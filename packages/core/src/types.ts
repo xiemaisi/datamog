@@ -59,17 +59,13 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     for (const rule of rules) {
       if (rule.body.length === 0) {
         for (const [i, arg] of rule.head.args.entries()) {
-          const pos: [number, number] | undefined = arg.$cstNode && [
-            arg.$cstNode.offset,
-            arg.$cstNode.end,
-          ];
           if (arg.$type === "StringLiteral") {
-            seedTypes[i] = unifyColumnType(seedTypes[i], "string", predicate, i, pos);
+            seedTypes[i] = unifyColumnType(seedTypes[i], "string");
           } else if (arg.$type === "NumberLiteral") {
             const t = isFloatLiteral(arg) || !Number.isInteger(arg.value) ? "float" : "integer";
-            seedTypes[i] = unifyColumnType(seedTypes[i], t, predicate, i, pos);
+            seedTypes[i] = unifyColumnType(seedTypes[i], t);
           } else if (arg.$type === "BooleanLiteral") {
-            seedTypes[i] = unifyColumnType(seedTypes[i], "boolean", predicate, i, pos);
+            seedTypes[i] = unifyColumnType(seedTypes[i], "boolean");
           }
         }
       }
@@ -98,10 +94,7 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
             const arg = rule.head.args[i]!;
             const argType = inferTermType(arg, varTypes, types);
             if (argType) {
-              const pos = arg.$cstNode
-                ? ([arg.$cstNode.offset, arg.$cstNode.end] as [number, number])
-                : undefined;
-              newTypes[i] = unifyColumnType(newTypes[i], argType, predicate, i, pos);
+              newTypes[i] = unifyColumnType(newTypes[i], argType);
             }
           }
         }
@@ -1257,23 +1250,14 @@ function checkHeadAnnotations(
 }
 
 /**
- * Widen `current` with `next` for column `i` of `predicate`, throwing a
- * useful `AnalyzerError` if the two can't be unified. Used wherever the
- * join comes from stacking multiple rule heads onto the same IDB column.
+ * Widen `current` with `next` where several rule heads (or facts) stack onto
+ * the same IDB column: the total least-upper-bound join. Unlike the within-rule
+ * meet, this never fails. Two incompatible primitives (e.g. `string` and
+ * `integer`) widen to `value`, their true least upper bound, since a column fed
+ * a string by one rule and an integer by another holds both as JSON; the
+ * primitive branches lift via the translator's `to_jsonb`/`json_quote`.
+ * `integer`/`float` still widen to `float`, not `value`.
  */
-function unifyColumnType(
-  current: PrimitiveType | undefined,
-  next: PrimitiveType,
-  predicate: string,
-  columnIndex: number,
-  pos?: [number, number],
-): PrimitiveType {
-  const joined = joinTypesWithJsonLift(current, next);
-  if (joined === null) {
-    throw new AnalyzerError(
-      `Column ${columnIndex + 1} of predicate '${predicate}' has conflicting types '${current}' and '${next}'`,
-      ...(pos ?? []),
-    );
-  }
-  return joined;
+function unifyColumnType(current: PrimitiveType | undefined, next: PrimitiveType): PrimitiveType {
+  return joinTypesWithJsonLift(current, next) ?? "value";
 }

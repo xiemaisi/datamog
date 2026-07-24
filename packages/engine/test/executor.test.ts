@@ -344,6 +344,23 @@ describe("DatamogExecutor", () => {
     }
   });
 
+  test("sibling rules with incompatible primitives produce a value column across backends", async () => {
+    // One rule contributes a string, another an integer; the column joins to
+    // `value` and holds both. Each primitive branch lifts to JSON, so both
+    // backends return the same mixed set.
+    const program = `
+      who("alice").
+      age(30).
+      mixed(V) :- who(V).
+      mixed(V) :- age(V).
+      ?- mixed(V).
+    `;
+
+    for (const results of await executeOnSqliteAndNative(program)) {
+      expect(sortRows(results[0]!)).toEqual([{ V: "alice" }, { V: 30 }]);
+    }
+  });
+
   test("value coercion and introspection builtins agree across backends", async () => {
     const program = `
       data(J) :- J = {

@@ -1548,18 +1548,25 @@ equalities).
 
 ### 5.6 Type Widening
 
-When multiple rules define the same predicate, each column must unify
-to a single type across rules. The widening rules:
+When multiple rules define the same predicate, its columns are combined
+across rules by the **join** (least upper bound) of each rule's head
+contribution. The join is total, so it never fails:
 
 - same type + same type = no change
 - `integer` + `float` = `float`
 - `value` + any primitive = `value` (the primitive auto-lifts; see §2.9)
-- any other pair (`string` + `integer`, `boolean` + `float`, …) = **error**
+- any other pair (`string` + `integer`, `boolean` + `float`, …) = `value`
+
+The last rule is the key point: a column fed a `string` by one rule and an
+`integer` by another has no common primitive supertype, so it widens to
+`value` and holds both as JSON (each primitive branch lifts via the
+translator, §2.9). This is the opposite direction to a variable shared
+across atoms *within* a single rule, which takes the **meet** (§5.2) and
+errors on incompatible primitives, because there one value must satisfy
+both positions at once.
 
 Every column of every predicate is typed with exactly one of `string`,
-`integer`, `float`, `boolean`, or `value`. Rules whose head contributions
-imply incompatible types for the same column are rejected with
-`Column N of predicate 'p' has conflicting types 'X' and 'Y'`.
+`integer`, `float`, `boolean`, or `value`.
 
 ### 5.7 Type Validation
 

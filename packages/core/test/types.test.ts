@@ -400,35 +400,36 @@ describe("type inference", () => {
     expect(typed.columnTypes.get("filtered")).toEqual(["float"]);
   });
 
-  test("rejects a column that would need to be both string and integer", () => {
-    expect(() =>
-      getTypes(`
-        input predicate words(w: string).
-        input predicate nums(n: integer).
-        mixed(X) :- words(X).
-        mixed(X) :- nums(X).
-      `),
-    ).toThrow(/'mixed'.*conflicting types.*'string'.*'integer'/);
+  test("sibling rules producing string and integer widen the column to value", () => {
+    // Across rules the column is a join (least upper bound). A string from one
+    // rule and an integer from another have no common primitive supertype, so
+    // the column holds both as JSON: `value`. (Within a single rule this same
+    // pair is a meet and still errors; see the shared-atom-variable tests.)
+    const typed = getTypes(`
+      input predicate words(w: string).
+      input predicate nums(n: integer).
+      mixed(X) :- words(X).
+      mixed(X) :- nums(X).
+    `);
+    expect(typed.columnTypes.get("mixed")).toEqual(["value"]);
   });
 
-  test("rejects a column that would need to be both string and boolean", () => {
-    expect(() =>
-      getTypes(`
-        input predicate flags(b: boolean).
-        input predicate names(n: string).
-        mixed(X) :- flags(X).
-        mixed(X) :- names(X).
-      `),
-    ).toThrow(/conflicting types/);
+  test("sibling rules producing boolean and string widen the column to value", () => {
+    const typed = getTypes(`
+      input predicate flags(b: boolean).
+      input predicate names(n: string).
+      mixed(X) :- flags(X).
+      mixed(X) :- names(X).
+    `);
+    expect(typed.columnTypes.get("mixed")).toEqual(["value"]);
   });
 
-  test("rejects facts of incompatible types at the same position", () => {
-    expect(() =>
-      getTypes(`
-        r(1).
-        r("hello").
-      `),
-    ).toThrow(/conflicting types/);
+  test("facts of incompatible primitive types at the same position widen to value", () => {
+    const typed = getTypes(`
+      r(1).
+      r("hello").
+    `);
+    expect(typed.columnTypes.get("r")).toEqual(["value"]);
   });
 
   test("integer and float are still joined as float (numeric widening)", () => {
