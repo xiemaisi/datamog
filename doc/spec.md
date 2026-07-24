@@ -1565,6 +1565,13 @@ across atoms *within* a single rule, which takes the **meet** (§5.2) and
 errors on incompatible primitives, because there one value must satisfy
 both positions at once.
 
+Widening rather than rejecting is deliberate: it keeps the join total, so
+every column has a least upper bound and inference stays a clean fixed point,
+and it describes a mixed column as the heterogeneous JSON it is. The cost is
+that a mistyped sibling rule silently produces a `value` column instead of an
+error. See the type-lattice design note (`doc/design/type-lattice.md`) for the
+full rationale.
+
 Every column of every predicate is typed with exactly one of `string`,
 `integer`, `float`, `boolean`, or `value`.
 
@@ -1746,7 +1753,11 @@ cannot determine is still an error (§5.2) even when annotated. Annotations carr
 no runtime effect and do not change the emitted SQL: codegen uses the inferred
 type, so declaring a column `value` that a rule fills with integers documents
 intended generality and constrains consumers, but the column is still stored and
-returned as integers.
+returned as integers. This invariant -- annotations affect only checking, never
+codegen -- is deliberate: keeping codegen on the inferred type means it never has
+to down-cast a wider declared type (say `value`) back to the narrower value a
+recursive body computes with. See the type-lattice design note
+(`doc/design/type-lattice.md`).
 
 Module boundaries (§9.3) apply this same directional subtype check: the value
 flowing across a boundary must fit within the type declared for it.
