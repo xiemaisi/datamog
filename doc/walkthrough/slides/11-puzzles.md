@@ -108,12 +108,31 @@ Every pair `(X, Y)` with `X² + Y = 30` falls out. Read the rule as a *specifica
 
 ---
 
+# A different kind of search: reachability
+
+Generate-and-test enumerates *static* candidates. The other pattern explores the **reachable states** of a system that changes step by step — river crossings, protocols, Petri nets.
+
+Same fixed point as transitive closure, but the recursing relation holds **states**: the initial state is a fact, each transition a rule.
+
+```prolog
+# A robot on a 3x3 grid. State is pos(X, Y).
+pos(0, 0).
+pos(X1, Y) :- pos(X, Y), X1 = X + 1, X1 <= 2.   # step east
+pos(X, Y1) :- pos(X, Y), Y1 = Y + 1, Y1 <= 2.   # step north
+?- pos(2, 2).                                    # reach the far corner?
+```
+
+**Model checking:** a safety check is a query for a reachable *bad* state — no rows means safe. See the `mutual-exclusion` (Peterson's) and `petri-net` examples. The reachable space must be finite (`--warn-finiteness`).
+
+---
+
 # When is Datalog good at this?
 
 | Problem shape | Verdict |
 | --- | --- |
 | Constraint-satisfaction (whodunit, colour assignments, "who sits where") | Excellent |
 | Small / bounded search spaces | Yes — handles fine |
+| Reachable-state search over a bounded space (puzzles, protocols, Petri nets) | Yes — idiomatic recursion over states |
 | Backtracking with **pruning** | Not natively — Datalog enumerates the whole candidate set |
 | Problems needing **novel values** | Tricky — can't invent strings or compounds; ranges only generate ints |
 
@@ -126,6 +145,7 @@ The art is spotting when your problem is constraint-shaped. Once you do, the enc
 - Core pattern: **generate-and-test**. One atom per candidate, one body atom per constraint.
 - Negation and aggregation work as filters; stratification ensures they fire *after* the candidate set stabilises.
 - **Ranges** generate integer candidates; **EDBs** generate domain objects (people, cities, subjects). Both are just "sources of rows".
+- A second pattern, **state-space search**: states in the recursing relation, transitions as rules; a safety check is a query for a reachable bad state (no rows = safe), for a finite space.
 - Datalog excels on small declarative constraint problems; it's weak on large search spaces that benefit from pruning.
 
 ---
