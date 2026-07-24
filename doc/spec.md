@@ -1322,7 +1322,15 @@ predicate dependency graph (processed stratum-by-stratum):
    `true`/`false` is `boolean`).
 3. **Variable types** are propagated from body atoms: if `p(X, Y)` has
    column types `[string, integer]`, then `X` gets `string` and `Y` gets
-   `integer`.
+   `integer`. A variable that appears in several atoms takes the **meet**
+   (greatest lower bound) of those column types, since it must be a valid
+   value in every position it occupies: `integer` and `float` narrow to
+   `integer`, a primitive shared with a `value` column narrows to the
+   primitive (the `value` column merely accepts it; the variable is still
+   primitive-valued), and two incompatible primitives (e.g. `string` and
+   `integer`) are a static error. This is the opposite direction to the
+   widening in §5.6, where sibling *rules* combine a column's producers with
+   the least upper bound.
 4. **Equality types** propagate through a bare-variable side: in `Z = expr`
    or `expr = Z`, `Z` gets the type of `expr`.
 5. **Range types** propagate: in `V in [low .. high]`, `V` gets the joined

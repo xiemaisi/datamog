@@ -66,6 +66,7 @@ export {
   columnTypesCompatible,
   inferTermType,
   inferTypes,
+  meetTypes,
   rebuildVarTypes,
   type TypedProgram,
 } from "./types.ts";

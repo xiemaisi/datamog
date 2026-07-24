@@ -1071,13 +1071,45 @@ describe("type inference — function and aggregate return types", () => {
     expect(typed.columnTypes.get("r")).toEqual(["string", "string", "integer"]);
   });
 
-  test("primitive-to-value auto-lift accepted across shared atom variables", () => {
+  test("shared atom variable takes the meet: value narrows to the primitive", () => {
+    // X must be a valid value in both the integer and the value column, so its
+    // type is the greatest lower bound (integer), not the join (value). X is
+    // genuinely integer-valued — the value column merely accepts it.
     const typed = getTypes(`
       input predicate i(x: integer).
       input predicate j(x: value).
       r(X) :- i(X), j(X).
     `);
-    expect(typed.columnTypes.get("r")).toEqual(["value"]);
+    expect(typed.columnTypes.get("r")).toEqual(["integer"]);
+  });
+
+  test("shared atom variable order does not affect the meet", () => {
+    const typed = getTypes(`
+      input predicate i(x: integer).
+      input predicate j(x: value).
+      r(X) :- j(X), i(X).
+    `);
+    expect(typed.columnTypes.get("r")).toEqual(["integer"]);
+  });
+
+  test("shared atom variable takes the meet: integer/float narrows to integer", () => {
+    const typed = getTypes(`
+      input predicate i(x: integer).
+      input predicate f(x: float).
+      r(X) :- i(X), f(X).
+    `);
+    expect(typed.columnTypes.get("r")).toEqual(["integer"]);
+  });
+
+  test("meet lets a shared integer/float variable be used in an integer-only op", () => {
+    // Under the old join this variable widened to float and `X & 1` was
+    // rejected as bitwise-on-float. The meet keeps it integer.
+    const typed = getTypes(`
+      input predicate i(x: integer).
+      input predicate f(x: float).
+      r(X, B) :- i(X), f(X), B = X & 1.
+    `);
+    expect(typed.columnTypes.get("r")).toEqual(["integer", "integer"]);
   });
 
   test("primitive-to-value auto-lift accepted at built-in body atom sources", () => {

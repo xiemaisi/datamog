@@ -720,7 +720,9 @@ describe("translator", () => {
     expect(sql).toContain('"j" = to_jsonb(5)');
   });
 
-  test("primitive shared variables lift when joined with `value` columns (postgres)", () => {
+  test("shared integer/value variable projects the integer, lifts only the join (postgres)", () => {
+    // X's meet type is integer, so the head projects the integer column
+    // unlifted; only the equality against the `value` column lifts.
     const result = translateSource(`
       input predicate i(x: integer).
       input predicate j(x: value).
@@ -728,7 +730,22 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain('to_jsonb(__b0."x") = __b1."x"');
-    expect(sql).toContain('to_jsonb(__b0."x") AS col1');
+    expect(sql).toContain('__b0."x" AS col1');
+    expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
+  });
+
+  test("shared integer/value projection is independent of atom order (postgres)", () => {
+    // `value` atom first: the head must still project the integer column
+    // (__b1), never the `value` column, so the result type is identical.
+    const result = translateSource(`
+      input predicate i(x: integer).
+      input predicate j(x: value).
+      r(X) :- j(X), i(X).
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain('__b1."x" AS col1');
+    expect(sql).toContain('to_jsonb(__b1."x") = __b0."x"');
+    expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
 
   test("primitive value-function args lift via to_jsonb (postgres)", () => {

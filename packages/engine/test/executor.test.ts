@@ -322,6 +322,28 @@ describe("DatamogExecutor", () => {
     }
   });
 
+  test("shared integer/float variable meets to integer across backends", async () => {
+    // X appears in an integer column and a float column, so its meet type is
+    // integer — narrow enough to feed the bitwise `&` (rejected on floats).
+    // Under the old join X widened to float and this program failed to
+    // type-check. The float atom comes first to exercise the head projecting
+    // the integer binding, not the float one, so every backend yields the
+    // same integer values rather than 3.0/4.0.
+    const program = `
+      i(3). i(4). i(5).
+      f(3.0). f(4.0). f(9.0).
+      r(X, B) :- f(X), i(X), B = X & 1.
+      ?- r(X, B).
+    `;
+
+    for (const results of await executeOnSqliteAndNative(program)) {
+      expect(sortRows(results[0]!)).toEqual([
+        { X: 3, B: 1 },
+        { X: 4, B: 0 },
+      ]);
+    }
+  });
+
   test("value coercion and introspection builtins agree across backends", async () => {
     const program = `
       data(J) :- J = {

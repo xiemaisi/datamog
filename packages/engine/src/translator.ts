@@ -26,6 +26,7 @@ import {
   AnalyzerError,
   assertNever,
   inferTermType,
+  meetTypes,
   queryProjection,
   rebuildVarTypes,
 } from "datamog-core";
@@ -404,8 +405,11 @@ function translateRule(
         const t = predTypes?.[j];
         list.push({ kind: "col", alias, col, type: t });
         bindings.set(term.name, list);
-        if (t && !varTypes.has(term.name)) {
-          varTypes.set(term.name, t);
+        // A variable in several atoms takes the meet of its column types
+        // (mirrors `rebuildVarTypes`): it must be a valid value in each.
+        if (t) {
+          const met = meetTypes(varTypes.get(term.name), t);
+          if (met) varTypes.set(term.name, met);
         }
       }
     }
@@ -585,6 +589,22 @@ function translateRule(
   // Helper: resolve a binding to SQL
   function bindingToSql(b: Binding): string {
     return b.kind === "col" ? `${b.alias}.${ident(b.col)}` : b.sql;
+  }
+
+  // A variable shared across atoms takes the meet (narrowest) of its binding
+  // types. The meet is the minimum of a compatible chain, so some binding
+  // already has that exact type; make it `refs[0]` so every projection of the
+  // variable (head, body expressions, join conditions all read `refs[0]`)
+  // emits SQL of the variable's real type. Projecting a wider binding (e.g. a
+  // `value` column for an `integer` variable) would need a downcast that
+  // `liftToJsonIfNeeded` cannot express, producing a JSONB expression in a
+  // primitive column and diverging across backends.
+  for (const [name, refs] of bindings) {
+    if (refs.length < 2) continue;
+    const vt = varTypes.get(name);
+    if (vt === undefined) continue;
+    const idx = refs.findIndex((r) => r.type === vt);
+    if (idx > 0) refs.unshift(refs.splice(idx, 1)[0]!);
   }
 
   // SELECT clause (with GROUP BY support for aggregate rules)

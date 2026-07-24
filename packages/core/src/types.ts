@@ -206,12 +206,15 @@ export function rebuildVarTypes(
   // loop below (mirroring the safety check and translator Pass 2, which also
   // iterate until nothing new is learned).
   //
-  // When a variable appears in multiple atoms we UNIFY the column types via
-  // `joinTypesWithJsonLift` (integer/float widen to float, primitive/value
-  // widens to value, same-type is a no-op, anything else throws). First-wins
-  // would silently pick one type and hide the conflict — e.g.
-  // `r(X) :- p(X), q(X)` with `p: integer` and `q: string` would end up as
-  // integer and leak through.
+  // When a variable appears in several atoms it takes their MEET (greatest
+  // lower bound): it has to be a valid value in every column it occupies, so
+  // `integer`/`float` narrow to `integer`, a primitive shared with a `value`
+  // column narrows to the primitive, same-type is a no-op, and two
+  // incompatible primitives (no common lower bound) throw. First-wins would
+  // silently pick one type and hide the conflict; the join (least upper
+  // bound) would over-widen — `r(X) :- p(X), q(X)` with `p: integer`,
+  // `q: value` would call X a `value` when it is really an integer, then
+  // spuriously reject a later `X & 1`.
   for (const elem of body) {
     if (elem.$type === "Literal" && !elem.negated) {
       const builtin = BUILTIN_BODY_ATOMS.get(elem.predicate);
@@ -228,7 +231,7 @@ export function rebuildVarTypes(
         const colType = predTypes[j];
         if (!colType) continue;
         const existing = varTypes.get(arg.name);
-        const joined = joinTypesWithJsonLift(existing, colType);
+        const joined = meetTypes(existing, colType);
         if (joined === null) {
           const cst = arg.$cstNode;
           throw new AnalyzerError(
@@ -1150,6 +1153,26 @@ function joinTypesWithJsonLift(
   if (direct !== null) return direct;
   if (a === "value" && b !== "value") return "value";
   if (b === "value" && a !== undefined && a !== "value") return "value";
+  return null;
+}
+
+/**
+ * Meet (greatest lower bound) of two column types: the type of a variable
+ * that has to be a valid value in *both* positions it occupies. `undefined`
+ * means "no constraint yet" and is the identity. `integer`/`float` narrow to
+ * `integer`; a primitive shared with `value` narrows to the primitive;
+ * same-type is a no-op; two incompatible primitives (e.g. `integer`/`string`)
+ * have no common lower bound and return `null` (⊥), which callers turn into a
+ * conflicting-types error. This is the opposite direction to `joinTypes*`
+ * (least upper bound), which is used where a column collects values from
+ * several producing rules.
+ */
+export function meetTypes(a: PrimitiveType | undefined, b: PrimitiveType): PrimitiveType | null {
+  if (!a) return b;
+  if (a === b) return a;
+  if ((a === "float" && b === "integer") || (a === "integer" && b === "float")) return "integer";
+  if (a === "value") return b;
+  if (b === "value") return a;
   return null;
 }
 
