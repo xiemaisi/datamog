@@ -91,10 +91,11 @@ consistency requirements:
 - **Same arity.** All rules for `close_kin` define a binary
   predicate; you cannot mix in a third rule like
   `close_kin(X) :- ...`.
-- **Compatible column types.** The types of the head arguments
-  (inferred from each rule) must unify. If one rule produced an
-  `integer` first column and another a `string` first column, Datamog
-  would reject the program.
+- **Column types combine, never clash.** The head-argument types from
+  each rule are joined: `integer`/`float` widen to `float`, and any other
+  primitive mismatch (say an `integer` first column from one rule and a
+  `string` from another) widens to `value`, holding both shapes as JSON.
+  Unlike an arity mismatch, this never rejects the program.
 - **Set semantics.** The resulting relation is the *union of sets*.
   If two rules would derive the same tuple, it appears once in the
   output, not twice.

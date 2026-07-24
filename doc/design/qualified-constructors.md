@@ -5,7 +5,7 @@ the design record; the summary and recommendation are kept for context, but the
 "defer" recommendation was overridden and variant B shipped.
 
 **What shipped.** A constructor is scoped to its predicate — `p::Cons`. Declared
-with `head[Ctor]` or the equivalent `head :: Ctor`; referenced bare (`Cons(...)`,
+with `head :: Ctor`; referenced bare (`Cons(...)`,
 resolved to the one predicate declaring the tag) or qualified (`p::Cons(...)`,
 required only when several predicates share the tag). The proof value's `$proof`
 holds the qualified name; output renders it bare. Constructors are no longer

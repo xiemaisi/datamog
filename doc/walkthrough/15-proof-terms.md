@@ -115,7 +115,7 @@ value) and the sub-proof of `num_list(n)`. The proof terms of
 datatype built for free out of the derivation structure.
 
 Under the hood a proof term is an ordinary `value` (Chapter 14):
-the object `{"$proof": "Cons", "args": [7, ...]}`, with a
+the object `{"$proof": "num_list::Cons", "args": [7, ...]}`, with a
 reserved `$proof` key so it can't be mistaken for your own data.
 The CLI and playground tables print it in the friendlier
 constructor form; `to_json` or the JSON output show the raw object.
@@ -272,8 +272,7 @@ sub-spans), so run them on `native` / `seminaive`. See the *Peano Naturals* and
   `predicate::Ctor`, unique within that predicate but free to recur
   across predicates. Reference it bare (`Cons(...)`) when only one
   predicate declares the tag, or qualified (`num_list::Cons(...)`)
-  otherwise. You can also *declare* it with `head :: Ctor` instead of
-  `head[Ctor]` — the two are equivalent.
+  otherwise.
 - A proof-carrying predicate can't also aggregate.
 - A proof mark applies only to a positive, proof-carrying atom,
   not to an extensional predicate and not to a negated atom.

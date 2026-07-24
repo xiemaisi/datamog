@@ -103,23 +103,24 @@ No explicit `input predicate grown_up(...)` declaration needed.
 
 ---
 
-# Type conflicts
+# Combining vs conflicting types
+
+Across sibling rules a column takes the **join**: `integer`+`float` → `float`, incompatible primitives widen to `value`.
 
 ```prolog
-input predicate a(x: integer).
-input predicate b(x: string).
-
-c(X) :- a(X).
-c(X) :- b(X).
+c(X) :- a(X).    % a: integer
+c(X) :- b(X).    % b: string, so c's column is value
 ```
 
-`c`'s first column would have to be both `integer` (rule 1) and `string` (rule 2). Datamog refuses:
+The real conflict is a variable at two incompatible positions **within one rule** (a meet):
+
+```prolog
+both(X) :- a(X), b(X).
+```
 
 ```
-Column 1 of predicate 'c' has conflicting types 'integer' and 'string'
+Variable 'X' has conflicting types 'integer' and 'string'
 ```
-
-A typed relational algebra requires one type per column. Datamog catches the conflict at translation time.
 
 ---
 
@@ -132,7 +133,7 @@ A typed relational algebra requires one type per column. Datamog catches the con
 - Primitive values embed into `value` slots
 
 So `t(5)` can match a `value` column containing JSON number `5`, and `type_of(5)` is valid.
-Other primitive mismatches require identical types.
+Within a rule and in comparisons, other primitive mismatches need compatible types.
 
 `X > "hello"` where `X` is `integer`?
 

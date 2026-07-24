@@ -8,7 +8,8 @@
 
 - **(b)** `both(X) :- a(X), b(X).` — the same variable `X` is
   being unified with `integer` (from `a`) and `string` (from `b`).
-  These can't unify. **Rejected** with a column-type conflict.
+  These can't unify (a variable meet). **Rejected** with
+  `Variable 'X' has conflicting types 'integer' and 'string'`.
 
 - **(c)**
   - `expensive(X) :- item(X, P), P > 100.` — `P` is `float`,
@@ -18,8 +19,9 @@
     `float`, compared against `string`. **Rejected** as incompatible
     comparison types.
 
-Two sub-rules for the same predicate (`expensive` and `labelled`
-have different names in the example above — substitute `expensive`
-twice and you'd also get a column-type conflict on `labelled`'s
-head, since one rule would make the column `string` and the other
-`float`).
+Two sub-rules for the same predicate stack into one column, which takes
+the *join* of their contributions. If you named both rules `expensive`,
+its head column would combine one rule's `float` with the other's
+`string` and widen to `value` (their least upper bound), not conflict.
+Only a shared variable *within a single rule*, as in (b), can fail to
+unify.

@@ -16,7 +16,7 @@ input predicate token(pos: integer, kind: string, val: integer?).
 # A number token is a Lit leaf spanning one position.
 ast(i, i + 1) :: Lit(V) :- token(i, "num", V).
 # An expression, a '+', and an expression make an Add over the whole span. The
-# split position j is a body variable, but [Add(L, R)] keeps it out of the tree.
+# split position j is a body variable, but Add(L, R) keeps it out of the tree.
 ast(i, k) :: Add(L, R) :- L : ast(i, j), token(j, "plus", _), R : ast(j + 1, k).
 ast(i, k) :: Mul(L, R) :- L : ast(i, j), token(j, "times", _), R : ast(j + 1, k).
 

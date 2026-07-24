@@ -35,7 +35,7 @@ Carried over from the discussion:
    ...`), so they read like the intensionals they are. Only the single unnamed
    default output keeps query-style implicit projection. Column types are not
    declared on an output; the type contract at an import boundary lives on the
-   receiving `input predicate`, checked against the output's inferred types.
+   receiving `input predicate`, checked against the output's published type.
 2. **At most one unnamed query per file**, always (not only on import). Extra
    outputs must be named. This breaks programs that use several `?-` queries;
    there are no external clients, so the migration is ours alone.
@@ -291,9 +291,10 @@ diagnostics, per-module EDB directories):
   actual vs the callee input's declared columns; the selected output vs the
   receiving declaration's columns), since those declared types are dropped when
   the binding is elaborated away. `checkModuleBoundaries` verifies them against
-  the merged program's inferred `columnTypes` after `inferTypes`, using the
+  the merged program's published types (inferred widened by annotations) after
+  `inferTypes`, using the
   directional subtype check `columnTypesCompatible` (the declared type must equal
-  or widen the inferred one, never narrow it -- the same rule head type
+  or widen the published one, never narrow it -- the same rule head type
   annotations use). The CLI runs it right after inference. (Done.)
 
 ## Deferred

@@ -375,8 +375,11 @@ ancestor(X: string, Y: string) :- parent(X, Y).
 class_totals(Class: string, sum(Fee): float) :- enrolment(_, Class, Fee).
 ```
 
-Annotations are optional and *checked, not used*: inference runs exactly as it
-would without them, and each declared type is verified against the inferred one.
+Annotations are optional: they never drive inference or code generation, but they
+are not inert. Inference runs exactly as it would without them, and each declared
+type is verified against the inferred one; beyond that, a predicate advertises a
+*published* type (its inferred type widened by its annotations) against which its
+consumers and any module boundary are type-checked (§5.10).
 They are **per rule and per argument** -- a rule may annotate any subset of its
 head arguments, and sibling rules of the same predicate may annotate
 differently or omit annotations entirely. Each annotated position is checked

@@ -116,30 +116,59 @@ integer literal). The head `grown_up(Name)` therefore has column 1
 of type `string`. No explicit `input predicate grown_up(name: string).` is
 needed.
 
-### Type conflicts
+### Combining types across rules
 
-What if two rules for the same predicate disagree? From
+What if two rules for the same predicate produce different column
+types? Each rule contributes to the column, so the column takes the
+*join* (least upper bound) of the contributions. Numeric types widen:
 
 ```prolog
 input predicate a(x: integer).
-input predicate b(x: string).
+input predicate b(x: float).
 
 c(X) :- a(X).
 c(X) :- b(X).
 ```
 
-the inferencer concludes the first column of `c` is simultaneously
-`integer` (from rule 1) and `string` (from rule 2). It can't unify
-them; Datamog rejects:
+Column 1 of `c` is `float`. And when the contributions have no common
+numeric type (one rule gives a `string`, another an `integer`), the
+column widens all the way to `value`, holding whichever shape each row
+carries as JSON:
+
+```prolog
+input predicate a(x: integer).
+input predicate b(x: string).
+
+c(X) :- a(X).    % c's column is value: integers from a and
+c(X) :- b(X).    % strings from b, side by side as JSON
+```
+
+Stacking rules never fails: across rules a column always has a least
+upper bound (`value` at worst).
+
+### When types really do conflict
+
+The genuine error is a single *variable* forced into two incompatible
+types *within one rule*. There the variable must be one value that
+satisfies every position at once (a meet, not a join), and no value is
+both a string and an integer:
+
+```prolog
+input predicate a(x: integer).
+input predicate b(x: string).
+
+both(X) :- a(X), b(X).    % X must be a's integer AND b's string
+```
+
+Datamog rejects this at translation time, before any SQL is emitted:
 
 ```
-Column 1 of predicate 'c' has conflicting types 'integer' and 'string'
+Variable 'X' has conflicting types 'integer' and 'string'
 ```
 
-You get this at translation time, not at SQL-run time. That's the
-point: a typed relational algebra requires each column to have one
-type; Datamog catches the inconsistency before the SQL is even
-emitted.
+So stacking rules *widens* a column (up to `value`); sharing a variable
+across atoms *intersects* its types, and incompatible primitives have
+no common value.
 
 ### The tolerated widenings
 
@@ -149,8 +178,9 @@ integer` stays `integer`, but `integer + float` is `float`.
 Primitive values also embed automatically into `value` slots:
 `t(5)` can match a `value` column containing the numeric leaf `5`,
 `J == 5` works when `J : value`, and `type_of(5)` first treats `5`
-as a `value` leaf. Other primitive mismatches still require identical
-types.
+as a `value` leaf. Other primitive mismatches widen to `value` across
+sibling rules (above), but within a rule and in comparisons they still
+require compatible types.
 
 ### Type-driven rejection of bad operations
 

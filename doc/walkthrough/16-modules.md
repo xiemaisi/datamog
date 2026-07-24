@@ -191,9 +191,11 @@ reusable library; the default is the convenient one-result case.
 The declared columns on the importing input are a **contract**, checked against
 what the module actually produces. Declare `road_reach(a: string, b: string)` for
 an integer closure, or wire a string relation to the integer `edge`, and you get
-a static error naming the offending column — before anything runs. The same
-column-type compatibility as any ordinary join applies (Chapter 7); the types you
-write at the boundary are the ones enforced.
+a static error naming the offending column — before anything runs. The check is
+one-directional: the type you declare must equal or widen what the module
+publishes, so a wider declaration (up to `value`) passes but a narrower one is
+rejected. That is a subtype check, not the symmetric cross-rule widening from
+Chapter 7.
 
 ## A poor-man's higher-order type
 

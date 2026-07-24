@@ -62,7 +62,7 @@ Three rules, one head. `close_kin` holds if either is the other's parent, **or**
 When a predicate has multiple rules, Datamog enforces:
 
 - **Same arity.** All rules of a predicate have the same number of head args.
-- **Compatible column types.** Inferred head-arg types from each rule must unify.
+- **Column types unify by widening.** Across rules, `integer`/`float` → `float` and other mismatches → `value`; this always succeeds.
 - **Set semantics.** The relation is the *union of sets* — duplicate tuples appear once.
 
 All three follow from "a predicate is a relation, and relations are sets".

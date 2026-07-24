@@ -93,8 +93,8 @@ function args, iteration sources, IDB column unification).
   edge in the predicate dependency graph.
 - Aggregate predicates cannot be recursive.
 - Predicates must have consistent arity across all rules.
-- Column types must unify across all rules (widening `integer →
-  float` permitted).
+- Column types always unify across rules: `integer`/`float` widen to
+  `float`, and other primitive mismatches widen to `value`.
 
 ## CLI flags
 
