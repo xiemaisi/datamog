@@ -24,6 +24,22 @@ const MODULES: Record<string, string> = {
     input predicate p(x: integer) := q from "a.dl".
     output predicate q(X) :- p(X).
   `,
+  // Pass-through modules: they do not exploit their input's type, so the
+  // flattened within-program check catches nothing and the boundary check is
+  // the only thing enforcing the declared type.
+  "sink.dl": `
+    input predicate p(x: integer).
+    output predicate out(X) :- p(X).
+  `,
+  "vsink.dl": `
+    input predicate p(x: value).
+    output predicate out(X) :- p(X).
+  `,
+  // A module whose output is declared wider than it produces.
+  "widen.dl": `
+    input predicate seed(v: integer).
+    output predicate out(X: value) :- seed(X).
+  `,
 };
 // Fresh parse per call (elaborate mutates the returned AST in place).
 const resolve: ModuleResolver = (ref) => ({ program: parseRaw(MODULES[ref]!), file: ref });
@@ -177,5 +193,43 @@ describe("module boundary type-checking", () => {
         input predicate best(a: integer) := reach from "reach.dl"(edge = road).
       `),
     ).toThrow(/bound to 'best': expected 1 column\(s\) but the wired predicate has 2/);
+  });
+
+  test("rejects an actual whose declared type is wider than the module input", () => {
+    // `thing` is declared value though it currently produces integers. sink.dl
+    // requires an integer input; the contract, not the current reality, is what
+    // must fit, so wiring `thing` in is rejected.
+    expect(() =>
+      check(`
+        raw(1). raw(2).
+        thing(V: value) :- raw(V).
+        input predicate result(x: value) := out from "sink.dl"(p = thing).
+      `),
+    ).toThrow(/actual 'thing' wired to input 'p'.*column 1 has type 'value' but 'integer'/);
+  });
+
+  test("accepts an actual whose declared type matches a value input", () => {
+    // Same value-declared `thing`, but the module input is value: the contract
+    // fits, so the wiring is fine. It is the narrowing that was rejected above,
+    // not the annotation.
+    expect(() =>
+      check(`
+        raw(1). raw(2).
+        thing(V: value) :- raw(V).
+        input predicate result(x: value) := out from "vsink.dl"(p = thing).
+      `),
+    ).not.toThrow();
+  });
+
+  test("rejects importing a value-contracted output under a narrower declaration", () => {
+    // widen.dl's output is declared value; importing it as integer would narrow
+    // the module's advertised contract, so it is rejected even though the
+    // output currently holds integers.
+    expect(() =>
+      check(`
+        nums(1).
+        input predicate result(x: integer) := out from "widen.dl"(seed = nums).
+      `),
+    ).toThrow(/bound to 'result': column 1 has type 'value' but 'integer'/);
   });
 });

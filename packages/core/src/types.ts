@@ -12,8 +12,16 @@ import { BITWISE_OPS, COMPARISON_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
 
 export interface TypedProgram extends AnalyzedProgram {
-  /** Column types for every predicate (EDB and IDB). */
+  /** Column types for every predicate (EDB and IDB). Used by codegen. */
   columnTypes: Map<string, PrimitiveType[]>;
+  /**
+   * Published column types: `columnTypes` widened at each position by the head
+   * annotations on it. This is the type a predicate advertises to its consumers
+   * and across module boundaries — the assume-guarantee contract. Equal to
+   * `columnTypes` for unannotated positions; codegen uses `columnTypes`, not
+   * this.
+   */
+  publishedTypes: Map<string, PrimitiveType[]>;
   /**
    * Resolved overload for each `FunctionCall` AST node in the program.
    * Backends key their SQL-emit / native-impl tables on `Overload.key`,
@@ -125,10 +133,15 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
   validateTypes(analyzed, types, published, functionOverloads);
   checkHeadAnnotations(analyzed, types, published);
 
-  // Finalize: reject unconstrained column types
+  // Finalize: reject unconstrained column types. `publishedTypes` is
+  // `columnTypes` widened by annotations (`published` ≥ inferred, so it is
+  // defined wherever the inferred type is).
   const columnTypes = new Map<string, PrimitiveType[]>();
+  const publishedTypes = new Map<string, PrimitiveType[]>();
   for (const [pred, predTypes] of types) {
     const finalTypes: PrimitiveType[] = [];
+    const pubTypes: PrimitiveType[] = [];
+    const pub = published.get(pred) ?? predTypes;
     for (let i = 0; i < predTypes.length; i++) {
       const t = predTypes[i];
       if (t === undefined) {
@@ -148,11 +161,13 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
         );
       }
       finalTypes.push(t);
+      pubTypes.push(pub[i] ?? t);
     }
     columnTypes.set(pred, finalTypes);
+    publishedTypes.set(pred, pubTypes);
   }
 
-  return { ...analyzed, columnTypes, functionOverloads };
+  return { ...analyzed, columnTypes, publishedTypes, functionOverloads };
 }
 
 function isNumericType(t: PrimitiveType | undefined): boolean {

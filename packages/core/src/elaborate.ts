@@ -180,20 +180,24 @@ function collectBoundaries(
  */
 export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryConstraint[]): void {
   for (const b of boundaries) {
-    const inferred = typed.columnTypes.get(b.predicate);
+    // Compare against the published type (the predicate's advertised contract),
+    // not its inferred type, so a predicate declared wider than it currently
+    // produces is held to its declaration across the boundary — the same
+    // assume-guarantee contract that applies within a program.
+    const actual = typed.publishedTypes.get(b.predicate);
     // A missing predicate (e.g. an actual that names nothing) is left to the
-    // analyzer's own reporting; there is no inferred type to compare here.
-    if (!inferred) continue;
-    if (inferred.length !== b.expected.length) {
+    // analyzer's own reporting; there is no type to compare here.
+    if (!actual) continue;
+    if (actual.length !== b.expected.length) {
       throw boundaryError(
-        `${b.note}: expected ${b.expected.length} column(s) but the wired predicate has ${inferred.length}`,
+        `${b.note}: expected ${b.expected.length} column(s) but the wired predicate has ${actual.length}`,
         b,
       );
     }
     for (let i = 0; i < b.expected.length; i++) {
-      if (!columnTypesCompatible(inferred[i]!, b.expected[i]!)) {
+      if (!columnTypesCompatible(actual[i]!, b.expected[i]!)) {
         throw boundaryError(
-          `${b.note}: column ${i + 1} has type '${inferred[i]}' but '${b.expected[i]}' was declared`,
+          `${b.note}: column ${i + 1} has type '${actual[i]}' but '${b.expected[i]}' was declared`,
           b,
         );
       }

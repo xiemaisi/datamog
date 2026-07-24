@@ -2296,13 +2296,17 @@ names; the module's own head-variable names are not exposed.
   program (they remain available internally as dependencies of the selection).
 - **Boundary types must satisfy the declaration.** A boundary is checked as a
   directional subtype relation (§5.10), not mutual compatibility: each actual's
-  inferred column types must equal or widen to the type declared for the module
-  input it is wired to, and the selected output's inferred types must fit within
-  the columns of the importing declaration. A declaration may therefore be the
-  same as, or wider than, what flows into it (up to `value`), but never narrower
-  -- declaring `integer` for a column the module produces as `value` is a static
-  error, since the declaration would promise more than the module proves. A
-  mismatch either way is a static error.
+  **published** column types must equal or widen to the type declared for the
+  module input it is wired to, and the selected output's published types must fit
+  within the columns of the importing declaration. Published, not inferred: the
+  boundary honours a predicate's advertised contract (§5.10), so a predicate
+  declared `value` may not be wired into an `integer` input even while it happens
+  to hold integers, and a module output declared `value` may not be imported
+  under an `integer` declaration. A declaration may therefore be the same as, or
+  wider than, the contract flowing into it (up to `value`), but never narrower --
+  declaring `integer` for a column contracted `value` is a static error, since
+  the declaration would promise more than the contract guarantees. A mismatch
+  either way is a static error.
 
 ## 10 Examples
 
