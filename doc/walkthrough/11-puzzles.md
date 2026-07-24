@@ -9,8 +9,10 @@ out which candidates survive — no manual search code, no
 backtracking, no if-trees.
 
 This chapter walks through a small whodunit puzzle to nail down
-the pattern. Exercises extend it with number puzzles and a
-map-coloring-style constraint check.
+the pattern, then turns to a second kind of search: exploring the
+reachable states of a system that evolves one step at a time.
+Exercises extend it with number puzzles and a map-coloring-style
+constraint check.
 
 ## Who broke the vase?
 
@@ -98,6 +100,50 @@ answer is every pair `(X, Y)` with `X² + Y = 30`. You can read the
 rule as stating the *specification* of the solution set, and the
 engine enumerates the solutions.
 
+## Beyond generate-and-test: searching a state space
+
+Generate-and-test enumerates a *static* set of candidates. A
+second kind of search explores the *reachable configurations* of a
+system that changes one step at a time — the shape behind
+river-crossing puzzles, sliding tiles, and checking that a
+concurrency protocol behaves.
+
+The encoding is the recursion of Chapter 4, but the recursing
+relation now holds **states**: represent a configuration as a
+tuple, assert the initial state as a fact, and write one rule per
+transition, each deriving a successor state from a reachable one.
+The reachable set is the least fixed point.
+
+```prolog
+# A robot on a 3x3 grid, stepping east or north. State is pos(X, Y).
+pos(0, 0).                                     # start in the corner
+pos(X1, Y) :- pos(X, Y), X1 = X + 1, X1 <= 2.  # step east
+pos(X, Y1) :- pos(X, Y), Y1 = Y + 1, Y1 <= 2.  # step north
+
+?- pos(2, 2).                                  # can it reach the far corner?
+```
+
+Two moves in place of two `edge` facts, but it is the same fixed
+point we computed for transitive closure — now over structured
+states instead of graph nodes.
+
+This is also how you **check a property**. A safety question ("can
+the system ever reach a bad state?") becomes a query for a
+reachable bad state: if it returns no rows, the property holds
+across the entire reachable space — a small model checker.
+`packages/cli/examples/mutual-exclusion/` verifies Peterson's
+mutual-exclusion algorithm this way (no reachable state has both
+processes in the critical section at once), and
+`packages/cli/examples/petri-net/` checks that a Petri net stays
+within capacity and never deadlocks midway. The
+[river-crossing case study](../case-studies/05-cross-the-river.md)
+applies the same pattern to a puzzle.
+
+One caveat: the reachable state space must be finite. A transition
+that keeps manufacturing new states (an unbounded counter, an
+ever-growing list) never reaches a fixed point; Datamog's
+finiteness checker (`--warn-finiteness`) flags exactly these.
+
 ## When is Datalog good at this?
 
 - **Constraint-satisfaction shaped problems** (whodunit, colour
@@ -106,6 +152,10 @@ engine enumerates the solutions.
 - **Small search spaces** — yes. Datalog enumerates the whole
   candidate set, so if candidates are bounded and numerous but
   not astronomical, this scales fine.
+- **Reachable-state search over a bounded space** (puzzles,
+  protocols, Petri nets) — yes, and idiomatic: it is recursion
+  over states, so the fixed point does the exploring, provided
+  the state space is finite.
 - **Problems needing backtracking with pruning** — not natively.
   Datalog doesn't prune; it generates the entire candidate space
   and filters. For large problems you'd want a dedicated SAT or
@@ -129,6 +179,10 @@ you do, the encoding is usually two or three predicates long.
 - Ranges generate integer candidates; EDBs generate domain
   objects (people, cities, subjects). Both are just "sources of
   rows" from the rule's point of view.
+- A second pattern, **state-space search**, puts states in the
+  recursing relation and one transition per rule; a safety check
+  becomes a query for a reachable bad state (no rows = safe), as
+  long as the state space is finite.
 - Datalog is strong on small, declarative constraint problems
   and weak on large search problems that benefit from pruning.
 
