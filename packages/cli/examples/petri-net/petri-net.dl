@@ -1,0 +1,46 @@
+# A Petri net, explored by reachability
+#
+# A Petri net has places that hold a number of tokens and transitions that
+# consume tokens from some places and produce them in others; a transition can
+# fire only when its input places hold enough tokens. A marking is the vector of
+# token counts, and the set of reachable markings is the least fixed point of
+# the firing relation -- so a bottom-up Datalog evaluation IS the reachability
+# analysis. (This is Maude's "system module" idea, in relational clothing.)
+#
+# The net models a little manufacturing line with three places,
+#   raw   parts waiting to be worked
+#   wip   work in progress (a machine of capacity 2)
+#   done  finished parts
+# and two transitions,
+#   start:  raw >= 1 and wip < 2  ->  raw--, wip++
+#   finish: wip >= 1              ->  wip--, done++
+# A marking is mark(Raw, Wip, Done). Every transition moves a token rather than
+# creating one, so parts are conserved (Raw + Wip + Done stays 3) and the net is
+# bounded; an unbounded net would grow the marking forever and trip Datamog's
+# finiteness checker (--warn-finiteness).
+
+# Initial marking: three raw parts, machine idle, nothing done.
+mark(3, 0, 0).
+
+# start: pull a raw part into the machine (bounded by the capacity of 2).
+mark(R1, W1, D) :- mark(R, W, D), R >= 1, W < 2, R1 = R - 1, W1 = W + 1.
+# finish: complete a part.
+mark(R, W1, D1) :- mark(R, W, D), W >= 1, W1 = W - 1, D1 = D + 1.
+
+# How many markings are reachable?
+output predicate reachable_markings(count(*)) :- mark(_, _, _).
+
+# Coverability / boundedness: can work-in-progress ever exceed the machine's
+# capacity of 2? No rows means the bound is never violated.
+output predicate wip_over_capacity(Raw, Wip, Done) :- mark(Raw, Wip, Done), Wip > 2.
+
+# Terminal (dead) markings: a reachable marking from which no transition can
+# fire. This needs stratified negation -- a marking is dead when it has no
+# enabled transition. Here the only terminal is (0, 0, 3), so the line always
+# drains to "all done" and never deadlocks midway.
+can_fire(R, W, D) :- mark(R, W, D), R >= 1, W < 2.   # start is enabled
+can_fire(R, W, D) :- mark(R, W, D), W >= 1.          # finish is enabled
+output predicate terminal(Raw, Wip, Done) :- mark(Raw, Wip, Done), not can_fire(Raw, Wip, Done).
+
+# Is the "all done" marking reachable?
+?- mark(0, 0, 3).
