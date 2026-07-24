@@ -1,0 +1,50 @@
+# Peterson's mutual-exclusion algorithm, verified by reachability
+#
+# This is what Maude and friends call a "system module": a state-transition
+# system whose reachable states you explore to check a safety property. In
+# Datalog the reachable set is just the least fixed point of a transition
+# relation, so a bottom-up evaluation IS the state-space search.
+#
+# Two processes share a critical section. Peterson's protocol coordinates them
+# with two flags (does process i want in?) and a `turn` variable that breaks
+# ties. Each process i (partner j) runs:
+#
+#     loc 0: idle                       -> flag[i] := true;  goto 1
+#     loc 1: announced interest         -> turn   := j;      goto 2
+#     loc 2: wait for flag[j]=false or turn=i, then          goto 3
+#     loc 3: CRITICAL SECTION           -> flag[i] := false; goto 0
+#
+# A global state is reach(pc0, pc1, flag0, flag1, turn): each process's
+# location (0..3), each flag, and whose turn it is (0 or 1). Location 3 is the
+# critical section. Mutual exclusion holds iff no reachable state has both
+# processes at location 3.
+
+# Initial state: both idle, neither wants in, turn 0.
+reach(0, 0, false, false, 0).
+
+# Process 0 (partner is process 1, so it yields the turn to 1).
+reach(1, P1, true,  F1, T) :- reach(0, P1, _,  F1, T).              # want in:  flag0 := true
+reach(2, P1, F0,    F1, 1) :- reach(1, P1, F0, F1, _).              # yield:    turn  := 1
+reach(3, P1, F0,    F1, T) :- reach(2, P1, F0, F1, T), F1 = false.  # enter:    partner not interested
+reach(3, P1, F0,    F1, T) :- reach(2, P1, F0, F1, T), T = 0.       # enter:    it is our turn
+reach(0, P1, false, F1, T) :- reach(3, P1, _,  F1, T).              # leave:    flag0 := false
+
+# Process 1 (mirror image; yields the turn to 0).
+reach(P0, 1, F0, true,  T) :- reach(P0, 0, F0, _,  T).
+reach(P0, 2, F0, F1,    0) :- reach(P0, 1, F0, F1, _).
+reach(P0, 3, F0, F1,    T) :- reach(P0, 2, F0, F1, T), F0 = false.
+reach(P0, 3, F0, F1,    T) :- reach(P0, 2, F0, F1, T), T = 1.
+reach(P0, 0, F0, false, T) :- reach(P0, 3, F0, _,  T).
+
+# How much of the state space is reachable?
+output predicate reachable_states(count(*)) :- reach(_, _, _, _, _).
+
+# The safety check is only meaningful if each critical section is reachable at
+# all; these counts are both nonzero.
+output predicate p0_in_critical(count(*)) :- reach(3, _, _, _, _).
+output predicate p1_in_critical(count(*)) :- reach(_, 3, _, _, _).
+
+# Safety: is any reachable state one where BOTH processes are in the critical
+# section? No rows means mutual exclusion holds across the whole state space.
+# (Run with `--all` to see the counts above alongside this check.)
+?- reach(3, 3, Flag0, Flag1, Turn).

@@ -1,0 +1,5 @@
+{
+  "name": "Mutual Exclusion",
+  "description": "Verify Peterson's algorithm by reachability",
+  "order": 45
+}
