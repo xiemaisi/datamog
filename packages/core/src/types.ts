@@ -1185,65 +1185,35 @@ export function columnTypesCompatible(inferred: PrimitiveType, declared: Primiti
 /**
  * Validate optional head type annotations against inference.
  *
- * Annotations are all-or-nothing per predicate: if any rule annotates any head
- * argument, every rule of that predicate must annotate every argument, and all
- * rules must agree on the type per column. Each declared type is then checked
- * against the inferred one — it must equal or widen what inference proves (you
- * may annotate `value` to document looseness, but not claim a type narrower
- * than inference supports). Annotations are only checked here, never used to
- * drive inference.
+ * Annotations are per rule and per argument: a rule may annotate any subset of
+ * its head arguments, and sibling rules of the same predicate may annotate
+ * differently or omit annotations entirely. Each annotated position is checked
+ * against that rule's own inferred contribution — the declared type must equal
+ * or widen it (annotate `value` to document looseness; a type narrower than the
+ * rule produces is rejected). Checked only; annotations do not drive codegen.
  */
 function checkHeadAnnotations(
   analyzed: AnalyzedProgram,
   types: Map<string, (PrimitiveType | undefined)[]>,
 ): void {
   for (const [pred, rules] of analyzed.rules) {
-    const annotated = rules.filter((r) => r.head.argTypes !== undefined);
-    if (annotated.length === 0) continue;
-
-    // All-or-nothing: every rule must annotate every head argument.
     for (const rule of rules) {
       const argTypes = rule.head.argTypes;
-      if (argTypes === undefined || argTypes.some((t) => t === undefined)) {
-        const cst = rule.head.$cstNode;
-        throw new AnalyzerError(
-          `Predicate '${pred}' mixes annotated and unannotated arguments: head type annotations are all-or-nothing per predicate (annotate every argument in every rule, or none)`,
-          cst?.offset,
-          cst?.end,
-        );
-      }
-    }
-
-    // All rules must declare the same type per column.
-    const declared = annotated[0]!.head.argTypes as PrimitiveType[];
-    for (const rule of annotated.slice(1)) {
-      const other = rule.head.argTypes as PrimitiveType[];
-      for (let i = 0; i < declared.length; i++) {
-        if (other[i] !== declared[i]) {
-          const cst = rule.head.$cstNode;
+      if (argTypes === undefined) continue;
+      const varTypes = rebuildVarTypes(rule.body, types);
+      for (let i = 0; i < rule.head.args.length; i++) {
+        const declared = argTypes[i] as PrimitiveType | undefined;
+        if (declared === undefined) continue; // this position is unannotated in this rule
+        const inferred = inferTermType(rule.head.args[i]!, varTypes, types);
+        if (inferred === undefined) continue; // unconstrained: the finalize step reports it
+        if (!columnTypesCompatible(inferred, declared)) {
+          const cst = rule.head.args[i]!.$cstNode ?? rule.head.$cstNode;
           throw new AnalyzerError(
-            `Predicate '${pred}' column ${i + 1} is annotated '${other[i]}' here but '${declared[i]}' in another rule; all rules must agree`,
+            `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but inferred as '${inferred}'`,
             cst?.offset,
             cst?.end,
           );
         }
-      }
-    }
-
-    // Checked against inference: declared must equal or widen the inferred type
-    // (the same directional subtype rule the module boundary uses).
-    const inferred = types.get(pred);
-    if (inferred === undefined) continue;
-    for (let i = 0; i < declared.length; i++) {
-      const inf = inferred[i];
-      if (inf === undefined) continue; // unconstrained: the finalize step reports it
-      if (!columnTypesCompatible(inf, declared[i]!)) {
-        const cst = annotated[0]!.head.$cstNode;
-        throw new AnalyzerError(
-          `Predicate '${pred}' column ${i + 1} is annotated '${declared[i]}' but inferred as '${inf}'`,
-          cst?.offset,
-          cst?.end,
-        );
       }
     }
   }

@@ -377,13 +377,13 @@ class_totals(Class: string, sum(Fee): float) :- enrolment(_, Class, Fee).
 
 Annotations are optional and *checked, not used*: inference runs exactly as it
 would without them, and each declared type is verified against the inferred one.
-They are **all-or-nothing per predicate** -- if any rule of a predicate
-annotates any argument, every rule of that predicate must annotate every
-argument, and all rules must agree on the type of each column; a partial or
-inconsistent annotation is a static error. A declared type must equal or widen
-the inferred one: you may annotate a column `value` to document that it holds
-arbitrary shapes, but claiming a type narrower than inference proves (for
-example `integer` on a column inferred as `value`) is rejected. See §5.10.
+They are **per rule and per argument** -- a rule may annotate any subset of its
+head arguments, and sibling rules of the same predicate may annotate
+differently or omit annotations entirely. Each annotated position is checked
+against that rule's own inferred contribution: the declared type must equal or
+widen it, so you may annotate a column `value` to document that it holds
+arbitrary shapes, but claiming a type narrower than the rule proves (for example
+`integer` on a position inferred as `value`) is rejected. See §5.10.
 
 ### 2.4 Queries
 
@@ -1710,26 +1710,24 @@ shifting, and both `<<` and `>>>` wrap their 64-bit result back to signed
 ### 5.10 Head type annotations
 
 Head terms may carry optional type annotations (§2.3). They are checked against
-inference, never used to drive it. After a program's column types are inferred,
-each annotated predicate is validated:
+inference, never used to drive it. Annotations are **per rule and per
+argument**: a rule may annotate any subset of its head arguments, and sibling
+rules of the same predicate may annotate differently or omit annotations. Each
+annotated position of each rule is validated:
 
-1. **All-or-nothing.** If any rule of a predicate annotates any head argument,
-   every rule of that predicate must annotate every argument. A rule that
-   annotates some but not all of its arguments, or a predicate whose rules do
-   not all annotate, is a static error.
-2. **Agreement.** All rules of the predicate must declare the same type for each
-   column. A column annotated `integer` in one rule and `value` in another is an
-   error, independent of what inference derives.
-3. **Soundness.** For each column the declared type `D` must equal or widen the
-   inferred type `I`: `widen(I, D) = D` (widening per §5.6, extended with the
-   primitive/`value` lift). So `value` may be declared for any column,
-   `integer` may be declared `float`, but a type narrower than the inferred one
-   (for example `integer` for a column inferred as `value`) is rejected.
+**Soundness.** For an annotated head position, the declared type `D` must equal
+or widen that rule's own inferred contribution `I` for the position:
+`widen(I, D) = D` (widening per §5.6, extended with the primitive/`value` lift).
+So `value` may be declared for any position, `integer` may be declared `float`,
+but a type narrower than the rule proves (for example `integer` for a position
+the rule infers as `value`) is rejected.
 
 Because annotations do not influence inference, a column whose type inference
 cannot determine is still an error (§5.2) even when annotated. Annotations carry
 no runtime effect; every backend produces identical results with or without
-them.
+them. In particular, an annotation wider than what a rule produces (declaring a
+column `value` that a rule fills with integers) does not change the column's
+inferred type or the emitted SQL; it only documents intended generality.
 
 Module boundaries (§9.3) apply this same directional subtype check: the value
 flowing across a boundary must fit within the type declared for it.

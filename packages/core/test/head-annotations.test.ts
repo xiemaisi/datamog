@@ -5,8 +5,10 @@ import { inferTypes } from "../src/types.ts";
 
 // Optional but checked head type annotations on intensional predicates
 // (`h(x: integer)`). The annotation is lifted onto the head's `argTypes` during
-// parsing, then checked against inference: all-or-nothing per predicate, all
-// rules agree, and each declared type must equal or widen the inferred one.
+// parsing, then checked against inference. Annotations are per rule and per
+// argument: a rule may annotate any subset of its head arguments, and sibling
+// rules may annotate differently or omit annotations. Each annotated position
+// must equal or widen that rule's own inferred contribution.
 
 function check(source: string) {
   const program = parse(source);
@@ -71,29 +73,35 @@ describe("head type annotations", () => {
     expect(() => check("p(1.5: integer).")).toThrow(/annotated 'integer' but inferred as 'float'/);
   });
 
-  test("mixing annotated and unannotated args in one rule is rejected", () => {
-    expect(() => check("pair(1: integer, 2).")).toThrow(/all-or-nothing/);
+  test("a rule may annotate some head arguments and omit others", () => {
+    const typed = check("pair(1: integer, 2).");
+    expect(typed.columnTypes.get("pair")).toEqual(["integer", "integer"]);
   });
 
-  test("annotating one rule but not another is rejected", () => {
-    expect(() =>
-      check(`
-        p(1: integer).
-        p(2).
-      `),
-    ).toThrow(/all-or-nothing/);
+  test("an annotated position is still checked when siblings are unannotated", () => {
+    expect(() => check("pair(1: string, 2).")).toThrow(
+      /column 1 is annotated 'string' but inferred as 'integer'/,
+    );
   });
 
-  test("rules disagreeing on the annotated type are rejected", () => {
-    // Both rules infer integer, so inference does not conflict; only the
-    // annotations disagree.
-    expect(() =>
-      check(`
-        input predicate q(v: integer).
-        p(1: integer).
-        p(x: value) :- q(x).
-      `),
-    ).toThrow(/all rules must agree/);
+  test("one rule may be annotated while a sibling rule is not", () => {
+    const typed = check(`
+      p(1: integer).
+      p(2).
+    `);
+    expect(typed.columnTypes.get("p")).toEqual(["integer"]);
+  });
+
+  test("sibling rules may carry different annotations, each valid", () => {
+    // rule 1 annotates integer (contributes integer), rule 2 annotates value
+    // (contributes integer, which value widens). Both check out. The column's
+    // inferred type stays integer — annotations do not drive codegen.
+    const typed = check(`
+      input predicate q(v: integer).
+      p(1: integer).
+      p(x: value) :- q(x).
+    `);
+    expect(typed.columnTypes.get("p")).toEqual(["integer"]);
   });
 
   test("aggregate head positions can be annotated and are checked", () => {
