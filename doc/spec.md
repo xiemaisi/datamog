@@ -1722,12 +1722,31 @@ So `value` may be declared for any position, `integer` may be declared `float`,
 but a type narrower than the rule proves (for example `integer` for a position
 the rule infers as `value`) is rejected.
 
+**Contract for consumers (assume-guarantee).** A predicate advertises a
+*published* type to its consumers: its inferred type, widened at each position
+by the annotations on it. Other predicates and queries that read the predicate
+are type-checked against this published type, not its inferred type. So if `p`
+is declared `value` while it currently produces only integers, a consumer
+`q(Z) :- p(Y), Z = Y + 1` is rejected -- `Y` is `value` at the boundary, and
+arithmetic on `value` is not defined. This lets a declaration promise more
+generality than the body currently delivers and holds callers to that promise,
+so they keep type-checking if the body later widens.
+
+A predicate's *own* body is the exception: its recursive self-references use its
+inferred type, not its published type. Otherwise a deliberately wide declaration
+would reject the very body that produced it -- a `value`-declared recursive
+predicate could not do arithmetic on its own recursive result. This is the
+guarantee half of the pair: a definition is checked against reality, its
+consumers against its advertised contract. The guarantee check above computes a
+rule's contribution the same way -- callees contribute their published type, the
+predicate's own references their inferred type.
+
 Because annotations do not influence inference, a column whose type inference
 cannot determine is still an error (§5.2) even when annotated. Annotations carry
-no runtime effect; every backend produces identical results with or without
-them. In particular, an annotation wider than what a rule produces (declaring a
-column `value` that a rule fills with integers) does not change the column's
-inferred type or the emitted SQL; it only documents intended generality.
+no runtime effect and do not change the emitted SQL: codegen uses the inferred
+type, so declaring a column `value` that a rule fills with integers documents
+intended generality and constrains consumers, but the column is still stored and
+returned as integers.
 
 Module boundaries (§9.3) apply this same directional subtype check: the value
 flowing across a boundary must fit within the type declared for it.

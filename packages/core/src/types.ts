@@ -112,12 +112,18 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     }
   }
 
+  // Published types: what each predicate advertises to consumers (inferred,
+  // widened by any head annotations). Validation and the guarantee check hold
+  // consumers to these while a predicate's own body still sees its inferred
+  // types. Codegen uses the inferred types, so `published` never reaches SQL.
+  const published = computePublishedTypes(analyzed, types);
+
   // Validate types (ranges, operators, function args). Validation also
   // resolves each FunctionCall to a specific overload — populated into
   // this map during the walk and threaded back out via TypedProgram.
   const functionOverloads = new Map<FunctionCall, Overload>();
-  validateTypes(analyzed, types, functionOverloads);
-  checkHeadAnnotations(analyzed, types);
+  validateTypes(analyzed, types, published, functionOverloads);
+  checkHeadAnnotations(analyzed, types, published);
 
   // Finalize: reject unconstrained column types
   const columnTypes = new Map<string, PrimitiveType[]>();
@@ -318,10 +324,14 @@ function allVarsTyped(term: HeadTerm, varTypes: Map<string, PrimitiveType>): boo
 /** Validate types across all expressions in a rule (ranges, operators, function args). */
 function validateTypes(
   analyzed: AnalyzedProgram,
-  types: Map<string, (PrimitiveType | undefined)[]>,
+  inferred: Map<string, (PrimitiveType | undefined)[]>,
+  published: Map<string, (PrimitiveType | undefined)[]>,
   functionOverloads: Map<FunctionCall, Overload>,
 ): void {
-  for (const [, predicateRules] of analyzed.rules) {
+  for (const [pred, predicateRules] of analyzed.rules) {
+    // Consumers (references to other predicates) see published types; this
+    // predicate's own recursive references see its inferred types.
+    const types = contextForPredicate(pred, inferred, published);
     for (const rule of predicateRules) {
       const varTypes = rebuildVarTypes(rule.body, types);
 
@@ -410,7 +420,9 @@ function validateTypes(
   // be numeric. We reuse the per-body-element validation by walking
   // the query body here. Variable types are computed per query via
   // a small fixed-point over the body's atoms and bindings, mirroring
-  // the rule-body inference above.
+  // the rule-body inference above. Queries are pure consumers, so every
+  // referenced predicate shows its published type.
+  const types = published;
   for (const query of analyzed.queries) {
     const varTypes = rebuildVarTypes(query.body, types);
     for (const elem of query.body) {
@@ -1183,6 +1195,54 @@ export function columnTypesCompatible(inferred: PrimitiveType, declared: Primiti
 }
 
 /**
+ * Published column types: what each predicate advertises to *consumers*. Starts
+ * from the inferred types and widens each position by any head annotations on it
+ * (the join of the inferred type and every rule's declared type there).
+ * Consumers are checked against these; a predicate's own body sees its inferred
+ * types (see `contextForPredicate`). Codegen uses the inferred types, so this
+ * never reaches SQL — it only documents intended generality to callers.
+ */
+function computePublishedTypes(
+  analyzed: AnalyzedProgram,
+  inferred: Map<string, (PrimitiveType | undefined)[]>,
+): Map<string, (PrimitiveType | undefined)[]> {
+  const published = new Map<string, (PrimitiveType | undefined)[]>();
+  for (const [pred, cols] of inferred) published.set(pred, [...cols]);
+  for (const [pred, rules] of analyzed.rules) {
+    const cols = published.get(pred);
+    if (!cols) continue;
+    for (const rule of rules) {
+      const argTypes = rule.head.argTypes;
+      if (argTypes === undefined) continue;
+      for (let i = 0; i < argTypes.length; i++) {
+        const declared = argTypes[i] as PrimitiveType | undefined;
+        if (declared !== undefined) cols[i] = unifyColumnType(cols[i], declared);
+      }
+    }
+  }
+  return published;
+}
+
+/**
+ * The type environment for validating and guarantee-checking the rules of
+ * `pred`: references to *other* predicates resolve to published types (their
+ * advertised contract), while `pred`'s own recursive references resolve to its
+ * inferred types (reality). Using the published type for a predicate's own body
+ * would let a deliberately-wide declaration reject the very body that produced
+ * it — a `value`-declared recursive predicate could not do arithmetic on itself.
+ */
+function contextForPredicate(
+  pred: string,
+  inferred: Map<string, (PrimitiveType | undefined)[]>,
+  published: Map<string, (PrimitiveType | undefined)[]>,
+): Map<string, (PrimitiveType | undefined)[]> {
+  const ctx = new Map(published);
+  const inf = inferred.get(pred);
+  if (inf) ctx.set(pred, inf);
+  return ctx;
+}
+
+/**
  * Validate optional head type annotations against inference.
  *
  * Annotations are per rule and per argument: a rule may annotate any subset of
@@ -1190,13 +1250,18 @@ export function columnTypesCompatible(inferred: PrimitiveType, declared: Primiti
  * differently or omit annotations entirely. Each annotated position is checked
  * against that rule's own inferred contribution — the declared type must equal
  * or widen it (annotate `value` to document looseness; a type narrower than the
- * rule produces is rejected). Checked only; annotations do not drive codegen.
+ * rule produces is rejected). The contribution is computed under the same
+ * assume-guarantee context as validation (callees contribute their published
+ * type, `pred`'s own references their inferred type). Checked only; annotations
+ * do not drive codegen.
  */
 function checkHeadAnnotations(
   analyzed: AnalyzedProgram,
-  types: Map<string, (PrimitiveType | undefined)[]>,
+  inferred: Map<string, (PrimitiveType | undefined)[]>,
+  published: Map<string, (PrimitiveType | undefined)[]>,
 ): void {
   for (const [pred, rules] of analyzed.rules) {
+    const types = contextForPredicate(pred, inferred, published);
     for (const rule of rules) {
       const argTypes = rule.head.argTypes;
       if (argTypes === undefined) continue;

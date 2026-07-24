@@ -125,3 +125,64 @@ describe("head type annotations", () => {
     expect(() => check("p(1: string).")).toThrow(AnalyzerError);
   });
 });
+
+describe("head annotations as consumer contracts (assume-guarantee)", () => {
+  test("a consumer is held to a predicate's declared type, not its inferred type", () => {
+    // p is declared value though it currently produces only integers. A
+    // consumer must treat p as value, so arithmetic on p's output is rejected.
+    expect(() =>
+      check(`
+        input predicate raw(v: integer).
+        p(X: value) :- raw(X).
+        q(Z) :- p(Y), Z = Y + 1.
+      `),
+    ).toThrow(/requires numeric/);
+  });
+
+  test("a consumer that treats the column as value is accepted, codegen stays inferred", () => {
+    const typed = check(`
+      input predicate raw(v: integer).
+      p(X: value) :- raw(X).
+      q(Y) :- p(Y).
+    `);
+    // The declaration is a contract, not a storage directive: the inferred
+    // (codegen) types are unchanged, so nothing is JSON-wrapped at runtime.
+    expect(typed.columnTypes.get("p")).toEqual(["integer"]);
+    expect(typed.columnTypes.get("q")).toEqual(["integer"]);
+  });
+
+  test("a predicate's own recursive body sees its inferred type, not its declaration", () => {
+    // count_down is declared value but its body does integer arithmetic on its
+    // own recursive result. Self-references use the inferred (integer) type, so
+    // this is accepted rather than rejected as `value - 1`.
+    const typed = check(`
+      input predicate base(v: integer).
+      count_down(N: value) :- base(N).
+      count_down(N) :- count_down(M), M > 0, N = M - 1.
+    `);
+    expect(typed.columnTypes.get("count_down")).toEqual(["integer"]);
+  });
+
+  test("an external consumer of that predicate is still held to value", () => {
+    expect(() =>
+      check(`
+        input predicate base(v: integer).
+        count_down(N: value) :- base(N).
+        count_down(N) :- count_down(M), M > 0, N = M - 1.
+        bad(Z) :- count_down(K), Z = K + 1.
+      `),
+    ).toThrow(/requires numeric/);
+  });
+
+  test("a predicate sourcing from a value-contracted callee cannot claim integer", () => {
+    // raw is declared value; p copies it. p annotating integer is unsound under
+    // raw's contract, even though raw currently holds integers.
+    expect(() =>
+      check(`
+        input predicate seed(v: integer).
+        raw(V: value) :- seed(V).
+        p(X: integer) :- raw(X).
+      `),
+    ).toThrow(/column 1 is annotated 'integer' but inferred as 'value'/);
+  });
+});
