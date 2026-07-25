@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { dirname, extname, resolve } from "node:path";
+import type { IterationCapInfo } from "datamog-backend-native";
 import type { DataSource, ElaborationResult, ExtDecl } from "datamog-core";
 import {
   AnalyzerError,
@@ -69,6 +70,8 @@ function usage(exitCode = 1): never {
   console.error("  --dry-run                  Print generated SQL without executing");
   console.error("  --warn-finiteness          Print a warning for each predicate column whose");
   console.error("                             values may grow unboundedly across iterations");
+  console.error("  --max-iterations <n>       Cap fixed-point passes per stratum and stop with a");
+  console.error("                             note instead of looping (native/seminaive only)");
   console.error("  --csv-no-header            CSV inputs have no header row");
   console.error("  --repl                     Start an interactive REPL (default with no program)");
   console.error("  --json                     In REPL mode, emit ndjson events on stdout");
@@ -120,7 +123,25 @@ async function createSqlDialect(name: BackendName): Promise<SqlDialect> {
   }
 }
 
-async function createBackend(name: BackendName): Promise<Backend> {
+/**
+ * Iteration-cap options for the in-memory backends. Undefined cap → no options
+ * (unlimited, the default). The cap only applies to native/seminaive; SQL
+ * backends ignore it.
+ */
+function capOptions(
+  maxIterations: number | undefined,
+  format: (info: IterationCapInfo) => string,
+): { maxIterations?: number; onIterationCap?(info: IterationCapInfo): void } {
+  if (maxIterations === undefined) return {};
+  return {
+    maxIterations,
+    onIterationCap: (info) => {
+      console.error(format(info));
+    },
+  };
+}
+
+async function createBackend(name: BackendName, maxIterations?: number): Promise<Backend> {
   switch (name) {
     case "postgres": {
       const { create } = await import("datamog-backend-postgres");
@@ -135,12 +156,12 @@ async function createBackend(name: BackendName): Promise<Backend> {
       return create();
     }
     case "native": {
-      const { create } = await import("datamog-backend-native");
-      return create();
+      const { create, formatIterationCap } = await import("datamog-backend-native");
+      return create(capOptions(maxIterations, formatIterationCap));
     }
     case "seminaive": {
-      const { create } = await import("datamog-backend-seminaive");
-      return create();
+      const { create, formatIterationCap } = await import("datamog-backend-seminaive");
+      return create(capOptions(maxIterations, formatIterationCap));
     }
   }
 }
@@ -573,6 +594,7 @@ async function main() {
   let allOutputs = false;
   let backendOverride: BackendName | undefined;
   let outputFormat: OutputFormat = "table";
+  let maxIterations: number | undefined;
   let replMode = false;
   let jsonMode = false;
   // Data sources for input predicates. `--input name=source` is self-describing
@@ -614,6 +636,14 @@ async function main() {
         process.exit(1);
       }
       outputFormat = value;
+    } else if (arg === "--max-iterations") {
+      const value = requireValue(args, ++i, "--max-iterations");
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 1) {
+        console.error(`Invalid --max-iterations: ${value} (expected a positive integer)`);
+        process.exit(1);
+      }
+      maxIterations = n;
     } else if (arg === "--help" || arg === "-h") {
       usage(0);
     } else if (arg.startsWith("-")) {
@@ -650,7 +680,7 @@ async function main() {
       dataDir: dataDir ? resolve(dataDir) : process.cwd(),
       csvHasHeader: !csvNoHeader,
       explicitLoaders: buildExplicitLoaders(inputMappings, !csvNoHeader),
-      createBackend: () => createBackend(backendName),
+      createBackend: () => createBackend(backendName, maxIterations),
     });
     return;
   }
@@ -801,7 +831,7 @@ async function main() {
   // Precedence: an explicit `--input` beats a program `:=` data binding, which
   // beats the auto-load-by-convention directory loaders.
   const dataSourceLoaders = buildDataSourceLoaders(dataSources, !csvNoHeader);
-  const backend = await createBackend(backendName);
+  const backend = await createBackend(backendName, maxIterations);
   const executor = new DatamogExecutor(backend, [
     ...explicitLoaders,
     ...dataSourceLoaders,

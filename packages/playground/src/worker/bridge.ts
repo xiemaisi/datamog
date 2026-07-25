@@ -149,8 +149,9 @@ export function step(
   jsonlData: Record<string, string>,
   csvUrlData: Record<string, string>,
   engine: StepEngine,
+  maxIterations?: number,
 ): Promise<StepResult> {
-  return request({ type: "step", source, csvData, jsonlData, csvUrlData, engine });
+  return request({ type: "step", source, csvData, jsonlData, csvUrlData, engine, maxIterations });
 }
 
 export interface LintDiagnostic {

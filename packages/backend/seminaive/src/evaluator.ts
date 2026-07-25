@@ -141,6 +141,17 @@ export class SemiNaiveEvaluator extends BaseDatalogEvaluator {
     // --- Delta loop: only rules with at least one stratum-body-atom fire. ---
     if (recursive) {
       while (this.anyNonEmpty(delta)) {
+        // The priming pass above already ran, so `iteration + 1` is the pass
+        // this delta step would be. Cap the total passes per stratum at
+        // `maxIterations`, keeping the partial (prefix) relations.
+        if (this.maxIterations !== undefined && iteration + 1 >= this.maxIterations) {
+          this.capInfo = {
+            stratum: stratumIdx,
+            iteration: iteration + 1,
+            predicates: this.cappedPredicates(stratum),
+          };
+          break;
+        }
         iteration++;
         this.trace?.({ kind: "iteration-start", stratum: stratumIdx, iteration });
 

@@ -53,6 +53,14 @@ export class NaiveEvaluator extends BaseDatalogEvaluator {
     let iteration = 0;
     let changed = true;
     while (changed) {
+      if (this.maxIterations !== undefined && iteration >= this.maxIterations) {
+        this.capInfo = {
+          stratum: stratumIdx,
+          iteration,
+          predicates: this.cappedPredicates(stratum),
+        };
+        break;
+      }
       this.trace?.({ kind: "iteration-start", stratum: stratumIdx, iteration });
       changed = false;
       const pending = new Map<string, Relation>();

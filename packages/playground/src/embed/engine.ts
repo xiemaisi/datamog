@@ -3,7 +3,11 @@
 // sql.js), the embed targets tiny tutorial programs, so it evaluates them
 // directly on the main thread with the pure-TS native/seminaive backend.
 // No worker, no WASM.
-import { create as createNative } from "datamog-backend-native";
+import {
+  type IterationCapInfo,
+  create as createNative,
+  formatIterationCap,
+} from "datamog-backend-native";
 import { create as createSeminaive } from "datamog-backend-seminaive";
 import { AnalyzerError, findInfiniteRisks } from "datamog-core";
 import { DatamogExecutor, type QueryResult } from "datamog-engine";
@@ -78,19 +82,42 @@ function buildLoaders(data: EmbedData): Array<InMemoryCsvLoader | InMemoryJsonlL
 }
 
 /**
+ * Default per-stratum iteration cap for embeds. Tutorial programs converge in
+ * far fewer passes, so this only ever trips a genuinely non-terminating
+ * snippet (which would otherwise freeze the host page's tab). See
+ * `doc/design/finiteness-checking.md`.
+ */
+export const DEFAULT_EMBED_MAX_ITERATIONS = 1000;
+
+export interface RunProgramOptions {
+  /** Per-stratum fixed-point cap. Defaults to `DEFAULT_EMBED_MAX_ITERATIONS`. */
+  maxIterations?: number;
+  /** Invoked if evaluation stopped early on the cap. */
+  onIterationCap?(info: IterationCapInfo): void;
+}
+
+/**
  * Evaluate the whole program against the pre-baked data and return one
  * result per `?-` query. The backend is created and closed per run so a
- * failed run leaves no evaluator state behind.
+ * failed run leaves no evaluator state behind. A per-stratum iteration cap is
+ * on by default so a non-terminating snippet stops instead of freezing the
+ * main thread.
  */
 export async function runProgram(
   source: string,
   data: EmbedData,
   engine: EmbedEngine = "native",
+  opts: RunProgramOptions = {},
 ): Promise<QueryResult[]> {
-  const backend = await (engine === "seminaive" ? createSeminaive : createNative)();
+  const backend = await (engine === "seminaive" ? createSeminaive : createNative)({
+    maxIterations: opts.maxIterations ?? DEFAULT_EMBED_MAX_ITERATIONS,
+    onIterationCap: opts.onIterationCap,
+  });
   try {
     return await new DatamogExecutor(backend, buildLoaders(data)).execute(source);
   } finally {
     await backend.close();
   }
 }
+
+export { formatIterationCap };

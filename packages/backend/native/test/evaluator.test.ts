@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addRow, create, makeRelation } from "datamog-backend-native";
+import { type IterationCapInfo, addRow, create, makeRelation } from "datamog-backend-native";
 import type { ExtDecl } from "datamog-core";
 import {
   DatamogExecutor,
@@ -22,6 +22,58 @@ async function run(source: string): Promise<Record<string, unknown>[][]> {
 function sortRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   return [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
+
+async function runCapped(
+  source: string,
+  maxIterations: number,
+): Promise<{ rows: Record<string, unknown>[][]; capInfo: IterationCapInfo | undefined }> {
+  let capInfo: IterationCapInfo | undefined;
+  const backend = await create({
+    maxIterations,
+    onIterationCap: (info) => {
+      capInfo = info;
+    },
+  });
+  try {
+    const results = await new DatamogExecutor(backend).execute(source);
+    return { rows: results.map((r) => r.rows), capInfo };
+  } finally {
+    await backend.close();
+  }
+}
+
+describe("native backend — iteration cap", () => {
+  test("stops a runaway arithmetic recursion and reports the growing predicate", async () => {
+    // s counts up forever; the cap turns the hang into a bounded prefix.
+    const source = `
+      seed(0).
+      s(X) :- seed(X).
+      s(Y) :- s(X), Y = X + 1.
+      ?- s(N).
+    `;
+    const { rows, capInfo } = await runCapped(source, 5);
+    expect(capInfo).toBeDefined();
+    expect(capInfo?.predicates).toContain("s");
+    expect(capInfo?.iteration).toBe(5);
+    // 5 passes over `s(Y) :- s(X), Y = X + 1` starting from {0} yield {0..4}.
+    expect(rows[0]).toHaveLength(5);
+  });
+
+  test("a converging program is unaffected by a generous cap", async () => {
+    const source = `
+      edge(1, 2).
+      edge(2, 3).
+      edge(3, 4).
+      path(A, B) :- edge(A, B).
+      path(A, C) :- edge(A, B), path(B, C).
+      ?- path(A, B).
+    `;
+    const { rows, capInfo } = await runCapped(source, 50);
+    expect(capInfo).toBeUndefined();
+    // 3 direct edges + closure {(1,3),(1,4),(2,4)} = 6 pairs.
+    expect(rows[0]).toHaveLength(6);
+  });
+});
 
 describe("native backend — basics", () => {
   test("Regression: relation keys distinguish JSON string leaves from compounds", () => {

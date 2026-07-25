@@ -1,5 +1,5 @@
-import { create as createNativeBackend } from "datamog-backend-native";
-import type { TraceEvent } from "datamog-backend-native";
+import { create as createNativeBackend, formatIterationCap } from "datamog-backend-native";
+import type { IterationCapInfo, TraceEvent } from "datamog-backend-native";
 import { PostgresSqlDialect } from "datamog-backend-postgres/dialect";
 import { create as createSeminaiveBackend } from "datamog-backend-seminaive";
 import { SqliteSqlDialect } from "datamog-backend-sqlite/dialect";
@@ -118,6 +118,11 @@ export interface StepResult {
   rules: Record<string, Array<{ text: string; span: SourceSpan }>>;
   /** Query results (same shape as `execute`). */
   queries: QueryResult[];
+  /**
+   * Set when evaluation stopped on the iteration cap. A ready-to-show
+   * message; the queries above are the partial (prefix) result.
+   */
+  iterationCap?: string;
 }
 
 interface CstNode {
@@ -212,6 +217,8 @@ interface StepMessage {
   jsonlData: Record<string, string>;
   csvUrlData: Record<string, string>;
   engine: StepEngine;
+  /** Per-stratum fixed-point cap; omitted means unlimited. */
+  maxIterations?: number;
 }
 
 interface CompleteMessage {
@@ -471,9 +478,16 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     try {
       await respond(msg.id, "step", async () => {
         const events: TraceEvent[] = [];
+        let capInfo: IterationCapInfo | undefined;
         const createStepBackend =
           msg.engine === "seminaive" ? createSeminaiveBackend : createNativeBackend;
-        backend = await createStepBackend({ trace: (e) => events.push(e) });
+        backend = await createStepBackend({
+          trace: (e) => events.push(e),
+          maxIterations: msg.maxIterations,
+          onIterationCap: (info) => {
+            capInfo = info;
+          },
+        });
         const loaders = buildLoaders(msg.csvData, msg.jsonlData, msg.csvUrlData);
         const executor = new DatamogExecutor(backend, loaders);
         // Parse + analyse once and reuse for both running the program and
@@ -510,6 +524,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           extensionals: [...analyzed.extDecls.keys()],
           rules,
           queries,
+          iterationCap: capInfo ? formatIterationCap(capInfo) : undefined,
         };
         return result;
       });

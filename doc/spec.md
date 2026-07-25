@@ -1685,6 +1685,17 @@ termination depends on a comparison or filter the analyser doesn't
 read (e.g. Fibonacci's `I < 10`). It is therefore **only ever a
 warning** — programs are still translated and executed.
 
+Because the static check is necessarily incomplete, the in-memory
+interpreters (`native`, `seminaive`) also accept an optional **iteration
+cap**: a limit on fixed-point passes per stratum. When a stratum reaches
+the cap without converging, evaluation stops and returns the partial
+(prefix) result with a note naming the still-growing predicate, instead
+of looping forever. The cap is off by default on the CLI (opt in with
+`--max-iterations N`), on by default in the playground (adjustable, and
+switchable off) and in tutorial embeds. It is a runtime safeguard, not a
+semantic change: an uncapped run computes the same least fixed point as
+before. See `doc/design/finiteness-checking.md`.
+
 ### 5.9 Bitwise integer semantics
 
 The bitwise / shift operators `&`, `|`, `^`, `<<`, `>>`, `>>>` operate on

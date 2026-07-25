@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { create } from "datamog-backend-seminaive";
+import { type IterationCapInfo, create } from "datamog-backend-seminaive";
 import { DatamogExecutor } from "datamog-engine";
 
 async function run(source: string): Promise<Record<string, unknown>[][]> {
@@ -16,6 +16,57 @@ async function run(source: string): Promise<Record<string, unknown>[][]> {
 function sortRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   return [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
+
+async function runCapped(
+  source: string,
+  maxIterations: number,
+): Promise<{ rows: Record<string, unknown>[][]; capInfo: IterationCapInfo | undefined }> {
+  let capInfo: IterationCapInfo | undefined;
+  const backend = await create({
+    maxIterations,
+    onIterationCap: (info) => {
+      capInfo = info;
+    },
+  });
+  try {
+    const results = await new DatamogExecutor(backend).execute(source);
+    return { rows: results.map((r) => r.rows), capInfo };
+  } finally {
+    await backend.close();
+  }
+}
+
+describe("seminaive backend — iteration cap", () => {
+  test("stops a runaway arithmetic recursion and reports the growing predicate", async () => {
+    // Priming seeds {0}; each delta pass adds one integer. A cap of 5 total
+    // passes (priming + 4 deltas) leaves {0..4}, matching the naive backend.
+    const source = `
+      seed(0).
+      s(X) :- seed(X).
+      s(Y) :- s(X), Y = X + 1.
+      ?- s(N).
+    `;
+    const { rows, capInfo } = await runCapped(source, 5);
+    expect(capInfo).toBeDefined();
+    expect(capInfo?.predicates).toContain("s");
+    expect(capInfo?.iteration).toBe(5);
+    expect(rows[0]).toHaveLength(5);
+  });
+
+  test("a converging program is unaffected by a generous cap", async () => {
+    const source = `
+      edge(1, 2).
+      edge(2, 3).
+      edge(3, 4).
+      path(A, B) :- edge(A, B).
+      path(A, C) :- edge(A, B), path(B, C).
+      ?- path(A, B).
+    `;
+    const { rows, capInfo } = await runCapped(source, 50);
+    expect(capInfo).toBeUndefined();
+    expect(rows[0]).toHaveLength(6);
+  });
+});
 
 describe("seminaive backend — basics", () => {
   test("facts and a simple non-recursive rule", async () => {

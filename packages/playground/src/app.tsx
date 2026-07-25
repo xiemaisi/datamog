@@ -4,7 +4,7 @@ import { CycleModal } from "./components/cycle-modal.tsx";
 import { DataPanel } from "./components/data-panel.tsx";
 import { Editor } from "./components/editor.tsx";
 import { type ResultsTab, TabbedResults } from "./components/tabbed-results.tsx";
-import { Toolbar } from "./components/toolbar.tsx";
+import { DEFAULT_ITERATION_CAP, Toolbar } from "./components/toolbar.tsx";
 import { examples } from "./examples/index.ts";
 import { setCycleHandler } from "./lib/cycle-viewer.ts";
 import { setLintStatusHandler } from "./lib/lint-status.ts";
@@ -202,9 +202,12 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ResultsTab>("results");
   const [hoveredRange, setHoveredRange] = useState<SourceSpan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runNotice, setRunNotice] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [ready, setReady] = useState(false);
   const [backend, setBackend] = useState<BackendName>("native");
+  // Per-stratum iteration cap for the interpreters; null means unlimited.
+  const [iterationCap, setIterationCap] = useState<number | null>(DEFAULT_ITERATION_CAP);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [showWarnings, setShowWarningsState] = useState<boolean>(getShowWarnings);
   const [activeCycle, setActiveCycle] = useState<ActiveCycle | null>(null);
@@ -215,12 +218,14 @@ export function App() {
   const jsonlDataRef = useRef(jsonlData);
   const csvUrlDataRef = useRef(csvUrlData);
   const backendRef = useRef(backend);
+  const iterationCapRef = useRef(iterationCap);
 
   sourceRef.current = source;
   csvDataRef.current = csvData;
   jsonlDataRef.current = jsonlData;
   csvUrlDataRef.current = csvUrlData;
   backendRef.current = backend;
+  iterationCapRef.current = iterationCap;
 
   const canRun = RUNNABLE_BACKENDS.has(backend);
 
@@ -294,6 +299,7 @@ export function App() {
     if (!RUNNABLE_BACKENDS.has(current)) return;
     setIsRunning(true);
     setError(null);
+    setRunNotice(null);
     setResults(null);
     if (STEP_BACKENDS.has(current)) setStepResult(null);
     try {
@@ -305,9 +311,11 @@ export function App() {
           jsonlDataRef.current,
           csvUrlDataRef.current,
           current as "native" | "seminaive",
+          iterationCapRef.current ?? undefined,
         );
         setResults(stepOut.queries);
         setStepResult(stepOut);
+        if (stepOut.iterationCap) setRunNotice(stepOut.iterationCap);
       } else {
         const queryResults = await bridge.execute(
           sourceRef.current,
@@ -418,6 +426,8 @@ export function App() {
         onToggleTheme={toggleTheme}
         showWarnings={showWarnings}
         onToggleWarnings={toggleWarnings}
+        iterationCap={iterationCap}
+        onIterationCapChange={setIterationCap}
       />
       <div class="playground-body">
         <div class="editor-side">
@@ -446,6 +456,7 @@ export function App() {
         </div>
         <div class="output-side">
           {error && <div class="error-box">{error}</div>}
+          {runNotice && <div class="notice-box">{runNotice}</div>}
           {ready ? (
             <TabbedResults
               backend={backend}

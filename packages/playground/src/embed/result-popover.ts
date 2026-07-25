@@ -4,7 +4,7 @@ import { renderQueryResult, renderRunError } from "./results-view.ts";
 /** Run state for one query, shown in the result popover. */
 export type RunState =
   | { kind: "loading" }
-  | { kind: "result"; result: QueryResult }
+  | { kind: "result"; result: QueryResult; warning?: string }
   | { kind: "error"; message: string };
 
 // At most one popover (data or result) open at a time would be ideal, but the
@@ -89,9 +89,18 @@ export function openResultPopover(anchor: HTMLElement): (state: RunState) => voi
     if (current !== self) return; // a newer run replaced this popover
     title.textContent = `Result · ${summary(state)}`;
     body.replaceChildren();
-    if (state.kind === "loading") body.textContent = "running…";
-    else if (state.kind === "error") body.appendChild(renderRunError(state.message));
-    else body.appendChild(renderQueryResult(state.result));
+    if (state.kind === "loading") {
+      body.textContent = "running…";
+    } else if (state.kind === "error") {
+      body.appendChild(renderRunError(state.message));
+    } else {
+      if (state.warning) {
+        const warn = body.appendChild(document.createElement("div"));
+        warn.className = "datamog-embed-result-warning";
+        warn.textContent = state.warning;
+      }
+      body.appendChild(renderQueryResult(state.result));
+    }
     place(); // content size changed; keep it within the viewport
   };
 }

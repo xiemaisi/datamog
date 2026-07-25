@@ -260,6 +260,33 @@ body {
   box-shadow: 0 0 0 3px var(--primary-ring);
 }
 
+/* Iteration-cap control, shown only for the interpreter backends. */
+.itercap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-muted, inherit);
+  white-space: nowrap;
+}
+.itercap-input {
+  width: 5ch;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.itercap-input:disabled {
+  opacity: 0.5;
+}
+.itercap-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-ring);
+}
+
 .example-select {
   max-width: 360px;
 }
@@ -852,6 +879,22 @@ body {
   border: 1px solid var(--danger-border);
   border-radius: var(--radius);
   color: var(--danger-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-xs);
+}
+
+/* Shown above a partial result when evaluation hit the iteration cap. */
+.notice-box {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 12px 14px;
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  color: var(--warning-hover);
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.55;

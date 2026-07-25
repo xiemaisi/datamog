@@ -21,22 +21,65 @@ import {
 import type { TraceCallback, TraceTuple } from "./trace.ts";
 import { type Substitution, type Value, evalTerm } from "./values.ts";
 
+/**
+ * Why a stratum's fixed-point loop stopped before converging. Recorded on
+ * `capInfo` when the optional iteration cap is hit. See
+ * `doc/design/finiteness-checking.md`.
+ */
+export interface IterationCapInfo {
+  /** Index of the stratum that hit the cap. */
+  stratum: number;
+  /** Number of fixed-point passes run before stopping. */
+  iteration: number;
+  /** Recursive predicates in the capped stratum (the ones still growing). */
+  predicates: string[];
+}
+
+export interface EvaluatorOptions {
+  trace?: TraceCallback;
+  /**
+   * Maximum fixed-point passes per stratum. Undefined means unlimited (run to
+   * the least fixed point). When a stratum reaches the cap without converging,
+   * evaluation stops and `capInfo` is set; the partial (prefix) relations are
+   * kept.
+   */
+  maxIterations?: number;
+}
+
 export abstract class BaseDatalogEvaluator {
   readonly relations = new Map<string, Relation>();
   protected trace?: TraceCallback;
   /** Tracks which EDBs have already emitted an `edb-loaded` event. */
   private loadedEmitted = new Set<string>();
   protected analyzed: TypedProgram;
+  protected maxIterations?: number;
+  /**
+   * Set by a subclass's fixed-point driver when a stratum hits the iteration
+   * cap without converging. Undefined means every stratum reached its fixed
+   * point.
+   */
+  capInfo?: IterationCapInfo;
 
-  constructor(analyzed: TypedProgram, trace?: TraceCallback) {
+  constructor(analyzed: TypedProgram, opts?: EvaluatorOptions) {
     this.analyzed = analyzed;
-    this.trace = trace;
+    this.trace = opts?.trace;
+    this.maxIterations = opts?.maxIterations;
     for (const pred of analyzed.extDecls.keys()) {
       this.relations.set(pred, makeRelation());
     }
     for (const pred of analyzed.rules.keys()) {
       this.relations.set(pred, makeRelation());
     }
+  }
+
+  /**
+   * Recursive predicates of a stratum, for reporting which relations were
+   * still growing when the cap was hit. Falls back to the whole stratum if
+   * none are marked recursive (should not happen when a loop is capped).
+   */
+  protected cappedPredicates(stratum: string[]): string[] {
+    const recursive = stratum.filter((p) => this.analyzed.recursivePredicates.has(p));
+    return recursive.length > 0 ? recursive : [...stratum];
   }
 
   /** Append EDB rows (called by the backend's `insertRows` path). */

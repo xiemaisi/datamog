@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { IterationCapInfo } from "datamog-backend-native";
 import { collectCompletionCandidates, lintSource, runProgram } from "../src/embed/engine.ts";
 
 const REACHABILITY = `input predicate edge(src: string, dst: string).
@@ -29,6 +30,25 @@ describe("embed engine", () => {
     const no = REACHABILITY.replace("?- reachable(X).", '?- reachable("zzz").');
     const results = await runProgram(no, { csv: { edge: EDGES } });
     expect(results[0]!.rows).toHaveLength(0);
+  });
+
+  test("runProgram caps a non-terminating program and reports it", async () => {
+    // Without the default cap this counts up forever and freezes the tab.
+    const runaway = `seed(0).
+      s(X) :- seed(X).
+      s(Y) :- s(X), Y = X + 1.
+      ?- s(N).`;
+    let capInfo: IterationCapInfo | undefined;
+    const results = await runProgram(runaway, {}, "native", {
+      maxIterations: 20,
+      onIterationCap: (info) => {
+        capInfo = info;
+      },
+    });
+    expect(capInfo).toBeDefined();
+    expect(capInfo?.predicates).toContain("s");
+    // Partial prefix returned, not a hang and not empty.
+    expect(results[0]!.rows).toHaveLength(20);
   });
 
   test("lintSource: valid program has no errors and reports a query", () => {

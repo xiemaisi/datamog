@@ -8,10 +8,15 @@ import {
   type QueryResult,
   loadExtensionalData,
 } from "datamog-engine";
+import type { EvaluatorOptions, IterationCapInfo } from "./base-evaluator.ts";
 import { NaiveEvaluator } from "./evaluator.ts";
 import type { TraceCallback } from "./trace.ts";
 
-export { BaseDatalogEvaluator } from "./base-evaluator.ts";
+export {
+  BaseDatalogEvaluator,
+  type EvaluatorOptions,
+  type IterationCapInfo,
+} from "./base-evaluator.ts";
 export { NaiveEvaluator } from "./evaluator.ts";
 export type { Relation } from "./planner.ts";
 export {
@@ -38,6 +43,16 @@ export {
   valueEq,
 } from "./values.ts";
 
+/**
+ * One-line, user-facing explanation of an iteration cap being hit. Shared so
+ * the CLI, embed, and playground phrase it identically. See
+ * `doc/design/finiteness-checking.md`.
+ */
+export function formatIterationCap(info: IterationCapInfo): string {
+  const preds = info.predicates.map((p) => `'${p}'`).join(", ");
+  return `Stopped after ${info.iteration} iterations without reaching a fixed point (${preds} still producing rows). The result is incomplete: add a bound (e.g. a comparison like X < 10) or raise the iteration cap.`;
+}
+
 export interface NativeBackendOptions {
   /**
    * If supplied, `NaiveEvaluator` will invoke this callback during
@@ -46,6 +61,17 @@ export interface NativeBackendOptions {
    * there.
    */
   trace?: TraceCallback;
+  /**
+   * Maximum fixed-point passes per stratum. Undefined means unlimited (run to
+   * the least fixed point, the pre-existing behaviour). See
+   * `doc/design/finiteness-checking.md`.
+   */
+  maxIterations?: number;
+  /**
+   * Called once after evaluation if a stratum hit the iteration cap without
+   * converging. The partial (prefix) results are still returned.
+   */
+  onIterationCap?(info: IterationCapInfo): void;
 }
 
 /**
@@ -57,11 +83,13 @@ export interface DatalogEvaluator {
   appendEdb(predicate: string, rows: Record<string, unknown>[]): void;
   computeAll(): void;
   runQuery(query: Query): QueryResult;
+  /** Set when a stratum hit the iteration cap without converging. */
+  readonly capInfo?: IterationCapInfo;
 }
 
 export type DatalogEvaluatorCtor<E extends DatalogEvaluator> = new (
   analyzed: TypedProgram,
-  trace?: TraceCallback,
+  opts?: EvaluatorOptions,
 ) => E;
 
 /**
@@ -76,7 +104,7 @@ export function createEvaluatorBackend<E extends DatalogEvaluator>(
   EvaluatorCtor: DatalogEvaluatorCtor<E>,
   options: NativeBackendOptions & { name: string },
 ): Backend {
-  const trace = options.trace;
+  const { trace, maxIterations, onIterationCap } = options;
   let evaluator: E | null = null;
   let acceptingInserts = false;
   let closed = false;
@@ -117,7 +145,7 @@ export function createEvaluatorBackend<E extends DatalogEvaluator>(
       loaders: ExtensionalLoader[],
     ): Promise<QueryResult[]> {
       assertOpen();
-      const ev = new EvaluatorCtor(analyzed, trace);
+      const ev = new EvaluatorCtor(analyzed, { trace, maxIterations });
       evaluator = ev;
       acceptingInserts = true;
       try {
@@ -135,6 +163,7 @@ export function createEvaluatorBackend<E extends DatalogEvaluator>(
       }
 
       ev.computeAll();
+      if (ev.capInfo) onIterationCap?.(ev.capInfo);
 
       const results: QueryResult[] = [];
       for (const query of analyzed.queries) {

@@ -44,6 +44,7 @@ before the program configures the run; everything after belongs to the program.
 | `--all` | evaluate every output rather than a single one (see *Evaluation*) |
 | `--dry-run` | print the compiled SQL instead of running |
 | `--warn-finiteness` | run the finiteness analysis and print warnings |
+| `--max-iterations <n>` | cap fixed-point passes per stratum on the native/seminaive interpreters; stop with a note instead of looping (see `finiteness-checking.md`) |
 | `--csv-no-header` | treat CSV inputs as having no header row |
 | `--help`, `-h` | usage |
 

@@ -2,6 +2,13 @@ import type { Example } from "../examples/index.ts";
 import type { Theme } from "../lib/theme.ts";
 import type { BackendName } from "../worker/bridge.ts";
 
+/**
+ * Default per-stratum iteration cap for the playground's in-memory
+ * interpreters. On by default; the user can raise it or turn it off. See
+ * `doc/design/finiteness-checking.md`.
+ */
+export const DEFAULT_ITERATION_CAP = 1000;
+
 interface ToolbarProps {
   onRun: () => void;
   isRunning: boolean;
@@ -19,6 +26,14 @@ interface ToolbarProps {
   onToggleTheme: () => void;
   showWarnings: boolean;
   onToggleWarnings: () => void;
+  /** Per-stratum iteration cap for the interpreters; null means unlimited. */
+  iterationCap: number | null;
+  onIterationCapChange: (value: number | null) => void;
+}
+
+/** The interpreter backends the iteration cap applies to. */
+function isInterpreted(backend: BackendName): boolean {
+  return backend === "native" || backend === "seminaive";
 }
 
 const NATIVE_BACKEND_OPTIONS = [
@@ -104,6 +119,8 @@ export function Toolbar({
   onToggleTheme,
   showWarnings,
   onToggleWarnings,
+  iterationCap,
+  onIterationCapChange,
 }: ToolbarProps) {
   return (
     <div class="toolbar">
@@ -176,6 +193,32 @@ export function Toolbar({
             </option>
           ))}
         </select>
+        {isInterpreted(backend) && (
+          <label
+            class="itercap"
+            title="Stop after this many fixed-point passes per stratum so a non-terminating program returns a partial result instead of hanging. Uncheck for no limit."
+          >
+            <input
+              type="checkbox"
+              checked={iterationCap !== null}
+              onChange={(e) =>
+                onIterationCapChange(e.currentTarget.checked ? DEFAULT_ITERATION_CAP : null)
+              }
+            />
+            <span>cap</span>
+            <input
+              type="number"
+              min="1"
+              class="itercap-input"
+              value={iterationCap ?? ""}
+              disabled={iterationCap === null}
+              onInput={(e) => {
+                const n = Number(e.currentTarget.value);
+                if (Number.isInteger(n) && n >= 1) onIterationCapChange(n);
+              }}
+            />
+          </label>
+        )}
         <button
           type="button"
           class="btn btn-secondary btn-icon btn-warnings-toggle"

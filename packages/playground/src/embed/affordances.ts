@@ -8,7 +8,7 @@ import {
 } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { openDataPopover } from "./data-popover.ts";
-import { type EmbedData, type EmbedEngine, runProgram } from "./engine.ts";
+import { type EmbedData, type EmbedEngine, formatIterationCap, runProgram } from "./engine.ts";
 import { type RunState, openResultPopover } from "./result-popover.ts";
 import { type Structure, parseStructure } from "./structure.ts";
 
@@ -98,10 +98,17 @@ async function runQueryAt(
   const source = view.state.doc.toString();
   const data = currentEmbedData(view);
   try {
-    const results = await runProgram(source, data, engine);
+    let warning: string | undefined;
+    const results = await runProgram(source, data, engine, {
+      onIterationCap: (info) => {
+        warning = formatIterationCap(info);
+      },
+    });
     const result = results[index];
     update(
-      result ? { kind: "result", result } : { kind: "error", message: "No result for this query." },
+      result
+        ? { kind: "result", result, warning }
+        : { kind: "error", message: "No result for this query." },
     );
   } catch (err) {
     update({ kind: "error", message: err instanceof Error ? err.message : String(err) });

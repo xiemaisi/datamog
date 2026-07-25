@@ -109,6 +109,18 @@
   overflow: auto;
 }
 
+/* Shown above a partial result when evaluation hit the iteration cap. */
+.datamog-embed-result-warning {
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  background: #fff8e1;
+  border: 1px solid #f5c518;
+  color: #b45309;
+  font-size: 0.85em;
+  line-height: 1.35;
+}
+
 /* Result popover header: title on the left, a close "×" in the top-right. */
 .datamog-embed-popover-header {
   display: flex;
