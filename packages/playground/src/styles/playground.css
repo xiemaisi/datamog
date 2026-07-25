@@ -270,10 +270,11 @@ body {
   white-space: nowrap;
 }
 .itercap-input {
-  width: 5ch;
+  /* Wide enough for a 4-5 digit cap plus the native number spinner. */
+  width: 8ch;
   font-family: inherit;
   font-size: 13px;
-  padding: 5px 6px;
+  padding: 5px 4px 5px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);

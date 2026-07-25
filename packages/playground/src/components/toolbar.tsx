@@ -161,8 +161,8 @@ export function Toolbar({
             </option>
           ))}
         </select>
-      </div>
-      <div class="toolbar-right">
+        {/* Editing-side affordances: the spec reference and the editor's
+            warning-squiggly toggle both belong over the edit pane. */}
         <a
           class="btn btn-secondary"
           href={`${import.meta.env.BASE_URL}spec.html`}
@@ -172,6 +172,18 @@ export function Toolbar({
         >
           Spec
         </a>
+        <button
+          type="button"
+          class="btn btn-secondary btn-icon btn-warnings-toggle"
+          onClick={onToggleWarnings}
+          title={showWarnings ? "Hide warnings" : "Show warnings"}
+          aria-label={showWarnings ? "Hide warnings" : "Show warnings"}
+          aria-pressed={showWarnings}
+        >
+          <WarningIcon muted={!showWarnings} />
+        </button>
+      </div>
+      <div class="toolbar-right">
         <select
           class="backend-select"
           value={backend}
@@ -219,16 +231,6 @@ export function Toolbar({
             />
           </label>
         )}
-        <button
-          type="button"
-          class="btn btn-secondary btn-icon btn-warnings-toggle"
-          onClick={onToggleWarnings}
-          title={showWarnings ? "Hide warnings" : "Show warnings"}
-          aria-label={showWarnings ? "Hide warnings" : "Show warnings"}
-          aria-pressed={showWarnings}
-        >
-          <WarningIcon muted={!showWarnings} />
-        </button>
         <button
           type="button"
           class="btn btn-secondary btn-icon"
