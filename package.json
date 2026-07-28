@@ -41,8 +41,8 @@
     "playground:build": "bun run docs:html && node scripts/ensure-rollup-native.mjs && bun --filter datamog-playground build",
     "e2e": "playwright install chromium && playwright test",
     "e2e:ui": "playwright install chromium && playwright test --ui",
-    "slides:build": "bunx @marp-team/marp-cli@latest --pdf --allow-local-files --input-dir doc/walkthrough/slides --output-dir doc/walkthrough/slides/pdf",
-    "slides:watch": "bunx @marp-team/marp-cli@latest --watch --pdf --allow-local-files --input-dir doc/walkthrough/slides --output-dir doc/walkthrough/slides/pdf",
+    "slides:build": "bunx @marp-team/marp-cli@latest --pdf --allow-local-files --input-dir doc/walkthrough/slides -o doc/walkthrough/slides/pdf",
+    "slides:watch": "bunx @marp-team/marp-cli@latest --watch --pdf --allow-local-files --input-dir doc/walkthrough/slides -o doc/walkthrough/slides/pdf",
     "handout:pdf": "playwright install chromium && bun run doc/courses/flolac-26/build-pdf.ts"
   },
   "engines": {

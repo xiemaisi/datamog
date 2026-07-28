@@ -176,7 +176,7 @@ Langium-based language server providing syntax highlighting (TextMate grammar) a
 
 The `doc/` tree holds several standalone tutorials and course materials plus the spec:
 
-- `doc/walkthrough/` — the long-form language walkthrough. Main chapters `00-intro.md` through `14-json.md`; appendices `A-lenses.md` through `E-solutions.md`; runnable code in `doc/walkthrough/code/`, exercise solutions in `doc/walkthrough/solutions/`, Marp slides in `doc/walkthrough/slides/`, maintenance scripts in `doc/walkthrough/scripts/`.
+- `doc/walkthrough/` — the long-form language walkthrough. Main chapters `00-intro.md` through `16-modules.md`, grouped into five parts by `README.md` (I: 0–2, II: 3–6, III: 7–9, IV: 10–14, V: 15–16); appendices `A-lenses.md` through `E-solutions.md`; runnable code in `doc/walkthrough/code/`, exercise solutions in `doc/walkthrough/solutions/`, Marp slides in `doc/walkthrough/slides/`, maintenance scripts in `doc/walkthrough/scripts/`. `scripts/pg-link.mjs` regenerates a chapter's "Open this program in the playground" URL from its `.dl` (plus sibling CSVs); re-run it whenever you change the backing program.
 - `doc/case-studies/` — a puzzle-driven companion tutorial (8 chapters; chapters 2-7 adapted from the CodeQL, DES, and Soufflé tutorials, chapter 8 a propositional theorem prover built across five examples: `cnf-*`/`parse-to-cnf` for the model-search prover plus `sequent-prover` for the cut-free sequent-calculus alternative); complete solutions live in `packages/cli/examples/`.
 - `doc/jupyter/` — a standalone Jupyter-notebook tutorial (`datamog-jupyter.ipynb`) that drives Datamog via the `datamog-magic` IPython cell magic. Regenerate the notebook with `python3 doc/jupyter/build-jupyter-tutorial.py` (the script is the source of truth; the `.ipynb` is a committed build artifact).
 - `doc/courses/` — packaged course materials (currently `flolac-26/` for FLOLAC 2026).
@@ -184,7 +184,7 @@ The `doc/` tree holds several standalone tutorials and course materials plus the
 
 ## Tutorial slide decks
 
-Per-chapter Marp decks live under `doc/walkthrough/slides/<NN-name>.md`, one per main walkthrough chapter (00–13; chapter 14 and appendices not yet sliced). Conventions:
+Per-chapter Marp decks live under `doc/walkthrough/slides/<NN-name>.md`, one per main walkthrough chapter (00–13; chapters 14–16 and the appendices are not yet sliced). Conventions:
 
 - **Marp frontmatter**: `theme: default`, `paginate: true`, `size: 16:9`.
 - **Style**: condensed — roughly 10–17 slides per chapter, summarising the chapter rather than reproducing it. Keep code listings and lens callouts that earn their slide; drop the rest.

@@ -42,9 +42,10 @@ CLAUDE.local.md
 # Devcontainer env file — may hold a host gh token (GH_TOKEN); never commit it
 .devcontainer/.env
 
-# Marp slide deck PDFs (regenerated from doc/walkthrough/slides/*.md)
+# Marp slide deck PDFs (regenerated from doc/walkthrough/slides/*.md).
+# Only the output directory is ignored: a PDF appearing next to the .md sources
+# means slides:build lost its -o flag, and should show up in `git status`.
 doc/walkthrough/slides/pdf/
-doc/walkthrough/slides/*.pdf
 
 # Course handout PDFs (regenerated via `bun run handout:pdf`)
 doc/courses/**/*.pdf
