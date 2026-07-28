@@ -4,6 +4,25 @@ input predicate employee(id: integer, name: string, salary: integer).
 input predicate in_department(emp_id: integer, dept_id: integer).
 input predicate manages(manager: integer, report: integer).
 
+# --- Keys, enforced ---------------------------------------------------------
+# `employee.id` is the schema's primary key. Two rows can only share an id if
+# some other column differs, so that is exactly what to look for.
+error predicate duplicate_employee_id(Id) :-
+  employee(Id, N1, S1), employee(Id, N2, S2), N1 <> N2 || S1 <> S2.
+
+# `in_department.emp_id` and both columns of `manages` are foreign keys into
+# `employee`. Every reference must resolve.
+error predicate unknown_department_member(EmpId) :-
+  in_department(EmpId, _), not employee(EmpId, _, _).
+
+error predicate unknown_manages_party(Who) :-
+  manages(Who, _), not employee(Who, _, _).
+error predicate unknown_manages_party(Who) :-
+  manages(_, Who), not employee(Who, _, _).
+
+# Nobody manages themselves. A one-off assertion, so it needs no name.
+!- manages(M, M).
+
 # Anyone who manages someone.
 is_manager(M) :- manages(M, _).
 

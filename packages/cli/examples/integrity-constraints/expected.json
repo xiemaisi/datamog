@@ -1,0 +1,12 @@
+[
+  [
+    {
+      "Cust": "alice",
+      "Total": 200
+    },
+    {
+      "Cust": "bob",
+      "Total": 45
+    }
+  ]
+]

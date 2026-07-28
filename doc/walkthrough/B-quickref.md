@@ -12,7 +12,10 @@ definition, see [`doc/spec.md`](../spec.md).
 | ``input predicate `p-name`(`col-name`: type).`` | quote predicate or column identifiers            |
 | `p("value", 42).`                          | assert a ground fact                             |
 | `h(X, Y) :- body.`                         | rule defining an IDB predicate                   |
+| `output predicate h(X) :- body.`           | rule whose predicate is also a named result      |
+| `error predicate bad(X) :- body.`          | named integrity constraint: `bad` must be empty  |
 | `?- q(X, Y).`                              | query                                            |
+| `!- q(X), not r(X).`                       | anonymous integrity constraint: must have no solution |
 | `# comment`                                | line comment                                     |
 
 ## Identifiers

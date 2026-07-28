@@ -1,0 +1,23 @@
+# Integrity constraints: predicates asserted to be empty. Their tuples are the
+# counterexamples, so give them arguments — those become the reported columns.
+# Every constraint is checked before any query runs, so a violated program
+# produces no output at all.
+
+input predicate ord(id: integer, cust: string, amount: integer).
+input predicate cust(name: string, active: boolean).
+
+# Named form. Referential integrity: every order names a known customer.
+error predicate orphan_order(Id, Cust) :- ord(Id, Cust, _), not cust(Cust, _).
+
+# Anonymous form, for a one-off assertion. The implicit projection is the same
+# as a query's, so a violation would report Id and Amount.
+!- ord(Id, _, Amount), Amount <= 0.
+
+# Constraints are ordinary predicates: this one is derived, not read off an
+# input. Uncomment the `dormant` row in cust.csv to see it fire.
+placed_by(Cust) :- ord(_, Cust, _).
+error predicate inactive_with_orders(Cust) :- cust(Cust, false), placed_by(Cust).
+
+revenue_by_customer(Cust, sum(Amount)) :- ord(_, Cust, Amount).
+
+?- revenue_by_customer(Cust, Total).

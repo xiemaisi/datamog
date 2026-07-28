@@ -1,11 +1,14 @@
 # Chapter 10 — Modelling with Datalog
 
-Part I–III introduced every feature of the language. This chapter
-is about the *craft* of using them: how to shape a problem into
-Datalog, when to split a concept into multiple predicates, and how
-to use `--dry-run` output as a debugging tool. It's shorter than
-the foundational chapters and more advisory — the patterns here are
-habits you build up.
+Part I–III introduced the core of the language. This chapter is
+about the *craft* of using it: how to shape a problem into Datalog,
+when to split a concept into multiple predicates, how to state a
+schema's invariants so the program enforces them, and how to use
+`--dry-run` output as a debugging tool. It's shorter than the
+foundational chapters and more advisory — the patterns here are
+habits you build up. The one new piece of syntax it introduces,
+integrity constraints, belongs here because deciding *what* to
+constrain is a modelling question.
 
 ## A small schema, written carefully
 
@@ -84,6 +87,128 @@ to follow. The rule of thumb is to factor out any concept that
 invent a predicate. "Is neither an executive nor an intern and has
 over five years of tenure" might just be a body-of-a-rule.
 
+## Keys, and enforcing them
+
+The schema above says `id` is `employee`'s key "because other
+predicates refer to it". That's a convention held in your head — the
+declaration doesn't say it, and nothing stops a data file from
+breaking it. **Integrity constraints** turn the convention into a
+check the program enforces on every run.
+
+A constraint is a predicate asserted to be empty. Write one as a rule
+prefixed `error predicate`; its tuples are the counterexamples, so
+give it arguments naming what went wrong:
+
+```prolog
+error predicate unknown_department_member(EmpId) :-
+  in_department(EmpId, _), not employee(EmpId, _, _).
+```
+
+That's a **foreign key**: every `emp_id` in `in_department` must
+resolve to an `employee`. It reads as the definition of a violation,
+which is the whole trick — you don't state the invariant, you state
+what it would mean to break it, and assert there is no such thing.
+The negation is the same safe negation from
+[Chapter 8](08-negation.md): `EmpId` is bound by the positive atom
+before `not` narrows it.
+
+A **primary key** takes one more thought. The obvious reading, "no
+two rows share an id", can't be written directly — but remember set
+semantics from [Chapter 1](01-facts-and-queries.md): two identical
+rows *are* one row. So two tuples can only share an id if some other
+column differs, and that is exactly what to look for:
+
+```prolog
+error predicate duplicate_employee_id(Id) :-
+  employee(Id, N1, S1), employee(Id, N2, S2), N1 <> N2 || S1 <> S2.
+```
+
+Two atoms of the same predicate, joined on the key, requiring the
+rest to disagree. This is not recursion — `duplicate_employee_id`
+doesn't mention itself — so the linear-recursion restriction doesn't
+apply and it runs on every backend.
+
+> **Use `<>`, not `!=`.** For a nullable column these differ, and the
+> difference is silent. `<>` is *logical* inequality: `null <> "bob"`
+> is true. `!=` is *computational* (three-valued): `null != "bob"` is
+> `null`, which isn't true, so the row is never flagged. A duplicate
+> id where one row has a null name is caught by `<>` and missed
+> entirely by `!=`. See [Chapter 7](07-safety.md) on the two equality
+> families.
+
+A **composite key** is the same shape: join on every key column, and
+require some non-key column to differ. If `(emp_id, dept_id)` were the
+key of a membership table carrying a `role`, that is:
+
+```prolog
+error predicate duplicate_membership(E, D) :-
+  membership(E, D, R1), membership(E, D, R2), R1 <> R2.
+```
+
+Several rules for one constraint union their violations, which is how
+you cover more than one way to break the same invariant:
+
+```prolog
+error predicate unknown_manages_party(Who) :-
+  manages(Who, _), not employee(Who, _, _).
+error predicate unknown_manages_party(Who) :-
+  manages(_, Who), not employee(Who, _, _).
+```
+
+For a one-off assertion that doesn't deserve a name, `!-` takes a
+conjunction directly, with the same implicit projection a `?-` query
+has:
+
+```prolog
+!- manages(M, M).           # nobody manages themselves
+```
+
+### What happens when one fails
+
+Constraints are checked at their fixed point, after everything is
+evaluated and **before any output is produced**. Every violated
+constraint is reported, with its counterexample rows:
+
+```
+hr.dl: Constraint 'duplicate_employee_id' is violated by 1 row:
+  Id = 2
+Constraint 'unknown_manages_party' is violated by 1 row:
+  Who = 7
+```
+
+And then nothing else — no query results at all, and a non-zero exit
+status. That's deliberate: results derived from data the program
+itself declares invalid are worse than no results, because they look
+fine. It also makes constraints useful in a pipeline, where the exit
+status is what a build step checks.
+
+Two habits worth forming. **Put the witness in the head.** A nullary
+`error predicate bad()` tells you only that something is wrong;
+`bad(Id)` tells you which row, which is the difference between a
+report you can act on and one you have to investigate. **Constrain
+the EDBs, not just the IDBs.** The invariants most worth stating are
+the ones about data arriving from outside, since that's the data you
+don't control.
+
+### One caveat: nullable references
+
+Suppose the schema had taken the other route and given `employee` a
+nullable `mgr` column. An optional reference needs the null case
+excluded explicitly, or "absent" reads as "dangling":
+
+```prolog
+input predicate employee(id: integer, name: string, mgr: integer?).
+
+error predicate dangling_manager(Id, M) :-
+  employee(Id, _, M), M <> null, not employee(M, _, _).
+```
+
+Without `M <> null`, every employee with no manager is reported as a
+violation. The better fix is usually further upstream, and it's the
+first bullet of this chapter: model "has a manager" as a separate
+relation that simply omits the row, the way `manages` does, and the
+question never arises.
+
 ## Recursion inside a domain model
 
 `reports_to` is a recursive IDB with a clear domain meaning:
@@ -118,7 +243,7 @@ Three strata: `manages` (EDB) → `reports_to` (recursive) →
 stratum reads only from strictly lower strata; each is either
 monotone or non-recursive.
 
-**[Open this program in the playground →](https://max-schaefer.github.io/datamog/#p=employee(1%2C%20%22alice%22%2C%20120000).%0Aemployee(2%2C%20%22bob%22%2C%2095000).%0Aemployee(3%2C%20%22carol%22%2C%20110000).%0Aemployee(4%2C%20%22dave%22%2C%2085000).%0Aemployee(5%2C%20%22eve%22%2C%2075000).%0Aemployee(6%2C%20%22frank%22%2C%2090000).%0Ain_department(1%2C%2010).%0Ain_department(2%2C%2010).%0Ain_department(3%2C%2020).%0Ain_department(4%2C%2020).%0Ain_department(5%2C%2010).%0Ain_department(6%2C%2030).%0Amanages(1%2C%202).%0Amanages(1%2C%205).%0Amanages(3%2C%204).%0Amanages(3%2C%206).%0A%23%20Tutorial%2C%20chapter%2010%20%E2%80%94%20a%20small%20HR-style%20schema.%0A%0A%23%20Anyone%20who%20manages%20someone.%0Ais_manager(M)%20%3A-%20manages(M%2C%20_).%0A%0A%23%20Transitively%3A%20employees%20who%20report%20up%20(directly%20or%20indirectly)%0A%23%20to%20a%20given%20manager.%0Areports_to(R%2C%20M)%20%3A-%20manages(M%2C%20R).%0Areports_to(R%2C%20M)%20%3A-%20manages(M%2C%20X)%2C%20reports_to(R%2C%20X).%0A%0A%23%20An%20individual%20contributor%20has%20no%20reports.%0Aic(E)%20%3A-%20employee(E%2C%20_%2C%20_)%2C%20not%20is_manager(E).%0A%0A%23%20Head%20count%20per%20department.%0Aoutput%20predicate%20head_count(Dept%2C%20count(E))%20%3A-%20in_department(E%2C%20Dept).%0A%0A%23%20A%20%22big%20team%22%20manager%20is%20one%20who%20directly%20or%20indirectly%20manages%0A%23%20at%20least%202%20reports.%20Two%20strata%3A%20compute%20report_count%20first%2C%0A%23%20then%20filter.%0Areport_count(M%2C%20count(R))%20%3A-%20reports_to(R%2C%20M).%0Aoutput%20predicate%20big_team_manager(M)%20%3A-%20report_count(M%2C%20C)%2C%20C%20%3E%3D%202.%0A%0A%3F-%20ic(E).%0A)**
+**[Open this program in the playground →](https://max-schaefer.github.io/datamog/#p=employee(1%2C%20%22alice%22%2C%20120000).%0Aemployee(2%2C%20%22bob%22%2C%2095000).%0Aemployee(3%2C%20%22carol%22%2C%20110000).%0Aemployee(4%2C%20%22dave%22%2C%2085000).%0Aemployee(5%2C%20%22eve%22%2C%2075000).%0Aemployee(6%2C%20%22frank%22%2C%2090000).%0Ain_department(1%2C%2010).%0Ain_department(2%2C%2010).%0Ain_department(3%2C%2020).%0Ain_department(4%2C%2020).%0Ain_department(5%2C%2010).%0Ain_department(6%2C%2030).%0Amanages(1%2C%202).%0Amanages(1%2C%205).%0Amanages(3%2C%204).%0Amanages(3%2C%206).%0A%23%20Tutorial%2C%20chapter%2010%20%E2%80%94%20a%20small%20HR-style%20schema.%0A%0A%23%20---%20Keys%2C%20enforced%20---------------------------------------------------------%0A%23%20%60employee.id%60%20is%20the%20schema's%20primary%20key.%20Two%20rows%20can%20only%20share%20an%20id%20if%0A%23%20some%20other%20column%20differs%2C%20so%20that%20is%20exactly%20what%20to%20look%20for.%0Aerror%20predicate%20duplicate_employee_id(Id)%20%3A-%0A%20%20employee(Id%2C%20N1%2C%20S1)%2C%20employee(Id%2C%20N2%2C%20S2)%2C%20N1%20%3C%3E%20N2%20%7C%7C%20S1%20%3C%3E%20S2.%0A%0A%23%20%60in_department.emp_id%60%20and%20both%20columns%20of%20%60manages%60%20are%20foreign%20keys%20into%0A%23%20%60employee%60.%20Every%20reference%20must%20resolve.%0Aerror%20predicate%20unknown_department_member(EmpId)%20%3A-%0A%20%20in_department(EmpId%2C%20_)%2C%20not%20employee(EmpId%2C%20_%2C%20_).%0A%0Aerror%20predicate%20unknown_manages_party(Who)%20%3A-%0A%20%20manages(Who%2C%20_)%2C%20not%20employee(Who%2C%20_%2C%20_).%0Aerror%20predicate%20unknown_manages_party(Who)%20%3A-%0A%20%20manages(_%2C%20Who)%2C%20not%20employee(Who%2C%20_%2C%20_).%0A%0A%23%20Nobody%20manages%20themselves.%20A%20one-off%20assertion%2C%20so%20it%20needs%20no%20name.%0A!-%20manages(M%2C%20M).%0A%0A%23%20Anyone%20who%20manages%20someone.%0Ais_manager(M)%20%3A-%20manages(M%2C%20_).%0A%0A%23%20Transitively%3A%20employees%20who%20report%20up%20(directly%20or%20indirectly)%0A%23%20to%20a%20given%20manager.%0Areports_to(R%2C%20M)%20%3A-%20manages(M%2C%20R).%0Areports_to(R%2C%20M)%20%3A-%20manages(M%2C%20X)%2C%20reports_to(R%2C%20X).%0A%0A%23%20An%20individual%20contributor%20has%20no%20reports.%0Aic(E)%20%3A-%20employee(E%2C%20_%2C%20_)%2C%20not%20is_manager(E).%0A%0A%23%20Head%20count%20per%20department.%0Aoutput%20predicate%20head_count(Dept%2C%20count(E))%20%3A-%20in_department(E%2C%20Dept).%0A%0A%23%20A%20%22big%20team%22%20manager%20is%20one%20who%20directly%20or%20indirectly%20manages%0A%23%20at%20least%202%20reports.%20Two%20strata%3A%20compute%20report_count%20first%2C%0A%23%20then%20filter.%0Areport_count(M%2C%20count(R))%20%3A-%20reports_to(R%2C%20M).%0Aoutput%20predicate%20big_team_manager(M)%20%3A-%20report_count(M%2C%20C)%2C%20C%20%3E%3D%202.%0A%0A%3F-%20ic(E).%0A)**
 
 This separation is why the pattern works, and why you should reach
 for it every time a problem asks "how many X satisfy some recursive
@@ -176,6 +301,15 @@ thumb worth knowing once you're building something non-trivial:
   nest; prefer separate predicates over nullable columns for optional
   relationships.
 - Factor named concepts into separate IDBs; inline unnamed ones.
+- State a schema's key invariants as constraints rather than leaving
+  them a convention. A foreign key is `not` over the referenced
+  predicate; a primary key joins the predicate to itself on the key
+  and requires the rest to differ (with `<>`, not `!=`). Put the
+  offending values in the constraint's head — those are what a
+  violation reports.
+- A violated constraint suppresses every output and exits non-zero,
+  so constraints are what makes a Datamog run safe to use in a
+  pipeline.
 - Aggregate-over-recursion is a three-stratum pattern (recursive
   IDB → aggregate IDB → filter).
 - `--dry-run` is a debugger — read the generated SQL when things

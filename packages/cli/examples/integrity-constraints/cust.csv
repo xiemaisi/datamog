@@ -1,0 +1,4 @@
+name,active
+alice,true
+bob,true
+dormant,false

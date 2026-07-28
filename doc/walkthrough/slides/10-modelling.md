@@ -79,6 +79,60 @@ If it doesn't have a name, it's probably not earning a predicate.
 
 ---
 
+# Keys are a convention — until you enforce one
+
+`id` is `employee`'s key "because other predicates refer to it". Nothing in the declaration says so, and no data file is obliged to agree.
+
+An **integrity constraint** is a predicate asserted to be empty. Its tuples are the counterexamples.
+
+```prolog
+error predicate unknown_department_member(EmpId) :-
+  in_department(EmpId, _), not employee(EmpId, _, _).
+```
+
+A **foreign key**. You don't state the invariant — you state what breaking it looks like, and assert there is no such thing.
+
+---
+
+# Primary keys and set semantics
+
+"No two rows share an id" can't be written directly. But two identical rows *are* one row, so two tuples share an id only if something else differs:
+
+```prolog
+error predicate duplicate_employee_id(Id) :-
+  employee(Id, N1, S1), employee(Id, N2, S2), N1 <> N2 || S1 <> S2.
+```
+
+Not recursion — the head isn't in the body — so it runs on every backend.
+
+> **`<>`, not `!=`.** `null <> "bob"` is true; `null != "bob"` is `null`, so a duplicate with a null name is silently missed.
+
+`!-` takes a conjunction directly when the constraint needs no name:
+
+```prolog
+!- manages(M, M).
+```
+
+---
+
+# What a violation does
+
+Checked at the fixed point, **before any output is produced**:
+
+```
+hr.dl: Constraint 'duplicate_employee_id' is violated by 1 row:
+  Id = 2
+Constraint 'unknown_manages_party' is violated by 1 row:
+  Who = 7
+```
+
+Then nothing else — no query results, non-zero exit. Results derived from data the program calls invalid are worse than no results, because they look fine.
+
+- **Put the witness in the head.** `bad(Id)` beats `bad()`.
+- **Constrain the EDBs.** The data you don't control is the data worth checking.
+
+---
+
 # Recursion inside a domain model
 
 `reports_to` is a recursive IDB with clear domain meaning: "transitively, who do you report up to?"
@@ -141,6 +195,7 @@ This isn't a perf guide, but rules of thumb once you build something non-trivial
 
 - **EDB** for boundary data; **IDB** for derived data. Flatten instead of nest. Prefer separate predicates for optional relationships.
 - **Factor** named concepts into predicates; **inline** unnamed ones.
+- **Constrain** what the schema assumes. Foreign key = `not` over the referent; primary key = self-join on the key, rest must differ (with `<>`).
 - **Aggregate-over-recursion** is a three-stratum idiom (recursive IDB → aggregate IDB → filter rule).
 - **`--dry-run`** is your debugger. Read the generated SQL when answers look wrong.
 
