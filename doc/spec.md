@@ -154,11 +154,12 @@ not    in    true    false    null
 string    integer    float    boolean    value
 ```
 
-`input`, `output`, `predicate`, `from`, and `as` are **contextual keywords**:
-they lead the `input predicate` / `output predicate` declaration forms and the
-`:=` source binding (§9), but are ordinary identifiers everywhere else, so a
-program may still name a predicate, column, or variable after them (for example
-the `from`/`to` columns of an edge relation).
+`input`, `output`, `error`, `predicate`, `from`, and `as` are **contextual
+keywords**: they lead the `input predicate` / `output predicate` /
+`error predicate` declaration forms and the `:=` source binding (§9), but are
+ordinary identifiers everywhere else, so a program may still name a predicate,
+column, or variable after them (for example the `from`/`to` columns of an edge
+relation, or a predicate called `error`).
 
 **Built-in operation names** (functions, body atoms, and aggregates) are
 reserved only against unquoted predicate names; they may be used as input-predicate
@@ -186,6 +187,7 @@ Bitwise:       &  |  ^  <<  >>  >>>
 Comparison:    <  >  <=  >=  ==  !=  =  <>
 Rule:          :-
 Query:         ?-
+Constraint:    !-
 Binding:       :=
 Constructor:   ::
 Range:         ..
@@ -276,7 +278,7 @@ A program is a sequence of statements, each terminated by a period (`.`):
 
 ```
 Program     ::= Statement*
-Statement   ::= ExtDecl | Rule | Query
+Statement   ::= ExtDecl | Rule | Query | Constraint
 ```
 
 Programs are analysed as a whole. Extensional declarations, rules, and
@@ -286,6 +288,11 @@ predicates declared or defined later in the file.
 A program produces one result per **output**: the single `?-` query (the
 **default output**, §2.4) and each `output predicate` rule (a **named
 output**, §2.3). Results are reported in source order.
+
+A program may also assert **integrity constraints** (§2.10): predicates whose
+extension must be empty. Every constraint is checked before any output is
+produced, so a program whose data violates its own constraints yields no
+results at all.
 
 ### 2.2 Extensional Declarations
 
@@ -327,7 +334,7 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ### 2.3 Rules
 
 ```
-Rule        ::= ('output' 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
+Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm    ::= (AggregateCall | Expression) (':' PrimitiveType)?
 ```
@@ -1097,6 +1104,52 @@ Non-finite numeric leaves produced by host JSON parsers (for example
 `9e999` overflowing to IEEE `Infinity`) are rejected: `parse_json`
 returns `NULL` for the whole input.
 
+### 2.10 Integrity Constraints
+
+```
+Constraint  ::= '!-' BodyElement (',' BodyElement)* '.'
+```
+
+An **integrity constraint** is a predicate whose extension must be empty. Its
+tuples are counterexamples: if it derives any, the program is in violation. Two
+forms express the same thing.
+
+An **anonymous constraint** is written `!-` followed by a conjunction, exactly
+the shape of a query (§2.4), and with the same implicit projection — every
+distinct non-anonymous variable in the body becomes one column of the reported
+counterexample:
+
+```
+!- order(Id, Cust), not customer(Cust).      # every order has a known customer
+!- person(_, Age), Age < 0.                  # no negative ages
+```
+
+A **named constraint** is a rule prefixed `error predicate`. It defines its
+predicate exactly like any other rule and additionally asserts that the
+predicate is empty:
+
+```
+error predicate orphan_order(Id, Cust) :- order(Id, Cust), not customer(Cust).
+```
+
+The two differ only in whether the constraint has a name. Prefer the named form
+when the constraint deserves one in the violation message, when several rules
+contribute alternative violation shapes, or when other rules read it; prefer
+`!-` for a one-off assertion.
+
+Give a constraint arguments even though nothing reads them: the projected
+columns are what a violation reports, so `error predicate bad(Id)` names the
+offending `Id` while a nullary `error predicate bad()` says only that something
+is wrong. A **ground constraint** (one with no projected variables, as in
+`!- order(1, "alice").`) is permitted and reports a witness-free row.
+
+Constraints are otherwise ordinary intensional predicates: they may be
+recursive, use aggregates and negation, carry head type annotations (§5.10),
+and be referenced from other rules. Nothing about the marker changes how the
+predicate is evaluated or how it is compiled (§6) — only what happens to a
+non-empty result. See §4.7 for when constraints are checked, and §9 for how a
+module's constraints reach its importer.
+
 ## 3 Formal Grammar
 
 For reference, the complete grammar in BNF notation:
@@ -1104,7 +1157,7 @@ For reference, the complete grammar in BNF notation:
 ```
 Program        ::= Statement*
 
-Statement      ::= ExtDecl | Rule | Query
+Statement      ::= ExtDecl | Rule | Query | Constraint
 
 ExtDecl        ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
 ColumnDecl     ::= Identifier (':' PrimitiveType)? ('?')?
@@ -1113,12 +1166,13 @@ Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)  
                  | (STRING ('as' Identifier)?)                                    -- data file
 Actual         ::= Identifier '=' Identifier
 
-Rule           ::= HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
+Rule           ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom       ::= Identifier '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm       ::= (AggregateCall | Expression) (':' PrimitiveType)?
 AggregateCall  ::= IDENT '(' Expression ')'
 
 Query          ::= '?-' BodyElement (',' BodyElement)* '.'
+Constraint     ::= '!-' BodyElement (',' BodyElement)* '.'
 
 BodyElement    ::= Literal | Equality | RangeAtom | Filter
 Literal        ::= ('not')? Atom
@@ -1285,6 +1339,34 @@ are compiled together into a shared recursive CTE block.
 - A predicate cannot be declared as both extensional (EDB) and intensional
   (IDB).
 - Extensional declarations may not be duplicated.
+- All rules for one predicate must agree on their marker: a predicate marked
+  `output predicate` by one rule and `error predicate` by another is rejected.
+
+### 4.7 Constraint Checking
+
+Integrity constraints (§2.10) are checked at their fixed point, after all
+predicates are evaluated and **before any output is produced**:
+
+1. Every constraint is evaluated.
+2. If any is non-empty, evaluation stops. *All* violated constraints are
+   reported, each with its counterexample rows — not just the first.
+3. No query runs and no output is printed. A violated program produces
+   no results, rather than results derived from data it declares invalid.
+
+A constraint's identity in the report is its predicate name (`error predicate`)
+or its source text (an anonymous `!-`). A constraint that came from an imported
+module is reported under the name its author wrote, together with the binding
+that brought it in (§9).
+
+Constraints are subject to the same static rules as queries: body safety
+(§4.1), arity consistency (§4.2), stratification (§4.3), and type validation
+(§5.7). Since a constraint is an ordinary predicate, it also participates
+normally in the dependency graph and stratification.
+
+Constraint checking is a whole-program operation. An **incremental session**
+(the REPL) is built up a statement at a time, so it instead checks each
+constraint once, when the statement introducing it is entered; a constraint that
+held when written is not re-checked against later additions.
 
 ## 5 Type System
 
@@ -1785,7 +1867,11 @@ A Datamog program translates to three groups of SQL statements:
 1. **CREATE TABLE** statements for each extensional predicate.
 2. **CREATE VIEW** statements for each intensional predicate (one view per
    predicate, possibly recursive).
-3. **SELECT** statements for each query.
+3. **SELECT** statements for each integrity constraint (§2.10), run first.
+4. **SELECT** statements for each query.
+
+A constraint compiles to exactly the SELECT its query form would; the marker
+changes only what the executor does with a non-empty result.
 
 IDB column names use the convention `col1`, `col2`, ..., `colN`. EDB
 column names use the declared names from the extensional declaration.
@@ -2319,6 +2405,14 @@ names; the module's own head-variable names are not exposed.
 - **One output per import site.** An instance exposes only the selected output;
   the module's other outputs and its `?-` default do not leak into the merged
   program (they remain available internally as dependencies of the selection).
+- **Integrity constraints propagate.** A module's `!-` statements and
+  `error predicate` rules (§2.10) survive elaboration and are checked against the
+  data actually wired in, once per instance — a module asserts its invariants
+  wherever it is instantiated. Unlike the `?-` default, a `!-` is therefore not
+  dropped at the import boundary, and is not a candidate for the module's default
+  output. A violated module constraint is reported under the name its author
+  wrote, plus the binding it arrived through (its internal freshened name, §9.2,
+  is not shown).
 - **Boundary types must satisfy the declaration.** A boundary is checked as a
   directional subtype relation (§5.10), not mutual compatibility: each actual's
   **published** column types must equal or widen to the type declared for the
