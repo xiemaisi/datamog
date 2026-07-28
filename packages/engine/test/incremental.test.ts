@@ -86,4 +86,54 @@ describe("IncrementalSession", () => {
       await sqlite.close();
     }
   });
+
+  test("a violated constraint fails the chunk and suppresses its queries", async () => {
+    const sqlite = await createSqlite();
+    try {
+      const session = new IncrementalSession(sqlite);
+      await session.addStatements("p(1). p(2). q(1).");
+      await expect(session.addStatements("!- p(X), not q(X).\n?- p(X).")).rejects.toThrow(
+        /Constraint `!- p\(X\), not q\(X\)\.` is violated by 1 row/,
+      );
+    } finally {
+      await sqlite.close();
+    }
+  });
+
+  test("an `error predicate` is checked once, at its declaration", async () => {
+    const sqlite = await createSqlite();
+    try {
+      const session = new IncrementalSession(sqlite);
+      await session.addStatements("p(1). q(1).");
+      // Satisfied when declared, so the chunk succeeds and the constraint is not
+      // surfaced as a query result.
+      const r1 = await session.addStatements("error predicate bad(X) :- p(X), not q(X).");
+      expect(r1.queries).toEqual([]);
+      expect(r1.rules.map((r) => r.predicate)).toEqual(["bad"]);
+      // Later chunks must not re-check it: the analyzer re-synthesises its query
+      // every chunk, and a REPL session is built up a statement at a time.
+      const r2 = await session.addStatements("?- p(X).");
+      expect(r2.queries.map((q) => q.label)).toEqual(["default"]);
+    } finally {
+      await sqlite.close();
+    }
+  });
+
+  test("a chunk rejected for a violation can be re-entered", async () => {
+    // The constraint is only recorded as checked once the chunk succeeds, so a
+    // violated chunk does not wedge the name against a later retry.
+    const sqlite = await createSqlite();
+    try {
+      const session = new IncrementalSession(sqlite);
+      await session.addStatements("p(1). p(2). q(1).");
+      await expect(
+        session.addStatements("error predicate bad(X) :- p(X), not q(X)."),
+      ).rejects.toThrow(/Constraint 'bad' is violated/);
+      await expect(
+        session.addStatements("error predicate bad(X) :- p(X), not q(X)."),
+      ).rejects.toThrow(/Constraint 'bad' is violated/);
+    } finally {
+      await sqlite.close();
+    }
+  });
 });

@@ -63,8 +63,13 @@ PrimitiveType returns string:
 // printed result, run like an implicit `?- head` query. Types are inferred, so
 // the head takes ordinary variable arguments and reads like the intensional it
 // is. A predicate is an output if any of its rules carries the marker.
+//
+// `error predicate` is the same shape with the opposite disposition: the
+// predicate is an integrity constraint whose extension must be empty. Its
+// tuples are the counterexamples, reported and fatal instead of printed. A
+// predicate is a constraint if any of its rules carries the marker.
 Rule:
-    (output?='output' 'predicate')?
+    ((output?='output' | error?='error') 'predicate')?
     head=HeadAtom
         ('::' ruleName=Identifier (ctorParens?='(' (ctorArgs+=Expression (',' ctorArgs+=Expression)*)? ')')?)?
         (':' '-' body+=BodyElement (',' body+=BodyElement)*)? '.';
@@ -75,8 +80,14 @@ Rule:
 // joins, filters, and computations at the top level. The projection
 // is implicit: every distinct non-anonymous Variable that appears in
 // the body becomes one output column, in first-mention source order.
+//
+// `!-` is the same conjunctive shape as an anonymous integrity constraint: the
+// body must have no solution, and its implicit projection names the columns of
+// any counterexample. `'!' '-'` is two existing tokens rather than a composite
+// `!-` keyword, for the same reason `:-` is split below — `!` is also the
+// logical-not operator, so a composite token could munch across an expression.
 Query:
-    '?-' body+=BodyElement (',' body+=BodyElement)* '.';
+    ('?-' | isError?='!' '-') body+=BodyElement (',' body+=BodyElement)* '.';
 
 // --- Head (allows aggregates) ------------------------------------------------
 
@@ -291,14 +302,15 @@ FunctionCall:
 // longer enforces it — `Foo(X)` is a predicate, `foo` is a variable.
 // FunctionCall vs Variable in Primary, and Literal vs Filter in body
 // position, are disambiguated by whether `(` follows the identifier.
-// `input`, `output`, `predicate`, `from`, and `as` are contextual keywords:
-// they lead the declaration / binding forms above, but are otherwise ordinary
-// identifiers, so a program can still name a predicate/column/variable after
-// them (they are common words: `from`/`to` are the usual columns of an edge
-// relation). The parser tells the forms apart by lookahead: `input`/`output`
-// followed by `predicate`; an optional export identifier followed by `from`.
+// `input`, `output`, `error`, `predicate`, `from`, and `as` are contextual
+// keywords: they lead the declaration / binding forms above, but are otherwise
+// ordinary identifiers, so a program can still name a predicate/column/variable
+// after them (they are common words: `from`/`to` are the usual columns of an
+// edge relation, `error` a plausible predicate name). The parser tells the forms
+// apart by lookahead: `input`/`output`/`error` followed by `predicate`; an
+// optional export identifier followed by `from`.
 Identifier returns string:
-    IDENT | QUOTED_IDENT | 'input' | 'output' | 'predicate' | 'from' | 'as';
+    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as';
 
 // JSON-style construction. Both literals produce a `value` (an array
 // or object). Element expressions of any primitive type are auto-lifted

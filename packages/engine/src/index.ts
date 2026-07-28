@@ -8,6 +8,13 @@ export {
   type SqlDialect,
   sqlTypeFor,
 } from "./dialect.ts";
+export {
+  type ConstraintViolation,
+  ConstraintViolationError,
+  formatConstraintViolations,
+  projectConstraintRows,
+  toViolation,
+} from "./constraints.ts";
 export { DatamogExecutor } from "./executor.ts";
 export { expandGitHubShorthand } from "./github-shorthand.ts";
 export {

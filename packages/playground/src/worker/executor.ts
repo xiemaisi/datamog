@@ -429,7 +429,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           diagnostics,
           recursiveCalls,
           predicateReferences,
-          hasQueries: typed.queries.length > 0,
+          // A constraints-only program has something to run too: checking its
+          // constraints is the point of running it.
+          hasQueries: typed.queries.length > 0 || typed.constraints.length > 0,
         },
       });
     } catch (err: unknown) {

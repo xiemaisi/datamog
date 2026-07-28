@@ -442,13 +442,27 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "$type": "Group",
             "elements": [
               {
-                "$type": "Assignment",
-                "feature": "output",
-                "operator": "?=",
-                "terminal": {
-                  "$type": "Keyword",
-                  "value": "output"
-                }
+                "$type": "Alternatives",
+                "elements": [
+                  {
+                    "$type": "Assignment",
+                    "feature": "output",
+                    "operator": "?=",
+                    "terminal": {
+                      "$type": "Keyword",
+                      "value": "output"
+                    }
+                  },
+                  {
+                    "$type": "Assignment",
+                    "feature": "error",
+                    "operator": "?=",
+                    "terminal": {
+                      "$type": "Keyword",
+                      "value": "error"
+                    }
+                  }
+                ]
               },
               {
                 "$type": "Keyword",
@@ -615,8 +629,31 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
         "$type": "Group",
         "elements": [
           {
-            "$type": "Keyword",
-            "value": "?-"
+            "$type": "Alternatives",
+            "elements": [
+              {
+                "$type": "Keyword",
+                "value": "?-"
+              },
+              {
+                "$type": "Group",
+                "elements": [
+                  {
+                    "$type": "Assignment",
+                    "feature": "isError",
+                    "operator": "?=",
+                    "terminal": {
+                      "$type": "Keyword",
+                      "value": "!"
+                    }
+                  },
+                  {
+                    "$type": "Keyword",
+                    "value": "-"
+                  }
+                ]
+              }
+            ]
           },
           {
             "$type": "Assignment",
@@ -2443,6 +2480,10 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "Keyword",
             "value": "output"
+          },
+          {
+            "$type": "Keyword",
+            "value": "error"
           },
           {
             "$type": "Keyword",

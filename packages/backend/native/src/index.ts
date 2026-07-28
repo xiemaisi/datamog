@@ -4,9 +4,12 @@
 import type { ExtDecl, Query, TypedProgram } from "datamog-core";
 import {
   type Backend,
+  type ConstraintViolation,
+  ConstraintViolationError,
   type ExtensionalLoader,
   type QueryResult,
   loadExtensionalData,
+  toViolation,
 } from "datamog-engine";
 import type { EvaluatorOptions, IterationCapInfo } from "./base-evaluator.ts";
 import { NaiveEvaluator } from "./evaluator.ts";
@@ -164,6 +167,19 @@ export function createEvaluatorBackend<E extends DatalogEvaluator>(
 
       ev.computeAll();
       if (ev.capInfo) onIterationCap?.(ev.capInfo);
+
+      // Integrity constraints are checked before any query is projected, so a
+      // violated program produces no results at all. `runQuery` already returns
+      // rows in the uniform shape (native values need no coercion), so the rows
+      // are the counterexamples as-is.
+      const violations: ConstraintViolation[] = [];
+      for (const constraint of analyzed.constraints) {
+        const { rows } = ev.runQuery(constraint);
+        if (rows.length > 0) violations.push(toViolation(constraint, rows));
+      }
+      if (violations.length > 0) {
+        throw new ConstraintViolationError(violations, analyzed.sourceFile);
+      }
 
       const results: QueryResult[] = [];
       for (const query of analyzed.queries) {

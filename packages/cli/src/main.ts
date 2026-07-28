@@ -713,7 +713,7 @@ async function main() {
         if (stmt.head.predicate === "default") hasDefault = true;
         else outputPreds.add(stmt.head.predicate);
       }
-    } else if (stmt.$type === "Query") hasDefault = true;
+    } else if (stmt.$type === "Query" && !stmt.isError) hasDefault = true;
   }
   const outputNames = [...outputPreds];
 
@@ -807,6 +807,12 @@ async function main() {
     }
     for (const stmt of translation.createViews) {
       console.log(stmt);
+      console.log();
+    }
+    // Constraints run before any query, so preview them in that order. They are
+    // not outputs, so output selection does not apply.
+    for (const sql of translation.constraints) {
+      console.log(sql);
       console.log();
     }
     analyzed.queries.forEach((query, idx) => {

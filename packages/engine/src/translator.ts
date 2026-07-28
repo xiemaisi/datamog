@@ -62,6 +62,14 @@ export interface TranslationResult {
    * SQLite's 0/1 booleans into JS true/false.
    */
   queryColumnTypes: Record<string, PrimitiveType>[];
+  /**
+   * One SELECT per integrity constraint (`analyzed.constraints`, same
+   * length / indexing). Translated exactly like a query; the executor runs
+   * these before any query and treats returned rows as counterexamples.
+   */
+  constraints: string[];
+  /** For each `constraints[i]`, the result-row column types (see `queryColumnTypes`). */
+  constraintColumnTypes: Record<string, PrimitiveType>[];
 }
 
 export function translate(analyzed: TypedProgram, dialect: SqlDialect): TranslationResult {
@@ -76,7 +84,8 @@ export function translate(analyzed: TypedProgram, dialect: SqlDialect): Translat
 function translateImpl(analyzed: TypedProgram, dialect: SqlDialect): TranslationResult {
   const createTables = translateTables(analyzed, dialect);
   const viewResult = translateViews(analyzed, dialect);
-  const queryResult = translateQueries(analyzed, dialect);
+  const queryResult = translateQueries(analyzed, dialect, analyzed.queries);
+  const constraintResult = translateQueries(analyzed, dialect, analyzed.constraints);
   const viewStripped = viewResult.sql.map(stripSpanMarks);
   const queryStripped = queryResult.sql.map(stripSpanMarks);
   return {
@@ -88,6 +97,8 @@ function translateImpl(analyzed: TypedProgram, dialect: SqlDialect): Translation
     viewSpans: viewStripped.map((v) => v.spans),
     querySpans: queryStripped.map((q) => q.spans),
     queryColumnTypes: queryResult.columnTypes,
+    constraints: constraintResult.sql.map((s) => stripSpanMarks(s).sql),
+    constraintColumnTypes: constraintResult.columnTypes,
   };
 }
 
@@ -908,7 +919,8 @@ function translateFact(rule: Rule, analyzed: TypedProgram, dialect: SqlDialect):
 const QUERY_PRED = "__query__";
 
 /**
- * Translate every query in the program. Each query is processed by
+ * Translate a list of queries (the program's `?-`/output queries, or its
+ * constraints — both are the same conjunctive shape). Each query is processed by
  * synthesising a `Rule` whose head args are the projected variables
  * (or a single literal `1` for ground queries) and whose body is the
  * query body, then wrapping the rule's SELECT with an outer SELECT
@@ -918,11 +930,12 @@ const QUERY_PRED = "__query__";
 function translateQueries(
   analyzed: TypedProgram,
   dialect: SqlDialect,
+  queries: readonly Query[],
 ): { sql: string[]; predicates: string[]; columnTypes: Record<string, PrimitiveType>[] } {
   const sql: string[] = [];
   const predicates: string[] = [];
   const columnTypes: Record<string, PrimitiveType>[] = [];
-  for (const query of analyzed.queries) {
+  for (const query of queries) {
     const result = translateOneQuery(query, analyzed, dialect);
     sql.push(result.sql);
     predicates.push(result.predicate);

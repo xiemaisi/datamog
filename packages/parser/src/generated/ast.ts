@@ -53,6 +53,7 @@ export type DatamogKeywordNames =
     | "^"
     | "as"
     | "boolean"
+    | "error"
     | "false"
     | "float"
     | "from"
@@ -354,10 +355,10 @@ export function isHeadTerm(item: unknown): item is HeadTerm {
     return reflection.isInstance(item, HeadTerm.$type);
 }
 
-export type Identifier = 'as' | 'from' | 'input' | 'output' | 'predicate' | string;
+export type Identifier = 'as' | 'error' | 'from' | 'input' | 'output' | 'predicate' | string;
 
 export function isIdentifier(item: unknown): item is Identifier {
-    return item === 'input' || item === 'output' || item === 'predicate' || item === 'from' || item === 'as' || (typeof item === 'string' && (/[a-zA-Z_][a-zA-Z0-9_]*/.test(item) || /`(\\.|[^`\\\n\r])+`/.test(item)));
+    return item === 'input' || item === 'output' || item === 'error' || item === 'predicate' || item === 'from' || item === 'as' || (typeof item === 'string' && (/[a-zA-Z_][a-zA-Z0-9_]*/.test(item) || /`(\\.|[^`\\\n\r])+`/.test(item)));
 }
 
 export interface Literal extends langium.AstNode {
@@ -467,11 +468,13 @@ export interface Query extends langium.AstNode {
     readonly $container: Program;
     readonly $type: 'Query';
     body: Array<BodyElement>;
+    isError: boolean;
 }
 
 export const Query = {
     $type: 'Query',
-    body: 'body'
+    body: 'body',
+    isError: 'isError'
 } as const;
 
 export function isQuery(item: unknown): item is Query {
@@ -503,6 +506,7 @@ export interface Rule extends langium.AstNode {
     body: Array<BodyElement>;
     ctorArgs: Array<Expression>;
     ctorParens: boolean;
+    error: boolean;
     head: HeadAtom;
     output: boolean;
     ruleName?: Identifier;
@@ -513,6 +517,7 @@ export const Rule = {
     body: 'body',
     ctorArgs: 'ctorArgs',
     ctorParens: 'ctorParens',
+    error: 'error',
     head: 'head',
     output: 'output',
     ruleName: 'ruleName'
@@ -958,6 +963,10 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 body: {
                     name: Query.body,
                     defaultValue: []
+                },
+                isError: {
+                    name: Query.isError,
+                    defaultValue: false
                 }
             },
             superTypes: [Statement.$type]
@@ -990,6 +999,10 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 },
                 ctorParens: {
                     name: Rule.ctorParens,
+                    defaultValue: false
+                },
+                error: {
+                    name: Rule.error,
                     defaultValue: false
                 },
                 head: {

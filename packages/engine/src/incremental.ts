@@ -9,6 +9,12 @@ import {
 } from "datamog-core";
 import { parse } from "datamog-parser";
 import type { Backend, QueryResult } from "./backend.ts";
+import {
+  type ConstraintViolation,
+  ConstraintViolationError,
+  projectConstraintRows,
+  toViolation,
+} from "./constraints.ts";
 import type { ExtensionalLoader } from "./loader.ts";
 import { coerceBooleanColumns, coerceJsonColumns } from "./result-coerce.ts";
 import { translate } from "./translator.ts";
@@ -61,6 +67,12 @@ export class IncrementalSession {
   // re-synthesised on every re-analysis; this tracks which have already been
   // emitted so each prints once, not once per subsequent chunk.
   private appliedOutputs = new Set<string>();
+  // `error predicate` names already checked. A constraint is checked once, when
+  // it is declared: a session is built up a statement at a time, so a constraint
+  // that held when written must not fail later because a subsequent chunk added
+  // a row it forbids. `!-` statements need no tracking — they are queries, so
+  // they are never accumulated and are only ever present in their own chunk.
+  private appliedConstraints = new Set<string>();
   private lastTyped: TypedProgram | undefined;
   private loaders: ExtensionalLoader[];
 
@@ -110,6 +122,14 @@ export class IncrementalSession {
 
     const analyzed = inferTypes(analyze(merged));
 
+    // Narrow the program to the constraints this chunk introduces, so both apply
+    // paths (which check whatever `analyzed.constraints` holds) check each one
+    // exactly once, at its declaration.
+    const freshConstraints = analyzed.constraints.filter(
+      (c) => c.outputName === undefined || !this.appliedConstraints.has(c.outputName),
+    );
+    analyzed.constraints = freshConstraints;
+
     // Run the apply phase first — only commit the merged AST if it
     // succeeds. Backend state (tables, views, loaded rows) can still be
     // partially mutated by a mid-apply failure; the user is expected to
@@ -119,6 +139,12 @@ export class IncrementalSession {
     const result = this.backend.evaluateProgram
       ? await this.applyNative(analyzed, fragment.statements)
       : await this.applySql(analyzed);
+
+    // Reached only when no constraint was violated, so marking them checked here
+    // (rather than when filtering above) lets a rejected chunk be re-entered.
+    for (const c of freshConstraints) {
+      if (c.outputName !== undefined) this.appliedConstraints.add(c.outputName);
+    }
 
     // A `?-` query is a one-shot question, not part of the program being
     // built, so it is not accumulated. Keeping only declarations and rules
@@ -213,6 +239,22 @@ export class IncrementalSession {
       await this.backend.execute(translation.createViews[i]!);
       this.appliedViews.add(pred);
       rules.push({ predicate: pred, arity: analyzed.arities.get(pred) ?? 0 });
+    }
+
+    // Check this chunk's constraints before running its queries, so a violated
+    // chunk produces no results. `analyzed.constraints` has already been narrowed
+    // to the fresh ones by `addStatements`.
+    const violations: ConstraintViolation[] = [];
+    for (let i = 0; i < translation.constraints.length; i++) {
+      const rawRows = await this.backend.execute(translation.constraints[i]!);
+      if (rawRows.length === 0) continue;
+      const colTypes = translation.constraintColumnTypes[i] ?? {};
+      violations.push(
+        toViolation(analyzed.constraints[i]!, projectConstraintRows(rawRows, colTypes)),
+      );
+    }
+    if (violations.length > 0) {
+      throw new ConstraintViolationError(violations, analyzed.sourceFile);
     }
 
     const queries: QueryResultWithTypes[] = [];

@@ -317,7 +317,11 @@ function prepareModule(
   exposeSelected: boolean,
 ): string {
   const exportName = requestedExport ?? synthesizeDefaultOutput(module, decl);
-  module.statements = module.statements.filter((s) => s.$type !== "Query");
+  // Drop the module's `?-` queries so its default output does not leak into the
+  // merged program, but keep its `!-` constraints: a module's integrity
+  // constraints hold wherever it is instantiated. `error predicate` rules need
+  // no special handling here — the loop below only clears `output` markers.
+  module.statements = module.statements.filter((s) => s.$type !== "Query" || (s as Query).isError);
   let found = false;
   for (const s of module.statements) {
     if (!isRule(s) || !s.output) continue;
@@ -340,7 +344,8 @@ function prepareModule(
 /** Convert the module's single `?-` default output into a named `$default`
  *  output rule, so default-output selection reuses the named-export path. */
 function synthesizeDefaultOutput(module: Program, decl: ExtDecl): string {
-  const queries = module.statements.filter((s) => s.$type === "Query");
+  // Constraints are `!-` statements, not candidate default outputs.
+  const queries = module.statements.filter((s) => s.$type === "Query" && !(s as Query).isError);
   if (queries.length !== 1) {
     const how = queries.length === 0 ? "no" : "more than one";
     throw new AnalyzerError(

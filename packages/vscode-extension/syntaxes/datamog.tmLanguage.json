@@ -20,11 +20,11 @@
       "name": "comment.line.number-sign.datamog"
     },
     "query": {
-      "match": "\\?-",
+      "match": "\\?-|!-",
       "name": "keyword.control.query.datamog"
     },
     "declaration": {
-      "match": "\\b(input|output|predicate)\\b",
+      "match": "\\b(input|output|error|predicate)\\b",
       "name": "keyword.declaration.datamog"
     },
     "string": {

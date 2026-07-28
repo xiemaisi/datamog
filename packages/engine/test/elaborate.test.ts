@@ -36,6 +36,13 @@ const MODULES: Record<string, string> = {
     output predicate opt() :: None.
     output predicate opt() :: Some :- elem(V).
   `,
+  // Asserts an invariant about its own input, both anonymously and by name.
+  "checked.dl": `
+    input predicate p(a: integer, b: integer).
+    !- p(X, Y), X > Y.
+    error predicate self_loop(X) :- p(X, X).
+    output predicate keep(X, Y) :- p(X, Y).
+  `,
 };
 // Fresh parse per call (elaborate mutates the returned AST).
 const resolve: ModuleResolver = (ref) => ({ program: parseRaw(MODULES[ref]!), file: ref });
@@ -158,5 +165,43 @@ describe("module binding end-to-end", () => {
     `);
     expect(byLabel(results, "int_some")).toEqual([{ V: 1 }, { V: 2 }]);
     expect(byLabel(results, "colour_some")).toEqual([{ V: "red" }]);
+  });
+
+  test("an imported module's constraints are checked against the wired data", async () => {
+    // A module's invariants hold wherever it is instantiated, so its `!-` and
+    // `error predicate` statements survive elaboration and run in the importer.
+    expect(
+      run(`
+        pair(1, 2).
+        pair(5, 3).
+        input predicate ok(a: integer, b: integer) := keep from "checked.dl"(p = pair).
+        ?- ok(X, Y).
+      `),
+    ).rejects.toThrow(/Constraint `!- p\(X, Y\), X > Y\.` is violated by 1 row/);
+  });
+
+  test("a violated module constraint is named without its instance prefix", async () => {
+    // Elaboration renames `self_loop` to `ok$0$self_loop`; the message must
+    // report the name the module author wrote, plus the binding it came in via.
+    expect(
+      run(`
+        pair(1, 1).
+        input predicate ok(a: integer, b: integer) := keep from "checked.dl"(p = pair).
+        ?- ok(X, Y).
+      `),
+    ).rejects.toThrow(/Constraint 'self_loop' \(from the module bound to 'ok'\) is violated/);
+  });
+
+  test("a satisfied module constraint leaves the import working", async () => {
+    const results = await run(`
+      pair(1, 2).
+      pair(3, 4).
+      input predicate ok(a: integer, b: integer) := keep from "checked.dl"(p = pair).
+      ?- ok(X, Y).
+    `);
+    expect(sortRows(results[0]!.rows)).toEqual([
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+    ]);
   });
 });

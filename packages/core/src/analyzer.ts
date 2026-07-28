@@ -155,6 +155,13 @@ export interface AnalyzedProgram {
   /** Arity of each predicate (EDB and IDB). */
   arities: Map<string, number>;
   queries: Query[];
+  /** Integrity constraints (`!-` statements and `error predicate` rules), as
+   *  queries whose result must be empty. Kept apart from `queries` so every
+   *  consumer that walks results positionally stays aligned, and so a
+   *  constraint is never printed as an output. Validated exactly like a query
+   *  (arity, safety, function calls); a non-empty result is a violation whose
+   *  rows are the counterexamples. */
+  constraints: Query[];
   dependencies: Map<string, Set<string>>;
   /** Negative dependencies: predicate p negatively depends on q if some rule for p has `not q(...)` in its body. */
   negativeDependencies: Map<string, Set<string>>;
@@ -219,11 +226,15 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
   const extDecls = new Map<string, ExtDecl>();
   const rules = new Map<string, Rule[]>();
   const arities = new Map<string, number>();
+  // Constraints accumulate here alongside real queries so the validation passes
+  // below (arity, safety, function calls) cover both; the two are split apart
+  // in the returned program.
   const queries: Query[] = [];
-  // Track which output predicates have already had their implicit query
-  // emitted, so a predicate with several `output`-marked rules yields one
-  // result, not one per rule.
-  const emittedOutputs = new Set<string>();
+  // Which marker each output / error predicate was emitted under, so a
+  // predicate with several marked rules yields one result rather than one per
+  // rule, and so rules that disagree about the marker are rejected instead of
+  // silently taking whichever came first.
+  const emittedOutputs = new Map<string, "output" | "error">();
 
   // Classify statements
   for (const stmt of program.statements) {
@@ -287,11 +298,21 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
           arities.set(stmt.head.predicate, stmt.head.args.length);
         }
         // An `output predicate` rule additionally exposes its predicate as a
-        // printed result: synthesise an implicit `?- pred(V1, …, Vn)` query and
-        // push it at this source position so it interleaves with real `?-`
-        // queries in order. One query per output predicate, not per rule.
-        if (stmt.output && !emittedOutputs.has(stmt.head.predicate)) {
-          emittedOutputs.add(stmt.head.predicate);
+        // printed result, and an `error predicate` rule as an integrity
+        // constraint: synthesise an implicit `?- pred(V1, …, Vn)` query and push
+        // it at this source position so it interleaves with real `?-` queries in
+        // order. One query per marked predicate, not per rule.
+        const marker = stmt.error ? "error" : stmt.output ? "output" : undefined;
+        const previousMarker = emittedOutputs.get(stmt.head.predicate);
+        if (marker && previousMarker && previousMarker !== marker) {
+          const pos = nodePos(stmt.head);
+          throw new AnalyzerError(
+            `Predicate '${stmt.head.predicate}' is marked '${previousMarker} predicate' by one rule and '${marker} predicate' by another; all its rules must agree`,
+            ...(pos ?? []),
+          );
+        }
+        if (marker && !previousMarker) {
+          emittedOutputs.set(stmt.head.predicate, marker);
           const usedNames = new Set<string>();
           // A proof-carrying rule's head ends with an injected proof term
           // (an object literal). Read it into a synthetic `$`-name so
@@ -319,7 +340,8 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
           queries.push({
             $type: "Query",
             outputName: stmt.head.predicate,
-            isOutput: true,
+            isOutput: !stmt.error,
+            isError: stmt.error,
             body: [
               {
                 $type: "Literal",
@@ -335,9 +357,10 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
         break;
       }
       case "Query": {
-        // A `?-` query is the module's default output.
+        // A `?-` query is the module's default output. A `!-` constraint is not
+        // an output at all, so it must not claim the default slot.
         const q = stmt as Query;
-        q.outputName = "default";
+        if (!q.isError) q.outputName = "default";
         queries.push(q);
         break;
       }
@@ -769,7 +792,8 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     extDecls,
     rules,
     arities,
-    queries,
+    queries: queries.filter((q) => !q.isError),
+    constraints: queries.filter((q) => q.isError),
     dependencies,
     negativeDependencies,
     sortedStrata,

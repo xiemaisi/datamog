@@ -56,7 +56,12 @@ export function lintSource(source: string): EmbedLintResult {
       severity: "warning",
       message: d.message,
     }));
-    return { diagnostics, hasQueries: typed.queries.length > 0 };
+    // A constraints-only program has something to run too: checking its
+    // constraints is the point of running it.
+    return {
+      diagnostics,
+      hasQueries: typed.queries.length > 0 || typed.constraints.length > 0,
+    };
   } catch (err) {
     const diag: SimpleDiagnostic = {
       from: 0,

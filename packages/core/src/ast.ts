@@ -107,10 +107,14 @@ export function asCoreRule(rule: ParserRule): Rule {
 }
 
 // Widen Query to carry its output name and provenance.
-// `outputName` labels the result: the predicate name for an `output predicate`,
-// "default" for a `?-` query. `isOutput` marks the synthetic queries the
-// analyzer derives from `output predicate` rules (as opposed to a `?-` query);
-// the REPL uses it to emit each output once while re-running the transient `?-`.
+// `outputName` labels the result: the predicate name for an `output predicate`
+// or `error predicate`, "default" for a `?-` query, undefined for a `!-`
+// constraint (which is anonymous and identified by its source text instead).
+// `isOutput` marks the synthetic queries the analyzer derives from
+// `output predicate` rules (as opposed to a `?-` query); the REPL uses it to emit
+// each output once while re-running the transient `?-`. `isError` (from the
+// grammar) marks a constraint; the analyzer routes those into
+// `AnalyzedProgram.constraints` rather than `queries`.
 export type Query = ParserQuery & { outputName?: string; isOutput?: boolean };
 
 export type { AggregateFunction, BinaryOp } from "datamog-parser";

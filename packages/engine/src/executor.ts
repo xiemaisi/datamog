@@ -10,6 +10,12 @@ import {
 } from "datamog-core";
 import { ParseError, parse, parseRaw, postProcess } from "datamog-parser";
 import type { Backend, QueryResult } from "./backend.ts";
+import {
+  type ConstraintViolation,
+  ConstraintViolationError,
+  projectConstraintRows,
+  toViolation,
+} from "./constraints.ts";
 import { type ExtensionalLoader, loadExtensionalData } from "./loader.ts";
 import { coerceBooleanColumns, coerceJsonColumns } from "./result-coerce.ts";
 import { translate } from "./translator.ts";
@@ -108,7 +114,22 @@ export class DatamogExecutor {
       await this.backend.execute(stmt);
     }
 
-    // 4. Execute queries
+    // 4. Check integrity constraints, before any query runs: a violated program
+    // produces no results at all.
+    const violations: ConstraintViolation[] = [];
+    for (let i = 0; i < translation.constraints.length; i++) {
+      const rawRows = await this.backend.execute(translation.constraints[i]!);
+      if (rawRows.length === 0) continue;
+      const colTypes = translation.constraintColumnTypes[i] ?? {};
+      violations.push(
+        toViolation(analyzed.constraints[i]!, projectConstraintRows(rawRows, colTypes)),
+      );
+    }
+    if (violations.length > 0) {
+      throw new ConstraintViolationError(violations, analyzed.sourceFile);
+    }
+
+    // 5. Execute queries
     const results: QueryResult[] = [];
     const queries = analyzed.queries;
     const settledResults = await Promise.allSettled(
