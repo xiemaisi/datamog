@@ -2384,21 +2384,33 @@ need no module-specific support. Per instantiation:
 1. The module reference is resolved (relative to the importing file) and parsed.
 2. The module's wired inputs are **substituted** with the actuals; every private
    and output predicate name is **freshened** with a per-instance prefix (which
-   contains `$`, so it never clashes with a source identifier, §1.4); and the
-   selected output is **renamed** to the importing input's name. Its proof
-   **constructors** follow that rename, since a constructor is qualified by its
-   predicate (§8.1) — for `input predicate dist(...) := opt from "..."`, `Some`
-   becomes `dist::Some`, a writable name the importer can pattern-match, distinct
-   per instance, so a program can match against several instantiations of one ADT
-   module at once.
+   contains `$`, so it never clashes with a source identifier, §1.4).
 3. A data-file binding leaves the input as an EDB, loaded from its bound source.
    Its declaration is freshened like a private predicate, so the data belongs to
    that one instance: a module carrying its own data can be instantiated any
    number of times, and its input names never collide with the importer's.
-4. Everything merges into one program evaluated by one global least fixed point.
+4. The importing input's name is bound to the selected output by an **alias rule**
+   (`local(a, b) :- <instance>$<output>(a, b).`), whose head variables are the
+   declared column names. So the importing declaration's column names become the
+   result column names, and the module's own head-variable names are not exposed.
+5. Everything merges into one program evaluated by one global least fixed point.
 
-The importing declaration's column names become the instance's result column
-names; the module's own head-variable names are not exposed.
+**Instances are shared.** Two bindings of the same module with the same wiring
+denote the same relations, so they are elaborated to one expansion with one alias
+rule each: an interface's several outputs cost one copy of its rules, not one per
+output. Instance identity is the module plus the predicate each input is wired to;
+inputs left on a `:=` default need no part in it, since how a default resolves
+follows from the module. Differing wiring (including one site overriding a default
+that another leaves alone) gives separate instances, as does a module reached by
+two paths that do not resolve to the same file.
+
+**Exception: a proof-carrying output.** When the selected output carries a
+constructor (§8), it is **renamed** to the importing input's name rather than
+aliased, because a constructor is qualified by its predicate: for
+`input predicate dist(...) := opt from "..."`, `Some` becomes `dist::Some`, a
+writable name the importer can pattern-match. That rename is per-site, so such an
+instance is not shared — which is also what makes two instantiations of one ADT
+module distinct types, matchable side by side in one program.
 
 ### 9.3 Constraints
 
@@ -2418,7 +2430,8 @@ names; the module's own head-variable names are not exposed.
   mutually recursive predicates must live in the same module.
 - **One output per import site.** An instance exposes only the selected output;
   the module's other outputs and its `?-` default do not leak into the merged
-  program (they remain available internally as dependencies of the selection).
+  program (they remain available internally, both as dependencies of the selection
+  and as the target of another site's alias, §9.2).
 - **Integrity constraints propagate.** A module's `!-` statements and
   `error predicate` rules (§2.10) survive elaboration and are checked against the
   data actually wired in, once per instance — a module asserts its invariants
@@ -2426,7 +2439,9 @@ names; the module's own head-variable names are not exposed.
   dropped at the import boundary, and is not a candidate for the module's default
   output. A violated module constraint is reported under the name its author
   wrote, plus the binding it arrived through (its internal freshened name, §9.2,
-  is not shown).
+  is not shown); where several bindings share one instance, that is the binding
+  the instance was created for, and the constraint is reported once, not per
+  binding.
 - **Boundary types must satisfy the declaration.** A boundary is checked as a
   directional subtype relation (§5.10), not mutual compatibility: each actual's
   **published** column types must equal or widen to the type declared for the

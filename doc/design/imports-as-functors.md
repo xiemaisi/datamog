@@ -43,8 +43,12 @@ Carried over from the discussion:
    be bound directly to a data file with `:= "file"` — but that is a binding on
    the input itself, not an actual flowing into a module; actuals stay predicate
    names.)
-4. Instantiating a module always **duplicates** it (expansion / monomorphisation).
-   No sharing of instances in the first version.
+4. Instantiating a module **duplicates** it (expansion / monomorphisation), but
+   two instantiations that cannot be told apart are **shared**: instance identity
+   is the module plus the predicate each input is wired to. Equal inputs mean
+   equal outputs in a language with no side effects, so sharing is invisible apart
+   from the smaller program. (The first version always duplicated; sharing landed
+   with the alias-rule import binding, below.)
 5. Composition is by **expansion** (inline), not materialise-feed. Importing a
    module substitutes actuals for its inputs, freshens its private names per
    instance, and merges everything into one program with one global least fixed
@@ -172,9 +176,12 @@ Per instantiation:
    on a `:= "file"` data binding keeps its declaration and is freshened with the
    rest, so its data is private to the instance.
 3. **Freshen** every private and output predicate name with a per-instance prefix
-   (for example `road_reach$reach`), so two instances do not collide with each
+   (for example `road_reach$0$reach`), so two instances do not collide with each
    other or with the importer's names. The importer's chosen name binds to the
-   instance's selected output.
+   instance's selected output through an **alias rule**
+   (`road_reach(a, b) :- road_reach$0$reach(a, b).`), which is what lets several
+   sites take different outputs of one shared instance, and names the result
+   columns after the importing declaration.
 4. **Proof constructors** need no renaming, because they are qualified by their
    predicate (`predicate::Ctor`, see `qualified-constructors.md`). Renaming the
    head predicate carries the constructor with it: `opt`'s `Some`, imported as
@@ -219,10 +226,15 @@ State these plainly; they are the cost of expansion.
   parameterisation and reuse in a teaching tool. The check is cycle detection
   over the reachable, post-override instantiation graph, so a default that points
   into a cycle but is always overridden before it fires is not flagged.
-- **Always duplicate.** Two instantiations with the same actuals are still
-  expanded twice, producing duplicate generated SQL (template bloat). Correct,
-  just not minimal. Sharing identical instances is a later optimisation
-  (decision 4).
+- **Duplicate per distinct wiring.** Two instantiations with the same actuals are
+  expanded once and aliased twice (decision 4); two with different actuals are two
+  copies, which is the price of monomorphisation. One case still duplicates under
+  equal wiring: an instance whose selected output is proof-carrying, since its
+  constructors are qualified by the importer's name and that rename is per-site.
+  Sharing does not change which programs are accepted — in particular it cannot
+  turn linear recursion non-linear, because two instances only share when their
+  wiring is identical, and identical wiring already places both copies in one SCC
+  whenever a cycle runs through it.
 - **One unnamed query per file, enforced always.** A file with two `?-` queries
   is an error. Programs in `packages/cli/examples` that use several queries (27
   of 50 today) must move their extra queries to `output predicate`s. That
@@ -314,7 +326,10 @@ diagnostics, per-module EDB directories):
 - **Fixed / private imports** (a module-backed binding that is not part of the
   module's parameter surface). The first version makes every import an
   overridable input default.
-- **Sharing identical instances** (decision 4 starts with always-duplicate).
+- **Sharing an instance whose selected output is proof-carrying** (every other
+  identical instantiation is shared; see decision 4 and *Consequences*). It would
+  need the alias rule to rewrite the constructor tags inside the proof value,
+  including nested sub-proofs.
 - **Inferring receiving column types** from the selected output signature instead
   of restating them.
 - **Aliased whole-module access** (`import g = "mod.dl"(...)` then `g.a`, `g.b`).

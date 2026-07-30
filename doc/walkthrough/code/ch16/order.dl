@@ -17,3 +17,4 @@ elem(X) :- cover(X, _).
 elem(X) :- cover(_, X).
 
 output predicate minimal(X) :- elem(X), not lt(_, X).
+output predicate maximal(X) :- elem(X), not lt(X, _).

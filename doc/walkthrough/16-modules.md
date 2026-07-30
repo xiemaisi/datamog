@@ -133,31 +133,45 @@ declared columns are the instance's public face.
 Before anything runs, a program with bindings is **elaborated** into one flat
 program, which then goes through the ordinary pipeline (Chapter 5) unchanged — so
 the backends need no module machinery at all. For each instantiation Datamog
-takes a fresh copy of the module, substitutes the wired inputs, renames the
-selected output to the importing name, and *freshens* every other name with a
-per-instance prefix so two copies never collide. Everything merges into one
-program with one least fixed point.
+takes a fresh copy of the module, substitutes the wired inputs, and *freshens*
+every other name with a per-instance prefix so two copies never collide. Your
+declared name is then bound to the output you selected by a one-line **alias
+rule**, whose head variables are your declared columns:
+
+```prolog
+road_reach(a, b) :- road_reach$0$reach(a, b).       # generated, not written
+```
+
+Everything merges into one program with one least fixed point.
 
 > **SQL lens.** Elaboration is monomorphisation: each instance becomes its own
-> set of views. `datamog --dry-run main.dl` shows the two closures compiled to
-> two independent recursive views, each over its own edge table:
+> set of views, with a thin view per import site on top. `datamog --dry-run
+> main.dl` shows the two closures compiled to two independent recursive views,
+> each over its own edge table:
 >
 > ```sql
-> CREATE VIEW IF NOT EXISTS "road_reach" AS
->   WITH RECURSIVE "road_reach"(col1, col2) AS (
+> CREATE VIEW IF NOT EXISTS "road_reach$0$reach" AS
+>   WITH RECURSIVE "road_reach$0$reach"(col1, col2) AS (
 >     SELECT __b0."src", __b0."dst" FROM "road" AS __b0
 >     UNION
->     SELECT __b0."col1", __b1."dst" FROM "road_reach" __b0, "road" __b1
+>     SELECT __b0."col1", __b1."dst" FROM "road_reach$0$reach" __b0, "road" __b1
 >       WHERE __b0."col2" = __b1."src"
->   ) SELECT * FROM "road_reach";
+>   ) SELECT * FROM "road_reach$0$reach";
 >
-> CREATE VIEW IF NOT EXISTS "flight_reach" AS ...  -- the same, over "flight"
+> CREATE VIEW IF NOT EXISTS "road_reach" AS      -- the alias
+>   SELECT DISTINCT __b0."col1" AS col1, __b0."col2" AS col2
+>     FROM "road_reach$0$reach" AS __b0;
+>
+> CREATE VIEW IF NOT EXISTS "flight_reach$1$reach" AS ...  -- the same, over "flight"
 > ```
 
-Because each instance is a fresh copy, instantiating twice really does duplicate
-the module's rules. That is correct but not minimal — two identical
-instantiations generate the SQL twice. Sharing identical instances is a possible
-future optimisation; today, every binding is its own copy.
+`road_reach` and `flight_reach` are two copies because they are wired to
+different relations. Two bindings wired the *same* way are a different matter:
+Datamog **shares** them, expanding the module once and giving each binding its
+own alias. An instance is identified by its module plus the predicates its inputs
+are wired to, and in a language with no side effects equal inputs mean equal
+outputs, so there is nothing to tell two such instances apart. You will see this
+pay off in the next section.
 
 ## Composing modules
 
@@ -334,10 +348,26 @@ overridable hooks, written entirely with `input predicate`s.
 
 ### One import, several operations
 
-An import site selects **one** output, which is thin for an interface with several
-operations. You can bind the same module twice, but that is two instances and the
-shared work happens twice. The alternative is to hand back all the operations as
-one relation, tagging each with a constructor ([Chapter 15](15-proof-terms.md)):
+An import site selects **one** output, which looks thin for an interface with
+several operations. It is not: bind the module once per output you want, wired the
+same way each time, and the instances are shared. Add a `maximal` to `order.dl`
+and take both:
+
+```prolog
+# order-both.dl
+input predicate lo(x: integer) := minimal from "order.dl"(cover = cover).
+input predicate hi(x: integer) := maximal from "order.dl"(cover = cover).
+?- lo(L), hi(H).
+```
+
+`--dry-run` shows one closure, one `elem`, one `minimal`, one `maximal`, and two
+alias views. The algorithm is paid for once no matter how many of its outputs you
+take, which is what makes an interface with a dozen operations practical.
+
+There is still a reason to hand back several operations as *one* relation, tagging
+each with a constructor ([Chapter 15](15-proof-terms.md)): a single relation is a
+single value you can pass on as one actual, where several outputs would need
+several inputs.
 
 ```prolog
 # ops.dl
@@ -367,9 +397,14 @@ output predicate bottom(X)   :- P : ord, P = ord::Minimal(X).
 ```
 
 A method dictionary, passed as a relation. It costs a `value` column and a match
-per use, and it buys one instance instead of one per operation. Note that `ord`
-carries nothing but its proof term, so read it with a capture (`P : ord`) and
-print the operations you derive from it, not `ord` itself.
+per use. Note that `ord` carries nothing but its proof term, so read it with a
+capture (`P : ord`) and print the operations you derive from it, not `ord` itself.
+
+One wrinkle, and it is the exception to sharing: because a constructor is
+qualified by the predicate it lands on, `ops.dl`'s output has to be *renamed* to
+`ord` for you to be able to write `ord::Lt`. Renaming is per site, so a
+proof-carrying output is never shared — which is the same mechanism that makes two
+instantiations of `option.dl` two distinct types.
 
 ## A few rules of the road
 
@@ -385,10 +420,13 @@ print the operations you derive from it, not `ord` itself.
 - **A module's constraints travel with it.** Its `!-` and `error predicate` rules
   are checked once per instance against the wired data (its `?-` default, by
   contrast, is dropped unless you select it).
-- **Every import is a fresh copy** (duplicate-per-use), freshened so instances
-  never collide. Freshened names contain `$`, which no source identifier can, so
-  they never clash with yours. That covers an input the module bound to a data
-  file too: each instance loads its own copy, under a name you never see.
+- **Every distinct wiring is a fresh copy**, freshened so instances never
+  collide. Freshened names contain `$`, which no source identifier can, so they
+  never clash with yours. That covers an input the module bound to a data file
+  too: each instance loads its own copy, under a name you never see.
+- **Identical wirings share one copy.** Same module, same actuals, same instance,
+  one alias per binding. The exception is a proof-carrying output, which is
+  renamed rather than aliased and so stays per site.
 - **The instantiation graph must be acyclic.** Mutually recursive predicates
   share a file.
 - **A module never auto-loads its inputs.** Every input of an imported module
@@ -442,13 +480,13 @@ In `order-override.dl`, wire `lt` to a relation that is not transitive (drop
 `known(1, 4)`). Which of `order.dl`'s three laws catches it, and what does the
 error say? Then make it reflexive as well and see how many fire at once.
 
-### Exercise 16.7 — Add an operation without adding an instance ★★
+### Exercise 16.7 — Watch sharing appear and disappear ★★
 
-Give `ops.dl` a third operation, `Maximal(X)` (an element with nothing above it),
-and recover it in `ops-demo.dl` alongside the other two. Now do the same thing
-the other way — a separate `maximal` output in `order.dl`, imported by a second
-binding — and compare the two elaborations with `--dry-run`. What exactly is
-duplicated in the second version?
+Run `--dry-run` on `order-both.dl` and count the views: two bindings, one copy of
+the module. Now change one binding to wire `cover` to a different relation (add
+`other(5, 6).` and wire that) and count again. Explain both counts. Finally, give
+`ops.dl` a third operation, `Maximal(X)`, recover it in `ops-demo.dl`, and say
+which of the two styles you would rather write.
 
 ### Exercise 16.8 — A law that only the importer can state ★★★
 

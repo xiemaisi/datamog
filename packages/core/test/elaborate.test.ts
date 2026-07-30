@@ -40,6 +40,12 @@ const MODULES: Record<string, string> = {
     input predicate seed(v: integer).
     output predicate out(X: value) :- seed(X).
   `,
+  // A proof-carrying output (an ADT), whose constructor is qualified by whatever
+  // predicate its rule lands on.
+  "adt.dl": `
+    input predicate elem(v: value).
+    output predicate opt() :: Some :- elem(V).
+  `,
   // A module carrying its own data: `extra` is bound to a file inside the module.
   "carries-data.dl": `
     input predicate seed(a: integer).
@@ -64,6 +70,14 @@ const extDecls = (s: Stmt[]) => s.filter((x) => x.$type === "ExtDecl").map((x) =
 const rules = (s: Stmt[]) => s.filter((x) => x.$type === "Rule");
 const bodyPreds = (r: Stmt) =>
   r.body.filter((e: Stmt) => e.$type === "Literal").map((e: Stmt) => e.predicate);
+const byHead = (s: Stmt[], pred: string) => rules(s).filter((r) => r.head.predicate === pred);
+/** An importer's declared name is an alias rule over the instance's output; this
+ *  is the instance-side predicate it projects. */
+const instanceOutput = (s: Stmt[], local: string): string => {
+  const alias = byHead(s, local);
+  expect(alias).toHaveLength(1);
+  return bodyPreds(alias[0])[0];
+};
 
 describe("elaborate", () => {
   test("instantiates a named module export, aliasing it to the input's name", () => {
@@ -75,14 +89,16 @@ describe("elaborate", () => {
     const { program, dataSources } = elaborate(entry, resolve, "main.dl");
     const stmts = program.statements;
 
-    // The bound input and the module's wired input are gone; the module's
-    // `reach` output is renamed to the importer's `road_reach`.
+    // The bound input and the module's wired input are gone; the importer's name
+    // is an alias rule over the instance's `reach` output.
     expect(extDecls(stmts)).toEqual([]);
-    const reachRules = rules(stmts).filter((r) => r.head.predicate === "road_reach");
+    const output = instanceOutput(stmts, "road_reach");
+    expect(output).toMatch(/^road_reach\$\d+\$reach$/);
+    const reachRules = byHead(stmts, output);
     expect(reachRules).toHaveLength(2);
-    // edge -> road (the actual); the recursive self-reference is aliased too.
+    // edge -> road (the actual); the recursive self-reference is freshened too.
     expect(bodyPreds(reachRules[0])).toEqual(["road"]);
-    expect(bodyPreds(reachRules[1])).toEqual(["road_reach", "road"]);
+    expect(bodyPreds(reachRules[1])).toEqual([output, "road"]);
     expect(dataSources).toEqual([]);
 
     // The merged program is a valid ordinary program (no binding left to reject).
@@ -90,7 +106,7 @@ describe("elaborate", () => {
     expect(() => analyze(program)).not.toThrow();
   });
 
-  test("relabels the instance's head columns with the importer's declared names", () => {
+  test("the alias rule names the instance's columns after the declaration", () => {
     const entry = parseRaw(`
       road(1, 2).
       input predicate road_reach(a: integer, b: integer) := reach from "reach.dl"(edge = road).
@@ -98,18 +114,14 @@ describe("elaborate", () => {
     const { program } = elaborate(entry, resolve, "main.dl");
     const headVars = (r: Stmt) =>
       r.head.args.map((x: Stmt) => (x.$type === "Variable" ? x.name : x.$type));
-    const reachRules = rules(program.statements).filter((r) => r.head.predicate === "road_reach");
-    // Head positions carry a/b (module's X,Y renamed); internal join vars stay.
-    expect(headVars(reachRules[0])).toEqual(["a", "b"]);
-    expect(headVars(reachRules[1])).toEqual(["a", "b"]);
-    // The recursive rule's internal var is untouched: road_reach(a, Y), road(Y, b).
-    const secondBody = reachRules[1].body.map((e: Stmt) =>
-      e.args?.map((x: Stmt) => (x.$type === "Variable" ? x.name : "?")),
-    );
-    expect(secondBody).toEqual([
-      ["a", "Y"],
-      ["Y", "b"],
-    ]);
+    const alias = byHead(program.statements, "road_reach")[0];
+    // The alias projects the instance under the declared column names, and is
+    // exposed so it prints; the instance keeps the module's own head vars.
+    expect(headVars(alias)).toEqual(["a", "b"]);
+    expect(alias.output).toBe(true);
+    expect(
+      headVars(byHead(program.statements, instanceOutput(program.statements, "road_reach"))[0]),
+    ).toEqual(["X", "Y"]);
   });
 
   test("collects data-file bindings and clears them", () => {
@@ -144,6 +156,58 @@ describe("elaborate", () => {
     expect(() => analyze(program)).not.toThrow();
   });
 
+  test("shares one instance between bindings with the same module and wiring", () => {
+    // Two outputs of one interface, wired the same way: one expansion, two
+    // aliases. `iface.dl` has a nested default too, which is shared with it.
+    const entry = parseRaw(`
+      seed(1).
+      input predicate r1(a: integer) := result from "iface.dl"(base = seed).
+      input predicate r2(a: integer) := result from "iface.dl"(base = seed).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const stmts = program.statements;
+    expect(instanceOutput(stmts, "r1")).toBe(instanceOutput(stmts, "r2"));
+    // One copy of the module's rule, and one copy of the nested sink.dl instance.
+    const heads = rules(stmts).map((r) => r.head.predicate as string);
+    expect(heads.filter((h) => h.endsWith("$result"))).toHaveLength(1);
+    expect(heads.filter((h) => h.endsWith("$out"))).toHaveLength(1);
+    postProcess(program);
+    expect(() => analyze(program)).not.toThrow();
+  });
+
+  test("does not share when the wiring differs", () => {
+    const entry = parseRaw(`
+      seed(1). other(2).
+      input predicate r1(a: integer) := result from "iface.dl"(base = seed).
+      input predicate r2(a: integer) := result from "iface.dl"(base = other).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const stmts = program.statements;
+    expect(instanceOutput(stmts, "r1")).not.toBe(instanceOutput(stmts, "r2"));
+    const heads = rules(stmts).map((r) => r.head.predicate as string);
+    expect(heads.filter((h) => h.endsWith("$result"))).toHaveLength(2);
+  });
+
+  test("does not share a proof-carrying output, whose constructors are per-site", () => {
+    // `opt`'s constructors are qualified by the predicate they land on, so each
+    // site needs its own renamed copy for `o1::Some` / `o2::Some` to be writable.
+    const entry = parseRaw(`
+      n(1).
+      input predicate o1(o: value) := opt from "adt.dl"(elem = n).
+      input predicate o2(o: value) := opt from "adt.dl"(elem = n).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const stmts = program.statements;
+    // No alias rules: the selected output is renamed to the importer's name, so
+    // each site has its own `opt` rules under its own name.
+    for (const local of ["o1", "o2"]) {
+      const own = byHead(stmts, local);
+      expect(own).toHaveLength(1);
+      expect(own[0].ruleName).toBe("Some");
+      expect(bodyPreds(own[0])).toEqual(["n"]);
+    }
+  });
+
   test("rejects a default import when the module has no `?-` default", () => {
     // reach.dl exposes only named outputs, no `?-`.
     const entry = parseRaw('input predicate best(x: integer) := from "reach.dl".');
@@ -161,7 +225,8 @@ describe("elaborate", () => {
       input predicate r(a: integer) := result from "iface.dl"(base = seed).
     `);
     const { program } = elaborate(entry, resolve, "main.dl");
-    const resultRule = rules(program.statements).find((r) => r.head.predicate === "r");
+    const stmts = program.statements;
+    const resultRule = byHead(stmts, instanceOutput(stmts, "r"))[0];
     // `derived` resolved to the nested sink.dl instance's freshened output.
     expect(bodyPreds(resultRule)).toEqual([expect.stringMatching(/^derived\$\d+\$out$/)]);
     postProcess(program);
@@ -175,10 +240,10 @@ describe("elaborate", () => {
       input predicate r(a: integer) := result from "iface.dl"(base = seed, derived = mine).
     `);
     const { program } = elaborate(entry, resolve, "main.dl");
-    const resultRule = rules(program.statements).find((r) => r.head.predicate === "r");
-    expect(bodyPreds(resultRule)).toEqual(["mine"]);
+    const stmts = program.statements;
+    expect(bodyPreds(byHead(stmts, instanceOutput(stmts, "r"))[0])).toEqual(["mine"]);
     // The overridden default's module was never expanded.
-    const heads = rules(program.statements).map((s: Stmt) => s.head.predicate as string);
+    const heads = rules(stmts).map((s: Stmt) => s.head.predicate as string);
     expect(heads.filter((h) => h.endsWith("$out"))).toEqual([]);
     postProcess(program);
     expect(() => analyze(program)).not.toThrow();

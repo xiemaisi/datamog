@@ -156,6 +156,46 @@ input predicate e2(x: integer, y: integer) := all_edges from "leaky.dl"(cover = 
     expect(pairs("P", "Q")).toEqual(["3,4", "7,8"]);
   });
 
+  test("shares one instance between two outputs of the same interface", async () => {
+    const result = await withTempDir(
+      {
+        "reach.dl": REACH,
+        "order.dl": `input predicate cover(a: integer, b: integer).
+input predicate lt(a: integer, b: integer) := reach from "reach.dl"(edge = cover).
+elem(X) :- cover(X, _).
+elem(X) :- cover(_, X).
+output predicate minimal(X) :- elem(X), not lt(_, X).
+output predicate maximal(X) :- elem(X), not lt(X, _).
+`,
+        "main.dl": `cover(1, 2). cover(2, 3).
+input predicate lo(x: integer) := minimal from "order.dl"(cover = cover).
+input predicate hi(x: integer) := maximal from "order.dl"(cover = cover).
+?- lo(L), hi(H).
+`,
+      },
+      async (dir) => {
+        const run = await runCli([
+          "--backend",
+          "native",
+          "--output-format",
+          "jsonl",
+          join(dir, "main.dl"),
+        ]);
+        const dry = await runCli(["--dry-run", join(dir, "main.dl")]);
+        return { run, dry };
+      },
+    );
+    expect(result.run.stderr).toBe("");
+    expect(result.run.stdout.trim()).toBe('{"L":1,"H":3}');
+    // Both bindings wire `cover` the same way, so the closure and the element
+    // domain are expanded once and each binding is a thin alias over its output.
+    const views = [...result.dry.stdout.matchAll(/CREATE VIEW[^"]*"([^"]+)"/g)].map((m) => m[1]);
+    expect(views.filter((v) => v?.endsWith("$elem"))).toHaveLength(1);
+    expect(views.filter((v) => v?.endsWith("$reach"))).toHaveLength(1);
+    expect(views).toContain("lo");
+    expect(views).toContain("hi");
+  });
+
   test("rejects an import whose declared output type is wrong", async () => {
     const result = await withTempDir(
       {
