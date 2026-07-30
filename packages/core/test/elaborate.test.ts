@@ -188,24 +188,52 @@ describe("elaborate", () => {
     expect(heads.filter((h) => h.endsWith("$result"))).toHaveLength(2);
   });
 
-  test("does not share a proof-carrying output, whose constructors are per-site", () => {
-    // `opt`'s constructors are qualified by the predicate they land on, so each
-    // site needs its own renamed copy for `o1::Some` / `o2::Some` to be writable.
+  test("shares a proof-carrying output at the name level, so the constructor is one", () => {
+    // A proof-carrying output cannot be aliased by a rule (proof-carrying-ness
+    // does not propagate through one), so it is renamed for the first site and
+    // the second site's name is rewritten to it. Same wiring, same constructor.
     const entry = parseRaw(`
       n(1).
       input predicate o1(o: value) := opt from "adt.dl"(elem = n).
       input predicate o2(o: value) := opt from "adt.dl"(elem = n).
+      first(V)  :- P : o1, P = o1::Some(V).
+      second(V) :- Q : o2, Q = o2::Some(V).
     `);
     const { program } = elaborate(entry, resolve, "main.dl");
     const stmts = program.statements;
-    // No alias rules: the selected output is renamed to the importer's name, so
-    // each site has its own `opt` rules under its own name.
-    for (const local of ["o1", "o2"]) {
+    // One expansion, under the first site's name; `o2` defines nothing.
+    const own = byHead(stmts, "o1");
+    expect(own).toHaveLength(1);
+    expect(own[0].ruleName).toBe("Some");
+    expect(byHead(stmts, "o2")).toEqual([]);
+    // Both sites' references now name the one predicate, including the
+    // constructor qualifiers.
+    expect(bodyPreds(byHead(stmts, "first")[0])).toEqual(["o1"]);
+    expect(bodyPreds(byHead(stmts, "second")[0])).toEqual(["o1"]);
+    const qualifiers = rules(stmts)
+      .flatMap((r: Stmt) => r.body)
+      .flatMap((e: Stmt) => (e.$type === "Equality" ? [e.expr] : []))
+      .filter((e: Stmt) => e?.$type === "FunctionCall")
+      .map((e: Stmt) => e.qualifier);
+    expect(qualifiers).toEqual(["o1", "o1"]);
+  });
+
+  test("keeps ADT instantiations distinct when their wiring differs", () => {
+    // The Option story: two element types, two instances, two constructors.
+    const entry = parseRaw(`
+      n(1). colour("red").
+      input predicate int_opt(o: value)    := opt from "adt.dl"(elem = n).
+      input predicate colour_opt(o: value) := opt from "adt.dl"(elem = colour).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const stmts = program.statements;
+    for (const local of ["int_opt", "colour_opt"]) {
       const own = byHead(stmts, local);
       expect(own).toHaveLength(1);
       expect(own[0].ruleName).toBe("Some");
-      expect(bodyPreds(own[0])).toEqual(["n"]);
     }
+    expect(bodyPreds(byHead(stmts, "int_opt")[0])).toEqual(["n"]);
+    expect(bodyPreds(byHead(stmts, "colour_opt")[0])).toEqual(["colour"]);
   });
 
   test("rejects a default import when the module has no `?-` default", () => {

@@ -196,6 +196,68 @@ input predicate hi(x: integer) := maximal from "order.dl"(cover = cover).
     expect(views).toContain("hi");
   });
 
+  const OPS = `input predicate cover(a: integer, b: integer).
+lt(X, Y) :- cover(X, Y).
+lt(X, Z) :- lt(X, Y), cover(Y, Z).
+output predicate op() :: Lt(X, Y) :- lt(X, Y).
+`;
+
+  test("prints an imported proof-carrying output under --all", async () => {
+    const result = await withTempDir(
+      {
+        "ops.dl": OPS,
+        "main.dl": `cover(1, 2).
+input predicate ord(o: value) := op from "ops.dl"(cover = cover).
+output predicate below(X, Y) :- P : ord, P = ord::Lt(X, Y).
+`,
+      },
+      (dir) => runCli(["--all", "--backend", "native", join(dir, "main.dl")]),
+    );
+    expect(result.stderr).toBe("");
+    // The renamed output has no alias rule, so it needs its own output marker.
+    expect(result.stdout).toContain("-- ord");
+    expect(result.stdout).toContain("-- below");
+  });
+
+  test("two bindings of one ADT module with the same wiring share its constructor", async () => {
+    const result = await withTempDir(
+      {
+        "ops.dl": OPS,
+        "main.dl": `cover(1, 2). cover(2, 3).
+input predicate a(o: value) := op from "ops.dl"(cover = cover).
+input predicate b(o: value) := op from "ops.dl"(cover = cover).
+via_a(X, Y) :- P : a, P = a::Lt(X, Y).
+via_b(X, Y) :- Q : b, Q = b::Lt(X, Y).
+?- via_a(X, Y), via_b(X, Y).
+`,
+      },
+      async (dir) => {
+        const run = await runCli([
+          "--backend",
+          "native",
+          "--output-format",
+          "jsonl",
+          join(dir, "main.dl"),
+        ]);
+        const dry = await runCli(["--dry-run", join(dir, "main.dl")]);
+        return { run, dry };
+      },
+    );
+    expect(result.run.stderr).toBe("");
+    // Both names denote one relation, so the join is the closure itself.
+    const rows = result.run.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as { X: number; Y: number });
+    expect(rows.map((r) => `${r.X},${r.Y}`).sort()).toEqual(["1,2", "1,3", "2,3"]);
+    // One expansion: `b` defines nothing of its own.
+    const views = [...result.dry.stdout.matchAll(/CREATE VIEW[^"]*"([^"]+)"/g)].map((m) => m[1]);
+    expect(views.filter((v) => v?.includes("$lt"))).toHaveLength(1);
+    expect(views).toContain("a");
+    expect(views).not.toContain("b");
+  });
+
   test("rejects an import whose declared output type is wrong", async () => {
     const result = await withTempDir(
       {

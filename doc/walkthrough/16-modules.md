@@ -173,6 +173,16 @@ are wired to, and in a language with no side effects equal inputs mean equal
 outputs, so there is nothing to tell two such instances apart. You will see this
 pay off in the next section.
 
+> **Logic lens.** The ML jargon for this is that Datamog's functors are
+> **applicative**, not **generative**: writing `F(A)` twice denotes one instance,
+> where a generative functor would mint a fresh one each time (which is why
+> Standard ML's `functor` gives you two unrelated types if you apply it twice).
+> Applicative is the only defensible reading here, because nothing you can write
+> distinguishes two instantiations with the same arguments — making them different
+> would be an artefact of how elaboration happens to work, not a fact about your
+> program. Different arguments still give different instances, and that difference
+> is real.
+
 ## Composing modules
 
 A module can itself import a module: `reach.dl` could wire its `edge` input to a
@@ -251,6 +261,11 @@ play you must qualify.) So one program can match against several instantiations
 of the same type at once: `Option<Int>` and `Option<String>` from the one
 `option.dl`. That is a poor-man's higher-order type — `option.dl` is `Option<_>`,
 applied to an element predicate at each binding.
+
+What makes these two types distinct is that they are applied to *different*
+element predicates. Bind `option.dl` twice at the same element predicate and you
+get one type with one `Some`, since there would be nothing to tell the two apart:
+`Option<Int>` is `Option<Int>` however many times you write it.
 
 If you would rather keep the representation abstract, don't import `opt` at all:
 export *operations* over it from `option.dl` — matching the constructors
@@ -400,11 +415,15 @@ A method dictionary, passed as a relation. It costs a `value` column and a match
 per use. Note that `ord` carries nothing but its proof term, so read it with a
 capture (`P : ord`) and print the operations you derive from it, not `ord` itself.
 
-One wrinkle, and it is the exception to sharing: because a constructor is
-qualified by the predicate it lands on, `ops.dl`'s output has to be *renamed* to
-`ord` for you to be able to write `ord::Lt`. Renaming is per site, so a
-proof-carrying output is never shared — which is the same mechanism that makes two
-instantiations of `option.dl` two distinct types.
+One wrinkle in how this is bound. Because a constructor is qualified by the
+predicate it lands on, `ops.dl`'s output is *renamed* to `ord` rather than aliased,
+so that you can write `ord::Lt`. An alias rule could not do the job: a pass-through
+rule does not inherit proof-carrying-ness, so `q(X, Y) :- p(X, Y).` quietly drops
+`p`'s proof, and capturing from `q` is an error. Bind the same module twice the
+same way and the second name simply *becomes* the first predicate — one relation,
+one `Lt` — at the price of the second declaration's column labels, and the shared
+relation printing once. Wire them differently and you get two instances with
+distinct constructors, which is what the `option.dl` example above relies on.
 
 ## A few rules of the road
 
@@ -424,9 +443,10 @@ instantiations of `option.dl` two distinct types.
   collide. Freshened names contain `$`, which no source identifier can, so they
   never clash with yours. That covers an input the module bound to a data file
   too: each instance loads its own copy, under a name you never see.
-- **Identical wirings share one copy.** Same module, same actuals, same instance,
-  one alias per binding. The exception is a proof-carrying output, which is
-  renamed rather than aliased and so stays per site.
+- **Identical wirings share one copy.** Same module, same actuals, same instance.
+  For a plain output each binding gets its own alias and its own column labels; for
+  a proof-carrying one the second binding adopts the first's predicate outright, so
+  the constructor is shared and the second declaration's labels go unused.
 - **The instantiation graph must be acyclic.** Mutually recursive predicates
   share a file.
 - **A module never auto-loads its inputs.** Every input of an imported module

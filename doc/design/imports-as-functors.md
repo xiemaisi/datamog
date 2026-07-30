@@ -49,6 +49,18 @@ Carried over from the discussion:
    equal outputs in a language with no side effects, so sharing is invisible apart
    from the smaller program. (The first version always duplicated; sharing landed
    with the alias-rule import binding, below.)
+
+   In ML terms this makes the functors **applicative**, not **generative**:
+   `F(A)` denotes one thing however many times it is written, rather than minting a
+   fresh instance per application. The distinction is visible for proof-carrying
+   outputs, where instances have identity you can observe (a constructor is
+   qualified by its predicate, so a generative reading would give `a::Some` and
+   `b::Some` as unrelated tags for two bindings with the same wiring, and an
+   applicative one gives a single tag). Applicative is the coherent choice here:
+   nothing in the language can distinguish two instantiations with equal arguments,
+   so making them distinct types would be an artefact of the elaborator rather than
+   a property of the program. Two instantiations with *different* wiring are still
+   distinct — that is different arguments, not generativity.
 5. Composition is by **expansion** (inline), not materialise-feed. Importing a
    module substitutes actuals for its inputs, freshens its private names per
    instance, and merges everything into one program with one global least fixed
@@ -227,14 +239,25 @@ State these plainly; they are the cost of expansion.
   over the reachable, post-override instantiation graph, so a default that points
   into a cycle but is always overridden before it fires is not flagged.
 - **Duplicate per distinct wiring.** Two instantiations with the same actuals are
-  expanded once and aliased twice (decision 4); two with different actuals are two
-  copies, which is the price of monomorphisation. One case still duplicates under
-  equal wiring: an instance whose selected output is proof-carrying, since its
-  constructors are qualified by the importer's name and that rename is per-site.
-  Sharing does not change which programs are accepted — in particular it cannot
-  turn linear recursion non-linear, because two instances only share when their
-  wiring is identical, and identical wiring already places both copies in one SCC
-  whenever a cycle runs through it.
+  expanded once and bound twice (decision 4); two with different actuals are two
+  copies, which is the price of monomorphisation. Sharing does not change which
+  programs are accepted — in particular it cannot turn linear recursion
+  non-linear, because two instances only share when their wiring is identical, and
+  identical wiring already places both copies in one SCC whenever a cycle runs
+  through it.
+- **A proof-carrying output is bound by name, not by an alias rule.** Its
+  constructors are qualified by the predicate they land on, so the output is
+  renamed to an importing site's name to make `local::Ctor` writable. An alias rule
+  cannot substitute: proof-carrying-ness comes from a predicate's own `:: Ctor`
+  rules and does not propagate through a pass-through rule, so the alias would drop
+  the implicit proof column and a capture against it would be rejected. A second
+  binding of the same output therefore adopts the first one's predicate outright,
+  which keeps equal-wiring instantiations equal (one relation, one constructor) at
+  the price of the second declaration's column labels and its own entry in `--all`.
+  Making the alias route work instead would mean teaching post-processing that a
+  predicate defined by a pass-through inherits its target's proof column and named
+  rules — a change to the parser layer the module system otherwise never touches,
+  and one that would affect hand-written pass-through rules too.
 - **One unnamed query per file, enforced always.** A file with two `?-` queries
   is an error. Programs in `packages/cli/examples` that use several queries (27
   of 50 today) must move their extra queries to `output predicate`s. That
@@ -326,10 +349,10 @@ diagnostics, per-module EDB directories):
 - **Fixed / private imports** (a module-backed binding that is not part of the
   module's parameter surface). The first version makes every import an
   overridable input default.
-- **Sharing an instance whose selected output is proof-carrying** (every other
-  identical instantiation is shared; see decision 4 and *Consequences*). It would
-  need the alias rule to rewrite the constructor tags inside the proof value,
-  including nested sub-proofs.
+- **Per-site column labels for a second binding of a proof-carrying output.** It
+  shares the instance (see *Consequences*), but by adopting the first binding's
+  predicate, so its own declared column names go unused. Fixing that needs the
+  alias route, hence proof-carrying pass-through rules in post-processing.
 - **Inferring receiving column types** from the selected output signature instead
   of restating them.
 - **Aliased whole-module access** (`import g = "mod.dl"(...)` then `g.a`, `g.b`).

@@ -2396,21 +2396,31 @@ need no module-specific support. Per instantiation:
 5. Everything merges into one program evaluated by one global least fixed point.
 
 **Instances are shared.** Two bindings of the same module with the same wiring
-denote the same relations, so they are elaborated to one expansion with one alias
-rule each: an interface's several outputs cost one copy of its rules, not one per
-output. Instance identity is the module plus the predicate each input is wired to;
-inputs left on a `:=` default need no part in it, since how a default resolves
-follows from the module. Differing wiring (including one site overriding a default
-that another leaves alone) gives separate instances, as does a module reached by
-two paths that do not resolve to the same file.
+denote the same relations, so they are elaborated to one expansion that each site
+binds its own name into: an interface's several outputs cost one copy of its rules,
+not one per output. Instantiation is therefore *applicative* rather than
+*generative* in the ML sense — instantiating a module twice with the same arguments
+denotes one instance, it does not mint two. Instance identity is the module plus the
+predicate each input is wired to; inputs left on a `:=` default need no part in it,
+since how a default resolves follows from the module. Differing wiring (including one site overriding a
+default that another leaves alone) gives separate instances, as does a module
+reached by two paths that do not resolve to the same file.
 
-**Exception: a proof-carrying output.** When the selected output carries a
-constructor (§8), it is **renamed** to the importing input's name rather than
-aliased, because a constructor is qualified by its predicate: for
+**A proof-carrying output is bound by name, not by an alias rule.** When the
+selected output carries a constructor (§8) it is **renamed** to the importing
+input's name, because a constructor is qualified by its predicate: for
 `input predicate dist(...) := opt from "..."`, `Some` becomes `dist::Some`, a
-writable name the importer can pattern-match. That rename is per-site, so such an
-instance is not shared — which is also what makes two instantiations of one ADT
-module distinct types, matchable side by side in one program.
+writable name the importer can pattern-match. An alias rule could not do this job
+— proof-carrying-ness comes from a predicate's own `:: Ctor` rules and does not
+propagate through a pass-through rule, so an alias would drop the implicit proof
+column. A further binding of the same instance and output therefore takes the
+renamed predicate as its own name too: every reference written against the second
+name (body atom, proof capture, constructor qualifier) resolves to the first, so
+equal wiring yields one relation with one set of constructors. The cost is that
+the later declaration's column names are not used, and the shared relation prints
+once, under the first name. Instantiations whose wiring *differs* remain separate
+instances with distinct constructors, which is what lets one program match several
+instantiations of one ADT module side by side.
 
 ### 9.3 Constraints
 
