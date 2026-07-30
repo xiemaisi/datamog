@@ -5,8 +5,12 @@ import { defineConfig } from "vite";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? "/datamog/" : "/",
+export default defineConfig(({ command }) => ({
+  // GitHub Pages serves the SPA from the repo subpath, so a production build in
+  // CI needs that base for its asset URLs. The dev server always serves from the
+  // root: the e2e suite drives it by absolute path (`/embed-demo.html`), which a
+  // based dev server answers with a 404.
+  base: command === "build" && process.env.GITHUB_ACTIONS ? "/datamog/" : "/",
   plugins: [preact()],
   server: {
     // Bind to all interfaces so the dev server is reachable from the host
@@ -29,4 +33,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
