@@ -22,7 +22,7 @@ the correct closure — they don't go through SQL, so the `WITH
 RECURSIVE` limitation below doesn't apply to them.)
 
 The long comment at
-[`packages/cli/examples/transitive-closure/transitive-closure.dl`](../../../packages/cli/examples/transitive-closure/transitive-closure.dl)
+[`packages/cli/examples/transitive-closure/transitive-closure.dl`](../../../../packages/cli/examples/transitive-closure/transitive-closure.dl)
 explains why: per SQL:1999, every reference to a recursive name
 inside a `WITH RECURSIVE` step query resolves to the same "working
 table" (roughly Δ, the rows produced in the previous iteration).

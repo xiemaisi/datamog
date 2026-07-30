@@ -1,14 +1,17 @@
 # Design proposal: a module/import system for Datamog
 
-Status: proposal (nothing implemented yet).
+Status: **not adopted, and not planned.** Datamog has a module system, but it is
+the ambitious alternative in
+[`imports-as-functors.md`](./imports-as-functors.md) — a file is a function from
+its input relations to its output relations, wired with `:=`. This doc is kept as
+the design record of the conservative path (merge-by-name imports), which was
+weighed against it and dropped; see *Relation to the conservative design* in that
+doc for the trade. Read it for the reasoning, not for how imports behave.
 
-This is the conservative design. For the ambitious alternative that treats a
-program as a function from input relations to output relations, see
-[`imports-as-functors.md`](./imports-as-functors.md).
-
-Datamog programs are single files today. This proposes a small module system so
-larger programs can be split across files, with a clear path to grow into
-reusable libraries later. It covers what we call the two use cases:
+The rest of this document is written as it stood before that decision, when
+Datamog programs were single files. It proposes a small module system so larger
+programs can be split across files, with a clear path to grow into reusable
+libraries later. It covers what we call the two use cases:
 
 1. **Split a program.** One large program broken into several files that
    reference each other. This is the immediate goal.

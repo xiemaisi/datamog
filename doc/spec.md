@@ -2418,16 +2418,16 @@ renamed predicate as its own name too: every reference written against the secon
 name (body atom, proof capture, constructor qualifier) resolves to the first, so
 equal wiring yields one relation with one set of constructors. The cost is that
 the later declaration's column names are not used, and the shared relation prints
-once, under the first name.
+once, under the first name. Instantiations whose wiring *differs* remain separate
+instances with distinct constructors, which is what lets one program match several
+instantiations of one ADT module side by side.
 
 The receiving declaration counts the **implicit proof column** (§8.2), so it is
 one wider than the output's value columns — a `tc(X, Y) :: Step` output is received
 as `input predicate p(a: integer, b: integer, why: value)` — and omitting it is an
 arity error at the boundary. The declared names apply to the value columns; the
 proof column is named only for the declaration's own sake, since a query hides it
-(§8.3). Instantiations whose wiring *differs* remain separate
-instances with distinct constructors, which is what lets one program match several
-instantiations of one ADT module side by side.
+(§8.3).
 
 ### 9.3 Constraints
 

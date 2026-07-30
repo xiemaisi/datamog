@@ -276,9 +276,9 @@ State these plainly; they are the cost of expansion.
   `main.dl`'s directory, or via `--road` / `--flight` input-flag overrides
   (`--input name=source` for names no flag can express).
 - Its single unnamed `?-` output prints.
-- Named `output predicate`s can be requested with a flag (for example
-  `--output road_reach`); this is the CLI's equivalent of selecting a named
-  export. Exact flag left open.
+- A named `output predicate` is selected by a positional argument after the
+  program (`datamog main.dl road_reach`), and `--all` runs every output. This is
+  the CLI's equivalent of selecting a named export.
 
 ## Relation to the conservative design
 
