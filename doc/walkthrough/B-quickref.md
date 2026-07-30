@@ -12,8 +12,12 @@ definition, see [`doc/spec.md`](../spec.md).
 | ``input predicate `p-name`(`col-name`: type).`` | quote predicate or column identifiers            |
 | `p("value", 42).`                          | assert a ground fact                             |
 | `h(X, Y) :- body.`                         | rule defining an IDB predicate                   |
+| `h(X: integer) :- body.`                   | head argument with a checked type annotation     |
+| `h(X, Y) :: Ctor :- body.`                 | proof-carrying rule: `h` becomes an ADT          |
 | `output predicate h(X) :- body.`           | rule whose predicate is also a named result      |
 | `error predicate bad(X) :- body.`          | named integrity constraint: `bad` must be empty  |
+| `input predicate p(...) := "f.csv".`       | bind an input to a data file                     |
+| `input predicate p(...) := h from "m.dl"(q = r).` | bind an input to an instance of another module |
 | `?- q(X, Y).`                              | query                                            |
 | `!- q(X), not r(X).`                       | anonymous integrity constraint: must have no solution |
 | `# comment`                                | line comment                                     |
@@ -71,6 +75,65 @@ function args, iteration sources, IDB column unification).
 
 `count(*)` means `COUNT(*)` — count all rows.
 
+## Head type annotations
+
+- Optional, and **checked rather than used**: inference runs unchanged and each
+  annotation is verified against it.
+- Per rule and per argument — a rule may annotate any subset of its head
+  arguments, and sibling rules may annotate differently or not at all.
+- A declared type must equal or widen what the rule proves (`integer` may be
+  declared `float` or `value`; a narrower claim is rejected). Annotations are the
+  predicate's **published** contract: consumers are checked against them, while
+  the predicate's own body still sees its inferred types.
+- No runtime effect; codegen ignores them.
+
+## Proof terms (ADTs)
+
+| Syntax                        | Meaning                                                   |
+| ----------------------------- | --------------------------------------------------------- |
+| `h(X, Y) :: Ctor :- body.`    | constructor args derived (witnesses, then sub-proofs)     |
+| `h(X, Y) :: Ctor(A, B) :- body.` | constructor args listed explicitly                     |
+| `V : p(X, Y)`                 | capture `p`'s proof term into `V`                         |
+| `V : p`                       | shorthand for `V : p(_, ..., _)`, one per declared column |
+| `_ : p(X, Y)`                 | match without capturing (omits the sub-proof)             |
+| `V = Ctor(A, B)`              | match a constructor, bare when one predicate declares it  |
+| `V = p::Ctor(A, B)`           | qualified match, required when several predicates share the tag |
+
+- A proof-carrying predicate gains an **implicit trailing `value` column** holding
+  the derivation; it is the last column, a query hides it, and output renders the
+  term bare (`Ctor(...)`).
+- Constructors are scoped to their predicate, so a tag may recur across
+  predicates. Naming is all-or-nothing: name every rule of a predicate, or none.
+- A constructor term is always a **match**, never a value builder.
+
+## Modules
+
+A file is a function: its `input predicate`s are parameters, its
+`output predicate`s and single `?-` default are results. Bind an input with `:=`;
+`from` present means a module, a bare string means a data file.
+
+| Syntax                                          | Meaning                                |
+| ----------------------------------------------- | -------------------------------------- |
+| `:= "data/x.tsv" as csv.`                       | data file, loader forced (`csv`, `jsonl`, `json`, `mermaid`) |
+| `:= reach from "m.dl"(edge = road).`            | instance of `m.dl`, taking output `reach`, wiring `edge` to `road` |
+| `:= from "m.dl"(edge = road).`                  | same, taking the module's `?-` default output |
+
+- Every input of an imported module must be **supplied** — wired by an actual or
+  `:=`-bound inside the module. A module never auto-loads.
+- A `:=` on an input is an **overridable default**: a wired actual wins, and the
+  default is not instantiated. An actual naming a non-input is an error.
+- **One output per import site.** Take several outputs with several bindings.
+- Identical (module, wiring) pairs **share** one instance; differing wiring gives
+  separate copies. Instantiation is applicative: equal arguments, one instance.
+- Declared columns are the instance's public face and are checked against the
+  output's published types (equal or wider, never narrower). For a proof-carrying
+  output the declaration also counts the implicit proof column.
+- A module's `!-` and `error predicate` constraints travel with it, checked per
+  instance against the data wired in — an interface can enforce its own laws.
+- The **instantiation graph must be acyclic**: mutually recursive predicates share
+  a file. Recursion inside a module is fine.
+- Multi-file programs need the CLI; the browser playground runs single files.
+
 ## Cross-backend runtime guarantees
 
 - Division / modulo by zero → `NULL`
@@ -95,6 +158,8 @@ function args, iteration sources, IDB column unification).
 - Negation must be **stratified**: no cycle through a negative
   edge in the predicate dependency graph.
 - Aggregate predicates cannot be recursive.
+- At most one **default output** per file: a `?-` query, or a rule named
+  `output predicate default`. Further results must be named outputs.
 - Predicates must have consistent arity across all rules.
 - Column types always unify across rules: `integer`/`float` widen to
   `float`, and other primitive mismatches widen to `value`.
