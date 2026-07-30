@@ -1,0 +1,113 @@
+[
+  [
+    {
+      "T": {
+        "args": [
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "sk::K"
+              },
+              {
+                "args": [],
+                "$proof": "sk::K"
+              }
+            ],
+            "$proof": "sk::App"
+          },
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "sk::K"
+              },
+              {
+                "args": [],
+                "$proof": "sk::K"
+              }
+            ],
+            "$proof": "sk::App"
+          }
+        ],
+        "$proof": "sk::App"
+      },
+      "U": {
+        "args": [],
+        "$proof": "sk::K"
+      }
+    },
+    {
+      "T": {
+        "args": [
+          {
+            "args": [
+              {
+                "args": [
+                  {
+                    "args": [],
+                    "$proof": "sk::S"
+                  },
+                  {
+                    "args": [],
+                    "$proof": "sk::K"
+                  }
+                ],
+                "$proof": "sk::App"
+              },
+              {
+                "args": [],
+                "$proof": "sk::K"
+              }
+            ],
+            "$proof": "sk::App"
+          },
+          {
+            "args": [],
+            "$proof": "sk::K"
+          }
+        ],
+        "$proof": "sk::App"
+      },
+      "U": {
+        "args": [
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "sk::K"
+              },
+              {
+                "args": [],
+                "$proof": "sk::K"
+              }
+            ],
+            "$proof": "sk::App"
+          },
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "sk::K"
+              },
+              {
+                "args": [],
+                "$proof": "sk::K"
+              }
+            ],
+            "$proof": "sk::App"
+          }
+        ],
+        "$proof": "sk::App"
+      }
+    }
+  ],
+  [
+    {
+      "U": {
+        "args": [],
+        "$proof": "sk::K"
+      }
+    }
+  ]
+]

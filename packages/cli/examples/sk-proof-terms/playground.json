@@ -1,0 +1,5 @@
+{
+  "name": "SK Combinators (proof terms)",
+  "description": "The same SK calculus over a proof-term ADT, where reduction has to request the nodes it builds",
+  "order": 260
+}

@@ -1,0 +1,5 @@
+{
+  "name": "SK Combinators (strings)",
+  "description": "An interpreter for the Turing-complete SK calculus, with terms as prefix-notation strings and reduction as string surgery",
+  "order": 250
+}

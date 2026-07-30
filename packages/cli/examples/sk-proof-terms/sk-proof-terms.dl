@@ -1,0 +1,69 @@
+# SK combinators, with terms as a proof-term ADT
+#
+# The same Turing-complete calculus as sk-strings, over structured terms:
+#
+#   K x y    -> x
+#   S x y z  -> x z (y z)
+#
+# `sk` is the datatype of terms, with three constructors -- S, K and App -- so a
+# term is a tree instead of a string. Matching does the work that the counting
+# scan does in the string version, and a subterm is just a constructor argument.
+#
+# The twist is construction. A constructor term is always a *match*, never a
+# builder, so a term exists only once some rule of `sk` derives it. Reduction
+# therefore asks for the nodes it needs (`want`), and picks them up once they
+# exist (`app`): the universe of terms grows on demand instead of being
+# enumerated up front, which matters because enumerating even the terms of size
+# seven runs to tens of thousands. That request-then-collect cycle is the
+# value-producing recursion here, and the closing note of sk-strings -- on why
+# none of this can be guaranteed to terminate -- applies word for word.
+#
+# native/seminaive only: non-linear recursion, and proof accessor chains that
+# nest deeper than SQLite's parser accepts.
+
+# --- The datatype ----------------------------------------------------------
+sk() :: S.
+sk() :: K.
+sk() :: App(F, X) :- want(F, X).
+
+# The node built for a requested pair, so a rule can pick up what it asked for.
+app(F, X, T) :- T : sk, T = App(F, X).
+
+s(T) :- T : sk, T = S().
+k(T) :- T : sk, T = K().
+
+# --- The term to reduce: S applied to K three times, ((S K) K) K -----------
+# Each application has to be requested before it can be named.
+spine(0, T) :- s(T).
+want(F, X) :- spine(I, F), I < 3, k(X).
+spine(I + 1, T) :- spine(I, F), I < 3, k(X), app(F, X, T).
+start(T) :- spine(3, T).
+
+# --- The two reduction rules ----------------------------------------------
+# K x y -> x: the reduct is a subterm the match already handed us, so there is
+# nothing to build.
+step(T, X) :- T : sk, T = App(F, _), F = App(G, X), G = K().
+
+# S x y z -> x z (y z): three nodes that did not exist before. Ask for the two
+# inner applications, then for the outer one, then collect the result. The
+# fixed point runs the three rounds; a single rule could not, since the outer
+# request needs the inner nodes to exist first.
+s_redex(T, X, Y, Z) :- T : sk, T = App(F, Z), F = App(G, Y), G = App(H, X), H = S().
+want(X, Z) :- s_redex(_, X, _, Z).
+want(Y, Z) :- s_redex(_, _, Y, Z).
+want(P, Q) :- s_redex(_, X, Y, Z), app(X, Z, P), app(Y, Z, Q).
+step(T, R) :- s_redex(T, X, Y, Z), app(X, Z, P), app(Y, Z, Q), app(P, Q, R).
+
+# Congruence: rewriting either side of an application rewrites the whole.
+want(G, X) :- T : sk, T = App(F, X), step(F, G).
+step(T, R) :- T : sk, T = App(F, X), step(F, G), app(G, X, R).
+want(F, Y) :- T : sk, T = App(F, X), step(X, Y).
+step(T, R) :- T : sk, T = App(F, X), step(X, Y), app(F, Y, R).
+
+# --- Reduction to a normal form -------------------------------------------
+reduces(T, T) :- T : sk.
+reduces(T, V) :- step(T, U), reduces(U, V).
+
+# S K K is the identity combinator, so S K K K reduces to K in two steps.
+?- step(T, U).
+output predicate normal_form(U) :- start(T), reduces(T, U), not step(U, _).
