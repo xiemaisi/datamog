@@ -28,6 +28,9 @@ bun run tutorial:html                 # render doc/embed-tutorials to packages/p
 bun run docs:html                     # spec:html + tutorial:html (run by playground:build/dev)
 bun run e2e                           # Playwright e2e suite (auto-installs chromium on first run)
 bun run e2e:ui                        # Playwright e2e in UI mode
+# The Python magic has its own suite, which `bun test` does not cover:
+#   python3 -m venv .venv && .venv/bin/pip install -e 'python/datamog-magic[test]'
+#   DATAMOG_REPO=$PWD .venv/bin/python -m pytest python/datamog-magic
 bun run build:vscode                  # build VS Code extension (.vsix)
 bun run slides:build                  # render tutorial slide decks to PDF (one-shot)
 bun run slides:watch                  # render slides with watch mode

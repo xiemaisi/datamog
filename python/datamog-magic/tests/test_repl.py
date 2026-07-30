@@ -67,14 +67,14 @@ def proc() -> DatamogProcess:
 
 
 @needs_subprocess
-def test_extensional_declaration(proc: DatamogProcess) -> None:
-    events = proc.send_chunk("extensional q(x: integer).")
+def test_input_predicate_declaration(proc: DatamogProcess) -> None:
+    events = proc.send_chunk("input predicate q(x: integer).")
     assert events == [{"kind": "declared", "predicate": "q", "arity": 1, "rowsLoaded": 0}]
 
 
 @needs_subprocess
 def test_rule_then_query(proc: DatamogProcess) -> None:
-    proc.send_chunk("extensional q(x: integer).")
+    proc.send_chunk("input predicate q(x: integer).")
     events = proc.send_chunk("p(X) :- q(X).\n?- p(X).")
     kinds = [e["kind"] for e in events]
     assert kinds == ["rule", "result"]
@@ -90,7 +90,7 @@ def test_internal_blank_lines_are_part_of_one_chunk(proc: DatamogProcess) -> Non
     # wrapper must still drain both `done` sentinels and return all events
     # together — the user's mental model is "one cell = one send_chunk".
     events = proc.send_chunk(
-        "extensional r(y: string).\n\nextensional s(z: integer)."
+        "input predicate r(y: string).\n\ninput predicate s(z: integer)."
     )
     kinds = [e["kind"] for e in events]
     assert kinds == ["declared", "declared"]
@@ -100,8 +100,8 @@ def test_internal_blank_lines_are_part_of_one_chunk(proc: DatamogProcess) -> Non
 
 @needs_subprocess
 def test_redefinition_across_chunks_yields_error(proc: DatamogProcess) -> None:
-    proc.send_chunk("extensional p(x: integer).")
-    events = proc.send_chunk("extensional p(y: string).")
+    proc.send_chunk("input predicate p(x: integer).")
+    events = proc.send_chunk("input predicate p(y: string).")
     assert len(events) == 1
     err = events[0]
     assert err["kind"] == "error"
@@ -112,10 +112,10 @@ def test_redefinition_across_chunks_yields_error(proc: DatamogProcess) -> None:
 
 @needs_subprocess
 def test_reset_allows_redefinition(proc: DatamogProcess) -> None:
-    proc.send_chunk("extensional p(x: integer).")
+    proc.send_chunk("input predicate p(x: integer).")
     reset = proc.reset()
     assert any(e.get("kind") == "info" for e in reset)
-    again = proc.send_chunk("extensional p(y: string).")
+    again = proc.send_chunk("input predicate p(y: string).")
     assert again[0]["kind"] == "declared"
 
 
@@ -135,7 +135,7 @@ def test_empty_chunk_is_a_noop(proc: DatamogProcess) -> None:
 @needs_subprocess
 def test_close_is_idempotent() -> None:
     p = DatamogProcess(cwd=REPO, backend="sqlite", data_dir="/tmp")
-    p.send_chunk("extensional p(x: integer).")
+    p.send_chunk("input predicate p(x: integer).")
     p.close()
     p.close()  # second close must not raise
     assert p.is_alive() is False
@@ -144,11 +144,11 @@ def test_close_is_idempotent() -> None:
 @needs_subprocess
 def test_send_after_close_respawns() -> None:
     p = DatamogProcess(cwd=REPO, backend="sqlite", data_dir="/tmp")
-    p.send_chunk("extensional p(x: integer).")
+    p.send_chunk("input predicate p(x: integer).")
     p.close()
     # `start()` is idempotent and `send_chunk` calls it; sending again
     # should bring up a fresh subprocess (with fresh state — `p` is
     # available again because it's a new session).
-    events = p.send_chunk("extensional p(y: string).")
+    events = p.send_chunk("input predicate p(y: string).")
     assert events[0]["kind"] == "declared"
     p.close()
