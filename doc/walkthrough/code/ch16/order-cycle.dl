@@ -1,0 +1,7 @@
+# order-cycle.dl -- the same import, over covers that form a cycle. The closure
+# then relates an element to itself, so order.dl's first law is violated.
+cover(1, 2). cover(2, 3). cover(3, 1).
+
+input predicate bottom(x: integer) := minimal from "order.dl"(cover = cover).
+
+?- bottom(X).

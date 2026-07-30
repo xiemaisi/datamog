@@ -2353,7 +2353,13 @@ module `mod.dl` and binds this input to one of its outputs:
   (`moduleInput = localPredicate`), where `localPredicate` is any predicate in
   the importing file's scope. A module input the actuals do not wire must be
   `:=`-bound inside the module; one that is neither wired nor bound is an error
-  (§9.3) — a module never auto-loads.
+  (§9.3) — a module never auto-loads. An actual naming something that is not an
+  input of the module is also an error.
+- A `:=` binding on a module's own input is a **default**, not a fixture: an
+  actual wired for that input overrides it, and the default is then not
+  instantiated (§9.3). A module can therefore ship a derived implementation of
+  part of its own parameter surface — an interface with default methods — and let
+  an importer replace any of it.
 
 ```
 # reach.dl: reachability, parameterised by an edge relation
@@ -2398,6 +2404,11 @@ names; the module's own head-variable names are not exposed.
   error. A module never auto-loads its inputs — the `<name>.csv`-by-convention
   loading is a frontend (CLI / playground) convenience for the entry program's
   free inputs only, not a language feature.
+- **An actual overrides a `:=` default.** When an input carries both a `:=`
+  binding and a wired actual, the actual wins and the bound source is not
+  instantiated at all (for a module binding, no copy of it is expanded; for a data
+  binding, nothing is loaded). An actual that names no input of the module is a
+  static error, so a misspelled override cannot silently fall back to the default.
 - **The instantiation graph must be acyclic.** Two modules whose inputs each
   default to an instance of the other are rejected. This is distinct from
   recursion *within* a module (an ordinary least fixed point, always allowed):

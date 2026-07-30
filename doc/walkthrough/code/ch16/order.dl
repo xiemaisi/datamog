@@ -1,0 +1,19 @@
+# order.dl -- an interface: supply a cover relation, get its minimal elements.
+
+# The primitive: which element directly covers which.
+input predicate cover(a: integer, b: integer).
+
+# A default method: `lt` is the transitive closure of `cover`, computed by this
+# chapter's reach.dl. An importer that already has the full order can wire its
+# own `lt` and skip the closure.
+input predicate lt(a: integer, b: integer) := reach from "reach.dl"(edge = cover).
+
+# Laws. However `lt` arrives, it must be a strict order.
+!- lt(X, X).
+!- lt(X, Y), lt(Y, X).
+!- lt(X, Y), lt(Y, Z), not lt(X, Z).
+
+elem(X) :- cover(X, _).
+elem(X) :- cover(_, X).
+
+output predicate minimal(X) :- elem(X), not lt(_, X).

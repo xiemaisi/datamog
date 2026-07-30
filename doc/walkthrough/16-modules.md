@@ -243,6 +243,134 @@ export *operations* over it from `option.dl` — matching the constructors
 *inside* the module — and let the importer use those. Same module, ML-style:
 expose a type through functions, or expose its constructors; your call.
 
+## A module is an interface
+
+Turn the picture around. A module's inputs are its parameters, so they are also
+its **requirements**: what an importer must supply for the module's rules to mean
+anything. That is an interface, and Datamog gives you all three parts of one out
+of features you already have:
+
+| Interface element | Datamog feature |
+| --- | --- |
+| the operations you must supply | `input predicate`, with its column types |
+| the operations you get for free | `output predicate`, derived from them |
+| the laws they must obey | integrity constraints ([Chapter 10](10-modelling.md)) |
+
+Here is a strict order over the elements of a cover relation:
+
+```prolog
+# order.dl
+input predicate cover(a: integer, b: integer).
+input predicate lt(a: integer, b: integer) := reach from "reach.dl"(edge = cover).
+
+!- lt(X, X).
+!- lt(X, Y), lt(Y, X).
+!- lt(X, Y), lt(Y, Z), not lt(X, Z).
+
+elem(X) :- cover(X, _).
+elem(X) :- cover(_, X).
+
+output predicate minimal(X) :- elem(X), not lt(_, X).
+```
+
+Instantiating it is nothing new — wire the covers, take the `minimal` output:
+
+```prolog
+# order-demo.dl
+cover(1, 2). cover(1, 3). cover(2, 4). cover(3, 4).
+input predicate bottom(x: integer) := minimal from "order.dl"(cover = cover).
+?- bottom(X).            # 1
+```
+
+The new part is the three `!-` lines. A module's constraints survive elaboration
+and are checked **once per instance, against the data actually wired in** — and,
+as in Chapter 10, before any query runs, so a violation yields no results at all.
+`order.dl` therefore does not merely document what it wants of an order; it
+enforces it at every use site. Point it at covers that form a cycle and its first
+law fires:
+
+```
+$ datamog order-cycle.dl
+order-cycle.dl: Constraint `!- lt(X, X).` is violated by 3 rows:
+  X = 1
+  X = 2
+  X = 3
+```
+
+The message quotes the law as *the module author* wrote it, over the *importer's*
+data. That is a different kind of check from the boundary types above: a type says
+what shape may cross the boundary, a law says what must be true of what actually
+crossed.
+
+> **Imperative lens.** An interface with default methods, whose contract is
+> executable. A Java interface can demand a `compareTo`; its documentation can
+> *ask* you to make it a total order; nothing checks that you did. Here the ask
+> is a constraint, and it runs on your data.
+
+### Overriding a default
+
+Look again at `lt`. It is an input — a parameter — but it carries a `:=` binding,
+so an importer who says nothing about it gets the transitive closure of `cover`,
+computed by the `reach.dl` from the start of this chapter. That makes the binding
+a **default**: wire an actual for that input and yours wins instead.
+
+```prolog
+# order-override.dl -- we already know the order, so skip the closure
+cover(1, 2). cover(1, 3). cover(2, 4). cover(3, 4).
+known(1, 2). known(1, 3). known(1, 4). known(2, 4). known(3, 4).
+input predicate bottom(x: integer) := minimal from "order.dl"(cover = cover, lt = known).
+?- bottom(X).            # 1, as before
+```
+
+Same answer, less machinery: `--dry-run` on `order-demo.dl` shows a recursive view
+for the closure, and on `order-override.dl` shows none, because an overridden
+default is never instantiated at all. The laws still apply — wire a `lt` that is
+not a strict order and `order.dl` rejects it exactly as it rejects bad covers.
+
+So importing a module is not all-or-nothing. It supplies an algorithm, plus
+defaults for the parts it can work out by itself; you supply the parts only you
+know, and replace any default you can do better. That is the abstract class with
+overridable hooks, written entirely with `input predicate`s.
+
+### One import, several operations
+
+An import site selects **one** output, which is thin for an interface with several
+operations. You can bind the same module twice, but that is two instances and the
+shared work happens twice. The alternative is to hand back all the operations as
+one relation, tagging each with a constructor ([Chapter 15](15-proof-terms.md)):
+
+```prolog
+# ops.dl
+input predicate cover(a: integer, b: integer).
+
+lt(X, Y) :- cover(X, Y).
+lt(X, Z) :- lt(X, Y), cover(Y, Z).
+
+elem(X) :- cover(X, _).
+elem(X) :- cover(_, X).
+
+output predicate op() :: Lt(X, Y)   :- lt(X, Y).
+output predicate op() :: Minimal(X) :- elem(X), not lt(_, X).
+```
+
+One import, and the constructors come qualified by the name you gave it, so the
+importer unpacks whichever operations it wants:
+
+```prolog
+# ops-demo.dl
+cover(1, 2). cover(1, 3). cover(2, 4). cover(3, 4).
+input predicate ord(o: value) := op from "ops.dl"(cover = cover).
+
+output predicate below(X, Y) :- P : ord, P = ord::Lt(X, Y).
+output predicate bottom(X)   :- P : ord, P = ord::Minimal(X).
+?- bottom(X).            # 1
+```
+
+A method dictionary, passed as a relation. It costs a `value` column and a match
+per use, and it buys one instance instead of one per operation. Note that `ord`
+carries nothing but its proof term, so read it with a capture (`P : ord`) and
+print the operations you derive from it, not `ord` itself.
+
 ## A few rules of the road
 
 - **`from` distinguishes the two bindings.** `from` present is a module; a bare
@@ -250,6 +378,13 @@ expose a type through functions, or expose its constructors; your call.
   contextual keywords — you can still name a column `from` or `to`.
 - **One output per import.** An instance exposes only the output you select; the
   module's other outputs and its `?-` default stay internal.
+- **A `:=` binding on an input is a default.** An actual the importer wires for
+  that input overrides it, and the default is then not instantiated. An actual
+  naming something that is not an input of the module is an error, not a silent
+  no-op — otherwise a typo would quietly leave the default in place.
+- **A module's constraints travel with it.** Its `!-` and `error predicate` rules
+  are checked once per instance against the wired data (its `?-` default, by
+  contrast, is dropped unless you select it).
 - **Every import is a fresh copy** (duplicate-per-use), freshened so instances
   never collide. Freshened names contain `$`, which no source identifier can, so
   they never clash with yours.
@@ -299,6 +434,27 @@ in `left` and `r` in `right`. Instantiate it as `pr` and match its constructor
 (`pr::Pair(L, R)`) to recover the pairs — a poor-man's two-argument type
 constructor, `Pair<A, B>`. What happens if you wire both parameters to the same
 relation?
+
+### Exercise 16.6 — Break a law ★
+
+In `order-override.dl`, wire `lt` to a relation that is not transitive (drop
+`known(1, 4)`). Which of `order.dl`'s three laws catches it, and what does the
+error say? Then make it reflexive as well and see how many fire at once.
+
+### Exercise 16.7 — Add an operation without adding an instance ★★
+
+Give `ops.dl` a third operation, `Maximal(X)` (an element with nothing above it),
+and recover it in `ops-demo.dl` alongside the other two. Now do the same thing
+the other way — a separate `maximal` output in `order.dl`, imported by a second
+binding — and compare the two elaborations with `--dry-run`. What exactly is
+duplicated in the second version?
+
+### Exercise 16.8 — A law that only the importer can state ★★★
+
+`order.dl` cannot know whether its order should be *total*. Add that law
+(`!- elem(X), elem(Y), X != Y, not lt(X, Y), not lt(Y, X).`) to a copy of the
+module and instantiate it against the diamond covers from `order-demo.dl`. Why
+does it fire? Where should such a law live — in the module, or in the importer?
 
 ---
 

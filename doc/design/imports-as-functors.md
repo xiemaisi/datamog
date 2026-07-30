@@ -130,6 +130,16 @@ or leave it and get the default instance. (A non-overridable, private "fixed"
 import is a later refinement; the first version makes every import an overridable
 default. See *Deferred*.)
 
+Overriding is a real substitution, not a shadowing: an actual wired for an input
+that also has a `:=` binding wins, and the bound source is then not instantiated
+at all. That is what makes a module readable as an **interface**: its inputs are
+the operations an importer must supply, a `:=`-bound input is a *default method*
+the module derives for itself, and its integrity constraints are the interface's
+*laws*, checked per instance against the data actually wired in. An actual naming
+something that is not an input is rejected, so a misspelled override cannot
+silently revert to the default. See the walkthrough's Chapter 16 for the worked
+example.
+
 Column types on the receiving declaration (`road_reach(src: integer, dst:
 integer)`) must match the selected output's signature, and each actual's columns
 must match the callee input's declared types. The existing type machinery checks

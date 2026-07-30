@@ -40,6 +40,13 @@ const MODULES: Record<string, string> = {
     input predicate seed(v: integer).
     output predicate out(X: value) :- seed(X).
   `,
+  // An interface with one primitive input and one defaulted (derived) input:
+  // `derived` falls back to sink.dl unless the importer wires it.
+  "iface.dl": `
+    input predicate base(a: integer).
+    input predicate derived(a: integer) := out from "sink.dl"(p = base).
+    output predicate result(X) :- derived(X).
+  `,
 };
 // Fresh parse per call (elaborate mutates the returned AST in place).
 const resolve: ModuleResolver = (ref) => ({ program: parseRaw(MODULES[ref]!), file: ref });
@@ -139,6 +146,43 @@ describe("elaborate", () => {
   test("rejects a module instantiation cycle", () => {
     const entry = parseRaw('input predicate top(x: integer) := q from "a.dl".');
     expect(() => elaborate(entry, resolve, "main.dl")).toThrow(/module import cycle/);
+  });
+
+  test("uses an input's `:=` default when the importer does not wire it", () => {
+    const entry = parseRaw(`
+      seed(1).
+      input predicate r(a: integer) := result from "iface.dl"(base = seed).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const resultRule = rules(program.statements).find((r) => r.head.predicate === "r");
+    // `derived` resolved to the nested sink.dl instance's freshened output.
+    expect(bodyPreds(resultRule)).toEqual([expect.stringMatching(/^derived\$\d+\$out$/)]);
+    postProcess(program);
+    expect(() => analyze(program)).not.toThrow();
+  });
+
+  test("an actual overrides an input's `:=` default, and the default is not built", () => {
+    const entry = parseRaw(`
+      seed(1).
+      mine(2).
+      input predicate r(a: integer) := result from "iface.dl"(base = seed, derived = mine).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const resultRule = rules(program.statements).find((r) => r.head.predicate === "r");
+    expect(bodyPreds(resultRule)).toEqual(["mine"]);
+    // The overridden default's module was never expanded.
+    const heads = rules(program.statements).map((s: Stmt) => s.head.predicate as string);
+    expect(heads.filter((h) => h.endsWith("$out"))).toEqual([]);
+    postProcess(program);
+    expect(() => analyze(program)).not.toThrow();
+  });
+
+  test("rejects an actual that names no input of the module", () => {
+    const entry = parseRaw(`
+      seed(1).
+      input predicate r(a: integer) := result from "iface.dl"(base = seed, drived = seed).
+    `);
+    expect(() => elaborate(entry, resolve, "main.dl")).toThrow(/has no input 'drived' to wire/);
   });
 
   test("rejects an unsupplied module input (not wired or bound)", () => {

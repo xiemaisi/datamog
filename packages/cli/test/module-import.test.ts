@@ -81,6 +81,45 @@ input predicate ordered(lo: integer, hi: integer) := from "asc.dl"(p = road).
     expect(result.stdout.trim()).toBe('{"L":1,"H":2}');
   });
 
+  test("an actual overrides a module input's `:=` default", async () => {
+    // order.dl's `lt` defaults to the closure of `cover`; the override wires a
+    // different (still lawful) order, so the two runs must disagree.
+    const files = {
+      "reach.dl": REACH,
+      "order.dl": `input predicate cover(a: integer, b: integer).
+input predicate lt(a: integer, b: integer) := reach from "reach.dl"(edge = cover).
+!- lt(X, X).
+elem(X) :- cover(X, _).
+elem(X) :- cover(_, X).
+output predicate minimal(X) :- elem(X), not lt(_, X).
+`,
+      "default.dl": `cover(1, 2). cover(2, 3).
+input predicate bottom(x: integer) := minimal from "order.dl"(cover = cover).
+?- bottom(X).
+`,
+      "override.dl": `cover(1, 2). cover(2, 3).
+known(2, 1).
+input predicate bottom(x: integer) := minimal from "order.dl"(cover = cover, lt = known).
+?- bottom(X).
+`,
+    };
+    const run = async (dir: string, entry: string): Promise<number[]> => {
+      const r = await runCli(["--backend", "native", "--output-format", "jsonl", join(dir, entry)]);
+      expect(r.stderr).toBe("");
+      expect(r.exitCode).toBe(0);
+      return r.stdout
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => (JSON.parse(l) as { X: number }).X)
+        .sort();
+    };
+    await withTempDir(files, async (dir) => {
+      expect(await run(dir, "default.dl")).toEqual([1]);
+      expect(await run(dir, "override.dl")).toEqual([2, 3]);
+    });
+  });
+
   test("rejects an import whose declared output type is wrong", async () => {
     const result = await withTempDir(
       {

@@ -1,0 +1,11 @@
+# ops.dl -- several operations behind one output, tagged by constructor.
+input predicate cover(a: integer, b: integer).
+
+lt(X, Y) :- cover(X, Y).
+lt(X, Z) :- lt(X, Y), cover(Y, Z).
+
+elem(X) :- cover(X, _).
+elem(X) :- cover(_, X).
+
+output predicate op() :: Lt(X, Y)   :- lt(X, Y).
+output predicate op() :: Minimal(X) :- elem(X), not lt(_, X).

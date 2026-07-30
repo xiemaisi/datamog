@@ -215,7 +215,9 @@ function boundaryError(message: string, b: BoundaryConstraint): AnalyzerError {
  * Expand one module instance into `ctx.out`. `inputSubst` maps this module's
  * inputs (those wired by the caller) to their merged-program names. Before
  * expanding, resolve this module's own module-bound inputs by recursively
- * instantiating each and feeding its output into the corresponding input.
+ * instantiating each and feeding its output into the corresponding input; an
+ * input the caller wired keeps the caller's actual, so a `:=` binding on an
+ * input is an overridable default.
  * `exportAs`/`relabelColumns` are set only for a user-facing (entry-level)
  * instance; a nested instance freshens its selected output the normal way.
  */
@@ -243,6 +245,11 @@ function instantiate(
 
   for (const s of module.statements) {
     if (!isExtDecl(s) || !s.binding?.isModule) continue;
+    // A `:=` binding on an input is a *default*: an actual the importer wired
+    // for it wins, and the default instance is then not built at all. (A
+    // data-file default is overridden the same way, by `expandModule` dropping
+    // the wired declaration so its source is never recorded.)
+    if (Object.hasOwn(inputSubst, s.predicate)) continue;
     const binding = s.binding;
     const child = ctx.resolve(binding.source, file);
     const id = child.file ?? binding.source;
@@ -280,11 +287,22 @@ function instantiate(
   // `inputSubst`) or bound with `:=` (a data or module binding). A free input
   // that is neither is an error: a module never auto-loads its inputs; supplying
   // them is the importer's job (wire it) or the module's (`:= "file"`).
+  const declaredInputs = new Set<string>();
   for (const s of module.statements) {
-    if (isExtDecl(s) && !s.binding && !Object.hasOwn(inputSubst, s.predicate)) {
+    if (!isExtDecl(s)) continue;
+    declaredInputs.add(s.predicate);
+    if (!s.binding && !Object.hasOwn(inputSubst, s.predicate)) {
       throw new AnalyzerError(
         `module '${sourceRef}' input '${s.predicate}' is not supplied; wire it with an actual (${s.predicate} = ...) or bind it with ':='`,
       );
+    }
+  }
+  // An actual naming something that is not an input of this module is a typo.
+  // Ignoring it would substitute nothing, and for a `:=`-bound input it would
+  // silently leave the default in place of the override the importer asked for.
+  for (const name of Object.keys(inputSubst)) {
+    if (!declaredInputs.has(name)) {
+      throw new AnalyzerError(`module '${sourceRef}' has no input '${name}' to wire`);
     }
   }
 
