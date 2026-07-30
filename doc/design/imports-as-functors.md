@@ -349,10 +349,21 @@ diagnostics, per-module EDB directories):
 - **Fixed / private imports** (a module-backed binding that is not part of the
   module's parameter surface). The first version makes every import an
   overridable input default.
-- **Per-site column labels for a second binding of a proof-carrying output.** It
-  shares the instance (see *Consequences*), but by adopting the first binding's
-  predicate, so its own declared column names go unused. Fixing that needs the
-  alias route, hence proof-carrying pass-through rules in post-processing.
+- **A per-site identity for a second binding of a proof-carrying output.** It
+  shares the instance (see *Consequences*) by adopting the first binding's
+  predicate, so it is not a predicate of its own: its declared column names go
+  unused and the relation prints once, under the first name, rather than once per
+  binding. Presentation only — the relation and its constructors are the ones the
+  wiring calls for either way, and a projection rule
+  (`mine(derivation) :- derivation : a.`) recovers a labelled copy. Fixing it
+  properly needs the alias route, hence proof-carrying pass-through rules in
+  post-processing: post-processing derives an implicit proof column and a
+  predicate's constructors from its own `:: Ctor` rules, and neither crosses a
+  pass-through. Deciding *which* rules qualify is the awkward part — any
+  single-atom pass-through changes what a hand-written `q(X, Y) :- p(X, Y).` means
+  (today it drops the proof), while restricting it to elaboration's own aliases
+  needs a marker on the generated rule, putting a module-system concept into the
+  one layer the module system has so far never touched.
 - **Inferring receiving column types** from the selected output signature instead
   of restating them.
 - **Aliased whole-module access** (`import g = "mod.dl"(...)` then `g.a`, `g.b`).

@@ -252,6 +252,13 @@ output predicate present(V) :- Q : colour_opt, Q = colour_opt::Some(V).
 ?- present(V).       # 1, 2, "red"
 ```
 
+Note the `o: value` column on each declaration. A proof-carrying predicate has an
+implicit trailing `value` column holding the derivation (Chapter 15), and the
+receiving declaration counts it, so it is always one wider than the output's own
+arguments: `opt()` takes none, hence one column. Omit it and you get an arity error
+at the boundary. The names you declare label the value columns; the proof column's
+name is never printed, since a query hides the proof.
+
 An imported instance's constructors are qualified by its predicate: `int_opt`'s
 is `int_opt::Some`, `colour_opt`'s is `colour_opt::Some`. Constructors are scoped
 to their predicate (Chapter 15), so the two `Some`s are genuinely distinct — no
@@ -446,7 +453,9 @@ distinct constructors, which is what the `option.dl` example above relies on.
 - **Identical wirings share one copy.** Same module, same actuals, same instance.
   For a plain output each binding gets its own alias and its own column labels; for
   a proof-carrying one the second binding adopts the first's predicate outright, so
-  the constructor is shared and the second declaration's labels go unused.
+  the constructor is shared, the second declaration's labels go unused, and the one
+  relation prints once under the first name rather than once per binding. For your
+  own labels on it, project it: `mine(derivation) :- derivation : a.`
 - **The instantiation graph must be acyclic.** Mutually recursive predicates
   share a file.
 - **A module never auto-loads its inputs.** Every input of an imported module
