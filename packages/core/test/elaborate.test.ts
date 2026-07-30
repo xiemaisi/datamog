@@ -46,6 +46,11 @@ const MODULES: Record<string, string> = {
     input predicate elem(v: value).
     output predicate opt() :: Some :- elem(V).
   `,
+  // A proof-carrying output with value columns of its own.
+  "adt-pair.dl": `
+    input predicate e(a: integer, b: integer).
+    output predicate tc(X, Y) :: Step :- e(X, Y).
+  `,
   // A module carrying its own data: `extra` is bound to a file inside the module.
   "carries-data.dl": `
     input predicate seed(a: integer).
@@ -216,6 +221,19 @@ describe("elaborate", () => {
       .filter((e: Stmt) => e?.$type === "FunctionCall")
       .map((e: Stmt) => e.qualifier);
     expect(qualifiers).toEqual(["o1", "o1"]);
+  });
+
+  test("relabels a proof-carrying output's value columns from the declaration", () => {
+    // The declaration counts the implicit proof column, so it is one longer than
+    // the head; the value columns still take the declared names.
+    const entry = parseRaw(`
+      base(1, 2).
+      input predicate p(orig: integer, dest: integer, why: value)
+        := tc from "adt-pair.dl"(e = base).
+    `);
+    const { program } = elaborate(entry, resolve, "main.dl");
+    const rule = byHead(program.statements, "p")[0];
+    expect(rule.head.args.map((a: Stmt) => a.name)).toEqual(["orig", "dest"]);
   });
 
   test("keeps ADT instantiations distinct when their wiring differs", () => {
