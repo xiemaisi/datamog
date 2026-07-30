@@ -12,8 +12,9 @@ export interface ExpandOptions {
   /**
    * Actuals for the module's inputs: a map from an `input predicate` name to
    * the predicate in the importer's scope it is wired to. Inputs absent from
-   * this map stay free (their declaration is kept and they become EDBs of the
-   * merged program).
+   * this map keep their declaration and become EDBs of the merged program; one
+   * carrying a `:=` data binding is freshened with `prefix` as well, since its
+   * data belongs to this instance alone.
    */
   inputs: Record<string, string>;
   /**
@@ -62,7 +63,10 @@ function* walk(node: unknown): Generator<Record<string, unknown>> {
  *   are qualified here with their owning predicate's new name so they stay
  *   unambiguous once several instances merge.
  * - **Drop** the declarations of wired inputs (they are supplied from outside);
- *   keep free-input declarations as EDBs.
+ *   keep free-input declarations as EDBs. A kept declaration that carries a `:=`
+ *   data binding is freshened too: its data is this instance's own, so two
+ *   instances must not share (or redeclare) the one predicate, and the name must
+ *   not collide with the importer's.
  *
  * The caller passes a fresh raw parse per instantiation, so mutating in place is
  * safe. The importer binds its chosen name to the instance's selected output
@@ -77,6 +81,9 @@ export function expandModule(
   // Constructor tag -> the module predicate that declares it, so a bare
   // constructor term can be qualified with that predicate's renamed name.
   const ctorOwner = new Map<string, string>();
+  // Data-bound inputs the importer did not override: their declarations survive
+  // into the merged program, so they are freshened like private predicates.
+  const boundInputs = new Set<string>();
   for (const stmt of module.statements) {
     if (isRule(stmt)) {
       localNames.add(stmt.head.predicate);
@@ -84,6 +91,9 @@ export function expandModule(
         ctorNames.add(stmt.ruleName);
         if (!ctorOwner.has(stmt.ruleName)) ctorOwner.set(stmt.ruleName, stmt.head.predicate);
       }
+    } else if (isExtDecl(stmt) && stmt.binding && !Object.hasOwn(inputs, stmt.predicate)) {
+      boundInputs.add(stmt.predicate);
+      localNames.add(stmt.predicate);
     }
   }
 
@@ -103,6 +113,10 @@ export function expandModule(
         node.head.predicate = renamePredicate(node.head.predicate);
       } else if (isLiteral(node)) {
         node.predicate = renamePredicate(node.predicate);
+      } else if (isExtDecl(node) && boundInputs.has(node.predicate)) {
+        // Freshen the surviving declaration itself (its references go through
+        // `renamePredicate` via `localNames`).
+        node.predicate = `${prefix}${node.predicate}`;
       } else if (isFunctionCall(node) && ctorNames.has(node.name)) {
         // A constructor term `Ctor(...)` (a match). Qualify it with its owning
         // predicate's new name so it stays unambiguous once several instances

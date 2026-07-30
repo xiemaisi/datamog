@@ -387,7 +387,8 @@ print the operations you derive from it, not `ord` itself.
   contrast, is dropped unless you select it).
 - **Every import is a fresh copy** (duplicate-per-use), freshened so instances
   never collide. Freshened names contain `$`, which no source identifier can, so
-  they never clash with yours.
+  they never clash with yours. That covers an input the module bound to a data
+  file too: each instance loads its own copy, under a name you never see.
 - **The instantiation graph must be acyclic.** Mutually recursive predicates
   share a file.
 - **A module never auto-loads its inputs.** Every input of an imported module

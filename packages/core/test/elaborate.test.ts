@@ -40,6 +40,13 @@ const MODULES: Record<string, string> = {
     input predicate seed(v: integer).
     output predicate out(X: value) :- seed(X).
   `,
+  // A module carrying its own data: `extra` is bound to a file inside the module.
+  "carries-data.dl": `
+    input predicate seed(a: integer).
+    input predicate extra(a: integer) := "extra.csv".
+    output predicate all(X) :- seed(X).
+    output predicate all(X) :- extra(X).
+  `,
   // An interface with one primitive input and one defaulted (derived) input:
   // `derived` falls back to sink.dl unless the importer wires it.
   "iface.dl": `
@@ -173,6 +180,30 @@ describe("elaborate", () => {
     // The overridden default's module was never expanded.
     const heads = rules(program.statements).map((s: Stmt) => s.head.predicate as string);
     expect(heads.filter((h) => h.endsWith("$out"))).toEqual([]);
+    postProcess(program);
+    expect(() => analyze(program)).not.toThrow();
+  });
+
+  test("instantiates a data-carrying module twice, one EDB per instance", () => {
+    const entry = parseRaw(`
+      a(1). b(2).
+      extra(3).
+      input predicate p(x: integer) := all from "carries-data.dl"(seed = a).
+      input predicate q(x: integer) := all from "carries-data.dl"(seed = b).
+    `);
+    const { program, dataSources } = elaborate(entry, resolve, "main.dl");
+
+    // Each instance declares (and loads) its own freshened copy of `extra`,
+    // distinct from each other and from the importer's own `extra`.
+    const decls = extDecls(program.statements);
+    expect(decls).toHaveLength(2);
+    expect(new Set(decls).size).toBe(2);
+    // The prefix names the importing input, so the copies are p$N$extra / q$N$extra.
+    for (const d of decls) expect(d).toMatch(/^[pq]\$\d+\$extra$/);
+    expect(dataSources.map((d) => d.predicate).sort()).toEqual(decls.sort());
+    for (const d of dataSources) expect(d.source).toBe("extra.csv");
+
+    // The importer's own `extra` rule is untouched by the instances.
     postProcess(program);
     expect(() => analyze(program)).not.toThrow();
   });

@@ -167,8 +167,10 @@ Per instantiation:
 
 1. Take a fresh copy of the module's private and output predicates.
 2. **Substitute** each input predicate with the actual predicate name the
-   importer supplied (or, recursively, the input's own default). Inputs are not
-   renamed; they resolve to predicates in the importer's scope.
+   importer supplied (or, recursively, the input's own default). A wired input is
+   not renamed, it resolves to a predicate in the importer's scope; an input left
+   on a `:= "file"` data binding keeps its declaration and is freshened with the
+   rest, so its data is private to the instance.
 3. **Freshen** every private and output predicate name with a per-instance prefix
    (for example `road_reach$reach`), so two instances do not collide with each
    other or with the importer's names. The importer's chosen name binds to the

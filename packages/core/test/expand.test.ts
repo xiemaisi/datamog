@@ -50,6 +50,36 @@ describe("expandModule", () => {
     expect(byHead("I$tagged")[0].ruleName).toBe("Mk");
   });
 
+  test("freshens a data-bound input's declaration and its references", () => {
+    // `aux` carries its own data, so it survives expansion as an EDB. Its
+    // declaration is freshened like a private predicate: two instances would
+    // otherwise redeclare the one predicate, and the bare name could collide
+    // with the importer's.
+    const src = `
+      input predicate edge(a: integer, b: integer).
+      input predicate aux(a: integer, b: integer) := "aux.csv".
+      output predicate reach(X, Y) :- edge(X, Y).
+      output predicate reach(X, Y) :- aux(X, Y).
+    `;
+    const stmts = expandModule(parseRaw(src), { prefix: "I$", inputs: { edge: "road" } });
+    expect(extDecls(stmts)).toEqual(["I$aux"]);
+    const reach = rules(stmts).filter((r) => r.head.predicate === "I$reach");
+    expect(bodyPreds(reach[0])).toEqual(["road"]);
+    expect(bodyPreds(reach[1])).toEqual(["I$aux"]);
+  });
+
+  test("an overridden data-bound input is dropped, not freshened", () => {
+    // The importer wired `aux`, so its default data binding does not apply: the
+    // declaration goes away and references become the actual.
+    const src = `
+      input predicate aux(a: integer, b: integer) := "aux.csv".
+      output predicate reach(X, Y) :- aux(X, Y).
+    `;
+    const stmts = expandModule(parseRaw(src), { prefix: "I$", inputs: { aux: "mine" } });
+    expect(extDecls(stmts)).toEqual([]);
+    expect(bodyPreds(rules(stmts)[0])).toEqual(["mine"]);
+  });
+
   test("a second instantiation stays distinct via its predicate, not the tag", () => {
     const one = expandModule(parseRaw(MODULE), { prefix: "A$", inputs: { edge: "road" } });
     const two = expandModule(parseRaw(MODULE), { prefix: "B$", inputs: { edge: "flight" } });

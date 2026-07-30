@@ -2392,6 +2392,9 @@ need no module-specific support. Per instantiation:
    per instance, so a program can match against several instantiations of one ADT
    module at once.
 3. A data-file binding leaves the input as an EDB, loaded from its bound source.
+   Its declaration is freshened like a private predicate, so the data belongs to
+   that one instance: a module carrying its own data can be instantiated any
+   number of times, and its input names never collide with the importer's.
 4. Everything merges into one program evaluated by one global least fixed point.
 
 The importing declaration's column names become the instance's result column

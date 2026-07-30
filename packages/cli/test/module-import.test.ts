@@ -120,6 +120,42 @@ input predicate bottom(x: integer) := minimal from "order.dl"(cover = cover, lt 
     });
   });
 
+  test("instantiates a data-carrying module twice, without colliding with the importer", async () => {
+    // leaky.dl binds its own `extra` input to a file. Both instances keep that
+    // data, and neither clashes with the other or with the importer's own
+    // `extra` predicate.
+    const result = await withTempDir(
+      {
+        "leaky.dl": `input predicate cover(a: integer, b: integer).
+input predicate extra(a: integer, b: integer) := "extra.csv".
+output predicate all_edges(X, Y) :- cover(X, Y).
+output predicate all_edges(X, Y) :- extra(X, Y).
+`,
+        "extra.csv": "a,b\n7,8\n",
+        "main.dl": `cover(1, 2).
+other(3, 4).
+extra(99, 99).
+input predicate e1(x: integer, y: integer) := all_edges from "leaky.dl"(cover = cover).
+input predicate e2(x: integer, y: integer) := all_edges from "leaky.dl"(cover = other).
+?- e1(X, Y), e2(P, Q).
+`,
+      },
+      (dir) => runCli(["--backend", "native", "--output-format", "jsonl", join(dir, "main.dl")]),
+    );
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    const rows = result.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as Record<string, number>);
+    // Each instance is its own actual plus its own copy of extra.csv; the
+    // importer's `extra(99, 99)` stays out of both.
+    const pairs = (a: string, b: string) => [...new Set(rows.map((r) => `${r[a]},${r[b]}`))].sort();
+    expect(pairs("X", "Y")).toEqual(["1,2", "7,8"]);
+    expect(pairs("P", "Q")).toEqual(["3,4", "7,8"]);
+  });
+
   test("rejects an import whose declared output type is wrong", async () => {
     const result = await withTempDir(
       {

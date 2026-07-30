@@ -233,7 +233,12 @@ function instantiate(
   sourceRef: string,
 ): void {
   const localNames = new Set<string>();
-  for (const s of module.statements) if (isRule(s)) localNames.add(s.head.predicate);
+  for (const s of module.statements) {
+    if (isRule(s)) localNames.add(s.head.predicate);
+    // A data-bound input is freshened by `expandModule` too, so a nested import
+    // wired to one must resolve to the freshened name.
+    else if (isExtDecl(s) && s.binding && !s.binding.isModule) localNames.add(s.predicate);
+  }
   // How a name in this module's scope reads in the merged program (mirrors
   // expandModule's own renaming), used to resolve a nested import's actuals.
   const renameName = (name: string): string =>
