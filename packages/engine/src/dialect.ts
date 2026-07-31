@@ -18,6 +18,23 @@ export interface SqlDialect {
   createRecursiveView(name: string, columns: string, body: string): string;
 
   /**
+   * Combine the recursive rules of one predicate into a single recursive term.
+   *
+   * Implement this when the dialect cannot take a flat
+   * `anchor UNION rec1 UNION rec2` body. Postgres cannot: it allows exactly one
+   * recursive term, containing exactly one reference to the CTE, so a predicate
+   * with two recursive rules has to be folded into one branch. SQLite and
+   * sql.js accept the flat form and leave this undefined.
+   *
+   * Only called when there is more than one recursive rule. Each entry of
+   * `recursive` has already been translated with its own self-referencing atom
+   * bound to `selfAlias` instead of to a `FROM` entry of its own, so the
+   * implementation supplies the single reference and joins the branches to it.
+   * See `doc/design/postgres-alignment.md`.
+   */
+  singleRecursiveTerm?(predicate: string, selfAlias: string, recursive: string[]): string;
+
+  /**
    * Generate CREATE VIEW statements for a mutually recursive SCC (stratum).
    *
    * @param stratum - predicate names in the SCC

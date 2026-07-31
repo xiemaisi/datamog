@@ -290,9 +290,17 @@ function translateViews(
         const bRec = isSelfRecursive(b, predicate) ? 1 : 0;
         return aRec - bRec;
       });
-      const ruleQueries = ordered.map((rule) =>
-        translateRule(rule, analyzed, undefined, undefined, dialect),
-      );
+      const recursive = ordered.filter((r) => isSelfRecursive(r, predicate));
+      // Postgres allows one recursive term holding one reference to the CTE, so
+      // two recursive rules cannot both name it. Hand them to the dialect to
+      // fold into a single term, translated against a shared alias rather than
+      // a FROM entry each. Dialects that accept the flat union skip this.
+      const foldRecursive = dialect.singleRecursiveTerm !== undefined && recursive.length > 1;
+      const ruleQueries = foldRecursive
+        ? ordered
+            .filter((r) => !isSelfRecursive(r, predicate))
+            .map((rule) => translateRule(rule, analyzed, undefined, undefined, dialect))
+        : ordered.map((rule) => translateRule(rule, analyzed, undefined, undefined, dialect));
       // Every rule for this predicate is self-recursive — its least
       // fixed point is the empty relation, but SQL engines reject a
       // `WITH RECURSIVE` CTE with no anchor branch ("circular
@@ -301,6 +309,16 @@ function translateViews(
       // rows.
       if (ordered.every((r) => isSelfRecursive(r, predicate))) {
         ruleQueries.unshift(emptyAnchor(arity, analyzed.columnTypes.get(predicate)!, dialect));
+      }
+      if (foldRecursive && dialect.singleRecursiveTerm) {
+        const selfAlias = "__rec";
+        const branches = recursive.map((rule) =>
+          translateRule(rule, analyzed, undefined, undefined, dialect, false, {
+            predicate,
+            alias: selfAlias,
+          }),
+        );
+        ruleQueries.push(dialect.singleRecursiveTerm(predicate, selfAlias, branches));
       }
       const unionBody = ruleQueries.join("\n  UNION\n");
       const colNames = colList(arity);
@@ -339,6 +357,11 @@ type Binding =
  * @param renameMap - Optional map from predicate name to table/CTE name (for SQLite mutual recursion)
  * @param tagMap - Optional map from predicate name to tag value (for SQLite combined CTE discrimination)
  * @param dialect - SQL dialect for dialect-specific expressions
+ * @param distinct - Emit `SELECT DISTINCT`
+ * @param selfRef - Bind this predicate's atom to an alias the caller supplies
+ *   from an enclosing query, rather than giving it a `FROM` entry here. Used
+ *   for the `LATERAL` recursive term (see `SqlDialect.singleRecursiveTerm`);
+ *   linear recursion means there is at most one such atom per rule.
  */
 function translateRule(
   rule: Rule,
@@ -347,6 +370,7 @@ function translateRule(
   tagMap: Map<string, string> | undefined,
   dialect: SqlDialect,
   distinct = false,
+  selfRef?: { predicate: string; alias: string },
 ): string {
   if (rule.body.length === 0) {
     // A fact is a single constant row and cannot duplicate, so `distinct`
@@ -387,7 +411,17 @@ function translateRule(
     valueSql: string;
   }[] = [];
 
-  const aliases = rule.body.map((_, i) => `__b${i}`);
+  // The atom the caller has already bound in an enclosing query: it still
+  // supplies column references, but takes the caller's alias and contributes no
+  // FROM entry here. Linear recursion guarantees at most one.
+  const selfRefIndex = selfRef
+    ? rule.body.findIndex(
+        (e) => e.$type === "Literal" && !e.negated && e.predicate === selfRef.predicate,
+      )
+    : -1;
+  const aliases = rule.body.map((_, i) =>
+    selfRef && i === selfRefIndex ? selfRef.alias : `__b${i}`,
+  );
   const bindings = new Map<string, Binding[]>();
   const varTypes = new Map<string, PrimitiveType>();
   const columnTypes = analyzed.columnTypes;
@@ -683,13 +717,16 @@ function translateRule(
     }
   }
 
-  // FROM clause: positive atoms + binding ranges
-  const fromParts = positiveAtoms.map(({ atom, index }) =>
-    markSpan(
-      atom,
-      `${ident(renameMap?.get(atom.predicate) ?? atom.predicate)} AS ${aliases[index]}`,
-    ),
-  );
+  // FROM clause: positive atoms + binding ranges. The self-reference, if the
+  // caller took one, is already in scope and must not be named again.
+  const fromParts = positiveAtoms
+    .filter(({ index }) => index !== selfRefIndex)
+    .map(({ atom, index }) =>
+      markSpan(
+        atom,
+        `${ident(renameMap?.get(atom.predicate) ?? atom.predicate)} AS ${aliases[index]}`,
+      ),
+    );
   for (let r = 0; r < bindingRanges.length; r++) {
     const { alias, lowSql, highSql, node } = bindingRanges[r]!;
     fromParts.push(markSpan(node, dialect.rangeSource(alias, lowSql, highSql)));

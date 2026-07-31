@@ -229,6 +229,26 @@ export class PostgresSqlDialect implements SqlDialect {
     return `CREATE RECURSIVE VIEW ${ident(name)} (${columns}) AS (\n  ${body}\n);`;
   }
 
+  /**
+   * Fold several recursive rules into the one recursive term Postgres allows.
+   *
+   * `anchor UNION rec1 UNION rec2` parses as `(anchor UNION rec1) UNION rec2`,
+   * putting a self-reference in the non-recursive half, and parenthesising it
+   * the other way only trades that error for `recursive reference ... must not
+   * appear more than once`. Naming the CTE once in `FROM` and unioning the
+   * rules inside a `LATERAL` satisfies both rules: each branch reads the
+   * previous iteration through `selfAlias`'s columns rather than through a
+   * mention of the CTE.
+   *
+   * Recursion here is linear (the analyzer rejects a rule with two recursive
+   * body atoms), so every rule has exactly one self-reference and this shape
+   * always applies.
+   */
+  singleRecursiveTerm(predicate: string, selfAlias: string, recursive: string[]): string {
+    const branches = recursive.join("\n      UNION\n      ");
+    return `SELECT __lat.* FROM ${ident(predicate)} AS ${selfAlias}, LATERAL (\n      ${branches}\n    ) AS __lat`;
+  }
+
   createMutuallyRecursiveViews(
     stratum: string[],
     arities: ReadonlyMap<string, number>,

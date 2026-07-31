@@ -5,12 +5,12 @@ the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
 `DATABASE_URL`) showed that it does not. This note records what diverges, why,
 and what a fix would take. Findings were checked against PostgreSQL 16.13.
 
-Of the 21 examples that failed when the block was first added, 10 are fixed
-(see *Numeric result columns*), 1 is inherent, and 10 remain. The remaining ones
-are listed in `POSTGRES_KNOWN_FAILURES` and marked `test.failing`, so the suite
-stays green and a fix forces the entry's removal.
+Of the 21 examples that failed when the block was first added, 18 are fixed, 1
+is inherent, and 2 remain. The remaining ones are listed in
+`POSTGRES_KNOWN_FAILURES` and marked `test.failing`, so the suite stays green
+and a fix forces the entry's removal.
 
-## Only one recursive term, referenced once
+## Only one recursive term, referenced once (fixed)
 
 8 examples: bridge-crossing, collatz, grammar, hanoi, jugs, mutual-exclusion,
 petri-net, river-crossing.
@@ -59,9 +59,40 @@ than through another mention of `t`. Recursion in Datamog is linear, checked by
 the analyzer, so every recursive rule has exactly one recursive body atom and
 this shape always applies. The rest of a rule's body joins inside the subquery.
 
-This is a real change to `createRecursiveView` in the Postgres dialect: rules
-have to be split into base and recursive sets, and each recursive rule
-re-projected against `t`'s columns instead of an aliased self-join.
+### How it is implemented
+
+`SqlDialect.singleRecursiveTerm` is an optional hook: a dialect that cannot take
+a flat `anchor UNION rec1 UNION rec2` implements it to fold the recursive rules
+into one term. Postgres does; SQLite and sql.js leave it undefined and keep the
+flat union, so their emitted SQL is untouched.
+
+`translateRule` takes a `selfRef` parameter naming a predicate and an alias.
+The matching positive atom then takes that alias instead of its own `__bN` and
+contributes no `FROM` entry, which is what lets the branch read `__rec."col1"`
+while the enclosing query owns the single reference. The translator uses this
+only when the dialect implements the hook and the predicate has more than one
+recursive rule; a single recursive rule stays a plain union branch, which is
+both clearer SQL and unchanged from before.
+
+Collatz, whose `chain` has two recursive rules, now emits:
+
+```sql
+CREATE RECURSIVE VIEW "chain" (col1, col2, col3) AS (
+  SELECT __b0."col1", __b0."col1", 0 FROM "seed" AS __b0
+  UNION
+  SELECT __lat.* FROM "chain" AS __rec, LATERAL (
+    SELECT __rec."col1", (__rec."col2" / NULLIF(2, 0)), (__rec."col3" + 1)
+      WHERE __rec."col2" > 1 AND (__rec."col2" % NULLIF(2, 0)) = 0
+    UNION
+    SELECT __rec."col1", ((3 * __rec."col2") + 1), (__rec."col3" + 1)
+      WHERE __rec."col2" > 1 AND (__rec."col2" % NULLIF(2, 0)) = 1
+  ) AS __lat
+);
+```
+
+All eight examples now agree with the other backends tuple for tuple. The
+encoding is pinned by unit tests in `engine/test/translator.test.ts`, which run
+without a database.
 
 ## Mutual recursion
 
@@ -74,7 +105,9 @@ dialect emits cannot work. Documented in `doc/spec.md` 6.5.
 The fix is SQLite's encoding: one CTE for the whole SCC with a `__tag`
 discriminator, then a non-recursive view per predicate filtering by tag. That
 CTE will have one recursive branch per rule across the SCC, so it runs into the
-restriction above and needs the `LATERAL` treatment too. **Unverified**: no
+restriction above and needs the same `LATERAL` fold — now available as
+`SqlDialect.singleRecursiveTerm`, though `createMutuallyRecursiveViews` builds
+its own CTE bodies and does not currently go through it. **Unverified**: no
 experiment was run on a tagged CTE under Postgres. Do that before committing to
 the approach, since a tag column also has to satisfy the anchor/recursive type
 agreement described next.

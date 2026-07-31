@@ -128,6 +128,47 @@ describe("translator", () => {
     expect(sql).toContain("UNION");
   });
 
+  test("folds two recursive rules into one LATERAL term (postgres)", () => {
+    const result = translateSource(`
+      input predicate edge(a: integer, b: integer).
+      reach(X, Y) :- edge(X, Y).
+      reach(X, Y) :- reach(X, Z), edge(Z, Y).
+      reach(X, Y) :- reach(X, Z), edge(Y, Z).
+    `);
+    const sql = norm(result.createViews[0]!);
+    // Postgres allows one recursive term holding one reference to the CTE, so
+    // the two recursive rules share a single `FROM "reach"` and read the
+    // previous iteration through its alias.
+    expect(sql).toContain("LATERAL");
+    expect(sql.match(/FROM "reach"/g)).toHaveLength(1);
+    expect(sql).toContain('"reach" AS __rec');
+    expect(sql).toContain("__rec.");
+  });
+
+  test("leaves a single recursive rule as a plain union term (postgres)", () => {
+    const result = translateSource(`
+      input predicate edge(a: integer, b: integer).
+      reach(X, Y) :- edge(X, Y).
+      reach(X, Y) :- reach(X, Z), edge(Z, Y).
+    `);
+    // One recursive rule needs no folding, and the flat form is the clearer SQL.
+    expect(norm(result.createViews[0]!)).not.toContain("LATERAL");
+  });
+
+  test("sqlite keeps the flat multi-branch union for two recursive rules", () => {
+    const result = translateSource(
+      `
+      input predicate edge(a: integer, b: integer).
+      reach(X, Y) :- edge(X, Y).
+      reach(X, Y) :- reach(X, Z), edge(Z, Y).
+      reach(X, Y) :- reach(X, Z), edge(Y, Z).
+    `,
+      sqlite,
+    );
+    // SQLite accepts what Postgres rejects, so it defines no `singleRecursiveTerm`.
+    expect(norm(result.createViews[0]!)).not.toContain("LATERAL");
+  });
+
   test("generates SELECT for query with constants", () => {
     const result = translateSource(`
       input predicate parent(name: string, child: string).

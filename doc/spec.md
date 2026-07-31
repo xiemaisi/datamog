@@ -1914,8 +1914,28 @@ CREATE VIEW IF NOT EXISTS "pred" AS     -- SQLite / sql.js
 
 ```sql
 CREATE RECURSIVE VIEW "pred" (col1, col2) AS
-  (base cases) UNION (recursive cases)
+  (base cases) UNION (recursive case)
 ```
+
+PostgreSQL allows exactly one recursive term, containing exactly one reference
+to the CTE. A predicate with two or more recursive rules therefore cannot be a
+flat union of them: the rules are folded into a single term that names the CTE
+once and unions their bodies inside a `LATERAL`, each branch reading the
+previous iteration through that one alias.
+
+```sql
+CREATE RECURSIVE VIEW "pred" (col1, col2) AS
+  (base cases)
+  UNION
+  SELECT __lat.* FROM "pred" AS __rec, LATERAL (
+    (recursive rule 1, reading __rec)
+    UNION
+    (recursive rule 2, reading __rec)
+  ) AS __lat
+```
+
+Recursion is linear (§4.4), so each rule has exactly one recursive body atom and
+this shape always applies.
 
 **SQLite / sql.js:**
 
@@ -1926,6 +1946,9 @@ CREATE VIEW IF NOT EXISTS "pred" AS
   )
   SELECT * FROM "pred"
 ```
+
+SQLite accepts any number of recursive branches in the flat union, so no folding
+is needed.
 
 ### 6.5 Mutually Recursive Views
 

@@ -34,19 +34,13 @@ function isNativeOnly(name: string): boolean {
  * They are `test.failing` rather than skipped, so the gap is recorded and
  * whoever fixes the dialect is told to delete the entry.
  *
- * None of these is a property of the example -- each runs on sqlite. Three
+ * None of these is a property of the example -- each runs on sqlite. Two
  * Postgres restrictions the translator does not respect, analysed in
  * doc/design/postgres-alignment.md:
  *
- * 1. Postgres allows a recursive CTE exactly one recursive term, and one
- *    reference to the CTE within it. A predicate with two recursive rules emits
- *    `anchor UNION rec1 UNION rec2`, which parses as `(anchor UNION rec1) UNION
- *    rec2` and puts a self-reference in the non-recursive half. Reordering does
- *    not help: parenthesising fixes the split and then trips the one-reference
- *    rule. A `LATERAL` encoding does work.
- * 2. Mutual recursion between `WITH` items is unimplemented in Postgres
+ * 1. Mutual recursion between `WITH` items is unimplemented in Postgres
  *    (doc/spec.md 6.5).
- * 3. A recursive CTE's column types must agree between anchor and recursive
+ * 2. A recursive CTE's column types must agree between anchor and recursive
  *    term, and `sum` widens `integer` to `bigint`.
  *
  * shannon-entropy is the one entry that is not a defect and will not be fixed:
@@ -57,14 +51,6 @@ function isNativeOnly(name: string): boolean {
  * comparison.
  */
 const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
-  ["bridge-crossing", "recursive reference in the non-recursive term"],
-  ["collatz", "recursive reference in the non-recursive term"],
-  ["grammar", "recursive reference in the non-recursive term"],
-  ["hanoi", "recursive reference in the non-recursive term"],
-  ["jugs", "recursive reference in the non-recursive term"],
-  ["mutual-exclusion", "recursive reference in the non-recursive term"],
-  ["petri-net", "recursive reference in the non-recursive term"],
-  ["river-crossing", "recursive reference in the non-recursive term"],
   ["mutual-recursion", "mutual recursion between WITH items is not implemented"],
   ["parity", "mutual recursion between WITH items is not implemented"],
   ["proof-term-fold", "integer anchor column against a bigint sum"],
