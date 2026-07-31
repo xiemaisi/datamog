@@ -1,0 +1,35 @@
+[
+  [
+    {
+      "Expr": "((x * x) + (3 * x))",
+      "Derivative": "(((1 * x) + (x * 1)) + ((0 * x) + (3 * 1)))"
+    }
+  ],
+  [
+    {
+      "count": 11
+    }
+  ],
+  [
+    {
+      "Subterm": "3",
+      "Derivative": "0"
+    },
+    {
+      "Subterm": "x",
+      "Derivative": "1"
+    },
+    {
+      "Subterm": "(x * x)",
+      "Derivative": "((1 * x) + (x * 1))"
+    },
+    {
+      "Subterm": "(3 * x)",
+      "Derivative": "((0 * x) + (3 * 1))"
+    },
+    {
+      "Subterm": "((x * x) + (3 * x))",
+      "Derivative": "(((1 * x) + (x * 1)) + ((0 * x) + (3 * 1)))"
+    }
+  ]
+]

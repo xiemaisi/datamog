@@ -1,0 +1,5 @@
+{
+  "name": "Symbolic Differentiation",
+  "description": "Build fresh structure with JSON values, where proof-term constructors cannot",
+  "order": 245
+}

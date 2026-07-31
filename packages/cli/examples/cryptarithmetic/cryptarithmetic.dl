@@ -1,0 +1,61 @@
+# SEND + MORE = MONEY
+#
+# Adapted from `crypt.pl` and `money_clpfd.pl` in the Ciao Prolog example
+# collection, where a finite-domain solver does the work.
+#
+#     S E N D
+#   + M O R E
+#   ---------
+#   M O N E Y
+#
+# Eight letters, eight distinct digits, and no leading zero.
+#
+# Stated as one equation over eight digits this is 10^8 candidates and hopeless
+# as a cross product. Stated column by column with explicit carries it is easy,
+# because each column pins down a letter from the ones already known: once D
+# and E are chosen, Y and the carry follow. So the rules go right to left and
+# each one adds only the letters that column introduces, with the distinctness
+# constraints for them. That is the same shape as `n-queens`: widen by one
+# position at a time and filter inside the same rule.
+
+dig(D) :- D in [0 .. 9].
+carry(C) :- C in [0 .. 1].
+
+# Column 1:  D + E = Y + 10*C1
+col1(D, E, Y, C1) :-
+  dig(D), dig(E), dig(Y), carry(C1),
+  D <> E, D <> Y, E <> Y,
+  D + E == Y + 10 * C1.
+
+# Column 2:  N + R + C1 = E + 10*C2
+col2(D, E, Y, N, R, C2) :-
+  col1(D, E, Y, C1), dig(N), dig(R), carry(C2),
+  N <> D, N <> E, N <> Y,
+  R <> D, R <> E, R <> Y, R <> N,
+  N + R + C1 == E + 10 * C2.
+
+# Column 3:  E + O + C2 = N + 10*C3
+col3(D, E, Y, N, R, O, C3) :-
+  col2(D, E, Y, N, R, C2), dig(O), carry(C3),
+  O <> D, O <> E, O <> Y, O <> N, O <> R,
+  E + O + C2 == N + 10 * C3.
+
+# Column 4:  S + M + C3 = O + 10*C4, and column 5 forces C4 = M.
+# M is the leading digit of a five-digit sum, so it is a carry out and cannot
+# be zero, which makes it 1; the solver finds that rather than being told.
+solution(S, E, N, D, M, O, R, Y) :-
+  col3(D, E, Y, N, R, O, C3), dig(S), dig(M),
+  S <> 0, M <> 0,
+  S <> D, S <> E, S <> Y, S <> N, S <> R, S <> O,
+  M <> D, M <> E, M <> Y, M <> N, M <> R, M <> O, M <> S,
+  S + M + C3 == O + 10 * M.
+
+addition(Send, More, Money) :-
+  solution(S, E, N, D, M, O, R, Y),
+  Send = 1000 * S + 100 * E + 10 * N + D,
+  More = 1000 * M + 100 * O + 10 * R + E,
+  Money = 10000 * M + 1000 * O + 100 * N + 10 * E + Y.
+
+?- addition(Send, More, Money).
+
+output predicate letters(S, E, N, D, M, O, R, Y) :- solution(S, E, N, D, M, O, R, Y).

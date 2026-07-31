@@ -1,0 +1,97 @@
+# Symbolic differentiation
+#
+# Adapted from `derivf.pl` in the Ciao Prolog example collection and `symdiff`
+# in Logtalk's, both of which pattern-match on Prolog terms and build new ones.
+#
+# Differentiation is the first program that has to *build* structure rather
+# than take it apart: d(u*v) is a sum of two products that appear nowhere in
+# the input. That rules out proof terms, whose constructors are match-only, so
+# a rule can never mint a node whose parts do not already exist (see `peano`
+# and `sk-proof-terms` for the two ways round that). The JSON `value` type has
+# no such restriction: an object literal builds a fresh node from anything in
+# scope, which is exactly what is needed here.
+#
+# Nodes are tagged with a "kind" so the rules can discriminate on it:
+#
+#   {"kind": "num", "value": 3}
+#   {"kind": "var", "name": "x"}
+#   {"kind": "op", "op": "*", "l": ..., "r": ...}
+#
+# Two `deriv` atoms in the binary-operator rules makes this non-linear
+# recursion, so it runs on the in-memory backends only.
+
+# d/dx of (x * x) + (3 * x), which should come out as 2x + 3.
+input_expr({
+  "kind": "op", "op": "+",
+  "l": {"kind": "op", "op": "*",
+        "l": {"kind": "var", "name": "x"},
+        "r": {"kind": "var", "name": "x"}},
+  "r": {"kind": "op", "op": "*",
+        "l": {"kind": "num", "value": 3},
+        "r": {"kind": "var", "name": "x"}}
+}).
+
+# Every subterm of the input. `deriv` is defined over these, so the set has
+# to be closed under taking children.
+expr(E) :- input_expr(E).
+expr(C) :- expr(E), E["kind"] == "op", C = E["l"].
+expr(C) :- expr(E), E["kind"] == "op", C = E["r"].
+
+# A constant differentiates to zero, and so does any variable other than x.
+deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] == "num".
+deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] == "var", E["name"] <> "x".
+deriv(E, {"kind": "num", "value": 1}) :- expr(E), E["kind"] == "var", E["name"] == "x".
+
+# Sum rule: d(u + v) = du + dv.
+deriv(E, D) :-
+  expr(E), E["kind"] == "op", E["op"] == "+",
+  L = E["l"], R = E["r"],
+  deriv(L, DL), deriv(R, DR),
+  D = {"kind": "op", "op": "+", "l": DL, "r": DR}.
+
+# Product rule: d(u * v) = du*v + u*dv. Three nodes built at once, none of
+# which occurs in the input.
+deriv(E, D) :-
+  expr(E), E["kind"] == "op", E["op"] == "*",
+  L = E["l"], R = E["r"],
+  deriv(L, DL), deriv(R, DR),
+  D = {"kind": "op", "op": "+",
+       "l": {"kind": "op", "op": "*", "l": DL, "r": R},
+       "r": {"kind": "op", "op": "*", "l": L, "r": DR}}.
+
+answer(D) :- input_expr(E), deriv(E, D).
+
+# A `value` tree prints as JSON, which is unreadable at this size, so walk it
+# back into infix text. `node` is everything worth printing: the input's
+# subterms, every derivative, and their children. It must stay separate from
+# `expr` -- feeding derivatives back into `expr` would have the rules
+# differentiate their own output, over and over, and never reach a fixed point.
+node(E) :- expr(E).
+node(D) :- deriv(_, D).
+node(C) :- node(N), N["kind"] == "op", C = N["l"].
+node(C) :- node(N), N["kind"] == "op", C = N["r"].
+
+show(N, S) :- node(N), N["kind"] == "num", S = to_string(as_integer(N["value"])).
+show(N, S) :- node(N), N["kind"] == "var", S = as_string(N["name"]).
+show(N, S) :-
+  node(N), N["kind"] == "op",
+  L = N["l"], R = N["r"],
+  show(L, SL), show(R, SR),
+  S = "(" + SL + " " + as_string(N["op"]) + " " + SR + ")".
+
+result(Expr, Derivative) :-
+  input_expr(E), show(E, Expr),
+  answer(D), show(D, Derivative).
+
+?- result(Expr, Derivative).
+
+# The derivative is correct and needlessly large: every product rule leaves
+# multiplications by 0 and 1 behind. Simplifying them away is the natural
+# follow-on exercise, and the node count is how you would score it.
+answer_node(D) :- answer(D).
+answer_node(C) :- answer_node(N), N["kind"] == "op", C = N["l"].
+answer_node(C) :- answer_node(N), N["kind"] == "op", C = N["r"].
+
+output predicate node_count(count(*)) :- answer_node(_).
+output predicate step(Subterm, Derivative) :-
+  deriv(E, D), show(E, Subterm), show(D, Derivative).
