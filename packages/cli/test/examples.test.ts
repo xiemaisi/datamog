@@ -6,6 +6,7 @@ import { create as createSeminaive } from "datamog-backend-seminaive";
 import { create as createSqlite } from "datamog-backend-sqlite";
 import { CsvLoader } from "datamog-csv";
 import { type Backend, DatamogExecutor } from "datamog-engine";
+import { createNodeModuleResolver } from "datamog-engine/module-resolver";
 import { JsonLoader } from "datamog-json";
 import { JsonlLoader } from "datamog-jsonl";
 import { MermaidLoader } from "datamog-mermaid";
@@ -26,13 +27,43 @@ function isNativeOnly(name: string): boolean {
   return existsSync(join(EXAMPLES_DIR, name, "native-only"));
 }
 
+/**
+ * The program to run for an example. A directory holding a module example has
+ * several `.dl` files -- the entry plus the modules it imports -- so the entry
+ * is the one named after the directory. Single-program examples may still name
+ * their file freely.
+ */
+function entryFile(dir: string, name: string): string {
+  if (existsSync(join(dir, `${name}.dl`))) return `${name}.dl`;
+  const dlFiles = readdirSync(dir).filter((f) => f.endsWith(".dl"));
+  if (dlFiles.length === 1) return dlFiles[0]!;
+  throw new Error(
+    `Example '${name}' has ${dlFiles.length} .dl files and no ${name}.dl to pick as the entry`,
+  );
+}
+
 async function runExample(
   name: string,
   createBackend: () => Promise<Backend>,
 ): Promise<Record<string, unknown>[][]> {
   const dir = join(EXAMPLES_DIR, name);
-  const dlFile = readdirSync(dir).find((f) => f.endsWith(".dl"))!;
-  const source = await Bun.file(join(dir, dlFile)).text();
+  const file = join(dir, entryFile(dir, name));
+  const source = await Bun.file(file).text();
+
+  // Elaborate rather than plain-parse, so an example may import modules with
+  // `:=`; the resolver reads them from disk relative to the entry file. For an
+  // example without bindings this is the same pipeline `execute` would run.
+  const { program, dataSources } = DatamogExecutor.prepareElaborated(
+    source,
+    createNodeModuleResolver(),
+    file,
+  );
+  if (dataSources.length > 0) {
+    // Data-file bindings need loaders built from the binding, which only the
+    // CLI does. The directory loaders below key off the predicate name, so
+    // they would quietly load the wrong file or none at all.
+    throw new Error(`Example '${name}' uses a ':=' data-file binding, unsupported here`);
+  }
 
   const backend = await createBackend();
   const executor = new DatamogExecutor(backend, [
@@ -43,7 +74,7 @@ async function runExample(
   ]);
 
   try {
-    const results = await executor.execute(source);
+    const results = await executor.executeAnalyzed(program);
     return results.map((r) => r.rows);
   } finally {
     await backend.close();

@@ -1,0 +1,8 @@
+# reach.dl -- reachability, parameterised by an edge relation.
+#
+# Its one input, `edge`, is a parameter: an importer wires it to any
+# binary relation. Its `reach` output is the transitive closure.
+input predicate edge(src: integer, dst: integer).
+
+output predicate reach(X, Y) :- edge(X, Y).
+output predicate reach(X, Z) :- reach(X, Y), edge(Y, Z).
