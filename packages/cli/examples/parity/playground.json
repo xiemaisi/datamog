@@ -1,0 +1,5 @@
+{
+  "name": "Set to Sequence",
+  "description": "Chain a set into a successor relation to number its elements, and read off the parity",
+  "order": 83
+}

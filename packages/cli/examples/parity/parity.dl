@@ -1,0 +1,54 @@
+# Turning a set into a sequence
+#
+# Adapted from `parity.dl` in the Datalog Educational System (DES) by
+# Fernando Saenz-Perez.
+#
+# Is the number of elements in `br` even or odd? With aggregates that is one
+# line, and the bottom of this file does it that way. The interesting version
+# is the one DES ships, which uses no aggregate at all: it threads the set
+# into a chain and then walks the chain, alternating even and odd.
+#
+# The technique is worth knowing beyond parity. `next` is a successor
+# relation over the set's own ordering, so it numbers the elements. That is
+# how you get row positions out of a relation when all you have is a total
+# order and negation.
+
+br("alice").
+br("bob").
+br("carol").
+br("dave").
+br("erin").
+
+# Y sits strictly between X and Z.
+between(X, Z) :- br(X), br(Y), br(Z), X < Y, Y < Z.
+
+# X and Y are consecutive: Y follows X with nothing in between.
+next(X, Y) :- br(X), br(Y), X < Y, not between(X, Y).
+
+# "nil" anchors the chain in front of the smallest element. DES plants a bug
+# here in its distributed copy, writing `Y > X` for `Y < X`, so every
+# element looks preceded and the chain never starts.
+has_preceding(X) :- br(X), br(Y), Y < X.
+next("nil", X) :- br(X), not has_preceding(X).
+
+# Walk the chain. These two are mutually recursive: nil is at position 0,
+# and each step flips which of the two holds.
+even("nil").
+even(Y) :- odd(X), next(X, Y).
+odd(Y) :- even(X), next(X, Y).
+
+# The last element's position is the size of the set.
+has_next(X) :- next(X, _).
+size_is_even() :- even(X), not has_next(X).
+size_is_odd() :- odd(X), not has_next(X).
+
+?- size_is_odd().
+
+# The same answer, the way you would actually write it.
+total(count(*)) :- br(_).
+output predicate parity(P) :- total(N), P = N % 2.
+
+# And the by-product that makes the chain worth building: element positions.
+position("nil", 0).
+position(Y, P) :- position(X, P0), next(X, Y), P = P0 + 1.
+output predicate numbered(Name, P) :- position(Name, P), Name <> "nil".

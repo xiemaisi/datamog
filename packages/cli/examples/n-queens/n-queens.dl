@@ -1,0 +1,53 @@
+# Six queens
+#
+# Adapted from `queens.pl` in the SWI-Prolog collection and `nqueens.pl` in
+# Ciao's, both of which carry the board as a list and permute it.
+#
+# Place a queen in every column of a 6x6 board so that no two share a row or
+# a diagonal. There are four ways to do it.
+#
+# Datalog has no lists, so the board cannot be one value that grows. Instead
+# each partial solution is its own predicate: `q3(A, B, C)` holds the safe
+# placements for the first three columns, one column per argument. Widening
+# by one column is one rule, and because the new queen's constraints sit in
+# the same rule as its generator, the join prunes as it goes rather than
+# building the full 6^6 product first.
+#
+# Two queens in columns that are D apart are safe when their rows differ and
+# their row difference is not D. Precomputing that as a relation keeps the
+# ladder readable: `safe(A, D, 2)` reads "the queen in this column is safe
+# against the one two columns back".
+#
+# Scaling up is mechanical: one more rung per queen, with one more `safe`
+# atom than the rung before. Eight queens has 92 solutions.
+
+n(I) :- I in [1 .. 6].
+d(D) :- D in [1 .. 5].
+
+attacks(R1, R2, D) :- n(R1), n(R2), d(D), (R1 == R2 || R1 - R2 == D || R2 - R1 == D).
+safe(R1, R2, D) :- n(R1), n(R2), d(D), not attacks(R1, R2, D).
+
+q1(A) :- n(A).
+
+q2(A, B) :- q1(A), n(B),
+  safe(A, B, 1).
+
+q3(A, B, C) :- q2(A, B), n(C),
+  safe(A, C, 2), safe(B, C, 1).
+
+q4(A, B, C, D) :- q3(A, B, C), n(D),
+  safe(A, D, 3), safe(B, D, 2), safe(C, D, 1).
+
+q5(A, B, C, D, E) :- q4(A, B, C, D), n(E),
+  safe(A, E, 4), safe(B, E, 3), safe(C, E, 2), safe(D, E, 1).
+
+q6(A, B, C, D, E, F) :- q5(A, B, C, D, E), n(F),
+  safe(A, F, 5), safe(B, F, 4), safe(C, F, 3), safe(D, F, 2), safe(E, F, 1).
+
+?- q6(Col1, Col2, Col3, Col4, Col5, Col6).
+
+output predicate solutions(count(*)) :- q6(_, _, _, _, _, _).
+
+# How much the early pruning saves: without it the last rung would start
+# from 6^5 partial boards instead of these.
+output predicate partial(count(*)) :- q5(_, _, _, _, _).

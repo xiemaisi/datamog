@@ -1,0 +1,23 @@
+[
+  [
+    {
+      "Islander": "A",
+      "Role": "knight"
+    },
+    {
+      "Islander": "B",
+      "Role": "knave"
+    },
+    {
+      "Islander": "C",
+      "Role": "knight"
+    }
+  ],
+  [
+    {
+      "A": true,
+      "B": false,
+      "C": true
+    }
+  ]
+]

@@ -1,0 +1,72 @@
+# Bird identification
+#
+# Adapted from the `birds` expert system in the Logtalk example collection,
+# a Prolog rendering of a classic rule-based identification key.
+#
+# An identification key is a chain of rules over observed features: features
+# fix the order, order plus more features fixes the family, family plus more
+# features fixes the species. Nothing here recurses and nothing aggregates.
+# It is the plainest kind of Datalog program there is, and it is also what
+# most rule engines are actually used for.
+#
+# The last rule is the useful one in practice: negation reports the birds the
+# key failed to place, which is how you find out your key has a gap.
+
+input predicate observed(bird: string, feature: string).
+
+order(B, "tubenose") :-
+  observed(B, "nostrils tubular"),
+  observed(B, "lives at sea"),
+  observed(B, "bill hooked").
+
+order(B, "waterfowl") :-
+  observed(B, "feet webbed"),
+  observed(B, "bill flat").
+
+order(B, "falconiform") :-
+  observed(B, "eats meat"),
+  observed(B, "feet curved talons"),
+  observed(B, "bill sharp hooked").
+
+family(B, "albatross") :-
+  order(B, "tubenose"),
+  observed(B, "size large"),
+  observed(B, "wings long narrow").
+
+family(B, "fulmar") :-
+  order(B, "tubenose"),
+  observed(B, "size medium"),
+  observed(B, "flight flapping").
+
+family(B, "swan") :-
+  order(B, "waterfowl"),
+  observed(B, "neck long"),
+  observed(B, "colour white").
+
+family(B, "duck") :-
+  order(B, "waterfowl"),
+  observed(B, "neck short"),
+  observed(B, "quacks").
+
+family(B, "falcon") :-
+  order(B, "falconiform"),
+  observed(B, "wings long pointed"),
+  observed(B, "tail narrow").
+
+species(B, "laysan albatross") :- family(B, "albatross"), observed(B, "colour white").
+species(B, "black footed albatross") :- family(B, "albatross"), observed(B, "colour dark").
+species(B, "fulmar") :- family(B, "fulmar").
+species(B, "whistling swan") :- family(B, "swan"), observed(B, "voice muffled musical whistle").
+species(B, "trumpeter swan") :- family(B, "swan"), observed(B, "voice loud trumpeting").
+species(B, "mallard") :- family(B, "duck"), observed(B, "head green").
+species(B, "pintail") :- family(B, "duck"), observed(B, "neck ringed").
+species(B, "peregrine falcon") :- family(B, "falcon"), observed(B, "colour crown black").
+species(B, "sparrow hawk") :- family(B, "falcon"), observed(B, "colour breast rust").
+
+?- species(Bird, Species).
+
+seen(B) :- observed(B, _).
+identified(B) :- species(B, _).
+
+output predicate placed_to_family(B, F) :- family(B, F).
+output predicate unidentified(B) :- seen(B), not identified(B).

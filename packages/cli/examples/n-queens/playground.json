@@ -1,0 +1,5 @@
+{
+  "name": "Six Queens",
+  "description": "One predicate per partial board, widened a column at a time so the join prunes as it goes",
+  "order": 49
+}

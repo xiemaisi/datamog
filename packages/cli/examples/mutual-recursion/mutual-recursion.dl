@@ -1,0 +1,45 @@
+# Mutual recursion
+#
+# Adapted from `mutrecursion.dl` and `tranclosure.dl` in the Datalog
+# Educational System (DES) by Fernando Saenz-Perez.
+#
+# Two predicates can be defined in terms of each other. The least fixed
+# point is taken over the pair at once, so neither has to be computable
+# first. On the SQL backends a mutually recursive group compiles to a single
+# recursive construct: several CTEs inside one WITH RECURSIVE on Postgres, a
+# combined CTE with a discriminator column on SQLite.
+#
+# Warm-up: even and odd numbers, each defined through the other.
+
+nat(N) :- N in [0 .. 20].
+
+even(0).
+even(N) :- nat(N), N > 0, odd(N - 1).
+odd(N) :- nat(N), N > 0, even(N - 1).
+
+# The point of it: paths that alternate between two kinds of edge. Neither
+# `after_red` nor `after_blue` can be computed without the other, and no
+# single predicate expresses "alternating" on its own.
+
+red("a", "b").
+red("c", "d").
+red("e", "a").
+blue("b", "c").
+blue("d", "e").
+blue("b", "e").
+
+# after_red(X, Y): a path from X to Y whose last edge is red.
+after_red(X, Y) :- red(X, Y).
+after_red(X, Y) :- after_blue(X, Z), red(Z, Y).
+
+# after_blue(X, Y): a path from X to Y whose last edge is blue.
+after_blue(X, Y) :- blue(X, Y).
+after_blue(X, Y) :- after_red(X, Z), blue(Z, Y).
+
+alternating(X, Y) :- after_red(X, Y).
+alternating(X, Y) :- after_blue(X, Y).
+
+?- alternating(From, To).
+
+output predicate evens(N) :- even(N).
+output predicate odds(N) :- odd(N).

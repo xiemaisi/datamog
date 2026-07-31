@@ -1,0 +1,66 @@
+[
+  [
+    {
+      "Bird": "sighting1",
+      "Species": "laysan albatross"
+    },
+    {
+      "Bird": "sighting2",
+      "Species": "black footed albatross"
+    },
+    {
+      "Bird": "sighting3",
+      "Species": "fulmar"
+    },
+    {
+      "Bird": "sighting4",
+      "Species": "trumpeter swan"
+    },
+    {
+      "Bird": "sighting5",
+      "Species": "mallard"
+    },
+    {
+      "Bird": "sighting6",
+      "Species": "sparrow hawk"
+    }
+  ],
+  [
+    {
+      "B": "sighting1",
+      "F": "albatross"
+    },
+    {
+      "B": "sighting2",
+      "F": "albatross"
+    },
+    {
+      "B": "sighting3",
+      "F": "fulmar"
+    },
+    {
+      "B": "sighting4",
+      "F": "swan"
+    },
+    {
+      "B": "sighting5",
+      "F": "duck"
+    },
+    {
+      "B": "sighting6",
+      "F": "falcon"
+    },
+    {
+      "B": "sighting7",
+      "F": "duck"
+    }
+  ],
+  [
+    {
+      "B": "sighting7"
+    },
+    {
+      "B": "sighting8"
+    }
+  ]
+]

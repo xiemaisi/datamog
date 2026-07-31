@@ -1,0 +1,64 @@
+# CYK chart parsing
+#
+# Generalises the left-recursive recogniser in `grammar` and DES's
+# `grammar.dl`, and the DCG parsers in the SWI-Prolog collection, to an
+# arbitrary context-free grammar in Chomsky normal form.
+#
+# Chart parsing is the classic argument for Datalog. The chart is a relation,
+# `span(NT, I, K)` meaning "NT derives the words from position I up to K", and
+# the whole parser is two rules: one seeding single words from the lexicon,
+# one combining two adjacent spans with a grammar rule. Sharing between
+# overlapping analyses is not something the program arranges; it falls out of
+# the fixed point, because a span is a tuple that gets derived once.
+#
+# Two `span` atoms in the combining rule makes this non-linear recursion, so
+# it runs on the in-memory backends only.
+#
+# The sentence is the famous ambiguous one: "with a telescope" can attach to
+# the seeing or to the man. Both parses are in the chart, and the `ambiguous`
+# output finds exactly where they diverge.
+
+grammar("S", "NP", "VP").
+grammar("NP", "Det", "N").
+grammar("NP", "NP", "PP").
+grammar("VP", "V", "NP").
+grammar("VP", "VP", "PP").
+grammar("PP", "P", "NP").
+
+lexicon("Det", "the").
+lexicon("Det", "a").
+lexicon("N", "man").
+lexicon("N", "telescope").
+lexicon("V", "saw").
+lexicon("P", "with").
+
+token(1, "the").
+token(2, "man").
+token(3, "saw").
+token(4, "a").
+token(5, "man").
+token(6, "with").
+token(7, "a").
+token(8, "telescope").
+
+sentence_end(9).
+
+# A word spans one position.
+span(NT, I, I + 1) :- token(I, W), lexicon(NT, W).
+
+# Two adjacent spans combine when a grammar rule says they may.
+span(NT, I, K) :- grammar(NT, L, R), span(L, I, J), span(R, J, K).
+
+# The sentence parses if S covers all of it.
+parses() :- sentence_end(N), span("S", 1, N).
+
+?- parses().
+
+# Every way a span was built. A span with more than one entry here is a
+# point of ambiguity.
+derivation(NT, I, K, L, R, J) :- grammar(NT, L, R), span(L, I, J), span(R, J, K).
+
+splits(NT, I, K, count(*)) :- derivation(NT, I, K, _, _, _).
+
+output predicate ambiguous(NT, I, K, Ways) :- splits(NT, I, K, Ways), Ways > 1.
+output predicate chart(NT, I, K) :- span(NT, I, K).

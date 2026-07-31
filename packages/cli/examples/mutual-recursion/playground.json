@@ -1,0 +1,5 @@
+{
+  "name": "Mutual Recursion",
+  "description": "Even/odd and alternating-colour paths: two predicates defined through each other",
+  "order": 82
+}

@@ -1,0 +1,5 @@
+{
+  "name": "CYK Chart Parser",
+  "description": "A context-free parser in two rules, with the chart as a relation and ambiguity as a count",
+  "order": 165
+}

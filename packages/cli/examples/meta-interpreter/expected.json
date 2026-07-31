@@ -1,0 +1,35 @@
+[
+  [
+    {
+      "Conclusion": "rained"
+    },
+    {
+      "Conclusion": "cold"
+    },
+    {
+      "Conclusion": "driving"
+    },
+    {
+      "Conclusion": "wet_grass"
+    },
+    {
+      "Conclusion": "slippery"
+    }
+  ],
+  [
+    {
+      "A": "accident"
+    },
+    {
+      "A": "insurance_claim"
+    },
+    {
+      "A": "fast"
+    }
+  ],
+  [
+    {
+      "A": "fast"
+    }
+  ]
+]

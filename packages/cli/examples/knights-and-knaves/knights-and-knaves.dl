@@ -1,0 +1,40 @@
+# Knights and knaves
+#
+# Adapted from the SWI-Prolog example collection, which solves it with a
+# boolean constraint solver.
+#
+# On Smullyan's island every inhabitant is either a knight, who only ever
+# says true things, or a knave, who only ever says false things. Three
+# islanders speak:
+#
+#   A: "B is a knave."
+#   B: "A and C are of different kinds."
+#   C: "A is a knight."
+#
+# Who is what?
+#
+# Represent each islander by a boolean: true for knight, false for knave.
+# The rule of the island is that an islander is a knight exactly when their
+# statement is true, so each speech becomes one biconditional. Datalog has
+# no biconditional, but `==` on two booleans is one.
+
+kind(true).
+kind(false).
+
+solution(A, B, C) :-
+  kind(A), kind(B), kind(C),
+  A == !B,
+  B == ((A && !C) || (!A && C)),
+  C == A.
+
+# Spell the answer out rather than leaving it as three booleans.
+role(Who, "knight") :- said(Who, true).
+role(Who, "knave") :- said(Who, false).
+
+said("A", A) :- solution(A, _, _).
+said("B", B) :- solution(_, B, _).
+said("C", C) :- solution(_, _, C).
+
+?- role(Islander, Role).
+
+output predicate booleans(A, B, C) :- solution(A, B, C).
