@@ -1,6 +1,6 @@
 # Datamog — Project Instructions
 
-Educational Datalog implementation with multiple evaluation backends — SQL (Postgres, SQLite via bun:sqlite, sql.js/WASM) and pure-TS in-memory interpreters (naive, seminaive). Every backend honours the same language semantics; the SQL ones go via a translator, the interpreters evaluate the AST directly. TypeScript/Bun monorepo. Uses **bun** as package manager and runtime — do not use pnpm/npm/yarn.
+Educational Datalog implementation with multiple evaluation backends — SQL (Postgres, SQLite via bun:sqlite, sql.js/WASM) and pure-TS in-memory interpreters (naive, seminaive). Every backend honours the same language semantics, with one known exception (Postgres cannot do mutual recursion, see the SQL backends section); the SQL ones go via a translator, the interpreters evaluate the AST directly. TypeScript/Bun monorepo. Uses **bun** as package manager and runtime — do not use pnpm/npm/yarn.
 
 Before running anything, verify `bun` is on PATH (`which bun`). If it is not, install via `curl -fsSL https://bun.sh/install | bash` and add `$HOME/.bun/bin` to PATH for the session (`export PATH="$HOME/.bun/bin:$PATH"`). The installer does not persist PATH, so export it on every new shell.
 
@@ -13,7 +13,7 @@ bun run typecheck           # tsc -b (project references, emits .d.ts only)
 bun run check               # biome lint + format check
 bun run check:fix           # auto-fix lint + format
 bun run datamog                       # start interactive REPL (no file → REPL mode is the default)
-bun run datamog <file.dl>             # run a Datamog program (in-memory SQLite via bun:sqlite)
+bun run datamog <file.dl>             # run a Datamog program (in-memory SQLite via bun:sqlite; Postgres instead if DATABASE_URL is set)
 bun run datamog --dry-run <file.dl>   # preview generated SQL
 bun run datamog --backend postgres <file.dl>  # use Postgres backend
 bun run datamog --backend sqljs <file.dl>     # use sql.js backend (WASM SQLite)
@@ -134,7 +134,7 @@ Each SQL backend implements `SqlDialect` (in `engine/src/dialect.ts`) and goes t
 
 - Non-recursive IDB → `CREATE [OR REPLACE] VIEW` (Postgres) / `CREATE VIEW IF NOT EXISTS` (SQLite/sql.js)
 - Recursive IDB → `CREATE RECURSIVE VIEW` (Postgres) / `CREATE VIEW ... WITH RECURSIVE` (SQLite/sql.js)
-- Mutually recursive IDB → Postgres: multiple CTEs in one `WITH RECURSIVE`; SQLite/sql.js: a combined CTE with a `__tag` discriminator column
+- Mutually recursive IDB → Postgres: multiple CTEs in one `WITH RECURSIVE`; SQLite/sql.js: a combined CTE with a `__tag` discriminator column. **Postgres rejects the SQL it is given here** (`mutual recursion between WITH items is not implemented`, checked on 16.13), so a mutually recursive program fails on that backend, e.g. `examples/mutual-recursion` and `examples/parity`. The one place a backend does not honour the common semantics. Nothing catches it: `cli/test/examples.test.ts` runs sqlite/native/seminaive only, and `backend/postgres/test` has no mutual-recursion case
 - Multiple rules for one predicate → `UNION`
 - IDB views use positional column names (`col1`, `col2`, …); EDB tables keep their declared names
 

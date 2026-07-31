@@ -1937,6 +1937,13 @@ WITH RECURSIVE
   "pred2"(col1, col2) AS (...)
 ```
 
+PostgreSQL does not accept this. Two `WITH` items may not reference each
+other, and it reports `mutual recursion between WITH items is not
+implemented` (through 16.x), so a program with mutually recursive predicates
+fails on the `postgres` backend rather than producing the wrong answer. This
+is the one documented case where a backend does not implement the whole
+language; use `sqlite`, `sqljs`, `native`, or `seminaive` for such a program.
+
 **SQLite / sql.js:** A combined CTE with a `__tag` discriminator column to
 separate the predicates, since SQLite does not support multiple recursive
 CTEs:
@@ -1979,7 +1986,7 @@ dialect-specific SQL:
 | CREATE VIEW              | `CREATE OR REPLACE VIEW`     | `CREATE VIEW IF NOT EXISTS`  |
 | Recursive view           | `CREATE RECURSIVE VIEW`      | `WITH RECURSIVE` in view     |
 | Non-linear recursion     | rejected                     | rejected                     |
-| Mutual recursion         | multiple CTEs                | tagged combined CTE          |
+| Mutual recursion         | multiple CTEs, rejected by the server (§6.5) | tagged combined CTE          |
 | Range source             | `generate_series`            | recursive CTE                |
 | `concat`           | `STRING_AGG(expr::TEXT, ',' ORDER BY expr)` | `GROUP_CONCAT(expr, ',' ORDER BY expr)` |
 | `!=`                     | `<>`                         | `<>`                         |

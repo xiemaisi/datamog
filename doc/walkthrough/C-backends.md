@@ -14,14 +14,17 @@ etc.
 | ------------ | ------------------------------------ | ------------------------------------------ | ----------------------------------------- |
 | `sqlite`     | native SQLite via `bun:sqlite`       | the CLI default; very small deployments    | combined recursive CTE with `__tag` for mutual recursion |
 | `sqljs`      | WASM SQLite in-process               | browser-portable; the playground default   | same CTE encoding as `sqlite`             |
-| `postgres`   | external Postgres (`DATABASE_URL`)   | production / shared data; native JSON      | `CREATE RECURSIVE VIEW`, full multi-CTE; `JSONB` columns give native structural equality |
+| `postgres`   | external Postgres (`DATABASE_URL`)   | production / shared data; native JSON      | `CREATE RECURSIVE VIEW`; `JSONB` columns give native structural equality; no mutual recursion |
 
 Differences that matter:
 
-- **Mutual recursion**: Postgres handles it with multiple CTEs in
-  a single `WITH RECURSIVE` block. SQLite/sql.js use a combined-CTE
-  + `__tag` encoding that achieves the same result through a
-  single CTE.
+- **Mutual recursion**: SQLite/sql.js use a combined-CTE + `__tag`
+  encoding, computing the whole SCC through a single CTE. The
+  translator emits multiple CTEs in one `WITH RECURSIVE` block for
+  Postgres, which the server refuses: two `WITH` items may not
+  reference each other, so it reports `mutual recursion between
+  WITH items is not implemented`. Run a mutually recursive program
+  on `sqlite`, `sqljs`, `native`, or `seminaive`.
 - **Ranges**: Postgres uses `generate_series`. SQLite and sql.js
   emit a recursive CTE with a literal or fixed-cap bound.
 - **`concat`**: SQLite/sql.js use `GROUP_CONCAT(expr, ',' ORDER BY expr)`.
@@ -74,7 +77,7 @@ existing database, use `postgres`. For browser deployments, use
 | Aggregates            | ✓      | ✓     | ✓        | ✓      | ✓         |
 | Negation (stratified) | ✓      | ✓     | ✓        | ✓      | ✓         |
 | Linear recursion      | ✓      | ✓     | ✓        | ✓      | ✓         |
-| Mutual recursion      | ✓      | ✓     | ✓        | ✓      | ✓         |
+| Mutual recursion      | ✓      | ✓     | ✗        | ✓      | ✓         |
 | Non-linear recursion  | ✗      | ✗     | ✗        | ✓      | ✓         |
 
 The `native` and `seminaive` backends don't go through SQL, so
@@ -84,3 +87,9 @@ rejects non-linear recursion at translation time (their recursive
 CTE semantics would silently produce wrong results), so a program
 that uses two recursive body atoms is portable only across the
 in-memory backends.
+
+Mutual recursion is the one gap that is not a considered design
+choice: the translator emits SQL that Postgres declines to run.
+The failure is loud, an error from the server rather than a wrong
+answer, but it does mean `postgres` is the only backend that does
+not implement the whole language.
