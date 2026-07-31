@@ -9,6 +9,7 @@ import { createDefaultModule, createDefaultSharedModule, startLanguageServer } f
 import { NodeFileSystem } from "langium/node";
 import { ProposedFeatures, createConnection } from "vscode-languageserver/node.js";
 import { DatamogCompletionProvider } from "./datamog-completion-provider.js";
+import { DatamogDefinitionProvider } from "./datamog-definition-provider.js";
 import { registerValidationChecks } from "./datamog-validator.js";
 
 const connection = createConnection(ProposedFeatures.all);
@@ -26,6 +27,9 @@ const DatamogModule: Module<LangiumServices, PartialLangiumServices> = {
   validation: {},
   lsp: {
     CompletionProvider: (services) => new DatamogCompletionProvider(services),
+    // The default provider resolves grammar cross-references; Datamog has
+    // none, so navigation is computed from the AST instead.
+    DefinitionProvider: () => new DatamogDefinitionProvider(),
   },
 };
 

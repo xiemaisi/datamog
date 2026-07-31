@@ -95,6 +95,14 @@ export {
 export { AGGREGATE_NAMES } from "./analyzer.ts";
 export { findRecursiveCalls, type RecursiveCall } from "./recursion.ts";
 export { findPredicateReferences, type PredicateReference } from "./references.ts";
+export {
+  findDefinition,
+  findModuleTarget,
+  findPredicateDefinitions,
+  type Definition,
+  type ModuleSelector,
+  type SourceSpan,
+} from "./definitions.ts";
 export { expandModule, type ExpandOptions } from "./expand.ts";
 export {
   elaborate,

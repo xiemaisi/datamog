@@ -94,9 +94,30 @@ export {
   DatamogLanguageMetaData,
 } from "./generated/module.js";
 
+import type { AstNode } from "langium";
+import { GrammarUtils } from "langium";
 import { createDatamogServices } from "./datamog-module.js";
 import type { Program } from "./generated/ast.js";
 import { defaultColumnTypes, liftHeadAnnotations, postProcess } from "./post-process.js";
+
+/**
+ * Source span of a single assigned property, for consumers that need to
+ * point at one identifier rather than the whole node.
+ *
+ * Most names in the grammar (`predicate`, `ruleName`, `Actual.param`, …)
+ * come from the `Identifier` datatype rule, so they are plain strings on
+ * the AST with no node of their own. Their position lives only in the CST,
+ * which is Langium-shaped; this wrapper is the one place that couples to
+ * `GrammarUtils` so `datamog-core` can stay Langium-free.
+ */
+export function propertySpan(
+  node: AstNode,
+  property: string,
+  index?: number,
+): { offset: number; end: number } | undefined {
+  const cst = GrammarUtils.findNodeForProperty(node.$cstNode, property, index);
+  return cst ? { offset: cst.offset, end: cst.end } : undefined;
+}
 
 export { ParseError } from "./parse-error.js";
 import { ParseError } from "./parse-error.js";
@@ -142,6 +163,24 @@ export function parseLenient(source: string): Program {
     // visited before that point have already been rewritten in place,
     // which is enough for completion-style consumers.
   }
+  return program;
+}
+
+/**
+ * Best-effort parse that also skips post-processing: `parseRaw`'s AST shape
+ * with `parseLenient`'s tolerance for a half-typed document. Completes the
+ * pair of axes the other three entry points cover between them (raw vs
+ * post-processed, throwing vs best-effort).
+ *
+ * This is what editor features keyed on *source* shapes want. Go-to-definition
+ * has to see `Ctor(...)` as a constructor term and `_` as a don't-care, both of
+ * which post-processing lowers away, and it has to keep working while the user
+ * is mid-keystroke and the document does not parse.
+ */
+export function parseRawLenient(source: string): Program {
+  const program = parser.parse<Program>(source).value;
+  liftHeadAnnotations(program);
+  defaultColumnTypes(program);
   return program;
 }
 
