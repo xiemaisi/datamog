@@ -5,6 +5,7 @@ import { create as createNative } from "datamog-backend-native";
 import { create as createPostgres } from "datamog-backend-postgres";
 import { create as createSeminaive } from "datamog-backend-seminaive";
 import { create as createSqlite } from "datamog-backend-sqlite";
+import { create as createSqljs } from "datamog-backend-sqljs";
 import { CsvLoader } from "datamog-csv";
 import { type Backend, DatamogExecutor } from "datamog-engine";
 import { createNodeModuleResolver } from "datamog-engine/module-resolver";
@@ -73,6 +74,23 @@ const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
   ["parse-json", "bigint/numeric columns come back as strings"],
   ["primitive-conversions", "bigint/numeric columns come back as strings"],
   ["shannon-entropy", "bigint/numeric columns come back as strings"],
+]);
+
+/**
+ * Examples the sql.js backend cannot run. sql.js ships a stock SQLite WASM
+ * build without the math extension that `bun:sqlite` enables, so `LN` is
+ * missing. The translator emits `LN` for `ln` and again inside the `**`
+ * overflow guard (`EXP(exp * LN(base))`), so those two features are
+ * unavailable on this backend; `SQRT`, `EXP`, `ABS`, and `ROUND` are all
+ * present, which is why nothing else is affected.
+ *
+ * Worth knowing before anyone adds a base-10 log: sql.js does define `LOG`,
+ * but as the natural logarithm, where SQLite's math extension defines it as
+ * base 10. Nothing emits `LOG` today, so that difference is latent rather than
+ * a wrong answer.
+ */
+const SQLJS_KNOWN_FAILURES = new Map<string, string>([
+  ["shannon-entropy", "sql.js has no LN function"],
 ]);
 
 /**
@@ -165,6 +183,31 @@ describe("examples (sqlite backend)", () => {
 
       const expected = (await expectedFile.json()) as Record<string, unknown>[][];
       expect(actual).toEqual(expected);
+    });
+  }
+});
+
+// sql.js is the same SQLite engine compiled to WASM, and shares
+// `SqliteSqlDialect` with the `sqlite` backend, so it should agree with
+// expected.json throughout. It is the playground's SQL backend, and until now
+// nothing in `bun test` executed a program on it at all.
+describe("examples (sqljs backend)", () => {
+  for (const name of getExamples()) {
+    const expectedPath = join(EXAMPLES_DIR, name, "expected.json");
+
+    // Non-linear recursion is rejected by every SQL backend.
+    const knownFailure = SQLJS_KNOWN_FAILURES.get(name);
+    const sqljsTest = isNativeOnly(name) ? test.skip : knownFailure ? test.failing : test;
+    sqljsTest(knownFailure ? `${name} (${knownFailure})` : name, async () => {
+      const expectedFile = Bun.file(expectedPath);
+      // sqlite seeds expected.json; skip until it has. A `test.failing` entry
+      // must not take this branch: returning without throwing counts as an
+      // unexpected pass.
+      if (!(await expectedFile.exists())) return;
+
+      const actual = await runExample(name, createSqljs);
+      const expected = (await expectedFile.json()) as Record<string, unknown>[][];
+      expect(sortResults(actual)).toEqual(sortResults(expected));
     });
   }
 });
