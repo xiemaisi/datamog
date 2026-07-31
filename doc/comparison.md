@@ -188,8 +188,8 @@ a Prolog tabling engine. Datamog goes the other way: it translates Datalog up
 into SQL and runs it on real relational databases. Both use the correspondence
 as a teaching device; they just cross the bridge from opposite banks.
 
-Datamog is narrower than DES (no relational-algebra or SQL front-end, no
-integrity constraints, no bag semantics) but adds things DES does not have: a
+Datamog is narrower than DES (no relational-algebra or SQL front-end, no bag
+semantics, no declarative debugger) but adds things DES does not have: a
 browser playground, multiple backends that check each other, a first-class
 JSON `value` type, algebraic datatypes as proof terms, and a functor-style
 module system that lets a file act as a function from its input predicates to
@@ -411,6 +411,90 @@ positing of unnamed ones. Those richer features are what turn a Datalog into a
 research or production system; leaving them out is what keeps Datamog a teaching
 one.
 
+## What the neighbours' examples show
+
+The feature lists above are abstract. The example collections these systems
+ship are concrete, and working through them is a direct way to find where
+Datamog's boundary actually runs. Most of the classics transfer:
+`packages/cli/examples/` now carries relational algebra, relational division
+and the Towers of Hanoi adapted from DES, water jugs and the prison guards
+from Ciao, and the zebra puzzle and Collatz sequences from SWI-Prolog and
+Logtalk. Four groups do not transfer, each for a different reason.
+
+### Negation inside a cycle
+
+XSB's win/lose game is a single rule:
+
+```prolog
+win(X) :- move(X, Y), not win(Y).
+```
+
+DES ships two smaller versions of the same shape: `russell.dl`, where the
+barber shaves everyone who does not shave himself, and `paradox.dl`, which
+is just `p :- not p`.
+
+Datamog rejects all three at analysis time, because negation must be
+stratified: no cycle in the dependency graph may pass through a `not`. The
+systems that accept them give up a two-valued model to do it. XSB evaluates
+under the well-founded semantics, where a game position can be *undefined*
+rather than won or lost, which is exactly what a drawn position should be.
+DES warns that the program is non-stratifiable and reports a set of
+undefined tuples alongside the true ones, by an algorithm its manual notes
+is incomplete. CodeQL takes a third route, parity stratification, accepting
+recursion through an even number of negations, which readmits some useful
+programs while still ruling out the liar-shaped ones. Of the four, Datamog
+draws the strictest line.
+
+### Search that needs propagation or pruning
+
+Datamog's only search strategy is generate-and-test: enumerate candidates
+as a cross product and filter them with comparisons. Putting the filters in
+the same rule as the generators lets the join discard partial candidates as
+it goes, which is a poor relation of constraint propagation and enough for a
+surprising amount. `map-colouring`, `zebra` and `guardians` all work this
+way, and n-queens does too.
+
+It stops working when the candidate space is astronomically large but
+heavily constrained, which is precisely the CLP(FD) sweet spot: Ciao's
+`sudoku_clpfd.pl` and SWISH's `clpfd_sudoku.pl` search a space of 9^81
+grids that only domain propagation makes tractable, and no join ordering
+substitutes for it. Optimisation problems (knapsack, magic series) fail for
+a related reason: Datalog can enumerate feasible solutions and take a `min`
+over them, but it cannot use a bound found so far to prune the rest.
+
+Ciao's `knights.pl`, a knight's tour, fails a third way. It is expressible
+in principle, since a tour is a path in a graph, but a Hamiltonian-path
+search needs to order and prune its frontier, and a least fixed point
+enumerates every partial tour in no particular order.
+
+### Terms, unification, and general recursion
+
+Ciao's `boyer.pl` (a rewriting theorem prover), `tak.pl`, `qsort.pl` and
+`poly.pl`, SWISH's `lists.pl`, and Logtalk's `ack` are Prolog benchmarks
+built on unification over unbounded terms, with recursion that builds new
+structure as it descends.
+
+Datamog does construct values: JSON arrays and objects, and proof terms as
+an algebraic datatype. What it does not do is posit them existentially. A
+constructor term is always a match, so a rule cannot mint a node whose parts
+do not already exist; building terms means either bounding the universe with
+an index (`examples/peano`) or driving construction from a request predicate
+(`examples/sk-proof-terms`). That covers a fixed, finite term universe, and
+not `qsort` over an arbitrary list.
+
+### Program-level features with no counterpart
+
+DES's **hypothetical queries** (manual §4.1.19) answer "what would this
+query return if these extra facts also held", without changing the
+database, and compose with its integrity constraints and negation. Datamog
+has no what-if construct: the only way to ask is to edit the program.
+
+Its **restricted predicates** (§4.1.17) and **limited-domain predicates**
+(§4.1.18) are safety escape hatches for rules Datamog would simply reject.
+And DES supports **duplicates** (§4.1.9), with bag semantics and duplicate
+counting throughout; Datamog is set-valued everywhere, by choice, so
+`count` is the only way to recover multiplicity.
+
 ## Further afield
 
 Even this list is not exhaustive. Others one might reach for next include
@@ -428,7 +512,11 @@ systems:
 - **Soufflé**: <https://souffle-lang.github.io/>, <https://github.com/souffle-lang/souffle>
 - **Flix**: <https://flix.dev/>, <https://doc.flix.dev/>, "From Datalog to Flix" (PLDI 2016)
 - **CodeQL / QL**: <https://codeql.github.com/docs/ql-language-reference/>, recursion and parity stratification <https://codeql.github.com/docs/ql-language-reference/recursion/>, algebraic datatypes <https://codeql.github.com/publications/algebraic-data-types.pdf>, <https://github.com/github/codeql>
-- **DES**: <https://des.sourceforge.net/>, DES User's Manual (Sáenz-Pérez, UCM)
+- **DES**: <https://des.sourceforge.net/>, DES User's Manual (Sáenz-Pérez, UCM) <https://www.fdi.ucm.es/profesor/fernan/des/html/manual/manualDES.html>
+- **XSB**: <https://xsb.sourceforge.net/>, "XSB: Extending Prolog with Tabled Logic Programming" <https://arxiv.org/abs/1012.5123>
+- **SWI-Prolog / SWISH**: <https://www.swi-prolog.org/>, example collection <https://swish.swi-prolog.org/example/examples.swinb>
+- **Ciao**: <https://ciao-lang.org/>, example collection <https://github.com/ciao-lang/ciao/tree/master/core/examples>
+- **Logtalk**: <https://logtalk.org/>, example collection <https://github.com/LogtalkDotOrg/logtalk3/blob/master/examples/NOTES.md>
 - **Datomic**: <https://docs.datomic.com/query/query-data-reference.html>, <https://blog.datomic.com/2023/04/datomic-is-free.html>
 - **Datafrog**: <https://github.com/rust-lang/datafrog>, McSherry's blog <https://github.com/frankmcsherry/blog>
 - **DDlog / differential dataflow**: <https://github.com/vmware/differential-datalog>, <https://github.com/frankmcsherry/differential-dataflow>

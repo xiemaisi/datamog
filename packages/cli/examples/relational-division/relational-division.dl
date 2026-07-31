@@ -10,7 +10,7 @@
 #
 # The `missing` rule is where the work happens. It pairs each employee with
 # each of smith's projects and keeps the pairs the employee does *not* work
-# on — the counterexamples. An employee with no counterexamples divides.
+# on, the counterexamples. An employee with no counterexamples divides.
 #
 # Note that `employee(E)` has to come before `not work(E, P)`: negation
 # filters, it never binds, so E and P must already be bound when it runs.

@@ -8,7 +8,7 @@
 #
 # The chain rules invent their own values through arithmetic rather than
 # drawing them from a declared range, so nothing here bounds how far the
-# sequence may climb — 27 reaches 9232 before it comes back down. That also
+# sequence may climb: 27 reaches 9232 before it comes back down. That also
 # means termination rests on the conjecture: a seed whose sequence never
 # reached 1 would not give a finite least fixed point.
 

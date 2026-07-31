@@ -1,5 +1,5 @@
 {
   "name": "The Prison Guards",
-  "description": "Every Nth door toggled by the Nth guard — ranges, modulo, and a counting argument",
+  "description": "Every Nth door toggled by the Nth guard: ranges, modulo, and a counting argument",
   "order": 43
 }

@@ -1,11 +1,11 @@
-# Map colouring — the states of Australia
+# Map colouring: the states of Australia
 #
 # Colour every state so that no two states sharing a border get the same
 # colour. The mainland states form a wheel around South Australia, which
 # borders all five of them; Tasmania is an island and borders nothing.
 #
 # Three colours are enough, and there are 18 ways to do it. Adding a fourth
-# colour brings that up to 768 — change the `colour` facts to see it.
+# colour brings that up to 768; change the `colour` facts to see it.
 #
 # Datalog cannot *invent* an assignment, so this is generate-and-test: the
 # cross product of one `colour` atom per state enumerates every candidate,

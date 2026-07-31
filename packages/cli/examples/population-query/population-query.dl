@@ -3,7 +3,7 @@
 # Adapted from `population_query.pl` in the Ciao Prolog example collection,
 # where it is one of the standard Prolog benchmarks.
 #
-# Two tables, a derived view, and a self-join with an arithmetic condition —
+# Two tables, a derived view, and a self-join with an arithmetic condition:
 # the shape most real deductive-database queries have. Find every pair of
 # countries whose population densities are within 5% of each other, with the
 # denser one named first.

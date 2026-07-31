@@ -15,36 +15,36 @@ a("a1"). a("a2"). a("a3").
 b("b1"). b("b2"). b("a1").
 c("a1", "b2"). c("a1", "a1"). c("a2", "b2").
 
-# pi_X(c) — projection: name only the columns you keep.
+# pi_X(c), projection: name only the columns you keep.
 projection(X) :- c(X, _).
 
-# sigma_{X = a2}(a) — selection: a filter in the body.
+# sigma_{X = a2}(a), selection: a filter in the body.
 selection(X) :- a(X), X = "a2".
 
-# a x b — Cartesian product: two atoms with nothing in common.
+# a x b, Cartesian product: two atoms with nothing in common.
 cartesian(X, Y) :- a(X), b(Y).
 
-# a |x| b — natural join: the shared variable *is* the join condition.
+# a |x| b, natural join: the shared variable *is* the join condition.
 inner_join(X) :- a(X), b(X).
 
-# a U b — union: two rules for one predicate.
+# a U b, union: two rules for one predicate.
 union(X) :- a(X).
 union(X) :- b(X).
 
-# a - b — difference: negation, which needs `a(X)` first to bind X.
+# a - b, difference: negation, which needs `a(X)` first to bind X.
 difference(X) :- a(X), not b(X).
 
-# a =|x| b — left outer join: the matches, then the unmatched rows padded
+# a =|x| b, left outer join: the matches, then the unmatched rows padded
 # with NULL. Y gets its type from the first rule; `null` flows through the
 # second at runtime.
 left_join(X, Y) :- a(X), b(Y), X = Y.
 left_join(X, null) :- a(X), not b(X).
 
-# a |x|= b — right outer join: the mirror image.
+# a |x|= b, right outer join: the mirror image.
 right_join(X, Y) :- a(X), b(Y), X = Y.
 right_join(null, Y) :- b(Y), not a(Y).
 
-# a =|x|= b — full outer join: both paddings on top of the matches.
+# a =|x|= b, full outer join: both paddings on top of the matches.
 full_join(X, Y) :- left_join(X, Y).
 full_join(X, Y) :- right_join(X, Y).
 

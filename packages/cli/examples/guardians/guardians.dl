@@ -9,7 +9,7 @@
 #
 # A door ends unlocked exactly when its key was turned an odd number of
 # times, and cell C is turned by guard G whenever G divides C. So the
-# question is really "which numbers have an odd number of divisors" — and
+# question is really "which numbers have an odd number of divisors", and
 # the answer is a nice one.
 
 cell(C) :- C in [1 .. 100].
