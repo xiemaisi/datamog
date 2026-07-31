@@ -34,22 +34,36 @@ const HAS_DATABASE_URL = Boolean(process.env.DATABASE_URL);
 // Gated on DATABASE_URL because these tests need a live Postgres server.
 // The repo's devcontainer brings one up via docker-compose; outside that
 // (vanilla checkout, CI without a service container) the suite skips.
-// `beforeEach` wipes and recreates the `public` schema to keep tests
-// independent — point DATABASE_URL only at a dedicated dev/test database.
+// The schema is wiped before each test to keep them independent, and again
+// after the last one so the suite leaves nothing behind — point DATABASE_URL
+// only at a dedicated dev/test database.
 describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
   let backend: Backend;
+
+  /**
+   * Drop every object in the schema. Unlike the in-memory backends, Postgres
+   * keeps tables and views after the process exits, so a run has to both start
+   * clean and leave clean: leftovers would otherwise collide with the next run
+   * (`CREATE RECURSIVE VIEW` has no `OR REPLACE` form) and sit in the database
+   * afterwards.
+   */
+  async function resetSchema(): Promise<void> {
+    await Bun.sql`DROP SCHEMA IF EXISTS public CASCADE`;
+    await Bun.sql`CREATE SCHEMA public`;
+  }
 
   beforeAll(async () => {
     backend = await create();
   });
 
   afterAll(async () => {
+    // Before `close()`: the reset needs the connection.
+    await resetSchema();
     await backend.close();
   });
 
   beforeEach(async () => {
-    await Bun.sql`DROP SCHEMA IF EXISTS public CASCADE`;
-    await Bun.sql`CREATE SCHEMA public`;
+    await resetSchema();
   });
 
   test("end-to-end: EDB facts + non-recursive IDB rule", async () => {
