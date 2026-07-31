@@ -32,6 +32,45 @@ export function coerceBooleanColumns(
 }
 
 /**
+ * `Bun.sql` hands back Postgres `BIGINT` and `NUMERIC` as JS strings, so that a
+ * value too large for a double is not silently rounded. `count(*)`, `sum`,
+ * `avg`, and the `to_integer` / `to_float` conversions all produce one of those
+ * types, which made a Postgres `count` of 4 arrive as `"4"` where SQLite,
+ * sql.js, and the interpreters all give `4`. Convert at columns whose declared
+ * type is numeric, so every backend exposes the same shape.
+ *
+ * A magnitude above `Number.MAX_SAFE_INTEGER` does lose precision in the
+ * conversion. That is inherent in having one result shape: the interpreters
+ * compute in JS numbers and SQLite returns them, so no backend was ever exact
+ * up there, and a `"9007199254740993"` string from Postgres alone would be a
+ * difference in type rather than a gain in accuracy.
+ */
+export function coerceNumericColumns(
+  rows: Record<string, unknown>[],
+  columnTypes: Record<string, PrimitiveType>,
+): Record<string, unknown>[] {
+  const numericCols = Object.entries(columnTypes)
+    .filter(([, t]) => t === "integer" || t === "float")
+    .map(([k]) => k);
+  if (numericCols.length === 0) return rows;
+  return rows.map((row) => {
+    let copy: Record<string, unknown> | null = null;
+    for (const col of numericCols) {
+      const v = row[col];
+      // Only strings need converting; every other backend already returns a
+      // number here. An unparseable string is left alone rather than turned
+      // into NaN, so a surprise from some future backend stays visible.
+      if (typeof v !== "string") continue;
+      const n = Number(v);
+      if (v.trim() === "" || !Number.isFinite(n)) continue;
+      if (!copy) copy = { ...row };
+      copy[col] = n;
+    }
+    return copy ?? row;
+  });
+}
+
+/**
  * Cross-backend uniformisation for value-typed result columns. SQLite
  * stores JSON as TEXT (canonical-string round-trip); Postgres jsonb
  * arrives as a parsed JS structure; native already holds parsed JS.

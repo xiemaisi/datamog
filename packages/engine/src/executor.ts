@@ -17,7 +17,7 @@ import {
   toViolation,
 } from "./constraints.ts";
 import { type ExtensionalLoader, loadExtensionalData } from "./loader.ts";
-import { coerceBooleanColumns, coerceJsonColumns } from "./result-coerce.ts";
+import { coerceBooleanColumns, coerceJsonColumns, coerceNumericColumns } from "./result-coerce.ts";
 import { translate } from "./translator.ts";
 
 export type { QueryResult } from "./backend.ts";
@@ -137,7 +137,8 @@ export class DatamogExecutor {
         const rawRows = await this.backend.execute(querySql);
         const colTypes = translation.queryColumnTypes[i] ?? {};
         const boolCoerced = coerceBooleanColumns(rawRows, colTypes);
-        const coerced = coerceJsonColumns(boolCoerced, colTypes);
+        const numCoerced = coerceNumericColumns(boolCoerced, colTypes);
+        const coerced = coerceJsonColumns(numCoerced, colTypes);
         // Project each row to only the columns we want to expose.
         // For ground queries (colTypes is empty) this strips the
         // SQL-level `__probe` column and leaves `{}` per matching

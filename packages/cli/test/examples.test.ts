@@ -35,22 +35,26 @@ function isNativeOnly(name: string): boolean {
  * whoever fixes the dialect is told to delete the entry.
  *
  * None of these is a property of the example -- each runs on sqlite. Three
- * separate Postgres restrictions the translator does not respect:
+ * Postgres restrictions the translator does not respect, analysed in
+ * doc/design/postgres-alignment.md:
  *
- * 1. The anchor branch of a recursive union may not reference the CTE. The
- *    translator emits a predicate's rules in source order, so a predicate whose
- *    recursive rule is written first is rejected. `UNION` is commutative, so
- *    ordering non-recursive rules first would fix this.
+ * 1. Postgres allows a recursive CTE exactly one recursive term, and one
+ *    reference to the CTE within it. A predicate with two recursive rules emits
+ *    `anchor UNION rec1 UNION rec2`, which parses as `(anchor UNION rec1) UNION
+ *    rec2` and puts a self-reference in the non-recursive half. Reordering does
+ *    not help: parenthesising fixes the split and then trips the one-reference
+ *    rule. A `LATERAL` encoding does work.
  * 2. Mutual recursion between `WITH` items is unimplemented in Postgres
- *    (doc/spec.md 6.5); it needs SQLite's tagged combined CTE.
+ *    (doc/spec.md 6.5).
  * 3. A recursive CTE's column types must agree between anchor and recursive
  *    term, and `sum` widens `integer` to `bigint`.
- * 4. `Bun.sql` hands back `BIGINT` and `NUMERIC` as strings, to avoid losing
- *    precision. `engine/src/result-coerce.ts` converts booleans and JSON but
- *    not numbers, so `count`, `sum`, `avg`, and conversions such as
- *    `to_integer` yield `"4"` where every other backend yields `4`. This class
- *    is a wrong answer rather than an error, which is what makes it the worst
- *    of the four.
+ *
+ * shannon-entropy is the one entry that is not a defect and will not be fixed:
+ * its answer is right to 15 significant figures and differs from SQLite's in
+ * the last bit, floating-point addition not being associative and `LN` not
+ * being specified to the ulp. It is listed so that the divergence is recorded
+ * rather than papered over with a tolerance on every other example's
+ * comparison.
  */
 const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
   ["bridge-crossing", "recursive reference in the non-recursive term"],
@@ -64,16 +68,7 @@ const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
   ["mutual-recursion", "mutual recursion between WITH items is not implemented"],
   ["parity", "mutual recursion between WITH items is not implemented"],
   ["proof-term-fold", "integer anchor column against a bigint sum"],
-  ["aggregates", "bigint/numeric columns come back as strings"],
-  ["flights", "bigint/numeric columns come back as strings"],
-  ["guardians", "bigint/numeric columns come back as strings"],
-  ["integrity-constraints", "bigint/numeric columns come back as strings"],
-  ["json-events", "bigint/numeric columns come back as strings"],
-  ["map-colouring", "bigint/numeric columns come back as strings"],
-  ["n-queens", "bigint/numeric columns come back as strings"],
-  ["parse-json", "bigint/numeric columns come back as strings"],
-  ["primitive-conversions", "bigint/numeric columns come back as strings"],
-  ["shannon-entropy", "bigint/numeric columns come back as strings"],
+  ["shannon-entropy", "last-bit float difference, not a defect"],
 ]);
 
 /**

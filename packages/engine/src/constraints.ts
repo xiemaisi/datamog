@@ -1,5 +1,5 @@
 import type { PrimitiveType, Query } from "datamog-core";
-import { coerceBooleanColumns, coerceJsonColumns } from "./result-coerce.ts";
+import { coerceBooleanColumns, coerceJsonColumns, coerceNumericColumns } from "./result-coerce.ts";
 
 /** How many counterexample rows a violation message spells out before eliding. */
 const MAX_REPORTED_ROWS = 5;
@@ -87,7 +87,10 @@ export function projectConstraintRows(
   rawRows: Record<string, unknown>[],
   columnTypes: Record<string, PrimitiveType>,
 ): Record<string, unknown>[] {
-  const coerced = coerceJsonColumns(coerceBooleanColumns(rawRows, columnTypes), columnTypes);
+  const coerced = coerceJsonColumns(
+    coerceNumericColumns(coerceBooleanColumns(rawRows, columnTypes), columnTypes),
+    columnTypes,
+  );
   const keys = Object.keys(columnTypes);
   return coerced.map((row) => {
     const out: Record<string, unknown> = {};
