@@ -3,8 +3,14 @@ import { PostgresSqlDialect } from "./dialect.ts";
 
 export { PostgresSqlDialect } from "./dialect.ts";
 
-export async function create(): Promise<Backend> {
-  const sql = Bun.sql;
+/**
+ * @param sql - Connection to run against, defaulting to the global `Bun.sql`
+ *   (configured from `DATABASE_URL`). `close()` closes whatever it is handed,
+ *   and the global cannot be reopened afterwards, so pass a dedicated
+ *   `new Bun.SQL(url)` when two backends need independent lifetimes -- as two
+ *   test suites in one `bun test` process do.
+ */
+export async function create(sql: typeof Bun.sql = Bun.sql): Promise<Backend> {
   return {
     sqlDialect: new PostgresSqlDialect(),
     async execute(query: string, params?: unknown[]): Promise<Record<string, unknown>[]> {

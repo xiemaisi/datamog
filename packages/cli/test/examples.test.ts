@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { create as createNative } from "datamog-backend-native";
+import { create as createPostgres } from "datamog-backend-postgres";
 import { create as createSeminaive } from "datamog-backend-seminaive";
 import { create as createSqlite } from "datamog-backend-sqlite";
 import { CsvLoader } from "datamog-csv";
@@ -28,6 +29,53 @@ function isNativeOnly(name: string): boolean {
 }
 
 /**
+ * Examples the Postgres backend cannot run, each with the server's complaint.
+ * They are `test.failing` rather than skipped, so the gap is recorded and
+ * whoever fixes the dialect is told to delete the entry.
+ *
+ * None of these is a property of the example -- each runs on sqlite. Three
+ * separate Postgres restrictions the translator does not respect:
+ *
+ * 1. The anchor branch of a recursive union may not reference the CTE. The
+ *    translator emits a predicate's rules in source order, so a predicate whose
+ *    recursive rule is written first is rejected. `UNION` is commutative, so
+ *    ordering non-recursive rules first would fix this.
+ * 2. Mutual recursion between `WITH` items is unimplemented in Postgres
+ *    (doc/spec.md 6.5); it needs SQLite's tagged combined CTE.
+ * 3. A recursive CTE's column types must agree between anchor and recursive
+ *    term, and `sum` widens `integer` to `bigint`.
+ * 4. `Bun.sql` hands back `BIGINT` and `NUMERIC` as strings, to avoid losing
+ *    precision. `engine/src/result-coerce.ts` converts booleans and JSON but
+ *    not numbers, so `count`, `sum`, `avg`, and conversions such as
+ *    `to_integer` yield `"4"` where every other backend yields `4`. This class
+ *    is a wrong answer rather than an error, which is what makes it the worst
+ *    of the four.
+ */
+const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
+  ["bridge-crossing", "recursive reference in the non-recursive term"],
+  ["collatz", "recursive reference in the non-recursive term"],
+  ["grammar", "recursive reference in the non-recursive term"],
+  ["hanoi", "recursive reference in the non-recursive term"],
+  ["jugs", "recursive reference in the non-recursive term"],
+  ["mutual-exclusion", "recursive reference in the non-recursive term"],
+  ["petri-net", "recursive reference in the non-recursive term"],
+  ["river-crossing", "recursive reference in the non-recursive term"],
+  ["mutual-recursion", "mutual recursion between WITH items is not implemented"],
+  ["parity", "mutual recursion between WITH items is not implemented"],
+  ["proof-term-fold", "integer anchor column against a bigint sum"],
+  ["aggregates", "bigint/numeric columns come back as strings"],
+  ["flights", "bigint/numeric columns come back as strings"],
+  ["guardians", "bigint/numeric columns come back as strings"],
+  ["integrity-constraints", "bigint/numeric columns come back as strings"],
+  ["json-events", "bigint/numeric columns come back as strings"],
+  ["map-colouring", "bigint/numeric columns come back as strings"],
+  ["n-queens", "bigint/numeric columns come back as strings"],
+  ["parse-json", "bigint/numeric columns come back as strings"],
+  ["primitive-conversions", "bigint/numeric columns come back as strings"],
+  ["shannon-entropy", "bigint/numeric columns come back as strings"],
+]);
+
+/**
  * The program to run for an example. A directory holding a module example has
  * several `.dl` files -- the entry plus the modules it imports -- so the entry
  * is the one named after the directory. Single-program examples may still name
@@ -46,6 +94,21 @@ async function runExample(
   name: string,
   createBackend: () => Promise<Backend>,
 ): Promise<Record<string, unknown>[][]> {
+  const backend = await createBackend();
+  try {
+    return await runExampleOn(name, backend);
+  } finally {
+    await backend.close();
+  }
+}
+
+/**
+ * Run one example on a backend the caller owns. Split out because the Postgres
+ * backend has to be shared across a whole block rather than created per test:
+ * closing a Postgres connection is final, so one backend serves every example
+ * and the schema is wiped between them.
+ */
+async function runExampleOn(name: string, backend: Backend): Promise<Record<string, unknown>[][]> {
   const dir = join(EXAMPLES_DIR, name);
   const file = join(dir, entryFile(dir, name));
   const source = await Bun.file(file).text();
@@ -65,7 +128,6 @@ async function runExample(
     throw new Error(`Example '${name}' uses a ':=' data-file binding, unsupported here`);
   }
 
-  const backend = await createBackend();
   const executor = new DatamogExecutor(backend, [
     new CsvLoader({ directory: dir }),
     new JsonLoader({ directory: dir }),
@@ -73,12 +135,8 @@ async function runExample(
     new MermaidLoader({ directory: dir }),
   ]);
 
-  try {
-    const results = await executor.executeAnalyzed(program);
-    return results.map((r) => r.rows);
-  } finally {
-    await backend.close();
-  }
+  const results = await executor.executeAnalyzed(program);
+  return results.map((r) => r.rows);
 }
 
 /** Datalog is set-valued, so tuple ordering inside a result set isn't stable. */
@@ -153,6 +211,62 @@ describe("examples (seminaive backend)", () => {
       }
 
       const actual = await runExample(name, createSeminaive);
+      const expected = (await expectedFile.json()) as Record<string, unknown>[][];
+      expect(sortResults(actual)).toEqual(sortResults(expected));
+    });
+  }
+});
+
+// Gated on DATABASE_URL because this needs a live Postgres server; the
+// devcontainer brings one up via docker-compose. Unlike the other blocks the
+// backend is shared and the schema is wiped between examples: Postgres keeps
+// tables and views across runs, so `edge` from one example would otherwise
+// collide with `edge` from the next. The final wipe leaves the database clean,
+// as `backend/postgres/test` does.
+describe.skipIf(!process.env.DATABASE_URL)("examples (postgres backend)", () => {
+  let backend: Backend;
+  // A dedicated connection, not the global `Bun.sql`: `backend/postgres/test`
+  // takes the global and closes it, and a closed one cannot be reopened, so
+  // sharing it would break whichever suite `bun test` happens to run second.
+  let sql: typeof Bun.sql;
+
+  async function resetSchema(): Promise<void> {
+    await sql`DROP SCHEMA IF EXISTS public CASCADE`;
+    await sql`CREATE SCHEMA public`;
+  }
+
+  beforeAll(async () => {
+    sql = new Bun.SQL(process.env.DATABASE_URL);
+    backend = await createPostgres(sql);
+  });
+
+  afterAll(async () => {
+    await resetSchema();
+    await backend.close();
+  });
+
+  beforeEach(async () => {
+    await resetSchema();
+  });
+
+  for (const name of getExamples()) {
+    const expectedPath = join(EXAMPLES_DIR, name, "expected.json");
+
+    // Non-linear recursion is rejected by every SQL backend, Postgres included.
+    if (isNativeOnly(name)) {
+      test.skip(name, () => {});
+      continue;
+    }
+
+    const knownFailure = POSTGRES_KNOWN_FAILURES.get(name);
+    const runner = knownFailure ? test.failing : test;
+    runner(knownFailure ? `${name} (${knownFailure})` : name, async () => {
+      const expectedFile = Bun.file(expectedPath);
+      // sqlite seeds expected.json. A `test.failing` entry must not take this
+      // branch, since returning without throwing counts as an unexpected pass.
+      if (!(await expectedFile.exists())) return;
+
+      const actual = await runExampleOn(name, backend);
       const expected = (await expectedFile.json()) as Record<string, unknown>[][];
       expect(sortResults(actual)).toEqual(sortResults(expected));
     });
