@@ -14,7 +14,7 @@ Language support for the [Datamog](../../README.md) Datalog dialect.
   - a `:=` binding, into the imported module at the output it selects, or to the bound data file. Module inputs wired as actuals resolve on both sides, and a constructor of an imported ADT lands on its rule in the module
 - **Bracket matching** and auto-closing for `()`, `[]`, `""`
 - **Comment toggling** with `#`
-- **Run File**: evaluate the active `.dl` buffer in-process (seminaive backend) and show query results in the "Datamog" Output channel. Invoke via the editor title-bar play button, the `Datamog: Run File` command, or `Ctrl/Cmd+Enter`.
+- **Run File**: evaluate the active `.dl` buffer in-process (seminaive backend) and show its default output, the one the file's `?-` query defines, in the "Datamog" Output channel. Same result as `datamog <file>`; the command takes no arguments, so a named `output predicate` needs a `?-` query to be displayed. Invoke via the editor title-bar play button, the `Datamog: Run File` command, or `Ctrl/Cmd+Enter`.
 
   The runner evaluates the buffer as-is (no save required). Extensional data is loaded from sibling files next to a **saved** program, one file per predicate: `<predicate>.csv`, `<predicate>.json` (whole-file value), or `<predicate>.jsonl` (probed in that order). Predicates with no matching data file (or any `input predicate` declaration in an unsaved buffer) are flagged as empty in the output and a warning.
 

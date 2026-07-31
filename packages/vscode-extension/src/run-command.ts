@@ -21,8 +21,11 @@ export function registerRunCommand(context: vscode.ExtensionContext): void {
 }
 
 /**
- * Run the active `.dl` file through the in-process seminaive backend and
- * dump the query results to the "Datamog" Output channel.
+ * Run the active `.dl` file through the in-process seminaive backend and show
+ * its default output -- the one the file's `?-` query defines -- in the
+ * "Datamog" Output channel. That is what `datamog <file>` prints; named
+ * `output predicate`s are evaluated but not displayed, since this command
+ * takes no arguments to select one with.
  *
  * Evaluates the buffer as-is (no save required). Extensional data is loaded
  * from sibling files next to a saved program (`<predicate>.csv/.json/.jsonl`,
@@ -71,15 +74,23 @@ async function runActiveFile(): Promise<void> {
     );
     const elapsed = Date.now() - started;
 
-    if (results.length === 0) {
-      out.appendLine("No queries in this file — nothing to display.");
+    // The analysed program carries one result per `output predicate` as well as
+    // one for the `?-` query, and there is at most one default. Show the
+    // default, as the CLI does when given no output to select.
+    const chosen = results.filter((r) => (r.label ?? "default") === "default");
+    if (chosen.length === 0) {
+      const named = results.map((r) => r.label).filter((label) => label !== undefined);
+      out.appendLine(
+        named.length > 0
+          ? `No default output in this file. It declares ${named.join(", ")}; add a \`?-\` query for the one you want to see.`
+          : "No default output in this file (no `?-` query) — nothing to display.",
+      );
+      out.appendLine("");
     }
-    for (const result of results) {
+    for (const result of chosen) {
       renderResult(out, result);
     }
-    out.appendLine(
-      `Done: ${results.length} ${plural(results.length, "query", "queries")} in ${elapsed} ms.`,
-    );
+    out.appendLine(`Done in ${elapsed} ms.`);
   } catch (err) {
     const base = err instanceof Error ? err.message : String(err);
     // `ParseError`/`AnalyzerError` carry the source file; prefix it when set.
