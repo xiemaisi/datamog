@@ -505,7 +505,7 @@ describe("translator", () => {
     expect(sql).toContain('"col1" = __b0."name"');
   });
 
-  test("generates views with shared WITH RECURSIVE for mutual recursion", () => {
+  test("generates a tagged combined CTE for mutual recursion (postgres)", () => {
     // Use the typed translation path because the synthesised empty anchor
     // for `odd` (whose rules are purely recursive) needs `columnTypes` to
     // emit the `CAST(NULL AS INTEGER)` projection.
@@ -521,12 +521,55 @@ describe("translator", () => {
     const oddView = result.createViews.find((v) => norm(v).includes('VIEW "odd"'));
     expect(evenView).toBeDefined();
     expect(oddView).toBeDefined();
-    // Both should contain WITH RECURSIVE with both CTEs
-    expect(norm(evenView!)).toContain("WITH RECURSIVE");
-    expect(norm(evenView!)).toContain('"even"(col1)');
-    expect(norm(evenView!)).toContain('"odd"(col1)');
-    expect(norm(evenView!)).toContain('SELECT * FROM "even"');
-    expect(norm(oddView!)).toContain('SELECT * FROM "odd"');
+    // Postgres has never implemented mutual recursion between WITH items, so
+    // the SCC becomes one tagged CTE and each view filters its own rows out.
+    const even = norm(evenView!);
+    expect(even).toContain("WITH RECURSIVE");
+    expect(even).toContain('"__mutual_odd_even"(__tag, col1)');
+    expect(even).not.toContain('"even"(col1)');
+    expect(even).toContain(`WHERE __tag = 'even'`);
+    expect(norm(oddView!)).toContain(`WHERE __tag = 'odd'`);
+    // And one recursive term naming the CTE once, the rest inside a LATERAL.
+    expect(even).toContain("LATERAL");
+    expect(even.match(/FROM "__mutual_odd_even"/g)).toHaveLength(2); // recursive term + final SELECT
+  });
+
+  test("pads a narrower predicate inside the select list, not after WHERE (postgres)", () => {
+    const result = translateTyped(`
+      input predicate e(a: integer, b: integer).
+      seed(X: integer) :- e(X, _).
+      p(X) :- seed(X).
+      p(X) :- q(X, _).
+      q(X, Y) :- p(X), e(X, Y).
+    `);
+    const view = norm(result.createViews.find((v) => norm(v).includes('VIEW "p"'))!);
+    // `p(X) :- q(X, _)` is folded into the LATERAL, where its only body atom is
+    // the SCC reference and so leaves the branch with a WHERE but no FROM. The
+    // NULL padding still belongs in the select list: appending it at the end of
+    // the branch would put it after the WHERE and not parse.
+    expect(view).toContain(`CAST(NULL AS INTEGER) WHERE __rec."__tag" = 'q'`);
+    // The broken form: padding trailing a completed WHERE condition.
+    expect(view).not.toMatch(/= '\w+', CAST\(NULL/);
+  });
+
+  test("sqlite tags the same SCC but unions the branches flat", () => {
+    const result = translateTyped(
+      `
+      input predicate base(x: integer).
+      even(X) :- base(X).
+      even(X) :- odd(X).
+      odd(X) :- even(X).
+    `,
+      sqlite,
+    );
+    // SQLite spells it `CREATE VIEW IF NOT EXISTS "even"`, so match the name.
+    const evenView = result.createViews.find((v) => norm(v).includes('"even" AS'));
+    expect(evenView).toBeDefined();
+    const even = norm(evenView!);
+    expect(even).toContain('"__mutual_odd_even"(__tag, col1)');
+    expect(even).not.toContain("LATERAL");
+    // SQLite is untyped enough not to need the anchor's padding cast.
+    expect(even).not.toContain("CAST(NULL AS");
   });
 
   test("generates generate_series for binding range (postgres)", () => {

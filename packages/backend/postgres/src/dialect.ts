@@ -1,5 +1,12 @@
 import type { BitwiseOp, PrimitiveType, Rule, TypedProgram } from "datamog-core";
-import { SQL_TYPE_MAP, type SqlDialect, colList, emptyAnchor, ident } from "datamog-engine";
+import {
+  type MutualRuleTranslator,
+  SQL_TYPE_MAP,
+  type SqlDialect,
+  colList,
+  ident,
+  mutualCteParts,
+} from "datamog-engine";
 
 /**
  * Replace IEEE Infinity / NaN with SQL NULL. Used at jsonb-construction
@@ -249,47 +256,49 @@ export class PostgresSqlDialect implements SqlDialect {
     return `SELECT __lat.* FROM ${ident(predicate)} AS ${selfAlias}, LATERAL (\n      ${branches}\n    ) AS __lat`;
   }
 
+  /**
+   * Compile a mutually recursive SCC to one tagged CTE, as SQLite does.
+   *
+   * Postgres has never implemented mutual recursion between `WITH` items, so
+   * the obvious shape -- one CTE per predicate, referring to each other -- is
+   * rejected outright. Merging the SCC into a single self-recursive CTE with a
+   * `__tag` discriminator sidesteps that, and a view per predicate filters its
+   * own rows back out.
+   *
+   * The recursive branches are then folded through `singleRecursiveTerm`, since
+   * one CTE for the whole SCC necessarily has a branch per rule and Postgres
+   * allows only one recursive term naming the CTE once. Padding NULLs are cast:
+   * Postgres takes the CTE's column types from the anchor, where a bare NULL
+   * would resolve to `text` and then collide with the recursive term.
+   */
   createMutuallyRecursiveViews(
     stratum: string[],
     arities: ReadonlyMap<string, number>,
     rules: ReadonlyMap<string, Rule[]>,
     analyzed: TypedProgram,
-    translateRule: (
-      rule: Rule,
-      renameMap?: Map<string, string>,
-      tagMap?: Map<string, string>,
-    ) => string,
+    translateRule: MutualRuleTranslator,
   ): string[] {
-    const stratumSet = new Set(stratum);
-    const cteParts = stratum.map((predicate) => {
-      const predRules = rules.get(predicate)!;
-      const arity = arities.get(predicate)!;
-      const ruleQueries = predRules.map((rule) => translateRule(rule));
-      // Empty-anchor synthesis: a stratum predicate whose only rules
-      // are recursive (no base case of its own)
-      // produces a CTE with no anchor branch, which Postgres rejects.
-      // Prepend a typed empty SELECT so the CTE compiles and evaluates
-      // to zero rows.
-      const hasBase = predRules.some(
-        (r) =>
-          r.body.length === 0 ||
-          !r.body.some(
-            (elem) => elem.$type === "Literal" && !elem.negated && stratumSet.has(elem.predicate),
-          ),
-      );
-      if (!hasBase) {
-        ruleQueries.unshift(emptyAnchor(arity, analyzed.columnTypes.get(predicate)!, this));
-      }
-      const unionBody = ruleQueries.join("\n    UNION\n  ");
-      const colNames = colList(arity);
-      return `  ${ident(predicate)}(${colNames}) AS (\n  ${unionBody}\n  )`;
-    });
-    const withBlock = `WITH RECURSIVE\n${cteParts.join(",\n")}`;
-
-    return stratum.map(
-      (predicate) =>
-        `CREATE OR REPLACE VIEW ${ident(predicate)} AS\n  ${withBlock}\n  SELECT * FROM ${ident(predicate)}\n;`,
+    const selfAlias = "__rec";
+    const { combinedName, combinedCols, baseParts, recParts } = mutualCteParts(
+      stratum,
+      arities,
+      rules,
+      analyzed,
+      this,
+      translateRule,
+      { typedPadding: true, selfAlias },
     );
+    const unionParts = [...baseParts];
+    if (recParts.length > 0) {
+      unionParts.push(this.singleRecursiveTerm(combinedName, selfAlias, recParts));
+    }
+    const unionBody = unionParts.join("\n    UNION\n  ");
+    const withBlock = `WITH RECURSIVE ${ident(combinedName)}(${combinedCols}) AS (\n  ${unionBody}\n  )`;
+
+    return stratum.map((predicate) => {
+      const selectCols = colList(arities.get(predicate)!);
+      return `CREATE OR REPLACE VIEW ${ident(predicate)} AS\n  ${withBlock}\n  SELECT ${selectCols} FROM ${ident(combinedName)} WHERE __tag = '${predicate.replace(/'/g, "''")}'\n;`;
+    });
   }
 
   rangeSource(alias: string, lowSql: string, highSql: string): string {

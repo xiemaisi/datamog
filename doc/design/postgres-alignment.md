@@ -5,8 +5,8 @@ the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
 `DATABASE_URL`) showed that it does not. This note records what diverges, why,
 and what a fix would take. Findings were checked against PostgreSQL 16.13.
 
-Of the 21 examples that failed when the block was first added, 18 are fixed, 1
-is inherent, and 2 remain. The remaining ones are listed in
+Of the 21 examples that failed when the block was first added, 20 are fixed, 1
+is inherent, and 1 remains. The remaining ones are listed in
 `POSTGRES_KNOWN_FAILURES` and marked `test.failing`, so the suite stays green
 and a fix forces the entry's removal.
 
@@ -94,23 +94,47 @@ All eight examples now agree with the other backends tuple for tuple. The
 encoding is pinned by unit tests in `engine/test/translator.test.ts`, which run
 without a database.
 
-## Mutual recursion
+## Mutual recursion (fixed)
 
 2 examples: mutual-recursion, parity.
 
 `mutual recursion between WITH items is not implemented` — Postgres has never
 supported two `WITH` items referencing each other, so the multiple-CTE shape the
-dialect emits cannot work. Documented in `doc/spec.md` 6.5.
+dialect emitted could never have run. Documented in `doc/spec.md` 6.5.
 
-The fix is SQLite's encoding: one CTE for the whole SCC with a `__tag`
-discriminator, then a non-recursive view per predicate filtering by tag. That
-CTE will have one recursive branch per rule across the SCC, so it runs into the
-restriction above and needs the same `LATERAL` fold — now available as
-`SqlDialect.singleRecursiveTerm`, though `createMutuallyRecursiveViews` builds
-its own CTE bodies and does not currently go through it. **Unverified**: no
-experiment was run on a tagged CTE under Postgres. Do that before committing to
-the approach, since a tag column also has to satisfy the anchor/recursive type
-agreement described next.
+Postgres now uses SQLite's encoding: one CTE for the whole SCC with a `__tag`
+discriminator, and a view per predicate filtering by tag. That CTE has one
+recursive branch per rule across the SCC, so it also needs the `LATERAL` fold
+above, and `createMutuallyRecursiveViews` composes the two.
+
+The branch construction is shared with SQLite as `mutualCteParts` in
+`engine/src/dialect.ts`; the dialects differ in two respects only.
+
+- **Combining.** SQLite unions the branches flat. Postgres passes a `selfAlias`
+  so each recursive rule's SCC atom binds to one enclosing reference, then folds
+  them through `singleRecursiveTerm`.
+- **Padding.** A predicate narrower than the widest in the SCC has its branch
+  padded with NULLs. Postgres needs those cast, taking the CTE's column types
+  from the anchor, where a bare NULL resolves to `text` and then collides with
+  the recursive term. SQLite is untyped enough not to care.
+
+Two edge cases worth keeping in mind, neither covered by any example and both
+checked by hand across postgres, sqlite, and seminaive:
+
+- A rule whose only body atom is the SCC reference loses its `FROM` entirely
+  once that atom is bound to the outer alias, leaving a branch with a `WHERE`
+  and no `FROM`. Padding columns still have to go in the select list, so the
+  helper looks for the first top-level clause keyword rather than for `FROM`
+  alone. Getting this wrong emits `... WHERE x = 'q', CAST(NULL AS INTEGER)`,
+  which does not parse.
+- An SCC with no base case anywhere gets a synthesised empty anchor, typed the
+  same way. It evaluates to the empty relation on all three backends.
+
+A residual limitation: the combined CTE gives each column one type across the
+whole SCC, taken from the first predicate wide enough to have it. Two predicates
+in one SCC disagreeing at the same position (say `integer` against `string`)
+would make the union ill-typed and Postgres would reject it. SQLite would not
+care. No example does this and nothing checks for it.
 
 ## Anchor and recursive column types must agree
 

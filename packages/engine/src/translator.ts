@@ -329,7 +329,8 @@ function translateViews(
         rule: Rule,
         renameMap?: Map<string, string>,
         tagMap?: Map<string, string>,
-      ) => translateRule(rule, analyzed, renameMap, tagMap, dialect);
+        selfRef?: { predicate: string; alias: string },
+      ) => translateRule(rule, analyzed, renameMap, tagMap, dialect, false, selfRef);
 
       const mutualViews = dialect.createMutuallyRecursiveViews(
         stratum,

@@ -1,11 +1,12 @@
 import type { BitwiseOp, PrimitiveType, Rule, TypedProgram } from "datamog-core";
-import { type SqlDialect, colList, compareJsonbObjectKeys, ident } from "datamog-engine";
-
-// Strip a leading `SELECT ` from a rule SQL string while preserving any span
-// markers (U+0001-delimited) the translator emitted before it. Built via
-// new RegExp so the control characters don't appear literally in source.
-const MARK = "\u0001";
-const STRIP_SELECT = new RegExp(`^((?:${MARK}[^${MARK}]+${MARK})*)SELECT `);
+import {
+  type MutualRuleTranslator,
+  type SqlDialect,
+  colList,
+  compareJsonbObjectKeys,
+  ident,
+  mutualCteParts,
+} from "datamog-engine";
 
 /**
  * True if `sql` is an integer literal. Accepts bare `42` / `-42` and the
@@ -21,62 +22,6 @@ function isIntLiteral(sql: string): boolean {
 function stripLiteralParens(sql: string): string {
   const m = sql.match(/^\s*\((-\d+)\)\s*$/);
   return m ? m[1]! : sql;
-}
-
-/**
- * Find the start of the top-level ` FROM ` clause in a rule SQL body (the
- * string produced after stripping the leading `SELECT `). Returns -1 when
- * there's no FROM (e.g. a fact). Tracks paren depth and string literals
- * so it doesn't latch onto a `FROM` inside a subquery like
- * `NOT EXISTS (SELECT 1 FROM ...)`.
- */
-function findTopLevelFrom(sql: string): number {
-  let depth = 0;
-  let i = 0;
-  while (i < sql.length) {
-    const ch = sql[i];
-    if (ch === "(") {
-      depth++;
-      i++;
-    } else if (ch === ")") {
-      depth--;
-      i++;
-    } else if (ch === "'") {
-      i++;
-      while (i < sql.length) {
-        if (sql[i] === "'") {
-          if (sql[i + 1] === "'") {
-            i += 2;
-            continue;
-          }
-          i++;
-          break;
-        }
-        i++;
-      }
-    } else if (ch === '"') {
-      // Skip a double-quoted identifier (`"o'brien"`, `"a(b"`); without this
-      // a `'` or `(` inside a quoted name desyncs the string/paren tracking
-      // and the top-level FROM is missed. Honour the `""` escape.
-      i++;
-      while (i < sql.length) {
-        if (sql[i] === '"') {
-          if (sql[i + 1] === '"') {
-            i += 2;
-            continue;
-          }
-          i++;
-          break;
-        }
-        i++;
-      }
-    } else if (depth === 0 && sql.slice(i, i + 6) === " FROM ") {
-      return i;
-    } else {
-      i++;
-    }
-  }
-  return -1;
 }
 
 /**
@@ -167,83 +112,24 @@ export class SqliteSqlDialect implements SqlDialect {
     arities: ReadonlyMap<string, number>,
     rules: ReadonlyMap<string, Rule[]>,
     analyzed: TypedProgram,
-    translateRule: (
-      rule: Rule,
-      renameMap?: Map<string, string>,
-      tagMap?: Map<string, string>,
-    ) => string,
+    translateRule: MutualRuleTranslator,
   ): string[] {
     // SQLite does not support mutually recursive CTEs. We merge all
     // predicates in the SCC into a single self-recursive CTE with a
     // discriminator tag column, then create views that filter by tag.
-    const maxArity = Math.max(...stratum.map((p) => arities.get(p)!));
-    const combinedName = `__mutual_${stratum.join("_")}`;
-    const combinedCols = `__tag, ${colList(maxArity)}`;
-
-    // Build UNION of all rules, each tagged with its predicate name.
-    // References to sibling predicates in the SCC are rewritten to
-    // query the combined CTE with a tag filter.
-    const renameMap = new Map(stratum.map((p) => [p, combinedName]));
-    const tagMap = new Map(stratum.map((p) => [p, p]));
-
-    // SQLite requires non-recursive (base) terms before recursive terms
-    // in a WITH RECURSIVE UNION, so we partition rules into base cases
-    // (facts / rules that don't reference the SCC) and recursive cases.
-    const stratumSet = new Set(stratum);
-    const baseParts: string[] = [];
-    const recParts: string[] = [];
-    for (const predicate of stratum) {
-      const predRules = rules.get(predicate)!;
-      const arity = arities.get(predicate)!;
-      const padding = maxArity - arity;
-      const nullPad = padding > 0 ? `, ${Array(padding).fill("NULL").join(", ")}` : "";
-
-      for (const rule of predRules) {
-        const isRecursive =
-          rule.body.length > 0 &&
-          rule.body.some(
-            (elem) => elem.$type === "Literal" && !elem.negated && stratumSet.has(elem.predicate),
-          );
-        const ruleSql = translateRule(rule, renameMap, tagMap);
-        // The rule SQL is wrapped with span markers (U+0001…U+0001 opens a
-        // span, U+0002 closes it) that survive until a post-processing step
-        // in the translator strips them. Match past any leading opens so we
-        // correctly remove the `SELECT ` token and keep the projection intact.
-        const body = ruleSql.replace(STRIP_SELECT, "$1");
-        // NULL padding columns have to be inserted at the end of the SELECT
-        // list (before FROM) — appending them after the whole body would put
-        // them after the FROM/WHERE clauses, producing garbage like
-        // `FROM t WHERE x = 1, NULL, NULL`. For facts there's no FROM, so we
-        // simply append.
-        let padded: string;
-        if (nullPad) {
-          const fromIdx = findTopLevelFrom(body);
-          padded =
-            fromIdx === -1
-              ? `${body}${nullPad}`
-              : `${body.slice(0, fromIdx)}${nullPad}${body.slice(fromIdx)}`;
-        } else {
-          padded = body;
-        }
-        const part = `SELECT '${predicate.replace(/'/g, "''")}' AS __tag, ${padded}`;
-        if (isRecursive) {
-          recParts.push(part);
-        } else {
-          baseParts.push(part);
-        }
-      }
-    }
-    // When every rule in the SCC is recursive (no base case anywhere),
-    // SQLite would reject the combined CTE with "circular reference"
-    // because `WITH RECURSIVE` requires at least one anchor branch.
-    // Synthesise a typed empty anchor that contributes zero rows but
-    // pins the CTE's column shape. The Postgres path does the same
-    // per-predicate; SQLite only needs one anchor for the combined
-    // CTE to be valid syntactically.
-    if (baseParts.length === 0) {
-      const nulls = Array.from({ length: maxArity }, (_, i) => `NULL AS col${i + 1}`).join(", ");
-      baseParts.push(`SELECT '${stratum[0]!.replace(/'/g, "''")}' AS __tag, ${nulls} WHERE 1 = 0`);
-    }
+    // SQLite requires non-recursive terms before recursive ones in the
+    // UNION, which is the order `mutualCteParts` returns them in; unlike
+    // Postgres it takes any number of recursive branches, so they go in flat
+    // and it needs no padding casts.
+    const { combinedName, combinedCols, baseParts, recParts } = mutualCteParts(
+      stratum,
+      arities,
+      rules,
+      analyzed,
+      this,
+      translateRule,
+      { typedPadding: false },
+    );
     const unionParts = [...baseParts, ...recParts];
 
     const unionBody = unionParts.join("\n    UNION\n  ");

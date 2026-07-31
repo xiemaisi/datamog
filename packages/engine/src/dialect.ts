@@ -1,6 +1,22 @@
 import type { BitwiseOp, PrimitiveType, Rule, TypedProgram } from "datamog-core";
 
 /**
+ * Translate one rule of a mutually recursive stratum.
+ *
+ * `renameMap` points a predicate at the combined CTE, `tagMap` adds the tag
+ * filter that picks its rows out again, and `selfRef` binds the rule's one
+ * SCC body atom to an alias the caller has already put in scope instead of
+ * giving it a `FROM` entry — needed by a dialect that folds the recursive
+ * rules into a single term.
+ */
+export type MutualRuleTranslator = (
+  rule: Rule,
+  renameMap?: Map<string, string>,
+  tagMap?: Map<string, string>,
+  selfRef?: { predicate: string; alias: string },
+) => string;
+
+/**
  * Interface for dialect-specific SQL generation.
  * Each SQL backend (Postgres, SQLite, etc.) implements this interface
  * to control how DDL and dialect-specific expressions are produced.
@@ -42,7 +58,9 @@ export interface SqlDialect {
    * @param rules - rules for each predicate
    * @param analyzed - the full analyzed program (for column resolution)
    * @param translateRule - callback to translate a single rule to a SQL SELECT;
-   *   the dialect may pass renameMap/tagMap to control table references
+   *   the dialect may pass renameMap/tagMap to control table references, and
+   *   selfRef to bind one body atom to an enclosing alias (see
+   *   {@link MutualRuleTranslator})
    * @returns one CREATE VIEW string per predicate
    */
   createMutuallyRecursiveViews(
@@ -50,11 +68,7 @@ export interface SqlDialect {
     arities: ReadonlyMap<string, number>,
     rules: ReadonlyMap<string, Rule[]>,
     analyzed: TypedProgram,
-    translateRule: (
-      rule: Rule,
-      renameMap?: Map<string, string>,
-      tagMap?: Map<string, string>,
-    ) => string,
+    translateRule: MutualRuleTranslator,
   ): string[];
 
   /** Generate a FROM clause element for a binding range (integer series). */
@@ -408,6 +422,202 @@ export const SQL_TYPE_MAP: Record<PrimitiveType, string> = {
  * Shared by the translator's self-recursive path and the Postgres
  * dialect's mutually-recursive path.
  */
+// Strip a leading `SELECT ` from a rule SQL string while preserving any span
+// markers (U+0001-delimited) the translator emitted before it. Built via
+// new RegExp so the control characters don't appear literally in source.
+const MARK = "\u0001";
+const STRIP_SELECT = new RegExp(`^((?:${MARK}[^${MARK}]+${MARK})*)SELECT `);
+
+/** Clause keywords that can follow a rule's select list, longest first. */
+const CLAUSE_STARTS = [" GROUP BY ", " ORDER BY ", " HAVING ", " WHERE ", " FROM "];
+
+/**
+ * Find where the select list ends in a rule SQL body (the string produced
+ * after stripping the leading `SELECT `) — that is, the start of the first
+ * top-level clause following it. Returns -1 when the body is a bare select
+ * list, as a fact is. Tracks paren depth and string literals so it doesn't
+ * latch onto a keyword inside a subquery like `NOT EXISTS (SELECT 1 FROM ...)`.
+ *
+ * `WHERE` matters as much as `FROM`: a rule whose only body atom is bound to an
+ * enclosing alias has conditions but no `FROM` of its own, and appending
+ * padding columns after its `WHERE` would be a syntax error.
+ */
+function findSelectListEnd(sql: string): number {
+  let depth = 0;
+  let i = 0;
+  while (i < sql.length) {
+    const ch = sql[i];
+    if (ch === "(") {
+      depth++;
+      i++;
+    } else if (ch === ")") {
+      depth--;
+      i++;
+    } else if (ch === "'") {
+      i++;
+      while (i < sql.length) {
+        if (sql[i] === "'") {
+          if (sql[i + 1] === "'") {
+            i += 2;
+            continue;
+          }
+          i++;
+          break;
+        }
+        i++;
+      }
+    } else if (ch === '"') {
+      // Skip a double-quoted identifier (`"o'brien"`, `"a(b"`); without this
+      // a `'` or `(` inside a quoted name desyncs the string/paren tracking
+      // and the top-level FROM is missed. Honour the `""` escape.
+      i++;
+      while (i < sql.length) {
+        if (sql[i] === '"') {
+          if (sql[i + 1] === '"') {
+            i += 2;
+            continue;
+          }
+          i++;
+          break;
+        }
+        i++;
+      }
+    } else if (depth === 0 && CLAUSE_STARTS.some((kw) => sql.startsWith(kw, i))) {
+      return i;
+    } else {
+      i++;
+    }
+  }
+  return -1;
+}
+
+/** The tagged branches of a mutually recursive stratum's combined CTE. */
+export interface MutualCteParts {
+  /** Name of the combined CTE holding the whole SCC. */
+  combinedName: string;
+  /** Its column list, `__tag` followed by `col1 .. colN`. */
+  combinedCols: string;
+  /** Branches whose rules do not reference the SCC: the CTE's anchor. */
+  baseParts: string[];
+  /** Branches whose rules do, each already tagged and padded. */
+  recParts: string[];
+}
+
+/**
+ * Build the branches of the combined CTE that represents a mutually recursive
+ * stratum. Neither SQLite nor Postgres can express an SCC as several CTEs
+ * referring to each other, so the whole group becomes one self-recursive CTE
+ * with a `__tag` discriminator, and a view per predicate filters by tag.
+ *
+ * Shared because the branch construction is identical for both; they differ
+ * only in how the branches are combined afterwards. SQLite unions them flat.
+ * Postgres cannot, and passes `selfAlias` so each recursive rule's SCC atom
+ * binds to one enclosing reference, ready for `singleRecursiveTerm`.
+ *
+ * A predicate narrower than the widest in the SCC has its branch padded with
+ * NULLs. `typedPadding` casts them, which Postgres needs: it takes the CTE's
+ * column types from the anchor, and a bare NULL there resolves to `text` and
+ * then collides with the recursive term.
+ */
+export function mutualCteParts(
+  stratum: string[],
+  arities: ReadonlyMap<string, number>,
+  rules: ReadonlyMap<string, Rule[]>,
+  analyzed: TypedProgram,
+  dialect: SqlDialect,
+  translateRule: MutualRuleTranslator,
+  options: { typedPadding: boolean; selfAlias?: string },
+): MutualCteParts {
+  const maxArity = Math.max(...stratum.map((p) => arities.get(p)!));
+  const combinedName = `__mutual_${stratum.join("_")}`;
+  const combinedCols = `__tag, ${colList(maxArity)}`;
+  const renameMap = new Map(stratum.map((p) => [p, combinedName]));
+  const tagMap = new Map(stratum.map((p) => [p, p]));
+  const stratumSet = new Set(stratum);
+
+  // Type per combined column: the first predicate in the SCC wide enough to
+  // have one there. Predicates disagreeing on a position would make the union
+  // ill-typed on Postgres anyway, and SQLite does not consult this.
+  const padType = (position: number): PrimitiveType => {
+    for (const p of stratum) {
+      if (arities.get(p)! > position) {
+        const t = analyzed.columnTypes.get(p)?.[position];
+        if (t) return t;
+      }
+    }
+    return "string";
+  };
+
+  const baseParts: string[] = [];
+  const recParts: string[] = [];
+  for (const predicate of stratum) {
+    const arity = arities.get(predicate)!;
+    const padding = maxArity - arity;
+    const nullPad =
+      padding > 0
+        ? `, ${Array.from({ length: padding }, (_, i) =>
+            options.typedPadding
+              ? `CAST(NULL AS ${sqlTypeFor(dialect, padType(arity + i))})`
+              : "NULL",
+          ).join(", ")}`
+        : "";
+
+    for (const rule of rules.get(predicate)!) {
+      // Linear recursion is enforced by the analyzer, so a rule has at most one
+      // body atom from the SCC; that is the one a folding dialect binds.
+      const sccAtom = rule.body.find(
+        (elem) => elem.$type === "Literal" && !elem.negated && stratumSet.has(elem.predicate),
+      );
+      const isRecursive = rule.body.length > 0 && sccAtom !== undefined;
+      const selfRef =
+        options.selfAlias && sccAtom?.$type === "Literal"
+          ? { predicate: sccAtom.predicate, alias: options.selfAlias }
+          : undefined;
+      const ruleSql = translateRule(rule, renameMap, tagMap, selfRef);
+      // The rule SQL is wrapped with span markers (U+0001…U+0001 opens a
+      // span, U+0002 closes it) that survive until a post-processing step
+      // in the translator strips them. Match past any leading opens so we
+      // correctly remove the `SELECT ` token and keep the projection intact.
+      const body = ruleSql.replace(STRIP_SELECT, "$1");
+      // NULL padding columns have to be inserted at the end of the SELECT
+      // list (before FROM) — appending them after the whole body would put
+      // them after the FROM/WHERE clauses, producing garbage like
+      // `FROM t WHERE x = 1, NULL, NULL`. For facts there's no FROM, so we
+      // simply append.
+      let padded: string;
+      if (nullPad) {
+        const fromIdx = findSelectListEnd(body);
+        padded =
+          fromIdx === -1
+            ? `${body}${nullPad}`
+            : `${body.slice(0, fromIdx)}${nullPad}${body.slice(fromIdx)}`;
+      } else {
+        padded = body;
+      }
+      const part = `SELECT '${predicate.replace(/'/g, "''")}' AS __tag, ${padded}`;
+      if (isRecursive) {
+        recParts.push(part);
+      } else {
+        baseParts.push(part);
+      }
+    }
+  }
+
+  // Every rule in the SCC is recursive, so there is no anchor and the engine
+  // would reject the CTE ("circular reference" on SQLite, similar on Postgres).
+  // Synthesise one that contributes no rows but pins the column shape.
+  if (baseParts.length === 0) {
+    const nulls = Array.from(
+      { length: maxArity },
+      (_, i) =>
+        `${options.typedPadding ? `CAST(NULL AS ${sqlTypeFor(dialect, padType(i))})` : "NULL"} AS col${i + 1}`,
+    ).join(", ");
+    baseParts.push(`SELECT '${stratum[0]!.replace(/'/g, "''")}' AS __tag, ${nulls} WHERE 1 = 0`);
+  }
+
+  return { combinedName, combinedCols, baseParts, recParts };
+}
+
 export function emptyAnchor(
   arity: number,
   colTypes: readonly PrimitiveType[],

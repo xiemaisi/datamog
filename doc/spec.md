@@ -1952,30 +1952,24 @@ is needed.
 
 ### 6.5 Mutually Recursive Views
 
-**PostgreSQL:** Multiple CTEs in a shared `WITH RECURSIVE` block:
+Neither backend can express an SCC as several CTEs referring to each other:
+SQLite does not support multiple recursive CTEs, and PostgreSQL reports
+`mutual recursion between WITH items is not implemented`. Both therefore merge
+the whole SCC into one self-recursive CTE with a `__tag` discriminator column,
+and separate non-recursive views filter by tag:
 
 ```sql
-WITH RECURSIVE
-  "pred1"(col1, col2) AS (...),
-  "pred2"(col1, col2) AS (...)
+WITH RECURSIVE "__mutual_pred1_pred2"(__tag, col1, col2) AS (...)
 ```
 
-PostgreSQL does not accept this. Two `WITH` items may not reference each
-other, and it reports `mutual recursion between WITH items is not
-implemented` (through 16.x), so a program with mutually recursive predicates
-fails on the `postgres` backend rather than producing the wrong answer. This
-is the one documented case where a backend does not implement the whole
-language; use `sqlite`, `sqljs`, `native`, or `seminaive` for such a program.
+A predicate narrower than the widest in the SCC has its branch padded with
+NULLs to match the CTE's column count.
 
-**SQLite / sql.js:** A combined CTE with a `__tag` discriminator column to
-separate the predicates, since SQLite does not support multiple recursive
-CTEs:
-
-```sql
-WITH RECURSIVE "__mutual__pred1__pred2"(__tag, col1, col2) AS (...)
-```
-
-Separate non-recursive views then filter by tag.
+**PostgreSQL** differs in two details. The recursive branches are folded into a
+single `LATERAL` term (§6.4), because the combined CTE has one branch per rule
+across the SCC and Postgres allows only one recursive term. And the padding
+NULLs are cast to their column's type, since PostgreSQL takes the CTE's column
+types from the anchor, where an uncast NULL would resolve to `text`.
 
 ### 6.6 Aggregate Views
 
@@ -2009,7 +2003,7 @@ dialect-specific SQL:
 | CREATE VIEW              | `CREATE OR REPLACE VIEW`     | `CREATE VIEW IF NOT EXISTS`  |
 | Recursive view           | `CREATE RECURSIVE VIEW`      | `WITH RECURSIVE` in view     |
 | Non-linear recursion     | rejected                     | rejected                     |
-| Mutual recursion         | multiple CTEs, rejected by the server (§6.5) | tagged combined CTE          |
+| Mutual recursion         | tagged combined CTE, `LATERAL` fold | tagged combined CTE          |
 | Range source             | `generate_series`            | recursive CTE                |
 | `concat`           | `STRING_AGG(expr::TEXT, ',' ORDER BY expr)` | `GROUP_CONCAT(expr, ',' ORDER BY expr)` |
 | `!=`                     | `<>`                         | `<>`                         |
