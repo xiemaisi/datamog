@@ -1,10 +1,13 @@
-# A meta-interpreter: rules as data
+# Proplog: rules as data
 #
 # Adapted from the `expert_system` example in the SWI-Prolog collection and
 # `metainterpreters` in Logtalk's, both of which write Prolog's `solve/1` in
-# Prolog. This is the Datalog counterpart: a forward-chaining interpreter for
-# propositional Horn clauses whose knowledge base is a relation, not a
-# program. Editing `kb` changes what the program concludes with no reparsing.
+# Prolog. Those are meta-interpreters: they interpret the host language in
+# itself. This one is not. The object language is Proplog, propositional Horn
+# clauses, which is strictly weaker than the Datalog interpreting it. What
+# carries over is the idea: a forward-chaining interpreter whose knowledge
+# base is a relation rather than a program, so editing `kb` changes what the
+# program concludes with no reparsing.
 #
 # A clause is `kb(Id, Head, Premises)` with the premises in an array `value`.
 # `derived` is the interpreter: a head holds when all of its premises hold.
