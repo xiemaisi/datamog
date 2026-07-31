@@ -1,0 +1,38 @@
+# Water jugs — measure exactly 2 litres
+#
+# Adapted from the Ciao Prolog example collection.
+#
+# A 4-litre jug and a 3-litre jug, no markings, a tap and a drain. You may
+# fill a jug, empty a jug, or pour one into the other until the source is
+# empty or the target is full. Can you end up with exactly 2 litres?
+#
+# state(Big, Small) is the reachable-state relation. Where `river-crossing`
+# searches a space of boolean positions, this one searches over *numbers*,
+# so the moves are arithmetic rather than case analysis.
+#
+# Pouring needs the smaller of "what's in the source" and "what fits in the
+# target". There is no two-argument `min` (the aggregate `min` groups rows,
+# which is a different thing), so each pour is two rules split on which of
+# the two is smaller.
+
+state(0, 0).
+
+state(4, B) :- state(_, B).   # fill the big jug
+state(A, 3) :- state(A, _).   # fill the small jug
+state(0, B) :- state(_, B).   # empty the big jug
+state(A, 0) :- state(A, _).   # empty the small jug
+
+# Pour big -> small. T is the room left in the small jug.
+state(A - T, B + T) :- state(A, B), T = 3 - B, A >= T.   # small fills up
+state(0, B + A)     :- state(A, B), T = 3 - B, A < T.    # big runs dry
+
+# Pour small -> big. T is the room left in the big jug.
+state(A + T, B - T) :- state(A, B), T = 4 - A, B >= T.   # big fills up
+state(A + B, 0)     :- state(A, B), T = 4 - A, B < T.    # small runs dry
+
+# Every state that holds 2 litres in one of the jugs.
+solved(A, B) :- state(A, B), (A == 2 || B == 2).
+
+?- solved(Big, Small).
+
+output predicate reachable(Big, Small) :- state(Big, Small).

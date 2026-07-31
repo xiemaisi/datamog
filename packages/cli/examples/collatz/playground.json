@@ -1,0 +1,5 @@
+{
+  "name": "Collatz Sequences",
+  "description": "Hailstone chain lengths for 1..27, and how high 27 climbs on the way",
+  "order": 25
+}

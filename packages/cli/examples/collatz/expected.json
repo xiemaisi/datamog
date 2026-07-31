@@ -1,0 +1,122 @@
+[
+  [
+    {
+      "Seed": 1,
+      "Steps": 0
+    },
+    {
+      "Seed": 2,
+      "Steps": 1
+    },
+    {
+      "Seed": 4,
+      "Steps": 2
+    },
+    {
+      "Seed": 8,
+      "Steps": 3
+    },
+    {
+      "Seed": 16,
+      "Steps": 4
+    },
+    {
+      "Seed": 5,
+      "Steps": 5
+    },
+    {
+      "Seed": 10,
+      "Steps": 6
+    },
+    {
+      "Seed": 3,
+      "Steps": 7
+    },
+    {
+      "Seed": 20,
+      "Steps": 7
+    },
+    {
+      "Seed": 21,
+      "Steps": 7
+    },
+    {
+      "Seed": 6,
+      "Steps": 8
+    },
+    {
+      "Seed": 12,
+      "Steps": 9
+    },
+    {
+      "Seed": 13,
+      "Steps": 9
+    },
+    {
+      "Seed": 24,
+      "Steps": 10
+    },
+    {
+      "Seed": 26,
+      "Steps": 10
+    },
+    {
+      "Seed": 17,
+      "Steps": 12
+    },
+    {
+      "Seed": 11,
+      "Steps": 14
+    },
+    {
+      "Seed": 22,
+      "Steps": 15
+    },
+    {
+      "Seed": 23,
+      "Steps": 15
+    },
+    {
+      "Seed": 7,
+      "Steps": 16
+    },
+    {
+      "Seed": 14,
+      "Steps": 17
+    },
+    {
+      "Seed": 15,
+      "Steps": 17
+    },
+    {
+      "Seed": 9,
+      "Steps": 19
+    },
+    {
+      "Seed": 18,
+      "Steps": 20
+    },
+    {
+      "Seed": 19,
+      "Steps": 20
+    },
+    {
+      "Seed": 25,
+      "Steps": 23
+    },
+    {
+      "Seed": 27,
+      "Steps": 111
+    }
+  ],
+  [
+    {
+      "max": 111
+    }
+  ],
+  [
+    {
+      "max": 9232
+    }
+  ]
+]

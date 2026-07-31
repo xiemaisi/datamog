@@ -1,0 +1,5 @@
+{
+  "name": "Towers of Hanoi",
+  "description": "The full move sequence, numbered, from a linearly recursive task decomposition",
+  "order": 42
+}

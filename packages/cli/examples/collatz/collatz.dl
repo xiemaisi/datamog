@@ -1,0 +1,27 @@
+# Collatz (hailstone) sequences
+#
+# Adapted from the Logtalk example collection.
+#
+# Halve an even number, treble an odd one and add one, repeat. Every start
+# value tried so far eventually reaches 1; nobody knows whether all of them
+# do. How many steps does each of the first 27 numbers take?
+#
+# The chain rules invent their own values through arithmetic rather than
+# drawing them from a declared range, so nothing here bounds how far the
+# sequence may climb — 27 reaches 9232 before it comes back down. That also
+# means termination rests on the conjecture: a seed whose sequence never
+# reached 1 would not give a finite least fixed point.
+
+seed(N) :- N in [1 .. 27].
+
+# chain(Seed, Value, K): starting from Seed, Value is reached after K steps.
+chain(N, N, 0) :- seed(N).
+chain(N, M, K) :- chain(N, P, K0), P > 1, P % 2 == 0, M = P / 2,     K = K0 + 1.
+chain(N, M, K) :- chain(N, P, K0), P > 1, P % 2 == 1, M = 3 * P + 1, K = K0 + 1.
+
+steps(N, K) :- chain(N, 1, K).
+
+?- steps(Seed, Steps).
+
+output predicate longest(max(K)) :- steps(_, K).
+output predicate peak(max(M)) :- chain(_, M, _).

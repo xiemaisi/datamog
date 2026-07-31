@@ -1,0 +1,82 @@
+# The Zebra Puzzle (Life International, 1962)
+#
+# Five houses in a row, each with a different nationality, pet, drink,
+# cigarette brand, and colour. Who drinks water, and who owns the zebra?
+#
+# Adapted from the SWI-Prolog and Ciao Prolog example collections.
+#
+# The trick is to name a *position* (1..5) for every attribute value, so
+# "the Englishman lives in the red house" is just Eng = Red. Each category
+# is a permutation of the five positions, and the clues are joins between
+# permutations. Applying the single-category clues first keeps every join
+# small: 120 permutations become 24 as soon as one position is pinned down.
+
+nat(N) :- N in [1 .. 5].
+
+# Two houses are neighbours if their positions differ by one.
+next(X, Y) :- nat(X), nat(Y), X = Y + 1.
+next(X, Y) :- nat(X), nat(Y), Y = X + 1.
+
+# The 120 ways to assign five distinct positions to five values.
+perm(A, B, C, D, E) :-
+  nat(A), nat(B), nat(C), nat(D), nat(E),
+  A <> B, A <> C, A <> D, A <> E,
+  B <> C, B <> D, B <> E, C <> D, C <> E, D <> E.
+
+# Clue 6: the green house is immediately to the right of the ivory house.
+colours(Red, Green, Ivory, Yellow, Blue) :-
+  perm(Red, Green, Ivory, Yellow, Blue), Green = Ivory + 1.
+
+# Clue 10: the Norwegian lives in the first house.
+nations(Eng, Spa, Ukr, Nor, Jap) :-
+  perm(Eng, Spa, Ukr, Nor, Jap), Nor = 1.
+
+# Clue 9: milk is drunk in the middle house.
+drinks(Cof, Tea, Milk, Juice, Water) :-
+  perm(Cof, Tea, Milk, Juice, Water), Milk = 3.
+
+smokes(Gold, Kool, Chest, Lucky, Parl) :- perm(Gold, Kool, Chest, Lucky, Parl).
+pets(Dog, Snails, Fox, Horse, Zebra) :- perm(Dog, Snails, Fox, Horse, Zebra).
+
+# Clue 2: the Englishman lives in the red house.
+# Clue 15: the Norwegian lives next to the blue house.
+cn(Green, Yellow, Eng, Spa, Ukr, Nor, Jap) :-
+  colours(Red, Green, _, Yellow, Blue),
+  nations(Eng, Spa, Ukr, Nor, Jap),
+  Eng = Red, next(Nor, Blue).
+
+# Clue 4: coffee is drunk in the green house.
+# Clue 5: the Ukrainian drinks tea.
+cnd(Yellow, Eng, Spa, Ukr, Nor, Jap, Juice, Water) :-
+  cn(Green, Yellow, Eng, Spa, Ukr, Nor, Jap),
+  drinks(Cof, Tea, _, Juice, Water),
+  Cof = Green, Tea = Ukr.
+
+# Clue 8: Kools are smoked in the yellow house.
+# Clue 13: the Lucky Strike smoker drinks orange juice.
+# Clue 14: the Japanese smokes Parliaments.
+cnds(Eng, Spa, Ukr, Nor, Jap, Water, Gold, Kool, Chest) :-
+  cnd(Yellow, Eng, Spa, Ukr, Nor, Jap, Juice, Water),
+  smokes(Gold, Kool, Chest, Lucky, Parl),
+  Kool = Yellow, Lucky = Juice, Parl = Jap.
+
+# Clue 3: the Spaniard owns the dog.
+# Clue 7: the Old Gold smoker owns snails.
+# Clue 11: the Chesterfield smoker lives next to the fox owner.
+# Clue 12: Kools are smoked next to the house with the horse.
+sol(Eng, Spa, Ukr, Nor, Jap, Water, Zebra) :-
+  cnds(Eng, Spa, Ukr, Nor, Jap, Water, Gold, Kool, Chest),
+  pets(Dog, Snails, Fox, Horse, Zebra),
+  Dog = Spa, Snails = Gold, next(Chest, Fox), next(Kool, Horse).
+
+# Turn the solved positions back into names.
+nation_at(Eng, "Englishman") :- sol(Eng, _, _, _, _, _, _).
+nation_at(Spa, "Spaniard")   :- sol(_, Spa, _, _, _, _, _).
+nation_at(Ukr, "Ukrainian")  :- sol(_, _, Ukr, _, _, _, _).
+nation_at(Nor, "Norwegian")  :- sol(_, _, _, Nor, _, _, _).
+nation_at(Jap, "Japanese")   :- sol(_, _, _, _, Jap, _, _).
+
+answer("drinks water", Who) :- sol(_, _, _, _, _, Water, _), nation_at(Water, Who).
+answer("owns the zebra", Who) :- sol(_, _, _, _, _, _, Zebra), nation_at(Zebra, Who).
+
+?- answer(Question, Who).

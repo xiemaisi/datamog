@@ -1,0 +1,171 @@
+[
+  [
+    {
+      "WA": "blue",
+      "NT": "green",
+      "SA": "red",
+      "Q": "blue",
+      "NSW": "green",
+      "V": "blue",
+      "T": "blue"
+    },
+    {
+      "WA": "blue",
+      "NT": "green",
+      "SA": "red",
+      "Q": "blue",
+      "NSW": "green",
+      "V": "blue",
+      "T": "green"
+    },
+    {
+      "WA": "blue",
+      "NT": "green",
+      "SA": "red",
+      "Q": "blue",
+      "NSW": "green",
+      "V": "blue",
+      "T": "red"
+    },
+    {
+      "WA": "blue",
+      "NT": "red",
+      "SA": "green",
+      "Q": "blue",
+      "NSW": "red",
+      "V": "blue",
+      "T": "blue"
+    },
+    {
+      "WA": "blue",
+      "NT": "red",
+      "SA": "green",
+      "Q": "blue",
+      "NSW": "red",
+      "V": "blue",
+      "T": "green"
+    },
+    {
+      "WA": "blue",
+      "NT": "red",
+      "SA": "green",
+      "Q": "blue",
+      "NSW": "red",
+      "V": "blue",
+      "T": "red"
+    },
+    {
+      "WA": "green",
+      "NT": "blue",
+      "SA": "red",
+      "Q": "green",
+      "NSW": "blue",
+      "V": "green",
+      "T": "blue"
+    },
+    {
+      "WA": "green",
+      "NT": "blue",
+      "SA": "red",
+      "Q": "green",
+      "NSW": "blue",
+      "V": "green",
+      "T": "green"
+    },
+    {
+      "WA": "green",
+      "NT": "blue",
+      "SA": "red",
+      "Q": "green",
+      "NSW": "blue",
+      "V": "green",
+      "T": "red"
+    },
+    {
+      "WA": "green",
+      "NT": "red",
+      "SA": "blue",
+      "Q": "green",
+      "NSW": "red",
+      "V": "green",
+      "T": "blue"
+    },
+    {
+      "WA": "green",
+      "NT": "red",
+      "SA": "blue",
+      "Q": "green",
+      "NSW": "red",
+      "V": "green",
+      "T": "green"
+    },
+    {
+      "WA": "green",
+      "NT": "red",
+      "SA": "blue",
+      "Q": "green",
+      "NSW": "red",
+      "V": "green",
+      "T": "red"
+    },
+    {
+      "WA": "red",
+      "NT": "blue",
+      "SA": "green",
+      "Q": "red",
+      "NSW": "blue",
+      "V": "red",
+      "T": "blue"
+    },
+    {
+      "WA": "red",
+      "NT": "blue",
+      "SA": "green",
+      "Q": "red",
+      "NSW": "blue",
+      "V": "red",
+      "T": "green"
+    },
+    {
+      "WA": "red",
+      "NT": "blue",
+      "SA": "green",
+      "Q": "red",
+      "NSW": "blue",
+      "V": "red",
+      "T": "red"
+    },
+    {
+      "WA": "red",
+      "NT": "green",
+      "SA": "blue",
+      "Q": "red",
+      "NSW": "green",
+      "V": "red",
+      "T": "blue"
+    },
+    {
+      "WA": "red",
+      "NT": "green",
+      "SA": "blue",
+      "Q": "red",
+      "NSW": "green",
+      "V": "red",
+      "T": "green"
+    },
+    {
+      "WA": "red",
+      "NT": "green",
+      "SA": "blue",
+      "Q": "red",
+      "NSW": "green",
+      "V": "red",
+      "T": "red"
+    }
+  ],
+  [
+    {
+      "count": 18
+    }
+  ]
+]

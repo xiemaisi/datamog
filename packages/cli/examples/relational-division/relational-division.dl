@@ -1,0 +1,35 @@
+# Relational division
+#
+# Adapted from the Datalog Educational System (DES) by Fernando Saenz-Perez,
+# which offers division as a built-in operator (its manual, section 4.1.14).
+#
+# "Which employees work on *every* project that smith works on?" That is a
+# universally quantified question, and Datalog has no universal quantifier.
+# The standard move is to negate twice: instead of "E covers every project",
+# ask for "no project that E fails to cover, and none of those exist".
+#
+# The `missing` rule is where the work happens. It pairs each employee with
+# each of smith's projects and keeps the pairs the employee does *not* work
+# on — the counterexamples. An employee with no counterexamples divides.
+#
+# Note that `employee(E)` has to come before `not work(E, P)`: negation
+# filters, it never binds, so E and P must already be bound when it runs.
+
+work("smith", "alpha").
+work("smith", "beta").
+work("jones", "alpha").
+work("jones", "beta").
+work("jones", "gamma").
+work("brown", "alpha").
+work("white", "gamma").
+
+employee(E) :- work(E, _).
+smith_project(P) :- work("smith", P).
+
+missing(E, P) :- employee(E), smith_project(P), not work(E, P).
+
+covers(E) :- employee(E), not missing(E, _).
+
+?- covers(Employee).
+
+output predicate counterexample(E, P) :- missing(E, P).

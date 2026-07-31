@@ -1,0 +1,5 @@
+{
+  "name": "Map Colouring",
+  "description": "Colour the Australian states so no neighbours clash: generate-and-test in one rule",
+  "order": 47
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Relational Algebra",
+  "description": "Projection, selection, product, join, union, difference and the outer joins, as rules",
+  "order": 51
+}

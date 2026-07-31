@@ -1,0 +1,99 @@
+[
+  [
+    {
+      "Step": 8,
+      "Disc": 4,
+      "From": "a",
+      "To": "c"
+    },
+    {
+      "Step": 4,
+      "Disc": 3,
+      "From": "a",
+      "To": "b"
+    },
+    {
+      "Step": 12,
+      "Disc": 3,
+      "From": "b",
+      "To": "c"
+    },
+    {
+      "Step": 2,
+      "Disc": 2,
+      "From": "a",
+      "To": "c"
+    },
+    {
+      "Step": 6,
+      "Disc": 2,
+      "From": "c",
+      "To": "b"
+    },
+    {
+      "Step": 10,
+      "Disc": 2,
+      "From": "b",
+      "To": "a"
+    },
+    {
+      "Step": 14,
+      "Disc": 2,
+      "From": "a",
+      "To": "c"
+    },
+    {
+      "Step": 1,
+      "Disc": 1,
+      "From": "a",
+      "To": "b"
+    },
+    {
+      "Step": 3,
+      "Disc": 1,
+      "From": "b",
+      "To": "c"
+    },
+    {
+      "Step": 5,
+      "Disc": 1,
+      "From": "c",
+      "To": "a"
+    },
+    {
+      "Step": 7,
+      "Disc": 1,
+      "From": "a",
+      "To": "b"
+    },
+    {
+      "Step": 9,
+      "Disc": 1,
+      "From": "b",
+      "To": "c"
+    },
+    {
+      "Step": 11,
+      "Disc": 1,
+      "From": "c",
+      "To": "a"
+    },
+    {
+      "Step": 13,
+      "Disc": 1,
+      "From": "a",
+      "To": "b"
+    },
+    {
+      "Step": 15,
+      "Disc": 1,
+      "From": "b",
+      "To": "c"
+    }
+  ],
+  [
+    {
+      "count": 15
+    }
+  ]
+]

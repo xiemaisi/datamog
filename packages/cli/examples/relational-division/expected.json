@@ -1,0 +1,24 @@
+[
+  [
+    {
+      "Employee": "jones"
+    },
+    {
+      "Employee": "smith"
+    }
+  ],
+  [
+    {
+      "E": "white",
+      "P": "alpha"
+    },
+    {
+      "E": "brown",
+      "P": "beta"
+    },
+    {
+      "E": "white",
+      "P": "beta"
+    }
+  ]
+]

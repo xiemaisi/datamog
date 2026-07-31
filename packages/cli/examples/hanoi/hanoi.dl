@@ -1,0 +1,41 @@
+# Towers of Hanoi — with the actual move sequence
+#
+# Adapted from the Datalog Educational System (DES) by Fernando Saenz-Perez.
+#
+# DES's version answers only "is it solvable"; the moves stay hidden in the
+# extension table. Numbering the moves makes them a query result instead.
+#
+# task(N, From, To, Via, Off) means "move N discs from From to To, using Via
+# as the spare peg", and it occupies steps Off+1 .. Off+2^N-1. Such a task
+# splits into three parts:
+#
+#   1. move the top N-1 discs From -> Via   (steps Off+1 .. Off+2^(N-1)-1)
+#   2. move disc N From -> To               (step  Off+2^(N-1))
+#   3. move the top N-1 discs Via -> To     (the rest)
+#
+# Each rule below mentions `task` exactly once, so this is *linear*
+# recursion and runs on every backend, SQL ones included.
+
+discs(4).
+
+# Powers of two, so a task knows where its own middle move falls.
+pow2(0, 1).
+pow2(N, P) :- pow2(N0, P0), N = N0 + 1, N <= 12, P = P0 * 2.
+
+task(N, "a", "c", "b", 0) :- discs(N).
+
+# Part 1: the sub-task that runs before the big disc moves.
+task(N1, From, Via, To, Off) :-
+  task(N, From, To, Via, Off), N > 1, N1 = N - 1.
+
+# Part 3: the sub-task that runs after it, offset past part 1 and the move.
+task(N1, Via, To, From, S) :-
+  task(N, From, To, Via, Off), N > 1, N1 = N - 1, pow2(N1, P), S = Off + P.
+
+# Part 2: every task contributes exactly one move, its largest disc.
+move(S, N, From, To) :-
+  task(N, From, To, _, Off), N1 = N - 1, pow2(N1, P), S = Off + P.
+
+?- move(Step, Disc, From, To).
+
+output predicate total(count(*)) :- move(_, _, _, _).

@@ -1,0 +1,27 @@
+# The prison guards
+#
+# Adapted from the Ciao Prolog example collection.
+#
+# A corridor of 100 locked cells and 100 guards. Guard 1 turns the key in
+# every cell, guard 2 in every second cell, guard 3 in every third, and so
+# on. Turning the key on a locked door unlocks it and vice versa. Which
+# doors are unlocked when the last guard has walked past?
+#
+# A door ends unlocked exactly when its key was turned an odd number of
+# times, and cell C is turned by guard G whenever G divides C. So the
+# question is really "which numbers have an odd number of divisors" — and
+# the answer is a nice one.
+
+cell(C) :- C in [1 .. 100].
+guard(G) :- G in [1 .. 100].
+
+turn(G, C) :- guard(G), cell(C), C % G == 0.
+
+# Aggregating over `turn` groups by the non-aggregate head argument, C.
+turns(C, count(*)) :- turn(_, C).
+
+unlocked(C) :- turns(C, K), K % 2 == 1.
+
+?- unlocked(Cell).
+
+output predicate how_many(count(*)) :- unlocked(_).

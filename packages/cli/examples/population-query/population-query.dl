@@ -1,0 +1,29 @@
+# Population density query
+#
+# Adapted from `population_query.pl` in the Ciao Prolog example collection,
+# where it is one of the standard Prolog benchmarks.
+#
+# Two tables, a derived view, and a self-join with an arithmetic condition —
+# the shape most real deductive-database queries have. Find every pair of
+# countries whose population densities are within 5% of each other, with the
+# denser one named first.
+#
+# Populations are in units of 100 000 people and areas in thousands of
+# square miles, so density is scaled by 100 to keep it an integer; `/` on
+# two integers truncates. The 5% band is written `20 * D1 < 21 * D2` rather
+# than `D1 / D2 < 1.05` so the comparison stays in integer arithmetic.
+
+input predicate population(country: string, people: integer).
+input predicate area(country: string, sq_miles: integer).
+
+density(C, D) :- population(C, P), area(C, A), D = P * 100 / A.
+
+close_pair(C1, D1, C2, D2) :-
+  density(C1, D1), density(C2, D2),
+  D1 > D2,
+  20 * D1 < 21 * D2.
+
+?- close_pair(Denser, D1, Sparser, D2).
+
+top(max(D)) :- density(_, D).
+output predicate densest(C, D) :- density(C, D), top(D).
