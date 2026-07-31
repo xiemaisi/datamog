@@ -1,5 +1,5 @@
 {
   "name": "Meta-Interpreter",
-  "description": "Horn clauses stored as data and interpreted by rules, and why the body length is bounded",
+  "description": "Horn clauses stored as data and interpreted by rules, with premises matched a prefix at a time",
   "order": 85
 }

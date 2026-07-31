@@ -7,10 +7,15 @@
 # This is a well-known tautology (one of Łukasiewicz's axiom schemas).
 #
 # Formulas are evaluated bottom-up: each subformula gets its own
-# predicate, composed from the truth tables of the connectives.
-# This avoids recursion, which would require non-linear recursive
-# CTEs (evaluating a binary connective needs values of both children)
-# — something neither SQLite nor Postgres supports.
+# predicate, composed from the truth tables of the connectives. The
+# formula is therefore fixed at write time, one predicate per node.
+#
+# A recursive evaluator over a formula supplied as data is perfectly
+# expressible: `expr-eval` writes one over an AST, and `evaluate-formula`
+# one that works straight from the formula's text. Both need non-linear
+# recursion, since a binary connective needs the values of both children,
+# so both run on the in-memory backends only. Unrolling by hand is what
+# lets this example run on every backend, the SQL ones included.
 
 # --- Truth tables for connectives ---
 

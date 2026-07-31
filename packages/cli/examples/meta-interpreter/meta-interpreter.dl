@@ -9,7 +9,7 @@
 # A clause is `kb(Id, Head, Premises)` with the premises in an array `value`.
 # `derived` is the interpreter: a head holds when all of its premises hold.
 #
-# WHY THE ARITY LADDER. The natural way to say "all premises hold" is to
+# WHY THE PREFIX COUNTER. The natural way to say "all premises hold" is to
 # find a premise that does not and rule the clause out:
 #
 #   premise(Id, A) :- kb(Id, _, B), array_element(B, _, V), A = as_string(V).
@@ -19,15 +19,18 @@
 # That is the double-negation trick from `relational-division`, and here it
 # does not work: `derived` now depends on `unmet`, which depends negatively
 # on `derived`, so negation sits inside a recursive cycle and the program is
-# not stratifiable. Counting the met premises and comparing against the total
-# fails the same way, because it recurses through an aggregate. So the
-# interpreter matches premises positionally instead, one rule per body
-# length, and only handles clauses up to the longest ladder rung written out.
-# That is the honest cost of a meta-interpreter without recursion through
-# negation.
+# not stratifiable. Counting the met premises with an aggregate and comparing
+# against the total fails the same way.
 #
-# Two or three `derived` atoms in one rule body makes this non-linear
-# recursion, so it runs on the in-memory backends only.
+# So the interpreter walks the premise array positionally instead.
+# `body_derived(Clause, N)` means the first N premises hold; it starts at 0
+# and extends one element at a time, and a head is derived once the prefix
+# reaches `length(B)`. Positive recursion and arithmetic only, and no bound
+# on how many premises a clause may have.
+#
+# `derived` and `body_derived` are mutually recursive, and the step rule has
+# two atoms from that cycle in its body, so this is non-linear recursion and
+# runs on the in-memory backends only.
 
 kb(1, "rained", []).
 kb(2, "cold", []).
@@ -37,18 +40,12 @@ kb(5, "slippery", ["wet_grass", "cold"]).
 kb(6, "accident", ["slippery", "driving", "fast"]).
 kb(7, "insurance_claim", ["accident"]).
 
-derived(H) :- kb(_, H, B), length(B) == 0.
+body_atom_derived(Clause, N) :- kb(Clause, _, B), array_element(B, N, V), A = as_string(V), derived(A).
 
-derived(H) :- kb(_, H, B), length(B) == 1,
-  A0 = as_string(B[0]), derived(A0).
+body_derived(Clause, 0) :- kb(Clause, _, _).
+body_derived(Clause, N + 1) :- body_derived(Clause, N), body_atom_derived(Clause, N).
 
-derived(H) :- kb(_, H, B), length(B) == 2,
-  A0 = as_string(B[0]), A1 = as_string(B[1]),
-  derived(A0), derived(A1).
-
-derived(H) :- kb(_, H, B), length(B) == 3,
-  A0 = as_string(B[0]), A1 = as_string(B[1]), A2 = as_string(B[2]),
-  derived(A0), derived(A1), derived(A2).
+derived(H) :- kb(Clause, H, B), body_derived(Clause, length(B)).
 
 ?- derived(Conclusion).
 

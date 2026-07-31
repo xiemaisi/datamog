@@ -6,12 +6,17 @@
 # Place a queen in every column of a 6x6 board so that no two share a row or
 # a diagonal. There are four ways to do it.
 #
-# Datalog has no lists, so the board cannot be one value that grows. Instead
-# each partial solution is its own predicate: `q3(A, B, C)` holds the safe
+# Each partial solution is its own predicate: `q3(A, B, C)` holds the safe
 # placements for the first three columns, one column per argument. Widening
 # by one column is one rule, and because the new queen's constraints sit in
 # the same rule as its generator, the join prunes as it goes rather than
 # building the full 6^6 product first.
+#
+# The board could instead be a proof-term list that grows a column at a time,
+# the way `list-ops` builds lists. That makes the board size data rather than
+# a rung count, and it still prunes, but it is not worth it here: the list
+# version is non-linear recursion, so it loses the SQL backends, and it runs
+# about ten times slower.
 #
 # Two queens in columns that are D apart are safe when their rows differ and
 # their row difference is not D. Precomputing that as a relation keeps the
