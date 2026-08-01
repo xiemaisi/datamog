@@ -32,3 +32,20 @@ describe("playground examples", () => {
     });
   }
 });
+
+// `native-only` marks an example no SQL backend can run (non-linear recursion,
+// or parity-stratified recursion). The CLI example suite keys its skips off
+// this marker; `src/examples/index.ts` globs the same file so the app can
+// switch to an interpreter when one is loaded. That wiring only exists after
+// Vite resolves the glob, so it is tested in the browser by
+// `e2e/native-only-example.e2e.ts`. What is worth asserting here is that the
+// marker is actually in play: with no registered example carrying it, the e2e
+// test would pass vacuously.
+describe("playground examples: native-only marker", () => {
+  test("some registered examples are native-only", () => {
+    const nativeOnly = registered.filter((dir) =>
+      existsSync(join(CLI_EXAMPLES, dir, "native-only")),
+    );
+    expect(nativeOnly.length).toBeGreaterThan(0);
+  });
+});

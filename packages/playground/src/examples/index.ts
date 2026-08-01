@@ -7,6 +7,14 @@ export interface Example {
   csvData?: Record<string, string>;
   jsonlData?: Record<string, string>;
   csvUrlData?: Record<string, string>;
+  /**
+   * No SQL backend can run this program: it uses non-linear recursion or
+   * parity-stratified recursion. Read from the `native-only` marker file the
+   * CLI example suite already keys off, so the fact lives in one place. The
+   * app switches to an interpreter when such an example is loaded, rather than
+   * letting the user land on a translation error they did not ask for.
+   */
+  nativeOnly?: boolean;
 }
 
 // Playground metadata, authored per example as a `playground.json` file in its
@@ -43,6 +51,12 @@ const csvFiles = import.meta.glob<string>("../../../cli/examples/*/*.csv", {
   eager: true,
 });
 const jsonlFiles = import.meta.glob<string>("../../../cli/examples/*/*.jsonl", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+// The marker is an empty file, so only its presence matters.
+const nativeOnlyMarkers = import.meta.glob("../../../cli/examples/*/native-only", {
   query: "?raw",
   import: "default",
   eager: true,
@@ -87,6 +101,7 @@ function loadExample(dir: string, meta: PlaygroundMeta): Example {
     source,
     csvData: override ?? dataFilesFor(dir, csvFiles, "csv"),
     jsonlData: dataFilesFor(dir, jsonlFiles, "jsonl"),
+    nativeOnly: `${EXAMPLE_PREFIX}${dir}/native-only` in nativeOnlyMarkers,
   };
 }
 

@@ -24,7 +24,10 @@ import "./styles/playground.css";
 // the native and seminaive backends interpret Datalog directly. Postgres
 // can only show generated SQL.
 const RUNNABLE_BACKENDS: ReadonlySet<BackendName> = new Set(["sqlite", "native", "seminaive"]);
-const STEP_BACKENDS: ReadonlySet<BackendName> = new Set(["native", "seminaive"]);
+// Backends that evaluate Datalog directly instead of translating it to SQL.
+// The same set answers two questions: only an interpreter can produce a step
+// trace, and only an interpreter can run a program no SQL dialect accepts.
+const INTERPRETED_BACKENDS: ReadonlySet<BackendName> = new Set(["native", "seminaive"]);
 
 interface ExtDecl {
   predicate: string;
@@ -301,9 +304,9 @@ export function App() {
     setError(null);
     setRunNotice(null);
     setResults(null);
-    if (STEP_BACKENDS.has(current)) setStepResult(null);
+    if (INTERPRETED_BACKENDS.has(current)) setStepResult(null);
     try {
-      if (STEP_BACKENDS.has(current)) {
+      if (INTERPRETED_BACKENDS.has(current)) {
         // The native/seminaive backends give us results + a trace in one call.
         const stepOut = await bridge.step(
           sourceRef.current,
@@ -346,7 +349,7 @@ export function App() {
 
   const fetchSqlFor = useCallback(async (target: BackendName) => {
     // Native / seminaive don't produce SQL; callers should avoid this path for them.
-    if (STEP_BACKENDS.has(target)) return;
+    if (INTERPRETED_BACKENDS.has(target)) return;
     setError(null);
     try {
       const result = await bridge.dryRun(sourceRef.current, target);
@@ -374,19 +377,29 @@ export function App() {
     setStepResult(null);
   }, []);
 
-  const loadExample = useCallback((index: number) => {
-    const ex = examples[index]!;
-    setSource(ex.source);
-    setCsvData(ex.csvData ?? {});
-    setJsonlData(ex.jsonlData ?? {});
-    setCsvUrlData(ex.csvUrlData ?? {});
-    setResults(null);
-    setSqlResult(null);
-    setStepResult(null);
-    setError(null);
-    setHoveredRange(null);
-    setActiveTab("results");
-  }, []);
+  const loadExample = useCallback(
+    (index: number) => {
+      const ex = examples[index]!;
+      // No SQL backend can run a native-only example, so loading one while a
+      // SQL backend is selected would answer with a translation error rather
+      // than the program. Switch to the interpreter instead: the selector
+      // updates in place, so the change is visible and reversible.
+      if (ex.nativeOnly && !INTERPRETED_BACKENDS.has(backendRef.current)) {
+        handleBackendChange("native");
+      }
+      setSource(ex.source);
+      setCsvData(ex.csvData ?? {});
+      setJsonlData(ex.jsonlData ?? {});
+      setCsvUrlData(ex.csvUrlData ?? {});
+      setResults(null);
+      setSqlResult(null);
+      setStepResult(null);
+      setError(null);
+      setHoveredRange(null);
+      setActiveTab("results");
+    },
+    [handleBackendChange],
+  );
 
   const extensionals = extractExtensionals(source);
 
