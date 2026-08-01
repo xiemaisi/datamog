@@ -69,11 +69,14 @@ test.describe("embed mini-playground", () => {
 
   test("the result popover dismisses on an outside click", async ({ page }) => {
     await page.goto("/embed-demo.html");
+    const popover = page.locator(".datamog-embed-result-popover");
     await page.locator(".datamog-embed").first().locator(".datamog-embed-runquery").click();
-    await expect(page.locator(".datamog-embed-result-popover")).toBeVisible();
-    // Click well away from the popover and its anchor.
-    await page.mouse.click(5, 5);
-    await expect(page.locator(".datamog-embed-result-popover")).toHaveCount(0);
+    await expect(popover.locator(".datamog-embed-table")).toBeVisible();
+    // Click an element well away from the popover and its anchor. A raw
+    // `mouse.click(5, 5)` is dispatched at viewport coordinates with no
+    // actionability wait, and was intermittently not delivered at all.
+    await page.getByRole("heading", { name: "Datamog embed" }).click();
+    await expect(popover).toHaveCount(0);
   });
 
   test("the data popover uses the predicate's fixed format (no selector)", async ({ page }) => {
