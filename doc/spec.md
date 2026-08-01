@@ -190,6 +190,7 @@ Query:         ?-
 Constraint:    !-
 Binding:       :=
 Constructor:   ::
+Maximal:       ^        (postfix, on a predicate name)
 Range:         ..
 Grouping:      (  )  [  ]
 Separators:    ,  :  .
@@ -198,6 +199,11 @@ Separators:    ,  :  .
 `=`/`<>` are *logical* equality and inequality (null-aware); `==`/`!=`
 are *computational* (3VL — see §5.4). Body-level Equality reuses the
 logical operator and can bind an unbound bare variable on either side.
+
+`^` serves twice. Between two expressions it is bitwise XOR; immediately after
+a predicate name and before its argument list (`bad^(E)`) it marks the
+predicate **maximal** (§4.3). The positions do not overlap, so no expression
+changes meaning.
 
 ### 1.8 Namespaces
 
@@ -335,7 +341,7 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 
 ```
 Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
-HeadAtom    ::= Identifier '(' (HeadTerm (',' HeadTerm)*)? ')'
+HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm    ::= (AggregateCall | Expression) (':' PrimitiveType)?
 ```
 
@@ -456,14 +462,15 @@ BodyElement ::= Literal | Equality | RangeAtom | Filter
 
 ```
 Literal     ::= ('not')? Atom
-Atom        ::= Identifier '(' (Expression (',' Expression)*)? ')'
+Atom        ::= Identifier '^'? '(' (Expression (',' Expression)*)? ')'
 ```
 
 The `Atom` here is a predicate application `p(...)`. A predicate
 **literal** is either a positive atom or a negated atom (`not p(...)`): a
 positive atom tests membership in a predicate, a negated atom tests
-non-membership. Negation-as-failure is subject to stratification
-constraints (Section 4.3).
+non-membership. Negation-as-failure is subject to the polarity
+constraints of Section 4.3, which is also where the `^` sigil is defined;
+an atom must spell it exactly as the predicate's rules do.
 
 ```
 ancestor(X, Y)           # positive literal (an atom)
@@ -1167,7 +1174,7 @@ Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)  
 Actual         ::= Identifier '=' Identifier
 
 Rule           ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
-HeadAtom       ::= Identifier '(' (HeadTerm (',' HeadTerm)*)? ')'
+HeadAtom       ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm       ::= (AggregateCall | Expression) (':' PrimitiveType)?
 AggregateCall  ::= IDENT '(' Expression ')'
 
@@ -1176,7 +1183,7 @@ Constraint     ::= '!-' BodyElement (',' BodyElement)* '.'
 
 BodyElement    ::= Literal | Equality | RangeAtom | Filter
 Literal        ::= ('not')? Atom
-Atom           ::= Identifier '(' (Expression (',' Expression)*)? ')'
+Atom           ::= Identifier '^'? '(' (Expression (',' Expression)*)? ')'
 Equality       ::= Addition '=' Expression
 RangeAtom      ::= Expression 'in' '[' Expression '..' Expression ']'
 Filter         ::= ('not')? Expression
@@ -1266,15 +1273,30 @@ foo(X) :- not bar(X, Y).              # ERROR: Y in negation must be safe
 - All uses of a predicate (in rule bodies and queries) must match its
   declared arity.
 
-### 4.3 Stratification
+### 4.3 Stratification and polarity
 
-Datamog enforces **stratified negation**: if predicate `p` negatively
-depends on predicate `q` (i.e. some rule for `p` contains `not q(...)`),
-then `q` must not depend (directly or transitively) on `p`. In other words,
-negation may not occur within a strongly connected component of the
-predicate dependency graph.
+Every predicate has a **polarity**. A predicate whose name carries the postfix
+`^` sigil is **maximal**; every other predicate is **minimal**, which is the
+default. The sigil is written at every occurrence of the name -- rule heads,
+body literals, and queries -- and all of them must agree, since the definition
+claims the polarity and each call site repeats the claim. It is not part of the
+name: `bad` and `bad^` cannot be two predicates, module wiring and constructor
+qualifiers use the bare name, and only labels (query output, `--all`, the REPL)
+show the sigil.
 
-**Allowed** (stratified):
+Within one strongly connected component of the dependency graph:
+
+- a **positive** body atom must name a predicate of the **same** polarity;
+- a **negated** body atom must name one of the **opposite** polarity.
+
+Outside an SCC there is no restriction: negation across strata is unrestricted,
+and a later stratum may read a maximal predicate positively.
+
+With no sigil anywhere the second rule can never be satisfied, so this
+degenerates to classical **stratified negation**: negation may not occur within
+an SCC.
+
+**Allowed** (stratified, no sigil needed):
 
 ```
 reachable(X) :- edge("a", X).
@@ -1284,12 +1306,59 @@ frontier(X) :- reachable(X), not has_outgoing(X).
 # depend on frontier.
 ```
 
-**Forbidden** (unstratified):
+**Forbidden** (one negation around the cycle):
 
 ```
 p(X) :- not q(X).
-q(X) :- not p(X).     # ERROR: circular negative dependency
+q(X) :- not p(X).     # ERROR: same polarity on both ends of a negated call
 ```
+
+**Allowed** (parity-stratified: two negations around the cycle):
+
+```
+constant(E) :- literal(E).
+constant(E) :- composite(E), not has_nonconstant_child^(E).
+has_nonconstant_child^(E) :- child(E, C), not constant(C).
+```
+
+The rules above are local, but they imply the global condition: following a
+cycle flips polarity exactly at its negated edges, and returning to the start
+takes an even number of flips. A cycle may therefore cross only an even number
+of negations, and the sigil additionally records *which* side starts at ⊤.
+
+**Semantics.** A stratum holding both polarities is evaluated by an
+**alternating fixed point**. Write `U` for the tuples of its minimal
+predicates and `V` for those of its maximal predicates:
+
+```
+V₀ = ⊤                     every maximal predicate holds of every tuple
+U₁ = lfp F(·, V₀)          minimal side, maximal side frozen
+V₁ = lfp G(U₁, ·)          maximal side, minimal side frozen
+U₂ = lfp F(·, V₁)
+...
+```
+
+`U` increases and `V` decreases; iteration stops when `V` stops changing, at
+which point `U` is already at its fixed point for that `V`. Both sides are
+*least* fixed points within a round, so positive recursion inside the maximal
+class means what it always does; `^` sets a predicate's starting value, it does
+not make it a greatest fixed point.
+
+`⊤` is never materialised. The polarity rules guarantee that the only atoms
+which can observe a maximal predicate at `⊤` are negated ones, and those simply
+fail, so no rule ever enumerates it. Variable safety (§4.1) is therefore
+unchanged: every positive body atom still reads a finite relation.
+
+The choice of which side carries the sigil is a modelling decision, not a
+detail. Both assignments satisfy the parity condition and they generally
+compute different answers, the minimal side being the one that must prove
+itself. See `examples/purity`.
+
+A sigil on a predicate whose SCC holds only one polarity has no effect, since
+nothing reads it at `⊤`. It is accepted and reported as a warning.
+
+Parity-stratified strata are rejected by every SQL backend (§6.1) and run on
+`native` and `seminaive`.
 
 ### 4.4 Recursion
 
@@ -1321,6 +1390,11 @@ iteration's delta, computing the correct fixed point.
 
 **Mutually recursive** predicates (predicates that depend on each other)
 are compiled together into a shared recursive CTE block.
+
+A **parity-stratified** predicate is recursive through an even number of
+negations (§4.3). Its stratum is evaluated by an alternating fixed point rather
+than a single least fixed point, which no SQL dialect can express, so the SQL
+backends reject it and the `native` / `seminaive` evaluators run it.
 
 ### 4.5 Aggregate Constraints
 
@@ -1875,6 +1949,13 @@ changes only what the executor does with a non-empty result.
 
 IDB column names use the convention `col1`, `col2`, ..., `colN`. EDB
 column names use the declared names from the extensional declaration.
+
+Two shapes have no SQL translation and are rejected here rather than
+mistranslated: non-linear recursion (§4.4) and parity-stratified recursion
+(§4.3). The latter needs an outer loop that rebuilds a relation from empty
+between rounds, where `WITH RECURSIVE` computes one least fixed point of a
+monotone body and cannot delete. A sigil whose stratum holds only one polarity
+has no effect on evaluation and compiles normally.
 
 ### 6.2 Rule Translation
 

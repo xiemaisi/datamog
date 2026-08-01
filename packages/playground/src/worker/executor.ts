@@ -6,6 +6,7 @@ import { SqliteSqlDialect } from "datamog-backend-sqlite/dialect";
 import { sqljsBackendForDatabase } from "datamog-backend-sqljs";
 import {
   AnalyzerError,
+  findInertPolarity,
   findInfiniteRisks,
   findPredicateReferences,
   findRecursiveCalls,
@@ -394,21 +395,30 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     try {
       const typed = DatamogExecutor.prepare(msg.source);
       // Errors above are throws; warnings are static-analysis findings
-      // returned as data. Surface `findInfiniteRisks` results as
-      // severity:"warning" diagnostics so the editor renders them as
-      // yellow squigglies instead of red.
-      const diagnostics = findInfiniteRisks(typed).map((d) => ({
-        message: d.message,
-        from: d.offset,
-        to: d.end,
-        severity: "warning" as const,
-        cycle: d.cycle
-          ? {
-              kind: "finiteness" as const,
-              cycle: elideCycleLabels(d.cycle, msg.source),
-            }
-          : undefined,
-      }));
+      // returned as data. Surface `findInertPolarity` and `findInfiniteRisks`
+      // results as severity:"warning" diagnostics so the editor renders them
+      // as yellow squigglies instead of red.
+      const diagnostics = [
+        ...findInertPolarity(typed).map((d) => ({
+          message: d.message,
+          from: d.offset,
+          to: d.end,
+          severity: "warning" as const,
+          cycle: undefined,
+        })),
+        ...findInfiniteRisks(typed).map((d) => ({
+          message: d.message,
+          from: d.offset,
+          to: d.end,
+          severity: "warning" as const,
+          cycle: d.cycle
+            ? {
+                kind: "finiteness" as const,
+                cycle: elideCycleLabels(d.cycle, msg.source),
+              }
+            : undefined,
+        })),
+      ];
       // Recursive-call spans drive the editor's superscript glyph
       // after each body atom that loops back into its rule's SCC.
       const recursiveCalls = findRecursiveCalls(typed).map((c) => ({

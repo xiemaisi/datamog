@@ -718,6 +718,16 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             }
           },
           {
+            "$type": "Assignment",
+            "feature": "maximal",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "^"
+            },
+            "cardinality": "?"
+          },
+          {
             "$type": "Keyword",
             "value": "("
           },
@@ -953,6 +963,16 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 }
               },
               {
+                "$type": "Assignment",
+                "feature": "maximal",
+                "operator": "?=",
+                "terminal": {
+                  "$type": "Keyword",
+                  "value": "^"
+                },
+                "cardinality": "?"
+              },
+              {
                 "$type": "Group",
                 "elements": [
                   {
@@ -1037,6 +1057,16 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                   },
                   "arguments": []
                 }
+              },
+              {
+                "$type": "Assignment",
+                "feature": "maximal",
+                "operator": "?=",
+                "terminal": {
+                  "$type": "Keyword",
+                  "value": "^"
+                },
+                "cardinality": "?"
               },
               {
                 "$type": "Assignment",

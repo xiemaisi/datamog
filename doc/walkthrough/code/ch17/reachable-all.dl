@@ -1,0 +1,17 @@
+# Chapter 17, exercise 17.1 — this program is rejected as written.
+#
+# "A node is safe if it is a sink, or every node it points at is safe."
+# Put the sigil where it belongs, then try it on the other predicate.
+
+node("a"). node("b"). node("c"). node("bad").
+edge("a", "b"). edge("b", "c"). edge("a", "bad").
+
+sink(N) :- node(N), not has_successor(N).
+has_successor(N) :- edge(N, _).
+
+safe(N) :- sink(N), N <> "bad".
+safe(N) :- has_successor(N), not has_unsafe_successor(N).
+
+has_unsafe_successor(N) :- edge(N, M), not safe(M).
+
+?- safe(N).

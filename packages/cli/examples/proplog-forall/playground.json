@@ -1,0 +1,5 @@
+{
+  "name": "Proplog: every premise",
+  "description": "The Proplog interpreter again, saying \"all premises hold\" directly instead of counting a prefix",
+  "order": 87
+}

@@ -1,0 +1,7 @@
+parent,kid
+add,n1
+add,n2
+mul_x,add
+mul_x,x
+mul_4,add
+mul_4,n4

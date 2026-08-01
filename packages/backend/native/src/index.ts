@@ -18,6 +18,7 @@ import type { TraceCallback } from "./trace.ts";
 export {
   BaseDatalogEvaluator,
   type EvaluatorOptions,
+  type FixpointOptions,
   type IterationCapInfo,
 } from "./base-evaluator.ts";
 export { NaiveEvaluator } from "./evaluator.ts";
@@ -28,6 +29,7 @@ export {
   type Step,
   addRow,
   buildVarTypes,
+  clearRelation,
   enumerate,
   evalAggregate,
   makeRelation,

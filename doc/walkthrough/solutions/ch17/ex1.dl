@@ -1,0 +1,27 @@
+# Solution 17.1 — the sigil goes on `has_unsafe_successor`.
+#
+# `safe` is the predicate you are trying to establish, so it is the one that
+# should have to earn its tuples: minimal, starting empty. The helper is the
+# counterexample finder, so it is the anti-monotone side and takes the `^`.
+#
+# Putting the sigil on `safe` instead is rejected outright here, because
+# `sink(N)` and `has_successor(N)` are positive calls into predicates outside
+# the cycle -- fine -- but `safe` would then be maximal while
+# `has_unsafe_successor` stayed minimal only if you moved *both* markers. Move
+# both and the program is accepted but answers a different question: every
+# node is safe until something proves otherwise, so a cycle of nodes pointing
+# at each other would come out safe rather than unsafe.
+
+node("a"). node("b"). node("c"). node("bad").
+edge("a", "b"). edge("b", "c"). edge("a", "bad").
+
+sink(N) :- node(N), not has_successor(N).
+has_successor(N) :- edge(N, _).
+
+safe(N) :- sink(N), N <> "bad".
+safe(N) :- has_successor(N), not has_unsafe_successor^(N).
+
+has_unsafe_successor^(N) :- edge(N, M), not safe(M).
+
+# b and c are safe; a is not, because it can reach `bad`.
+?- safe(N).

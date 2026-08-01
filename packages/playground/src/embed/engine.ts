@@ -9,7 +9,7 @@ import {
   formatIterationCap,
 } from "datamog-backend-native";
 import { create as createSeminaive } from "datamog-backend-seminaive";
-import { AnalyzerError, findInfiniteRisks } from "datamog-core";
+import { AnalyzerError, findInertPolarity, findInfiniteRisks } from "datamog-core";
 import { DatamogExecutor, type QueryResult } from "datamog-engine";
 import { ParseError } from "datamog-parser";
 import { InMemoryCsvLoader } from "../lib/csv-loader.ts";
@@ -50,10 +50,13 @@ export interface EmbedLintResult {
 export function lintSource(source: string): EmbedLintResult {
   try {
     const typed = DatamogExecutor.prepare(source);
-    const diagnostics: SimpleDiagnostic[] = findInfiniteRisks(typed).map((d) => ({
+    const diagnostics: SimpleDiagnostic[] = [
+      ...findInertPolarity(typed),
+      ...findInfiniteRisks(typed),
+    ].map((d) => ({
       from: d.offset ?? 0,
       to: d.end ?? source.length,
-      severity: "warning",
+      severity: "warning" as const,
       message: d.message,
     }));
     // A constraints-only program has something to run too: checking its

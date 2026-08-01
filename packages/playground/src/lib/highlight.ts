@@ -62,6 +62,13 @@ export function datamogToken(stream: StringStream): string | null {
     const word = ident[0]!;
     if (keywords.has(word)) return "keyword";
     if (types.has(word)) return "typeName";
+    // A `^` immediately before an argument list is the maximal sigil, not
+    // bitwise XOR, and the parser reads it the same way. Consume it with the
+    // name so the whole `bad^` highlights as one predicate; a `^` anywhere
+    // else is matched as an operator above. StreamLanguage emits one tag per
+    // call, so the sigil cannot carry a scope of its own here (the VS Code
+    // TextMate grammar does give it one, via a capture).
+    stream.match(/^\^(?=\()/);
     return "name";
   }
 

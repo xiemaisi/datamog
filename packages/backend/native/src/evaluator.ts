@@ -21,39 +21,25 @@
 //   and shares EDB ingestion / query projection / dedup / trace plumbing
 //   via `BaseDatalogEvaluator` in `./base-evaluator.ts`.
 
-import { BaseDatalogEvaluator } from "./base-evaluator.ts";
+import { BaseDatalogEvaluator, type FixpointOptions } from "./base-evaluator.ts";
 import { type Relation, addRow, makeRelation, planRule } from "./planner.ts";
 import type { Value } from "./values.ts";
 
 export type { Relation } from "./planner.ts";
 
 export class NaiveEvaluator extends BaseDatalogEvaluator {
-  /** Compute every IDB stratum in dependency order. */
-  computeAll(): void {
-    for (let s = 0; s < this.analyzed.sortedStrata.length; s++) {
-      this.evaluateStratum(this.analyzed.sortedStrata[s]!, s);
-    }
-  }
-
-  private evaluateStratum(stratum: string[], stratumIdx: number): void {
-    const recursive = stratum.some((p) => this.analyzed.recursivePredicates.has(p));
-    this.trace?.({
-      kind: "stratum-start",
-      stratum: stratumIdx,
-      predicates: [...stratum],
-      recursive,
-    });
-
+  protected runFixpoint(stratum: string[], stratumIdx: number, opts: FixpointOptions): number {
     // Pure naive fixed-point: each iteration computes I_{k+1} = I_k ∪ T(I_k)
     // where T applies every rule to I_k. We implement that by buffering all
     // tuples produced in one pass into a per-predicate "pending" relation —
     // rules within the same iteration don't observe each other's adds, they
     // all read from the iteration-start snapshot. At the end of the pass we
     // flush pending into the live relations.
-    let iteration = 0;
+    let passes = 0;
     let changed = true;
     while (changed) {
-      if (this.maxIterations !== undefined && iteration >= this.maxIterations) {
+      const iteration = opts.startIteration + passes;
+      if (opts.budget !== undefined && passes >= opts.budget) {
         this.capInfo = {
           stratum: stratumIdx,
           iteration,
@@ -107,9 +93,9 @@ export class NaiveEvaluator extends BaseDatalogEvaluator {
         iteration,
         added: iterationAdded,
       });
-      iteration++;
+      passes++;
     }
 
-    this.trace?.({ kind: "stratum-end", stratum: stratumIdx, iterations: iteration });
+    return passes;
   }
 }

@@ -96,3 +96,11 @@ A flat index to every exercise solution, grouped by chapter.
 - 13.1 Count reachable nodes *(straightforward from chapter 9 + 13 pattern)*
 - 13.2 Unreachable pairs *(cross-product then filter)*
 - 13.3 Path reconstruction *(open-ended)*
+
+## Chapter 17
+
+- [17.1 Where does the sigil go?](solutions/ch17/ex1.dl)
+- 17.2 Two readings of one graph *(prediction exercise -- run `code/ch17/purity.dl`)*
+- [17.3 Find the draws](solutions/ch17/ex3.dl)
+- 17.4 Why not just infer it? *(open-ended)*
+- 17.5 Even/odd, revisited *(discussion -- see the chapter's note on one-negation cycles)*

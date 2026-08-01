@@ -526,4 +526,6 @@ does it fire? Where should such a law live — in the module, or in the importer
 
 ---
 
-Next: **[Appendix A — The three lenses cheat sheet](A-lenses.md)**.
+Next: **[Chapter 17 — Recursion through negation](17-parity.md)**. The one
+place Datamog relaxes Chapter 8's ban on negation inside a cycle, and why
+"every child is constant" needs it.

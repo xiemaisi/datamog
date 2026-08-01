@@ -30,6 +30,7 @@
 
 import {
   BaseDatalogEvaluator,
+  type FixpointOptions,
   type Relation,
   type RulePlan,
   type Step,
@@ -52,21 +53,9 @@ interface RuleInfo {
 }
 
 export class SemiNaiveEvaluator extends BaseDatalogEvaluator {
-  computeAll(): void {
-    for (let s = 0; s < this.analyzed.sortedStrata.length; s++) {
-      this.evaluateStratum(this.analyzed.sortedStrata[s]!, s);
-    }
-  }
-
-  private evaluateStratum(stratum: string[], stratumIdx: number): void {
+  protected runFixpoint(stratum: string[], stratumIdx: number, opts: FixpointOptions): number {
     const stratumSet = new Set(stratum);
     const recursive = stratum.some((p) => this.analyzed.recursivePredicates.has(p));
-    this.trace?.({
-      kind: "stratum-start",
-      stratum: stratumIdx,
-      predicates: [...stratum],
-      recursive,
-    });
 
     // Plan every rule once, and for each plan pre-compute the step indices
     // where the delta substitution is a candidate (positive atoms whose
@@ -88,10 +77,20 @@ export class SemiNaiveEvaluator extends BaseDatalogEvaluator {
       rulesByPredicate.set(predicate, infos);
     }
 
-    // --- Priming (iteration 0): run every rule naively against `all`. ---
-    let iteration = 0;
+    // --- Priming (pass 0): run every rule naively against `all`. ---
+    let passes = 0;
+    let iteration = opts.startIteration;
     let delta = new Map<string, Relation>();
     for (const p of stratum) delta.set(p, makeRelation());
+
+    if (opts.budget === 0) {
+      this.capInfo = {
+        stratum: stratumIdx,
+        iteration,
+        predicates: this.cappedPredicates(stratum),
+      };
+      return 0;
+    }
 
     {
       this.trace?.({ kind: "iteration-start", stratum: stratumIdx, iteration });
@@ -136,15 +135,16 @@ export class SemiNaiveEvaluator extends BaseDatalogEvaluator {
         iteration,
         added: iterationAdded,
       });
+      passes++;
     }
 
     // --- Delta loop: only rules with at least one stratum-body-atom fire. ---
     if (recursive) {
       while (this.anyNonEmpty(delta)) {
-        // The priming pass above already ran, so `iteration + 1` is the pass
-        // this delta step would be. Cap the total passes per stratum at
-        // `maxIterations`, keeping the partial (prefix) relations.
-        if (this.maxIterations !== undefined && iteration + 1 >= this.maxIterations) {
+        // The priming pass above already ran, so `passes` counts it. Cap the
+        // total passes at the caller's budget, keeping the partial (prefix)
+        // relations.
+        if (opts.budget !== undefined && passes >= opts.budget) {
           this.capInfo = {
             stratum: stratumIdx,
             iteration: iteration + 1,
@@ -209,14 +209,11 @@ export class SemiNaiveEvaluator extends BaseDatalogEvaluator {
         });
 
         delta = nextDelta;
+        passes++;
       }
     }
 
-    this.trace?.({
-      kind: "stratum-end",
-      stratum: stratumIdx,
-      iterations: iteration + 1,
-    });
+    return passes;
   }
 
   private anyNonEmpty(delta: Map<string, Relation>): boolean {

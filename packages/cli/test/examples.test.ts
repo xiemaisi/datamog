@@ -22,9 +22,10 @@ function getExamples(): string[] {
   });
 }
 
-// Examples that use non-linear recursion can't run on the SQL backends.
-// They carry a `native-only` marker file; the sqlite backend is skipped for
-// them and the seminaive backend is the canonical source for expected.json.
+// Examples the SQL backends can't run: non-linear recursion, and
+// parity-stratified recursion (which needs an alternating fixed point). They
+// carry a `native-only` marker file; the sqlite backend is skipped for them and
+// the seminaive backend is the canonical source for expected.json.
 function isNativeOnly(name: string): boolean {
   return existsSync(join(EXAMPLES_DIR, name, "native-only"));
 }
@@ -143,8 +144,8 @@ describe("examples (sqlite backend)", () => {
   for (const name of getExamples()) {
     const expectedPath = join(EXAMPLES_DIR, name, "expected.json");
 
-    // Non-linear-recursion examples are rejected by sqlite; seminaive seeds
-    // their expected.json instead (see the seminaive block below).
+    // `native-only` examples are rejected by sqlite; seminaive seeds their
+    // expected.json instead (see the seminaive block below).
     const sqliteTest = isNativeOnly(name) ? test.skip : test;
     sqliteTest(name, async () => {
       const actual = await runExample(name, createSqlite);
@@ -170,7 +171,7 @@ describe("examples (sqljs backend)", () => {
   for (const name of getExamples()) {
     const expectedPath = join(EXAMPLES_DIR, name, "expected.json");
 
-    // Non-linear recursion is rejected by every SQL backend.
+    // `native-only` examples are rejected by every SQL backend.
     const knownFailure = SQLJS_KNOWN_FAILURES.get(name);
     const sqljsTest = isNativeOnly(name) ? test.skip : knownFailure ? test.failing : test;
     sqljsTest(knownFailure ? `${name} (${knownFailure})` : name, async () => {
@@ -217,7 +218,7 @@ describe("examples (seminaive backend)", () => {
     test(name, async () => {
       const expectedFile = Bun.file(expectedPath);
       if (!(await expectedFile.exists())) {
-        // For native-only examples (non-linear recursion, no SQL backend),
+        // For native-only examples (no SQL backend can run them),
         // seminaive is the canonical source for expected.json. For every
         // other example the sqlite block above seeds it; skip here.
         if (isNativeOnly(name)) {
@@ -270,7 +271,7 @@ describe.skipIf(!process.env.DATABASE_URL)("examples (postgres backend)", () => 
   for (const name of getExamples()) {
     const expectedPath = join(EXAMPLES_DIR, name, "expected.json");
 
-    // Non-linear recursion is rejected by every SQL backend, Postgres included.
+    // `native-only` examples are rejected by every SQL backend, Postgres included.
     if (isNativeOnly(name)) {
       test.skip(name, () => {});
       continue;

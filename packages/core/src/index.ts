@@ -93,6 +93,7 @@ export {
   type PredicateInfo,
 } from "./completions.ts";
 export { AGGREGATE_NAMES } from "./analyzer.ts";
+export { findInertPolarity, type PolarityDiagnostic } from "./polarity.ts";
 export { findRecursiveCalls, type RecursiveCall } from "./recursion.ts";
 export { findPredicateReferences, type PredicateReference } from "./references.ts";
 export {

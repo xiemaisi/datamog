@@ -1,0 +1,5 @@
+{
+  "name": "Purity Analysis",
+  "description": "The same two rules give a conservative or an optimistic answer, depending on which side carries the maximal sigil",
+  "order": 88
+}

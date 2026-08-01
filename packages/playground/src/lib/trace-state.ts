@@ -57,6 +57,9 @@ function isStop(event: TraceEvent, granularity: Granularity): boolean {
   // edb-loaded stops are visible at every granularity — EDB loading is a
   // natural anchor point and there are only a handful of them.
   if (event.kind === "edb-loaded") return true;
+  // So is the end of a parity round: it is the only place where relations
+  // shrink, so skipping past it would show tuples that are no longer there.
+  if (event.kind === "round-end") return true;
   switch (granularity) {
     case "rule":
       return event.kind === "rule-applied";
@@ -108,6 +111,14 @@ export function snapshotAt(
         }
         if (isNew) rel.newlyAddedKeys.add(k);
       }
+    } else if (e.kind === "relation-cleared") {
+      // The one non-append event: a parity stratum rebuilds its maximal
+      // relations from empty each round, so the replay has to drop them too or
+      // the panel keeps showing tuples the evaluator has retracted.
+      const rel = relations.get(e.predicate);
+      if (!rel) continue;
+      rel.tuples = [];
+      rel.newlyAddedKeys = new Set();
     }
   }
   return { relations };
@@ -133,6 +144,10 @@ export function captionFor(stop: Stop, schema: Record<string, string[]>): string
         : `Stratum ${e.stratum} · iter ${e.iteration} complete: ${e.added} new tuple${e.added === 1 ? "" : "s"}.`;
     case "stratum-end":
       return `Stratum ${e.stratum} converged after ${e.iterations} iteration${e.iterations === 1 ? "" : "s"}.`;
+    case "round-end":
+      return `Stratum ${e.stratum} · round ${e.round} complete: the minimal side grew, the maximal side was rebuilt.`;
+    case "relation-cleared":
+      return `Stratum ${e.stratum} · round ${e.round}: cleared '${e.predicate}' (${e.removed} tuple${e.removed === 1 ? "" : "s"}) to rebuild it against the minimal side.`;
     default:
       void schema;
       return "";

@@ -19,13 +19,19 @@
 #   unmet(Id)      :- premise(Id, A), not derived(A).
 #   derived(H)     :- kb(Id, H, _), not unmet(Id).
 #
-# That is the double-negation trick from `relational-division`, and here it
-# does not work: `derived` now depends on `unmet`, which depends negatively
-# on `derived`, so negation sits inside a recursive cycle and the program is
-# not stratifiable. Counting the met premises with an aggregate and comparing
-# against the total fails the same way.
+# That is the double-negation trick from `relational-division`, and written
+# like this it is rejected: `derived` depends on `unmet`, which depends
+# negatively on `derived`, so negation sits inside a recursive cycle and the
+# program is not stratifiable. Counting the met premises with an aggregate and
+# comparing against the total fails the same way.
 #
-# So the interpreter walks the premise array positionally instead.
+# Marking `unmet` maximal (`unmet^`) makes exactly that shape legal, since the
+# two negations around the cycle cancel. `examples/proplog-forall` is this
+# program written that way, with the same knowledge base and the same answers.
+# Keep both: the counter below is what you write when the recursion has to stay
+# positive, and it is worth being able to read.
+#
+# So this version walks the premise array positionally instead.
 # `body_derived(Clause, N)` means the first N premises hold; it starts at 0
 # and extends one element at a time, and a head is derived once the prefix
 # reaches `length(B)`. Positive recursion and arithmetic only, and no bound

@@ -1,0 +1,5 @@
+{
+  "name": "Nim",
+  "description": "Winning positions as the two bounds of a game analysis, checked against the Sprague-Grundy theorem",
+  "order": 89
+}

@@ -898,6 +898,31 @@ describe("translator", () => {
     ).toThrow(/Non-linear recursion is not supported by postgres.*'tc'/);
   });
 
+  test("rejects parity-stratified recursion", () => {
+    const source = `
+      input predicate composite(e: string).
+      input predicate child(parent: string, kid: string).
+      constant(E) :- composite(E), not bad^(E).
+      bad^(E) :- child(E, C), not constant(C).
+    `;
+    expect(() => translateSource(source)).toThrow(
+      /Parity-stratified recursion is not supported by postgres.*'bad\^'/,
+    );
+    expect(() => translateSource(source)).toThrow(/--backend native/);
+  });
+
+  test("compiles an inert sigil like any other predicate", () => {
+    // One polarity in the stratum, so there is nothing to alternate against
+    // and the ordinary translation is correct.
+    const result = translateSource(`
+      input predicate edge(src: string, dst: string).
+      tc^(X, Y) :- edge(X, Y).
+      tc^(X, Z) :- edge(X, Y), tc^(Y, Z).
+      ?- tc^(X, Y).
+    `);
+    expect(result.createViews.join("\n")).toContain("tc");
+  });
+
   test("mutual recursion with dependent non-recursive predicate", () => {
     // Typed path needed: `odd` has only recursive rules so the dialect
     // synthesises an empty anchor that requires `columnTypes`.

@@ -1,0 +1,42 @@
+# Proplog, the way you would first write it
+#
+# Same forward-chaining interpreter for propositional Horn clauses as
+# `examples/proplog`, and the same knowledge base, but written with the
+# `forall` the problem actually calls for: a head is derived when *every*
+# premise is derived.
+#
+# The `examples/proplog` header explains at length why this shape used to be
+# impossible, and works around it by walking the premise array positionally
+# with a prefix counter (`body_derived(Clause, N)` = "the first N premises
+# hold"). Compare the two. The counter version needs three rules and an
+# arithmetic index, and only works because premises happen to live in an array;
+# this one says what it means.
+#
+# The cycle is `derived` -> `unmet^` -> `derived` with a negation on each edge.
+# `unmet^` is the anti-monotone side: it starts holding of every clause, so
+# nothing is derived in round 1, and shrinks as `derived` grows.
+
+kb(1, "rained", []).
+kb(2, "cold", []).
+kb(3, "driving", []).
+kb(4, "wet_grass", ["rained"]).
+kb(5, "slippery", ["wet_grass", "cold"]).
+kb(6, "accident", ["slippery", "driving", "fast"]).
+kb(7, "insurance_claim", ["accident"]).
+
+premise(Id, A) :- kb(Id, _, B), array_element(B, _, V), A = as_string(V).
+
+unmet^(Id) :- premise(Id, A), not derived(A).
+
+derived(H) :- kb(Id, H, _), not unmet^(Id).
+
+?- derived(Conclusion).
+
+# Same reporting as the counter version. "fast" is never a head, so it is an
+# open question; "accident" needs it, and "insurance_claim" needs "accident".
+mentioned(A) :- kb(_, A, _).
+mentioned(A) :- kb(_, _, B), array_element(B, _, V), A = as_string(V).
+
+output predicate not_derived(A) :- mentioned(A), not derived(A).
+output predicate unsupported(A) :- mentioned(A), not kb_head(A).
+kb_head(A) :- kb(_, A, _).

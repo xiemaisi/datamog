@@ -95,6 +95,7 @@ the browser.
 
 - [Chapter 15. Proof terms](15-proof-terms.md)
 - [Chapter 16. Modules](16-modules.md)
+- [Chapter 17. Recursion through negation](17-parity.md)
 
 ### Companion tutorials
 

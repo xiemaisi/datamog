@@ -1,0 +1,17 @@
+# Chapter 17 — the same two rules, two answers.
+#
+# `f` and `g` call each other and write nothing. Whether that makes them pure
+# is a modelling decision, and the sigil is where you make it.
+
+func("f"). func("g"). func("h"). func("leaf"). func("writer").
+writes("writer").
+calls("f", "g"). calls("g", "f"). calls("h", "writer").
+
+# Conservative: purity must be earned by a finite derivation, and a call cycle
+# offers none.
+output predicate pure(F) :- func(F), not calls_impure^(F), not writes(F).
+calls_impure^(F) :- calls(F, G), not pure(G).
+
+# Optimistic: purity is assumed and has to be refuted.
+output predicate pure_opt^(F) :- func(F), not calls_impure_opt(F), not writes(F).
+calls_impure_opt(F) :- calls(F, G), not pure_opt^(G).

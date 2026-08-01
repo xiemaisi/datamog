@@ -59,8 +59,13 @@
       "name": "variable.other.datamog"
     },
     "predicate": {
-      "match": "\\b[a-z][a-zA-Z0-9_]*\\b(?=\\s*\\()",
-      "name": "entity.name.function.predicate.datamog"
+      "match": "\\b[a-z][a-zA-Z0-9_]*\\b(\\^)?(?=\\s*\\()",
+      "name": "entity.name.function.predicate.datamog",
+      "captures": {
+        "1": {
+          "name": "storage.modifier.maximal.datamog"
+        }
+      }
     },
     "operator": {
       "match": ":-|\\.\\.|\\.(?!\\.)|>>>|>>|<<|<=|>=|==|!=|<>|&&|\\|\\||[!<>=+\\-*/%,{}&|^]",

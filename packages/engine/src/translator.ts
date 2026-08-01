@@ -228,6 +228,23 @@ function translateViews(
   for (const stratum of analyzed.sortedStrata) {
     const isRecursive = analyzed.recursivePredicates.has(stratum[0]!);
 
+    // Parity-stratified recursion needs an alternating fixed point: an outer
+    // loop that rebuilds a relation from empty between rounds. `WITH
+    // RECURSIVE` computes one least fixed point of a monotone body and cannot
+    // delete, so no SQL dialect can express it. A stratum with only one
+    // polarity has nothing to alternate against (the sigil is inert), so it
+    // compiles as usual. See doc/design/parity-stratification.md §7.
+    const maximal = stratum.filter((p) => analyzed.maximalPredicates.has(p));
+    if (maximal.length > 0 && maximal.length < stratum.length) {
+      const predList = maximal.map((p) => `'${p}^'`).join(", ");
+      const cst = analyzed.rules.get(maximal[0]!)?.[0]?.head.$cstNode;
+      throw new AnalyzerError(
+        `Parity-stratified recursion is not supported by ${dialect.name}: ${maximal.length > 1 ? "predicates" : "predicate"} ${predList} ${maximal.length > 1 ? "are" : "is"} maximal, which needs an alternating fixed point. Use --backend native or --backend seminaive`,
+        cst?.offset,
+        cst?.end,
+      );
+    }
+
     if (
       isRecursive &&
       !dialect.supportsNonLinearRecursion &&

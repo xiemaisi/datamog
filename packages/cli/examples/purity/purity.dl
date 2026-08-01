@@ -1,0 +1,33 @@
+# Purity analysis: the same rules, two answers
+#
+# "A function is pure if it writes nothing and every function it calls is
+# pure." Recursion through a `forall` again, so it needs a maximal predicate.
+# What makes this example worth reading is that *which* predicate you mark
+# changes the answer, and both answers are analyses someone would want.
+#
+# The call graph has a mutually recursive pair, `f` and `g`, which call each
+# other and write nothing. Whether they count as pure is not a fact about the
+# rules; it is a modelling decision, and the sigil is where you make it.
+#
+# CONSERVATIVE. Mark the counterexample maximal. `pure` then starts empty and
+# has to earn every tuple by a finite derivation, and a call cycle offers none:
+# `f` and `g` are never pure.
+
+input predicate func(name: string).
+input predicate writes(name: string).
+input predicate calls(caller: string, callee: string).
+
+output predicate pure(F) :- func(F), not writes(F), not calls_impure^(F).
+calls_impure^(F) :- calls(F, G), not pure(G).
+
+# OPTIMISTIC. Move the sigil to the other side. `pure_opt` now starts holding
+# of everything and only loses tuples that are refuted, so a recursive pair
+# stays pure unless something inside the cycle actually writes. This is what a
+# real purity analysis wants, and it is the same two rules.
+
+output predicate pure_opt^(F) :- func(F), not writes(F), not calls_impure_opt(F).
+calls_impure_opt(F) :- calls(F, G), not pure_opt^(G).
+
+# The disagreement, which is exactly the recursive functions that write
+# nothing. Neither column is wrong; they answer different questions.
+output predicate only_optimistic(F) :- pure_opt^(F), not pure(F).

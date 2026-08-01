@@ -1,0 +1,20 @@
+# Chapter 17 — constant folding through "every child is constant".
+#
+# `has_nonconstant_child^` is the anti-monotone side of the cycle: it starts
+# holding of every expression and shrinks as `constant` grows. Drop the `^`
+# and the program is rejected, exactly as Chapter 8 describes.
+
+literal("n1"). literal("n2"). literal("n4").
+composite("add"). composite("mul_x"). composite("mul_4").
+
+# (1 + 2) * x   and   (1 + 2) * 4, sharing the subterm `add`.
+child("add", "n1").    child("add", "n2").
+child("mul_x", "add"). child("mul_x", "x").
+child("mul_4", "add"). child("mul_4", "n4").
+
+constant(E) :- literal(E).
+constant(E) :- composite(E), not has_nonconstant_child^(E).
+
+has_nonconstant_child^(E) :- child(E, C), not constant(C).
+
+?- constant(E).

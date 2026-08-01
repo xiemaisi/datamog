@@ -91,8 +91,14 @@ Query:
 
 // --- Head (allows aggregates) ------------------------------------------------
 
+// A postfix `^` marks the predicate as *maximal*: the anti-monotone side of a
+// parity-stratified recursion, which starts at ⊤ and is rebuilt each round.
+// The sigil is written at every occurrence (head, body atoms, queries) but is
+// not part of the predicate's name; the analyser keys the predicate under its
+// bare name and checks that every occurrence agrees. See
+// `doc/design/parity-stratification.md` and spec §4.3.
 HeadAtom:
-    predicate=Identifier '(' (args+=HeadTerm (',' args+=HeadTerm)*)? ')';
+    predicate=Identifier (maximal?='^')? '(' (args+=HeadTerm (',' args+=HeadTerm)*)? ')';
 
 // A head term is an Expression, optionally carrying a type annotation
 // (`x: integer`). When the `:` is present the parsed expression is wrapped in
@@ -136,10 +142,15 @@ BodyElement:
 // source had them, distinguishing the bare shorthand from an explicit `V : p()`
 // (zero args). A bare atom with no capture still requires parens, so `p` on its
 // own stays a Variable rather than a nullary atom.
+// `maximal` is the postfix `^` sigil described on HeadAtom. It sits between the
+// predicate name and the argument list, so `not bad^(E)` reads as the negation
+// of a maximal atom. `^` is also the bitwise XOR operator; the only shape whose
+// meaning this changes is a bare `A ^ (B)` as a complete body element, which
+// was already a type error (a filter must be boolean, XOR yields an integer).
 Literal:
-    proofVar=Identifier ':' (negated?='not')? predicate=Identifier
+    proofVar=Identifier ':' (negated?='not')? predicate=Identifier (maximal?='^')?
         (parens?='(' (args+=Expression (',' args+=Expression)*)? ')')?
-  | (negated?='not')? predicate=Identifier parens?='(' (args+=Expression (',' args+=Expression)*)? ')';
+  | (negated?='not')? predicate=Identifier (maximal?='^')? parens?='(' (args+=Expression (',' args+=Expression)*)? ')';
 
 // Equality covers both binding (`X = expr`, left side is a bare variable
 // or other unbound shape) and non-binding constraints (`X + 1 = Y`).

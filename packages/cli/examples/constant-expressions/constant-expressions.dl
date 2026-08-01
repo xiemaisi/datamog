@@ -1,0 +1,44 @@
+# Constant folding: recursion through "all children"
+#
+# The rule a compiler writer wants is "an expression is constant if it is a
+# literal, or it is composite and *every* child is constant". Datalog has no
+# `forall`, so you name the counterexample and negate it: an expression is
+# constant when it has no non-constant child.
+#
+# That puts `constant` in a cycle with itself through two negations. One
+# negation in a cycle has no fixed point and is rejected. Two cancel: the
+# operator on `constant` is monotone again, and only the helper in the middle
+# is anti-monotone. The `^` sigil says which side that is, so the evaluator
+# knows to start it at ⊤ and rebuild it each round while `constant` grows.
+#
+# Read `not has_nonconstant_child^(E)` as "no child of E fails to be constant",
+# and the `^` as the marker that this negation is deliberately inside a cycle.
+# Without the sigil the program is rejected, exactly as it was before this
+# feature existed.
+
+input predicate literal(e: string).
+input predicate composite(e: string).
+input predicate child(parent: string, kid: string).
+
+constant(E) :- literal(E).
+constant(E) :- composite(E), not has_nonconstant_child^(E).
+
+has_nonconstant_child^(E) :- child(E, C), not constant(C).
+
+?- constant(E).
+
+# The expressions are two arithmetic trees sharing a subterm: `(1 + 2) * x` and
+# `(1 + 2) * 4`. `x` is a variable, so it is neither a literal nor composite and
+# no rule can ever derive it constant. That makes `mul_x` non-constant while
+# `add` and `mul_4` fold.
+#
+# Evaluation takes one round per level of the tree. Round 1 has the helper at ⊤,
+# so nothing but the literals is constant; round 2 adds `add`; round 3 adds
+# `mul_4` and reaches the fixed point.
+
+output predicate not_constant(E) :- composite(E), not constant(E).
+
+# Anything with a constant child that is itself not constant is where folding
+# stops: the boundary a real optimiser would rewrite.
+output predicate fold_boundary(Parent, Kid) :-
+  child(Parent, Kid), constant(Kid), not constant(Parent).

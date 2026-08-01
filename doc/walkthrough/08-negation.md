@@ -98,8 +98,15 @@ q(X) :- r(X), not p(X).
 gives
 
 ```
-Negation of 'q' in rules for 'p' is not stratifiable (they are mutually recursive)
+Negation of 'q' in rules for 'p' is not stratifiable (they are mutually
+recursive). Recursion through negation needs the two sides to have opposite
+polarity: mark exactly one of them maximal with '^'
 ```
+
+Ignore the advice in the second sentence for now — it points at
+[Chapter 17](17-parity.md), which is about the one shape of recursion
+through negation that *does* have a well-defined meaning. Everything in
+this chapter holds without it.
 
 The directly-self-referential case
 
@@ -119,7 +126,10 @@ than let you write such a thing, Datamog refuses to compile it.
 (Some exotic Datalog dialects extend to *well-founded* or *stable
 model* semantics, which handle some unstratifiable programs, but
 at considerable cost in complexity and explainability. Datamog
-stops at stratified.)
+stops at stratified, with one carefully bounded exception:
+[Chapter 17](17-parity.md) covers cycles that cross an *even*
+number of negations, where the two negations cancel and a least
+fixed point exists after all.)
 
 ## A subtle limit: set difference is fine; "closures excluding X" is harder
 

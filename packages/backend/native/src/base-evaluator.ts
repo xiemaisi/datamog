@@ -12,6 +12,7 @@ import {
   type Relation,
   type RulePlan,
   addRow,
+  clearRelation,
   enumerate,
   evalAggregate,
   makeRelation,
@@ -35,6 +36,19 @@ export interface IterationCapInfo {
   predicates: string[];
 }
 
+/** Per-call knobs for a subclass's fixed-point driver. */
+export interface FixpointOptions {
+  /**
+   * Iteration number the first pass reports in its trace events. A parity
+   * stratum runs several fixed points back to back, and the iteration counter
+   * stays monotone across them so a trace consumer sees one increasing
+   * sequence per stratum rather than a counter that restarts each round.
+   */
+  startIteration: number;
+  /** Maximum passes this call may run. Undefined means run to convergence. */
+  budget?: number;
+}
+
 export interface EvaluatorOptions {
   trace?: TraceCallback;
   /**
@@ -44,6 +58,12 @@ export interface EvaluatorOptions {
    * kept.
    */
   maxIterations?: number;
+}
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
 }
 
 export abstract class BaseDatalogEvaluator {
@@ -102,8 +122,133 @@ export abstract class BaseDatalogEvaluator {
     }
   }
 
+  /**
+   * Run this evaluator's fixed point over `stratum`, treating every relation
+   * outside it as frozen input. Returns the number of passes run. The two
+   * evaluators differ only here.
+   */
+  protected abstract runFixpoint(
+    stratum: string[],
+    stratumIdx: number,
+    opts: FixpointOptions,
+  ): number;
+
   /** Compute every IDB stratum in dependency order. */
-  abstract computeAll(): void;
+  computeAll(): void {
+    for (let s = 0; s < this.analyzed.sortedStrata.length; s++) {
+      const stratum = this.analyzed.sortedStrata[s]!;
+      const maximal = stratum.filter((p) => this.analyzed.maximalPredicates.has(p));
+      const minimal = stratum.filter((p) => !this.analyzed.maximalPredicates.has(p));
+      this.trace?.({
+        kind: "stratum-start",
+        stratum: s,
+        predicates: [...stratum],
+        recursive: stratum.some((p) => this.analyzed.recursivePredicates.has(p)),
+        parity: maximal.length > 0 && minimal.length > 0,
+      });
+      // A stratum needs the alternating driver only when both polarities are
+      // present. One polarity on its own has nothing to alternate against, so
+      // the sigil is inert and the ordinary fixed point gives the same answer
+      // without paying for a round it cannot use. See
+      // `doc/design/parity-stratification.md` §11.
+      const passes =
+        maximal.length > 0 && minimal.length > 0
+          ? this.runParityStratum(minimal, maximal, s)
+          : this.runFixpoint(stratum, s, { startIteration: 0, budget: this.maxIterations });
+      this.trace?.({ kind: "stratum-end", stratum: s, iterations: passes });
+    }
+  }
+
+  /**
+   * Alternating fixed point for a parity-stratified stratum. Minimal
+   * predicates rise from ∅, maximal ones start at ⊤ and are rebuilt from ∅
+   * each round, so they fall. Iterate until the maximal relations stop
+   * changing; the minimal side is then already at its fixed point for that
+   * value. See `doc/design/parity-stratification.md` §4.
+   */
+  private runParityStratum(minimal: string[], maximal: string[], stratumIdx: number): number {
+    // Round 0 reads every maximal predicate as ⊤, which the polarity check
+    // guarantees is only ever observed by a negated atom (§4.1).
+    for (const p of maximal) this.relations.get(p)!.isTop = true;
+
+    let passes = 0;
+    let round = 0;
+    let previous: Set<string> | null = null;
+    for (;;) {
+      this.trace?.({ kind: "round-start", stratum: stratumIdx, round });
+
+      // Minimal side: keeps the tuples it already has. Sound because the
+      // maximal side only shrinks, so nothing derivable under the previous
+      // round's value stops being derivable under this one.
+      passes += this.runFixpoint(minimal, stratumIdx, {
+        startIteration: passes,
+        budget: this.remainingBudget(passes),
+      });
+      // Compare the stratum index rather than testing `capInfo` for presence:
+      // an earlier stratum may have capped already, and that is not a reason to
+      // abandon this one.
+      if (this.capInfo?.stratum === stratumIdx) {
+        this.reportParityCap(minimal, maximal);
+        break;
+      }
+
+      // Maximal side: rebuilt from ∅ against the minimal side just computed.
+      // Facts survive this, being rules with an empty body.
+      for (const p of maximal) {
+        const rel = this.relations.get(p)!;
+        const removed = rel.tuples.length;
+        clearRelation(rel);
+        this.trace?.({
+          kind: "relation-cleared",
+          stratum: stratumIdx,
+          round,
+          predicate: p,
+          removed,
+        });
+      }
+      passes += this.runFixpoint(maximal, stratumIdx, {
+        startIteration: passes,
+        budget: this.remainingBudget(passes),
+      });
+      if (this.capInfo?.stratum === stratumIdx) {
+        this.reportParityCap(minimal, maximal);
+        break;
+      }
+
+      const current = this.snapshot(maximal);
+      this.trace?.({ kind: "round-end", stratum: stratumIdx, round });
+      if (previous && setsEqual(previous, current)) break;
+      previous = current;
+      round++;
+    }
+
+    return passes;
+  }
+
+  /**
+   * Widen a cap report to the whole parity stratum. `runFixpoint` only sees
+   * the phase it was handed, but running out mid-alternation leaves both sides
+   * incomplete, so both are worth naming.
+   */
+  private reportParityCap(minimal: string[], maximal: string[]): void {
+    if (!this.capInfo) return;
+    this.capInfo.predicates = this.cappedPredicates([...minimal, ...maximal]);
+  }
+
+  /** Passes left in this stratum's budget, or undefined when uncapped. */
+  private remainingBudget(spent: number): number | undefined {
+    if (this.maxIterations === undefined) return undefined;
+    return Math.max(0, this.maxIterations - spent);
+  }
+
+  /** Row keys of every tuple in `predicates`, for round-to-round comparison. */
+  private snapshot(predicates: string[]): Set<string> {
+    const keys = new Set<string>();
+    for (const p of predicates) {
+      for (const k of this.relations.get(p)!.keys) keys.add(`${p} ${k}`);
+    }
+    return keys;
+  }
 
   /**
    * Run a top-level query and project its result rows. Queries are

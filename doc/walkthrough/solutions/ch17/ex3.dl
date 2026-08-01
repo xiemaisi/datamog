@@ -1,0 +1,25 @@
+# Solution 17.3 — a game with a draw in it.
+#
+# `p` and `q` move to each other forever, so neither player can force
+# anything there. `c` wins by moving to a dead end. The Sprague-Grundy
+# constraints are gone: they are facts about Nim, not about games.
+#
+# Running this reports the determinacy constraint as violated, and the rows it
+# reports are exactly the drawn positions:
+#
+#   Constraint `!- not_lost^(P), not win(P).` is violated by 2 rows:
+#     P = "p"
+#     P = "q"
+#
+# Which of the two to show a user depends on the question. `win` is the safe
+# one for "can I force a win from here"; `not_lost^` answers "is it still worth
+# playing". Showing the gap between them is better than either.
+
+move("p", "q"). move("q", "p"). move("c", "dead").
+
+output predicate win(P)       :- move(P, Q), not not_lost^(Q).
+output predicate not_lost^(P) :- move(P, Q), not win(Q).
+
+output predicate drawn(P) :- not_lost^(P), not win(P).
+
+!- not_lost^(P), not win(P).

@@ -168,6 +168,10 @@ export interface AnalyzedProgram {
   recursivePredicates: Set<string>;
   /** Predicates that are non-linearly recursive (some rule has >1 body atom from the same SCC). */
   nonLinearPredicates: Set<string>;
+  /** Predicates whose name carries the `^` sigil: the anti-monotone side of a
+   *  parity-stratified recursion, evaluated from ⊤ downwards by the
+   *  alternating fixed point. See spec §4.3. */
+  maximalPredicates: Set<string>;
   /** Predicates grouped into strata (SCCs) in dependency order. */
   sortedStrata: string[][];
   /** Source file the program was parsed from, threaded through so downstream
@@ -235,6 +239,10 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
   // rule, and so rules that disagree about the marker are rejected instead of
   // silently taking whichever came first.
   const emittedOutputs = new Map<string, "output" | "error">();
+  // Predicates whose name carries the `^` sigil, i.e. the anti-monotone side
+  // of a parity-stratified recursion. Collected from rule heads; every other
+  // occurrence is then checked to agree (`checkPolaritySpelling`).
+  const maximalPredicates = new Set<string>();
 
   // Classify statements
   for (const stmt of program.statements) {
@@ -280,6 +288,16 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
         break;
       }
       case "Rule": {
+        if (stmt.head.maximal) {
+          if (stmt.error) {
+            const pos = nodePos(stmt.head);
+            throw new AnalyzerError(
+              `'error predicate ${stmt.head.predicate}^' is not allowed: an integrity constraint cannot be maximal`,
+              ...(pos ?? []),
+            );
+          }
+          maximalPredicates.add(stmt.head.predicate);
+        }
         const existing = rules.get(stmt.head.predicate);
         if (existing) {
           const expectedArity = arities.get(stmt.head.predicate)!;
@@ -339,13 +357,17 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
           });
           queries.push({
             $type: "Query",
-            outputName: stmt.head.predicate,
+            // A maximal predicate is labelled with its sigil, the way the
+            // source always spells it (spec §4.3). The bare name stays the
+            // identity: module export selection matches `head.predicate`.
+            outputName: stmt.head.maximal ? `${stmt.head.predicate}^` : stmt.head.predicate,
             isOutput: !stmt.error,
             isError: stmt.error,
             body: [
               {
                 $type: "Literal",
                 predicate: stmt.head.predicate,
+                maximal: stmt.head.maximal,
                 negated: false,
                 parens: true,
                 args: projVars,
@@ -611,6 +633,39 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     }
   }
 
+  // Every occurrence of a predicate must spell the `^` sigil the same way. The
+  // sigil is not part of the name (spec §4.3): the definition claims the
+  // polarity and every call site repeats the claim, so that a reader can tell
+  // at the call site whether a negation inside a cycle is deliberate.
+  const checkPolaritySpelling = (
+    predicate: string,
+    spelled: boolean,
+    node: { $cstNode?: { offset: number; end: number } },
+  ) => {
+    const declared = maximalPredicates.has(predicate);
+    if (spelled === declared) return;
+    const pos = nodePos(node);
+    throw new AnalyzerError(
+      declared
+        ? `'${predicate}' is a maximal predicate; write '${predicate}^' here`
+        : `'${predicate}' is not a maximal predicate, so it cannot be written '${predicate}^' here`,
+      ...(pos ?? []),
+    );
+  };
+  for (const predicateRules of rules.values()) {
+    for (const rule of predicateRules) {
+      checkPolaritySpelling(rule.head.predicate, !!rule.head.maximal, rule.head);
+      for (const elem of rule.body) {
+        if (elem.$type === "Literal") checkPolaritySpelling(elem.predicate, !!elem.maximal, elem);
+      }
+    }
+  }
+  for (const query of queries) {
+    for (const elem of query.body) {
+      if (elem.$type === "Literal") checkPolaritySpelling(elem.predicate, !!elem.maximal, elem);
+    }
+  }
+
   // Build dependency graph (IDB predicates only), tracking positive and negative deps
   const dependencies = new Map<string, Set<string>>();
   const negativeDependencies = new Map<string, Set<string>>();
@@ -696,7 +751,6 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     }
   }
 
-  // Stratification check: no negation within an SCC
   const sccOf = new Map<string, Set<string>>();
   for (const scc of sccs) {
     const sccSet = new Set(scc);
@@ -705,31 +759,32 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     }
   }
 
-  for (const [predicate, negDeps] of negativeDependencies) {
+  // Polarity check (spec §4.3), which subsumes the older "no negation inside
+  // an SCC" rule. Within one SCC a positive call must join predicates of the
+  // same polarity and a negated call must join opposite ones, so a cycle
+  // crosses an even number of negations and the alternating fixed point has
+  // somewhere to start. With no `^` anywhere the second clause can never hold
+  // and this degenerates to plain stratified negation.
+  for (const [predicate, predicateRules] of rules) {
     const myScc = sccOf.get(predicate);
-    for (const dep of negDeps) {
-      if (myScc?.has(dep)) {
-        // Find the negated literal for a precise error location
-        let errPos: [number, number] | undefined;
-        for (const rule of rules.get(predicate) ?? []) {
-          for (const elem of rule.body) {
-            if (elem.$type === "Literal" && elem.negated && elem.predicate === dep) {
-              errPos = nodePos(elem);
-              break;
-            }
-          }
-          if (errPos) break;
-        }
+    if (!myScc) continue;
+    const headMaximal = maximalPredicates.has(predicate);
+    for (const rule of predicateRules) {
+      for (const elem of rule.body) {
+        if (elem.$type !== "Literal") continue;
+        if (BUILTIN_BODY_ATOMS.has(elem.predicate)) continue;
+        if (!myScc.has(elem.predicate)) continue;
+        const bodyMaximal = maximalPredicates.has(elem.predicate);
+        if (elem.negated === (headMaximal !== bodyMaximal)) continue;
+        const pos = nodePos(elem);
         // Project the failing SCC into a predicate-level dependency
         // cycle and stash it on the error. The playground reads this
         // to offer a "Show cycle" action on the error squiggly.
         const cycle = buildNegationCycle([...myScc], rules, dependencies, negativeDependencies);
-        throw new AnalyzerError(
-          `Negation of '${dep}' in rules for '${predicate}' is not stratifiable (they are mutually recursive)`,
-          errPos?.[0],
-          errPos?.[1],
-          cycle,
-        );
+        const message = elem.negated
+          ? `Negation of '${elem.predicate}' in rules for '${predicate}' is not stratifiable (they are mutually recursive). Recursion through negation needs the two sides to have opposite polarity: mark exactly one of them maximal with '^'`
+          : `'${predicate}' and '${elem.predicate}' are mutually recursive but have opposite polarity ('${bodyMaximal ? elem.predicate : predicate}' is maximal), so this call must be negated`;
+        throw new AnalyzerError(message, pos?.[0], pos?.[1], cycle);
       }
     }
   }
@@ -799,6 +854,7 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     sortedStrata,
     recursivePredicates,
     nonLinearPredicates,
+    maximalPredicates,
     sourceFile: file,
   };
 }

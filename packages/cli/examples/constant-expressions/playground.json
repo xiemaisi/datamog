@@ -1,0 +1,5 @@
+{
+  "name": "Constant Expressions",
+  "description": "Fold an expression tree with recursion through \"every child is constant\", using a maximal predicate",
+  "order": 86
+}

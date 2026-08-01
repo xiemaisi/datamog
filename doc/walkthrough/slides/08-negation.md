@@ -89,7 +89,8 @@ q(X) :- r(X), not p(X).
 
 ```
 Negation of 'q' in rules for 'p' is not stratifiable
-(they are mutually recursive)
+(they are mutually recursive). ... mark exactly one
+of them maximal with '^'
 ```
 
 And the direct case:

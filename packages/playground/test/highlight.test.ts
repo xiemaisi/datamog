@@ -56,3 +56,18 @@ describe("playground highlight", () => {
     expect(operatorTexts).toEqual(["!", "&&", "||", "==", "<>", "!=", "<=", ">="]);
   });
 });
+
+describe("playground highlight — maximal sigil", () => {
+  test("a `^` before an argument list belongs to the predicate name", () => {
+    const tokens = tokensFor("bad^(E)");
+    expect(tokens[0]).toEqual({ text: "bad^", tag: "name" });
+    expect(tokens[1]).toEqual({ text: "(", tag: "punctuation" });
+  });
+
+  test("a `^` between expressions is still the XOR operator", () => {
+    const tokens = tokensFor("X = a ^ b");
+    expect(tokens.find((t) => t.text === "^")).toEqual({ text: "^", tag: "operator" });
+    // And the operand before it stays an ordinary name.
+    expect(tokens.find((t) => t.text === "a")).toEqual({ text: "a", tag: "name" });
+  });
+});

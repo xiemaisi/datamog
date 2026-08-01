@@ -7,6 +7,7 @@ import {
   analyze,
   checkModuleBoundaries,
   elaborate,
+  findInertPolarity,
   findInfiniteRisks,
   inferTypes,
 } from "datamog-core";
@@ -573,6 +574,15 @@ function emitFinitenessWarnings(analyzed: Parameters<typeof findInfiniteRisks>[0
   }
 }
 
+// An inert `^` is always reported, unlike finiteness risks, which are opt-in
+// behind --warn-finiteness. It costs one SCC walk and means the sigil never
+// silently does nothing. See doc/design/parity-stratification.md §11.
+function emitPolarityWarnings(analyzed: Parameters<typeof findInertPolarity>[0]): void {
+  for (const d of findInertPolarity(analyzed)) {
+    console.error(`warning: ${d.message}`);
+  }
+}
+
 function csvEscape(value: string): string {
   // `\r` on its own (old-Mac line endings) is as structurally significant
   // for CSV as `\n`; without it a value containing a bare CR would leak
@@ -796,6 +806,7 @@ async function main() {
 
   const analyzed = inferTypes(analyze(program, programPath));
   checkModuleBoundaries(analyzed, boundaries);
+  emitPolarityWarnings(analyzed);
 
   if (dryRun) {
     if (warnFiniteness) emitFinitenessWarnings(analyzed);

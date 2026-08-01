@@ -32,10 +32,26 @@ import {
 export interface Relation {
   tuples: Value[][];
   keys: Set<string>;
+  /**
+   * The relation stands for ⊤ (holds of every tuple), which is the starting
+   * value of a maximal predicate in round 0 of a parity stratum. ⊤ is never
+   * enumerated: the polarity check guarantees the only atoms that can observe
+   * it are negated, and those simply fail. A positive atom step meeting a
+   * `isTop` relation is an internal error. See
+   * `doc/design/parity-stratification.md` §4.1.
+   */
+  isTop?: boolean;
 }
 
 export function makeRelation(): Relation {
   return { tuples: [], keys: new Set() };
+}
+
+/** Empty a relation in place, dropping the ⊤ marker with it. */
+export function clearRelation(rel: Relation): void {
+  rel.tuples.length = 0;
+  rel.keys.clear();
+  rel.isTop = false;
 }
 
 export function rowKey(row: Value[]): string {
@@ -646,6 +662,14 @@ export function* enumerate(
       const src =
         deltaOverride && deltaOverride.stepIndex === i ? deltaOverride.relations : relations;
       const rel = src.get(step.atom.predicate)!;
+      if (rel.isTop) {
+        // Unreachable: the polarity check rejects a positive atom on a maximal
+        // predicate from the minimal side of its own SCC, and every other
+        // reader sees a rebuilt (finite) relation. Assert rather than silently
+        // enumerating the empty tuple list, which would look like a wrong
+        // answer instead of a bug.
+        throw new Error(`Internal error: positive atom on '${step.atom.predicate}' read it at ⊤`);
+      }
       for (const tuple of rel.tuples) {
         const next = matchAtom(step.atom, tuple, sub, env);
         if (next !== null) yield* enumerate(steps, i + 1, next, env, relations, deltaOverride);
@@ -719,8 +743,13 @@ export function* enumerate(
     case "filterNot": {
       // Negation always reads from the main relations — stratification
       // forbids negating a predicate in the current SCC, so there is no
-      // delta for it.
+      // delta for it. The one exception is a parity stratum, where a
+      // negated atom may name a same-SCC predicate of the opposite
+      // polarity; that relation is either ⊤ (round 0) or the previous
+      // round's value, never a delta.
       const rel = relations.get(step.atom.predicate)!;
+      // ⊤ holds of every tuple, so the negation fails.
+      if (rel.isTop) return;
       let found = false;
       for (const tuple of rel.tuples) {
         if (matchAtom(step.atom, tuple, sub, env) !== null) {

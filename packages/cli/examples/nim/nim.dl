@@ -1,0 +1,49 @@
+# Nim: winning positions, and the draws that are not there
+#
+# The textbook game rule is "a position is winning if some move leads to a
+# position that is not winning":
+#
+#   win(P) :- move(P, Q), not win(Q).
+#
+# One negation around the cycle, which has no two-valued fixed point in
+# general, and Datamog rejects it. Marking `win` maximal does not help: a
+# predicate cannot differ in polarity from itself.
+#
+# Duplicating the predicate does help. Ask the question from both sides and
+# let each negate the other, and both edges of the cycle are now negated:
+#
+#   win        = positions with a forced win
+#   not_lost^  = positions that are not definitely lost
+#
+# Both rules apply the same operator, so `win` rises from below and `not_lost^`
+# falls from above: they are the two bounds of the same analysis. Where they
+# meet, the position is determined. Where they disagree, neither player can
+# force a result and the position is a draw. Nim has no draws, so they meet
+# everywhere, and the constraints below check exactly that.
+
+# Two heaps of at most three matches. A move shrinks one heap.
+size(N) :- N in [0 .. 3].
+pos(A, B) :- size(A), size(B).
+move(A, B, X, B) :- pos(A, B), X in [0 .. A - 1].
+move(A, B, A, Y) :- pos(A, B), Y in [0 .. B - 1].
+
+win(A, B)       :- move(A, B, C, D), not not_lost^(C, D).
+not_lost^(A, B) :- move(A, B, C, D), not win(C, D).
+
+# The player to move loses. For Nim these are the positions with equal heaps.
+output predicate losing(A, B) :- pos(A, B), not win(A, B).
+
+# DETERMINACY. Nothing sits in the gap between the two bounds, so every
+# position is a win or a loss. On a game with cycles this constraint fails and
+# reports the drawn positions.
+!- not_lost^(A, B), not win(A, B).
+
+# SPRAGUE-GRUNDY. A Nim position is losing exactly when the bitwise XOR of the
+# heap sizes is zero, which is a closed form the fixed point knows nothing
+# about. Checking the two against each other makes this example verify itself:
+# if the alternating fixed point were wrong, these fail.
+#
+# `^` here is the XOR operator, not the maximal sigil. They never collide: the
+# sigil only ever sits between a predicate name and its argument list.
+!- win(A, B), (A ^ B) = 0.
+!- pos(A, B), (A ^ B) <> 0, not win(A, B).

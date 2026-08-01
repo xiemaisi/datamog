@@ -13,6 +13,22 @@
 //       rule-applied*                 (one per rule, per iteration)
 //       iteration-end
 //     stratum-end
+//
+// A parity stratum (`stratum-start` with `parity: true`) runs several fixed
+// points back to back, wrapped in round-start / round-end. Its maximal
+// relations are rebuilt from empty each round, which is the one point where
+// the stream is not append-only: `relation-cleared` says a relation's tuples
+// were dropped, and a consumer accumulating tuples must drop them too. The
+// `iteration` counter stays monotone across a stratum's rounds.
+//
+//     stratum-start (parity: true)
+//     (repeated until the maximal relations stop changing:)
+//       round-start
+//       iteration-start / rule-applied* / iteration-end      (minimal side)
+//       relation-cleared*             (one per maximal predicate)
+//       iteration-start / rule-applied* / iteration-end      (maximal side)
+//       round-end
+//     stratum-end
 
 import type { Value } from "./values.ts";
 
@@ -37,6 +53,27 @@ export type TraceEvent =
       stratum: number;
       predicates: string[];
       recursive: boolean;
+      /** True when the stratum holds both polarities and runs the alternating
+       *  fixed point (`doc/design/parity-stratification.md` §4). */
+      parity: boolean;
+    }
+  | {
+      kind: "round-start";
+      stratum: number;
+      round: number;
+    }
+  | {
+      kind: "round-end";
+      stratum: number;
+      round: number;
+    }
+  | {
+      kind: "relation-cleared";
+      stratum: number;
+      round: number;
+      predicate: string;
+      /** Tuples the relation held before being emptied. */
+      removed: number;
     }
   | {
       kind: "stratum-end";

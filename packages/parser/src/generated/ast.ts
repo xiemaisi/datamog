@@ -332,12 +332,14 @@ export interface HeadAtom extends langium.AstNode {
     readonly $container: Rule;
     readonly $type: 'HeadAtom';
     args: Array<HeadTerm>;
+    maximal: boolean;
     predicate: Identifier;
 }
 
 export const HeadAtom = {
     $type: 'HeadAtom',
     args: 'args',
+    maximal: 'maximal',
     predicate: 'predicate'
 } as const;
 
@@ -365,6 +367,7 @@ export interface Literal extends langium.AstNode {
     readonly $container: Query | Rule;
     readonly $type: 'Literal';
     args: Array<Expression>;
+    maximal: boolean;
     negated: boolean;
     parens: boolean;
     predicate: Identifier;
@@ -374,6 +377,7 @@ export interface Literal extends langium.AstNode {
 export const Literal = {
     $type: 'Literal',
     args: 'args',
+    maximal: 'maximal',
     negated: 'negated',
     parens: 'parens',
     predicate: 'predicate',
@@ -874,6 +878,10 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                     name: HeadAtom.args,
                     defaultValue: []
                 },
+                maximal: {
+                    name: HeadAtom.maximal,
+                    defaultValue: false
+                },
                 predicate: {
                     name: HeadAtom.predicate
                 }
@@ -892,6 +900,10 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 args: {
                     name: Literal.args,
                     defaultValue: []
+                },
+                maximal: {
+                    name: Literal.maximal,
+                    defaultValue: false
                 },
                 negated: {
                     name: Literal.negated,

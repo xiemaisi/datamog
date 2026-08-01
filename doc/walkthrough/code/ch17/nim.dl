@@ -1,0 +1,23 @@
+# Chapter 17 — a game as the two bounds of one analysis.
+#
+# `win` grows from below: positions with a forced win. `not_lost^` shrinks from
+# above: positions that are not definitely lost. Nim has no draws, so they meet.
+
+size(N) :- N in [0 .. 3].
+pos(A, B) :- size(A), size(B).
+move(A, B, X, B) :- pos(A, B), X in [0 .. A - 1].
+move(A, B, A, Y) :- pos(A, B), Y in [0 .. B - 1].
+
+win(A, B)       :- move(A, B, C, D), not not_lost^(C, D).
+not_lost^(A, B) :- move(A, B, C, D), not win(C, D).
+
+output predicate losing(A, B) :- pos(A, B), not win(A, B).
+
+# No position sits in the gap between the two bounds.
+!- not_lost^(A, B), not win(A, B).
+
+# Sprague-Grundy: a Nim position is losing exactly when the heap sizes XOR to
+# zero. Here `^` is the XOR operator, not the sigil -- the sigil only ever sits
+# between a predicate name and its argument list.
+!- win(A, B), (A ^ B) = 0.
+!- pos(A, B), (A ^ B) <> 0, not win(A, B).
