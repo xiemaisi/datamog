@@ -19,6 +19,8 @@ import type {
 import {
   BUILTIN_BODY_ATOMS,
   assertNever,
+  allVarsBound as coreAllVarsBound,
+  chooseEqualityBinding as coreChooseEqualityBinding,
   equalityBindingCandidates,
   inferTermType,
   isAnonymousVar,
@@ -382,54 +384,17 @@ function hoistAtomArgs(body: BodyElement[]): BodyElement[] {
   return result;
 }
 
+/** `chooseEqualityBinding` against the variables the plan has bound so far. */
 function chooseEqualityBinding(
   eq: Equality,
   bound: Set<string>,
 ): { variable: string; expr: Expression } | undefined {
-  if (eq.left.$type === "Variable" && !bound.has(eq.left.name) && allVarsBound(eq.expr, bound)) {
-    return { variable: eq.left.name, expr: eq.expr };
-  }
-  if (eq.expr.$type === "Variable" && !bound.has(eq.expr.name) && allVarsBound(eq.left, bound)) {
-    return { variable: eq.expr.name, expr: eq.left };
-  }
-  return undefined;
+  return coreChooseEqualityBinding(eq, (name) => bound.has(name));
 }
 
+/** `allVarsBound` against the variables the plan has bound so far. */
 function allVarsBound(term: HeadTerm, bound: Set<string>): boolean {
-  switch (term.$type) {
-    case "Variable":
-      return bound.has(term.name);
-    case "StringLiteral":
-    case "NumberLiteral":
-    case "BooleanLiteral":
-    case "NullLiteral":
-      return true;
-    case "BinaryExpr":
-      return allVarsBound(term.left, bound) && allVarsBound(term.right, bound);
-    case "UnaryExpr":
-      return allVarsBound(term.operand, bound);
-    case "FunctionCall":
-      return term.args.every((a) => allVarsBound(a, bound));
-    case "AggregateCall":
-      return allVarsBound(term.arg, bound);
-    case "Subscript":
-      return allVarsBound(term.object, bound) && allVarsBound(term.index, bound);
-    case "Slice":
-      return (
-        allVarsBound(term.object, bound) &&
-        (!term.start || allVarsBound(term.start, bound)) &&
-        (!term.end || allVarsBound(term.end, bound))
-      );
-    case "ArrayLiteral":
-      return term.elements.every((e) => allVarsBound(e, bound));
-    case "ObjectLiteral":
-      return term.entries.every((entry) => allVarsBound(entry.value, bound));
-    case "Wildcard":
-      // The `count(*)` wildcard carries no variables.
-      return true;
-    case "BracketAccess":
-      return false;
-  }
+  return coreAllVarsBound(term, (name) => bound.has(name));
 }
 
 /**

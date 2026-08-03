@@ -25,6 +25,8 @@ import {
 import {
   AnalyzerError,
   assertNever,
+  allVarsBound as coreAllVarsBound,
+  chooseEqualityBinding as coreChooseEqualityBinding,
   inferTermType,
   meetTypes,
   queryProjection,
@@ -1430,57 +1432,18 @@ function isLiteralBinding(b: Binding): boolean {
   return /^\s*(-?\d+(?:\.\d+)?|\(-\d+(?:\.\d+)?\)|'(?:[^']|'')*')\s*$/.test(b.sql);
 }
 
+/** `chooseEqualityBinding` against the variables bound to SQL so far. */
 function chooseEqualityBinding(
   eq: Equality,
   bindings: Map<string, Binding[]>,
 ): { variable: string; expr: Expression } | undefined {
-  if (
-    eq.left.$type === "Variable" &&
-    !bindings.has(eq.left.name) &&
-    allVarsBound(eq.expr, bindings)
-  ) {
-    return { variable: eq.left.name, expr: eq.expr };
-  }
-  if (
-    eq.expr.$type === "Variable" &&
-    !bindings.has(eq.expr.name) &&
-    allVarsBound(eq.left, bindings)
-  ) {
-    return { variable: eq.expr.name, expr: eq.left };
-  }
-  return undefined;
+  return coreChooseEqualityBinding(eq, (name) => bindings.has(name));
 }
 
 /** Return true if every Variable reference in `term` has a binding. */
-function allVarsBound(term: Expression, bindings: Map<string, Binding[]>): boolean {
-  switch (term.$type) {
-    case "Variable":
-      return bindings.has(term.name);
-    case "StringLiteral":
-    case "NumberLiteral":
-    case "BooleanLiteral":
-    case "NullLiteral":
-      return true;
-    case "BinaryExpr":
-      return allVarsBound(term.left, bindings) && allVarsBound(term.right, bindings);
-    case "UnaryExpr":
-      return allVarsBound(term.operand, bindings);
-    case "FunctionCall":
-      return term.args.every((a) => allVarsBound(a, bindings));
-    case "Subscript":
-      return allVarsBound(term.object, bindings) && allVarsBound(term.index, bindings);
-    case "Slice":
-      return (
-        allVarsBound(term.object, bindings) &&
-        (!term.start || allVarsBound(term.start, bindings)) &&
-        (!term.end || allVarsBound(term.end, bindings))
-      );
-    case "ArrayLiteral":
-      return term.elements.every((e) => allVarsBound(e, bindings));
-    case "ObjectLiteral":
-      return term.entries.every((entry) => allVarsBound(entry.value, bindings));
-  }
-  return false;
+/** `allVarsBound` against the variables bound to SQL so far. */
+function allVarsBound(term: HeadTerm, bindings: Map<string, Binding[]>): boolean {
+  return coreAllVarsBound(term, (name) => bindings.has(name));
 }
 
 /** Check whether a term has integer type. */

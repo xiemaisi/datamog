@@ -1,6 +1,7 @@
 import type {
   BodyElement,
   Equality,
+  Expression,
   ExtDecl,
   HeadTerm,
   Literal,
@@ -1258,9 +1259,9 @@ export function queryProjection(query: Query): HeadTerm[] {
  */
 export function equalityBindingCandidates(eq: Equality): {
   variable: string;
-  expr: HeadTerm;
+  expr: Expression;
 }[] {
-  const candidates: { variable: string; expr: HeadTerm }[] = [];
+  const candidates: { variable: string; expr: Expression }[] = [];
   if (eq.left.$type === "Variable" && eq.expr.$type !== "NullLiteral") {
     candidates.push({ variable: eq.left.name, expr: eq.expr });
   }
@@ -1268,6 +1269,82 @@ export function equalityBindingCandidates(eq: Equality): {
     candidates.push({ variable: eq.expr.name, expr: eq.left });
   }
   return candidates;
+}
+
+/**
+ * Whether every variable in `term` is already ground.
+ *
+ * `isBound` is the caller's notion of ground, which is the only thing that
+ * differs between the four places that need this: a set of safe names, the
+ * keys of a variable-type map, the keys of a translator binding map, or the
+ * planner's bound set. The traversal itself is the same everywhere, and the
+ * exhaustive switch is what makes adding an expression form show up as a type
+ * error in one place instead of silently reading as "not ground" in some
+ * consumers and "ground" in others.
+ *
+ * `BracketAccess` is the exception: post-processing splits it into `Subscript`
+ * or `Slice`, so reaching it means an un-post-processed AST, and reporting
+ * "not ground" is the safe answer.
+ */
+export function allVarsBound(term: HeadTerm, isBound: (name: string) => boolean): boolean {
+  switch (term.$type) {
+    case "Variable":
+      return isBound(term.name);
+    case "StringLiteral":
+    case "NumberLiteral":
+    case "BooleanLiteral":
+    case "NullLiteral":
+      return true;
+    case "UnaryExpr":
+      return allVarsBound(term.operand, isBound);
+    case "BinaryExpr":
+      return allVarsBound(term.left, isBound) && allVarsBound(term.right, isBound);
+    case "FunctionCall":
+      return term.args.every((a) => allVarsBound(a, isBound));
+    case "AggregateCall":
+      return allVarsBound(term.arg, isBound);
+    case "Subscript":
+      return allVarsBound(term.object, isBound) && allVarsBound(term.index, isBound);
+    case "Slice":
+      return (
+        allVarsBound(term.object, isBound) &&
+        (!term.start || allVarsBound(term.start, isBound)) &&
+        (!term.end || allVarsBound(term.end, isBound))
+      );
+    case "ArrayLiteral":
+      return term.elements.every((e) => allVarsBound(e, isBound));
+    case "ObjectLiteral":
+      return term.entries.every((entry) => allVarsBound(entry.value, isBound));
+    case "Wildcard":
+      // The `count(*)` wildcard carries no variables.
+      return true;
+    case "BracketAccess":
+      return false;
+  }
+}
+
+/**
+ * Which side of a body equality it grounds on this round, if either.
+ *
+ * A side qualifies when it is a bare variable that is not yet ground and the
+ * other side's variables all are. The left side is preferred, which only
+ * matters for `X = Y` with both unbound, where nothing is ground either way.
+ * Returning undefined means "not yet": callers sit inside a fixed point and
+ * retry once more variables are ground, which is what lets a body reference a
+ * variable bound by a later element.
+ *
+ * Built on `equalityBindingCandidates`, so the rule about what can ground a
+ * variable lives in exactly one place. Every consumer therefore agrees that a
+ * bare `null` grounds nothing.
+ */
+export function chooseEqualityBinding(
+  eq: Equality,
+  isBound: (name: string) => boolean,
+): { variable: string; expr: Expression } | undefined {
+  for (const candidate of equalityBindingCandidates(eq)) {
+    if (!isBound(candidate.variable) && allVarsBound(candidate.expr, isBound)) return candidate;
+  }
+  return undefined;
 }
 
 function tarjanSCC(rules: Map<string, Rule[]>, dependencies: Map<string, Set<string>>): string[][] {

@@ -1,4 +1,9 @@
-import { AnalyzerError, BUILTIN_BODY_ATOMS, equalityBindingCandidates } from "./analyzer.ts";
+import {
+  AnalyzerError,
+  BUILTIN_BODY_ATOMS,
+  allVarsBound,
+  equalityBindingCandidates,
+} from "./analyzer.ts";
 import type { AnalyzedProgram, BuiltinBodyAtomSpec } from "./analyzer.ts";
 import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } from "./ast.ts";
 import { BITWISE_OPS, COMPARISON_OPS, isFloatLiteral } from "./ast.ts";
@@ -288,41 +293,9 @@ export function rebuildVarTypes(
   return varTypes;
 }
 
+/** `allVarsBound` against the variables typed so far. */
 function allVarsTyped(term: HeadTerm, varTypes: Map<string, PrimitiveType>): boolean {
-  switch (term.$type) {
-    case "Variable":
-      return varTypes.has(term.name);
-    case "StringLiteral":
-    case "NumberLiteral":
-    case "BooleanLiteral":
-    case "NullLiteral":
-      return true;
-    case "UnaryExpr":
-      return allVarsTyped(term.operand, varTypes);
-    case "BinaryExpr":
-      return allVarsTyped(term.left, varTypes) && allVarsTyped(term.right, varTypes);
-    case "FunctionCall":
-      return term.args.every((a) => allVarsTyped(a, varTypes));
-    case "AggregateCall":
-      return allVarsTyped(term.arg, varTypes);
-    case "Subscript":
-      return allVarsTyped(term.object, varTypes) && allVarsTyped(term.index, varTypes);
-    case "Slice":
-      return (
-        allVarsTyped(term.object, varTypes) &&
-        (term.start === undefined || allVarsTyped(term.start, varTypes)) &&
-        (term.end === undefined || allVarsTyped(term.end, varTypes))
-      );
-    case "ArrayLiteral":
-      return term.elements.every((e) => allVarsTyped(e, varTypes));
-    case "ObjectLiteral":
-      return term.entries.every((entry) => allVarsTyped(entry.value, varTypes));
-    case "Wildcard":
-      // The `count(*)` wildcard carries no variables.
-      return true;
-    case "BracketAccess":
-      return false;
-  }
+  return allVarsBound(term, (name) => varTypes.has(name));
 }
 
 /** Validate types across all expressions in a rule (ranges, operators, function args). */
