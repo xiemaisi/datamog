@@ -260,9 +260,12 @@ describe("analyzer", () => {
     expect(() => analyze(parse("q(X) :- null = X."))).toThrow(/Unsafe variable 'X'/);
     expect(() => analyze(parse("q(1). q(X) :- X = null."))).toThrow(/Unsafe variable 'X'/);
     // Nor does it help to route it through another variable: an ungrounded N
-    // leaves the range unable to ground X. The head is checked before the
-    // body, so X is what gets named even though N is the cause.
-    expect(() => analyze(parse("q(X) :- N = null, X in [1 .. N]."))).toThrow(/Unsafe variable 'X'/);
+    // leaves the range unable to ground X. Body elements are checked before
+    // head variables, so the report names N at the equality that fails to
+    // ground it, rather than X, which no edit can fix without fixing N.
+    expect(() => analyze(parse("q(X) :- N = null, X in [1 .. N]."))).toThrow(
+      /Unsafe variable 'N' in left-hand side of equality/,
+    );
   });
 
   test("naming the type grounds a null", () => {

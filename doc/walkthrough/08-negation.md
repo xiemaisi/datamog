@@ -50,7 +50,7 @@ q(X, Y) :- r(X), not r(Y).
 Datamog rejects it:
 
 ```
-Unsafe variable 'Y' in head of rule for 'q'
+Unsafe variable 'Y' in 'not r(...)'
 ```
 
 `Y` is only ever mentioned inside a negation, which can't bind it.

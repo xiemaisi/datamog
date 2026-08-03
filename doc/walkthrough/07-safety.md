@@ -42,7 +42,7 @@ unsafe(X, Y) :- Y = X + 1.
 from? The set of all integers? Datamog rejects the rule:
 
 ```
-Unsafe variable 'X' in head of rule for 'unsafe'
+Unsafe variable 'X' in equality 'Y = ...'
 ```
 
 A fix is to bind `X` first:

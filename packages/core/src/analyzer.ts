@@ -1072,21 +1072,6 @@ function checkSafety(body: BodyElement[], headArgs: HeadTerm[], headContext: str
     }
   }
 
-  // Check head variables
-  for (const arg of headArgs) {
-    if (arg.$type === "AggregateCall") {
-      // count(*) counts rows: the wildcard binds no variable, so there is
-      // nothing to check for safety. Its legality is enforced by
-      // checkWildcards.
-      if (arg.arg.$type === "Wildcard") {
-        continue;
-      }
-      checkTermSafe(arg.arg, `aggregate in ${headContext}`);
-    } else {
-      checkTermSafe(arg, headContext);
-    }
-  }
-
   // Check body elements left-to-right
   for (const elem of body) {
     switch (elem.$type) {
@@ -1151,6 +1136,26 @@ function checkSafety(body: BodyElement[], headArgs: HeadTerm[], headContext: str
           checkTermSafe(elem.expr, "range expression");
         }
         break;
+    }
+  }
+
+  // Head variables come last, so a variable that is unsafe only because some
+  // body element could not ground it is reported at that body element. In
+  // `q(X) :- N = null, X in [1 .. N].` the report names `N`, the bound that
+  // cannot be ground, rather than `X`, which no edit can fix without fixing
+  // `N` first. A variable occurring only in the head is unaffected: no body
+  // element mentions it, so it reaches this loop.
+  for (const arg of headArgs) {
+    if (arg.$type === "AggregateCall") {
+      // count(*) counts rows: the wildcard binds no variable, so there is
+      // nothing to check for safety. Its legality is enforced by
+      // checkWildcards.
+      if (arg.arg.$type === "Wildcard") {
+        continue;
+      }
+      checkTermSafe(arg.arg, `aggregate in ${headContext}`);
+    } else {
+      checkTermSafe(arg, headContext);
     }
   }
 }

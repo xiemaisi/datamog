@@ -384,7 +384,13 @@ out ⊤. That is Option B, and §8 records what it costs.
 At `Γ* = gfp F`:
 
 1. **Unsafety** first: any variable of the rule with `Γ*(x) = ⊤`, except
-   anonymous variables occurring only in negated atoms.
+   anonymous variables occurring only in negated atoms. Where several are ⊤,
+   prefer the one whose occurrence is *upstream*: a variable is ⊤ because
+   some occurrence failed to constrain it, and the ones downstream of it are
+   ⊤ only in consequence. `q(X) :- N = null, X in [1 .. N].` has both `N` and
+   `X` at ⊤, and naming `N` points at the fix. The implementation approximates
+   this by checking body elements before head arguments, which is enough
+   because the head is always downstream of the body.
 2. **Uninhabited**: any `x` with `Γ*(x) = ⊥`. See below, because the verdict
    is one thing and the message is another.
 3. **Checks**: every check from §4, evaluated at `Γ*`.
@@ -481,7 +487,7 @@ ground a variable. One previously legal program is now rejected:
 
 ```prolog
 q(1).
-q(X) :- X = null.       % Unsafe variable 'X' in head of rule for 'q'
+q(X) :- X = null.       % Unsafe variable 'X' in equality 'X = ...'
 ```
 
 The escape hatch is to name the type in the expression: `X = null + 0` for an

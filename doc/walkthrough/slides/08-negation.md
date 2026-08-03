@@ -52,7 +52,7 @@ q(X, Y) :- r(X), not r(Y).     # rejected
 ```
 
 ```
-Unsafe variable 'Y' in head of rule for 'q'
+Unsafe variable 'Y' in 'not r(...)'
 ```
 
 Fix:
