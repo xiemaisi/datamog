@@ -1236,6 +1236,11 @@ export function queryProjection(query: Query): HeadTerm[] {
  * The (variable, other-side) pairs by which a body equality can ground a
  * variable: one per side that is a bare variable.
  *
+ * The single definition, shared by everything that needs to know what a body
+ * grounds: safety here, type inference in `types.ts`, the finiteness
+ * analysis, and the native planner. It used to be copied into each, and the
+ * copies drifted.
+ *
  * A bare `null` literal on the other side is not one of them. `null` is
  * polymorphic, so `X = null` says nothing about what `X` holds and cannot
  * determine its column's type; treating it as a binding produces a column
@@ -1251,7 +1256,10 @@ export function queryProjection(query: Query): HeadTerm[] {
  * so it never admits an unsafe program; the gap surfaces as a
  * cannot-infer-type error rather than an unbound-variable one.
  */
-function equalityBindingCandidates(eq: Equality): { variable: string; expr: HeadTerm }[] {
+export function equalityBindingCandidates(eq: Equality): {
+  variable: string;
+  expr: HeadTerm;
+}[] {
   const candidates: { variable: string; expr: HeadTerm }[] = [];
   if (eq.left.$type === "Variable" && eq.expr.$type !== "NullLiteral") {
     candidates.push({ variable: eq.left.name, expr: eq.expr });

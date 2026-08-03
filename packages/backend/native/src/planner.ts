@@ -16,7 +16,13 @@ import type {
   TypedProgram,
   Variable,
 } from "datamog-core";
-import { BUILTIN_BODY_ATOMS, assertNever, inferTermType, isAnonymousVar } from "datamog-core";
+import {
+  BUILTIN_BODY_ATOMS,
+  assertNever,
+  equalityBindingCandidates,
+  inferTermType,
+  isAnonymousVar,
+} from "datamog-core";
 import { type JsonValue, canonicalizeJson } from "datamog-engine";
 import {
   type Substitution,
@@ -510,17 +516,6 @@ function joinTypesWithValueLift(a: PrimitiveType, b: PrimitiveType): PrimitiveTy
   if ((a === "float" && b === "integer") || (a === "integer" && b === "float")) return "float";
   if (a === "value" || b === "value") return "value";
   return null;
-}
-
-function equalityBindingCandidates(eq: Equality): { variable: string; expr: HeadTerm }[] {
-  const candidates: { variable: string; expr: HeadTerm }[] = [];
-  if (eq.left.$type === "Variable") {
-    candidates.push({ variable: eq.left.name, expr: eq.expr });
-  }
-  if (eq.expr.$type === "Variable") {
-    candidates.push({ variable: eq.expr.name, expr: eq.left });
-  }
-  return candidates;
 }
 
 /** Apply an aggregate across the group of substitutions that share a key. */

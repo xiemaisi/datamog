@@ -1,13 +1,6 @@
-import { AnalyzerError, BUILTIN_BODY_ATOMS } from "./analyzer.ts";
+import { AnalyzerError, BUILTIN_BODY_ATOMS, equalityBindingCandidates } from "./analyzer.ts";
 import type { AnalyzedProgram, BuiltinBodyAtomSpec } from "./analyzer.ts";
-import type {
-  BodyElement,
-  Equality,
-  FunctionCall,
-  HeadTerm,
-  PrimitiveType,
-  RangeAtom,
-} from "./ast.ts";
+import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } from "./ast.ts";
 import { BITWISE_OPS, COMPARISON_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
 
@@ -293,17 +286,6 @@ export function rebuildVarTypes(
     }
   }
   return varTypes;
-}
-
-function equalityBindingCandidates(eq: Equality): { variable: string; expr: HeadTerm }[] {
-  const candidates: { variable: string; expr: HeadTerm }[] = [];
-  if (eq.left.$type === "Variable") {
-    candidates.push({ variable: eq.left.name, expr: eq.expr });
-  }
-  if (eq.expr.$type === "Variable") {
-    candidates.push({ variable: eq.expr.name, expr: eq.left });
-  }
-  return candidates;
 }
 
 function allVarsTyped(term: HeadTerm, varTypes: Map<string, PrimitiveType>): boolean {

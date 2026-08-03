@@ -49,6 +49,7 @@ export {
   type AnalyzedProgram,
   type BuiltinBodyAtomSpec,
   BUILTIN_BODY_ATOMS,
+  equalityBindingCandidates,
   isAnonymousVar,
   isBuiltinBodyAtom,
   queryProjection,

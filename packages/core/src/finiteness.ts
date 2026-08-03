@@ -43,8 +43,8 @@
 // contains if any internal edge (or self-loop) carries the PLUS label.
 
 import type { AnalyzedProgram } from "./analyzer.ts";
-import { BUILTIN_BODY_ATOMS, isAnonymousVar } from "./analyzer.ts";
-import type { Equality, Expression, HeadTerm, Literal, Rule } from "./ast.ts";
+import { BUILTIN_BODY_ATOMS, equalityBindingCandidates, isAnonymousVar } from "./analyzer.ts";
+import type { Expression, HeadTerm, Literal, Rule } from "./ast.ts";
 
 export interface FinitenessDiagnostic {
   severity: "warning";
@@ -197,17 +197,6 @@ function collectVars(term: HeadTerm, into: Set<string>): void {
       // Should have been rewritten by post-processing; bail safely.
       return;
   }
-}
-
-function equalityBindingCandidates(eq: Equality): { variable: string; expr: HeadTerm }[] {
-  const candidates: { variable: string; expr: HeadTerm }[] = [];
-  if (eq.left.$type === "Variable") {
-    candidates.push({ variable: eq.left.name, expr: eq.expr });
-  }
-  if (eq.expr.$type === "Variable") {
-    candidates.push({ variable: eq.expr.name, expr: eq.left });
-  }
-  return candidates;
 }
 
 function buildEdges(analyzed: AnalyzedProgram): Edge[] {
