@@ -94,7 +94,7 @@ turn a conflict into an always-empty predicate.
 `==`, subscripted, embedded in an array) whereas ⊤ is the absence of
 information. It is the identity of the meet, which is what the
 implementation's `undefined` is doing at
-[types.ts:1191](../../packages/core/src/types.ts#L1191). `value` being the
+[types.ts:1152](../../packages/core/src/types.ts#L1152). `value` being the
 top of `T` and ⊤ being the top of `T̂` are not in tension: the language
 wants a nameable top and the solve wants a unit for the meet, and those
 are different things.
@@ -124,7 +124,7 @@ deliberately *not* the order:
 ```
 
 This is `joinTypesWithJsonLift ≠ null`
-([types.ts:1168](../../packages/core/src/types.ts#L1168)). Two properties
+([types.ts:1130](../../packages/core/src/types.ts#L1130)). Two properties
 worth naming: it is symmetric, so it is not subtyping, and it accepts
 `float` in a position declared `integer`. The directional check does
 exist, as `columnTypesCompatible`, but is used only for head annotations
@@ -138,12 +138,12 @@ if undetermined); admissibility is reported by the checks, not by the
 denotation. Totality is what keeps every `f` in §4 monotone.
 
 Following `inferTermType`
-([types.ts:1021](../../packages/core/src/types.ts#L1021)):
+([types.ts:983](../../packages/core/src/types.ts#L983)):
 
 ```
 ⟦x⟧            = Γ(x)
 ⟦"s"⟧          = string
-⟦n⟧            = integer      if written without a fraction or exponent
+⟦n⟧            = integer      if written without a fractional part
 ⟦n⟧            = float        otherwise
 ⟦true⟧,⟦false⟧ = boolean
 ⟦null⟧         = ⊤            see below
@@ -155,7 +155,7 @@ and §8 records what it changed. The reasoning: NULL inhabits every one
 of the five types, as in SQL, so a `null` literal genuinely constrains
 nothing about the column it flows into. `q(X) :- X = 1 / 0.` yields an
 `integer` column holding NULL, and every partial operation in the language
-(`/`, `mod`, `sqrt`, `ln`, `**`, a reversed slice) can produce one.
+(`/`, `%`, `sqrt`, `ln`, `**`, a reversed slice) can produce one.
 Nullability is orthogonal to the lattice (an EDB column declares it with a
 `?` suffix, which changes the generated `NOT NULL` and what loaders may
 pass but not the base type inference sees), so ⊤ is the right element, and
@@ -172,24 +172,34 @@ has its own result type:
 ```
 ⟦e₁ + e₂⟧   = string  if either side is string (concatenation), else the
                        strict numeric join of the two
-⟦e₁ - e₂⟧, ⟦e₁ * e₂⟧, ⟦e₁ / e₂⟧, ⟦e₁ mod e₂⟧ = strict numeric join
+⟦e₁ - e₂⟧, ⟦e₁ * e₂⟧, ⟦e₁ / e₂⟧, ⟦e₁ % e₂⟧  = strict numeric join
 ⟦e₁ ** e₂⟧  = float                     always, even for integer operands
 ⟦e₁ & e₂⟧ and the other bitwise/shift ops = integer
 ⟦e₁ < e₂⟧ and the other comparisons      = boolean
 ⟦e₁ && e₂⟧, ⟦!e⟧                         = boolean
-⟦e[i]⟧, ⟦e[i:j]⟧ = value if ⟦e⟧ is value, else string
+⟦e[i]⟧, ⟦e[i:j]⟧ = ⊤ if ⟦e⟧ is ⊤, else value if ⟦e⟧ is value, else string
 ⟦f(e…)⟧     = the result type of f's resolved overload
 ```
 
-"Strict numeric join" is `joinTypes`: `integer ⊔ integer = integer`,
-anything mixing `integer` and `float` is `float`, and every other pair is
-inadmissible. It does not lift to `value`, which is why `5 + V` with `V` a
-`value` is rejected rather than silently widened.
+"Strict numeric join" means `integer ⊔ integer = integer`, anything mixing
+`integer` and `float` is `float`, and every other pair is inadmissible. It
+does not lift to `value`, which is why `5 + V` with `V` a `value` is rejected
+rather than silently widened.
+
+Two functions share that description and they are not interchangeable.
+`joinTypes` is the strict join, used for range bounds. The *denotation* of an
+arithmetic operator is `numericResultType`, which ignores an operand it has no
+type for rather than treating the pair as inadmissible, so
+`numericResultType(value, integer, "*")` is `integer` where `joinTypes` is ⊥.
+Nothing observable differs, because every pair the two disagree on is rejected
+by `validateBinaryExprTypes` instead. Inadmissibility is therefore a property
+of the check, not of the denotation, which is the same division of labour as
+the paragraph below.
 
 **Operators do not propagate ⊤.** An arithmetic operator's result is
 determined by whichever operands have types and is ⊤ only if none do, so
 `⟦Y + 1⟧ = integer` even when `Γ(Y) = ⊤`
-([numericResultType:1137](../../packages/core/src/types.ts#L1137)).
+([numericResultType:1088](../../packages/core/src/types.ts#L1088)).
 Comparisons, logical and bitwise operators ignore their operands
 altogether. §5 shows why this is sound, and it is deliberate: it is what
 lets an expression name a type its operands do not, which is how a typed
@@ -225,10 +235,10 @@ No bindings, for any position, bare or not. This is the single rule that
 makes negation behave: it constrains types but grounds nothing, so a
 variable appearing only under `not` keeps ⊤ and is reported unsafe. The
 implementation matches:
-[types.ts:361](../../packages/core/src/types.ts#L361) type-checks negated
+[types.ts:323](../../packages/core/src/types.ts#L323) type-checks negated
 literals without testing `negated`, while
-[types.ts:233](../../packages/core/src/types.ts#L233) and
-[analyzer.ts:988](../../packages/core/src/analyzer.ts#L988) both skip them
+[types.ts:231](../../packages/core/src/types.ts#L231) and
+[analyzer.ts:989](../../packages/core/src/analyzer.ts#L989) both skip them
 when deriving types and safety.
 
 An anonymous variable under negation is the one apparent exception, and it
@@ -237,7 +247,7 @@ negation and bound there. Give each anonymous variable in a negated atom
 the binding `Γ(_) ⊑ Σ(p)ᵢ` and it comes out concrete for the right reason.
 The implementation reaches the same answer by exempting anonymous
 variables from the check
-([analyzer.ts:1098](../../packages/core/src/analyzer.ts#L1098)).
+([analyzer.ts:1084](../../packages/core/src/analyzer.ts#L1084)).
 
 **Equality** `e₁ = e₂`
 
@@ -277,8 +287,27 @@ rather than the maximal Γ: a range that is a variable's sole binding must
 enumerate integers, since that is all the translator can synthesise,
 whereas a range on a variable bound elsewhere is only a filter and may
 have float bounds. `isBoundElsewhere`
-([types.ts:995](../../packages/core/src/types.ts#L995)) is exactly "does
+([types.ts:957](../../packages/core/src/types.ts#L957)) is exactly "does
 another binding constraint on x exist", so the condition is syntactic.
+
+**This check is unsound as stated, and as implemented.** "x's only binding"
+is read syntactically, and two constructs satisfy it without grounding
+anything: a self-equality, and a second range. Both suppress the guard, so a
+float-bounded binding range slips through and the backends disagree, which is
+the same symptom pair §8 describes for the bound-typing bug:
+
+```prolog
+q(X) :- X in [1.5 .. 2.5], X = X.          % native: no rows
+                                           % sqlite, postgres: Unbound variable 'X'
+q(X) :- X in [1.5 .. 2.5], X in [1 .. 3].  % same
+```
+
+`X = X` cannot ground `X`, and two ranges each defer to the other. The rule
+above inherits the hole, since in both programs `x` has two bindings and so
+the check is skipped. Stating it over *grounding* bindings rather than
+syntactic ones fixes the model; the implementation needs
+`equalityBindingCandidates` to reject a candidate whose other side mentions
+the variable, and `isBoundElsewhere` to stop counting another range.
 
 **Iteration atom** `object_entry(s, k, v)`, `array_element(s, i, v)`
 
@@ -339,8 +368,8 @@ That is the whole algorithm: start every variable at ⊤, repeatedly replace
 each with the meet of its constraints, stop when nothing changes.
 
 The implementation's two fixed-point loops
-([types.ts:262](../../packages/core/src/types.ts#L262) for types,
-[analyzer.ts:1033](../../packages/core/src/analyzer.ts#L1033) for safety)
+([types.ts:261](../../packages/core/src/types.ts#L261) for types,
+[analyzer.ts:1035](../../packages/core/src/analyzer.ts#L1035) for safety)
 are this one iteration split in two, which is why they have the same shape.
 Both descend, matching the greatest fixed point: an absent entry in
 `varTypes` is ⊤ and each meet moves down, and absence from `safeVars` is
@@ -374,8 +403,8 @@ The hypothesis is over *every* variable of the rule, which is why §6 checks
 all of them rather than only those reaching the head. The imprecision is
 therefore confined to which variable gets blamed: in `X = Y + 1` with `Y`
 unbound, `X` comes out `integer` and only `Y` is reported. That is the
-better diagnostic anyway, and it is an improvement on the implementation,
-which reports both.
+better diagnostic anyway, and it is what the implementation now does, since
+`checkSafety` walks the body before the head.
 
 The converse fails in exactly one place, by design: a variable whose only
 source is a bare `null` literal is enumerable (its value is NULL) but comes
@@ -397,12 +426,21 @@ At `Γ* = gfp F`:
    is one thing and the message is another.
 3. **Checks**: every check from §4, evaluated at `Γ*`.
 
-The order is normative, not cosmetic. A ⊤-typed variable fails
-admissibility checks that demand a specific type, so running checks first
-turns "Z is unbound" into "operator `<` requires numeric operands; got ⊤".
-`q(Z) :- r(X), X < Z.` is the smallest case. The implementation gets this
-right by construction, since `analyze` runs `checkSafety` before
-`inferTypes` is called at all.
+The implementation gets this order for free: `analyze` runs `checkSafety`
+before `inferTypes` is called at all.
+
+It is worth being precise about how much the order is actually carrying,
+because the obvious argument for it is wrong. One might expect a ⊤-typed
+variable to trip an admissibility check and turn "Z is unbound" into
+"operator `<` requires numeric operands". It does not: every check is written
+to tolerate an operand it has no type for, guarding each complaint with
+`if (leftType && …)` in `validateBinaryExprTypes` and returning early from
+`checkComparableTypes` when either side is undefined, which is the runtime
+counterpart of `τ ≍ ⊤` being vacuous in §2.1. So
+`s(X) :- s(Y), X = Y + 1, Y < 3.` reports "cannot infer type of column 1",
+not an operator error. The order is therefore belt-and-braces rather than
+load-carrying: it is the right order because unsafety is the more specific
+diagnosis, not because the alternative misreports.
 
 ### ⊥ has one verdict and several messages
 
@@ -489,7 +527,7 @@ ground a variable. One previously legal program is now rejected:
 
 ```prolog
 q(1).
-q(X) :- X = null.       % Unsafe variable 'X' in equality 'X = ...'
+q(X) :- X = null.       % Unsafe variable 'X' in left-hand side of equality
 ```
 
 To write a NULL, name its type: `X = as_integer(null)`, and likewise
@@ -546,7 +584,8 @@ range path, and is what the regression test uses.
   `inferTypes`. The syntactic version grounds strictly more variables than
   the typed one, so it never admits an unsafe program; where they differ the
   program is still rejected, by a cannot-infer-type error instead of an
-  unsafety one. Only the safety copy of the helper changed: `types.ts`
+  unsafety one. When this landed only the safety copy of the helper changed,
+  because `types.ts`
   already declines to type a null-bound variable, and the `finiteness.ts` and
   `planner.ts` copies only ever see safety-approved programs.
 - The `allVarsTyped` guard on equality bindings must **stay**, despite
@@ -555,17 +594,19 @@ range path, and is what the regression test uses.
   outer Σ fixed point (§9): `s(X) :- s(Y), X = Y + 1.` reports "cannot
   infer type of column 1" today only because the guard declines to type
   `X`. Without it, `numericResultType(undefined, integer)` returns
-  `integer` ([types.ts:1137](../../packages/core/src/types.ts#L1137)) and
+  `integer` ([types.ts:1137](../../packages/core/src/types.ts#L1088)) and
   the column would silently infer `integer`. Replacing the guard requires
   `⟦·⟧` to be strict in ⊥ while still ignoring ⊤, which is the distinction
   §9 says the single `undefined` cannot make.
 - **Merging the two passes is not worth it.** An earlier version of this bullet
   claimed the merge would let safety apply the typed rule instead of the
-  syntactic approximation, and treated that as the payoff. Measured, the gap
-  between the two rules is two programs: `X = null[0]` and `X = null[1:2]`,
-  subscript and slice being the only expressions besides a bare `null` that
-  denote ⊤. Both are rejected either way, so the whole benefit is a better
-  message on a pathological program. Against that: `analyze()` is today the
+  syntactic approximation, and treated that as the payoff, having measured the
+  gap between the two rules as two programs. That measurement was wrong: it is
+  an unbounded family, since a subscript or slice of an untyped object denotes
+  ⊤ (`X = null[0]`, `X = null[1:2]`) and so does arithmetic with no typed
+  operand at all (`X = -null`, `X = null + null`). Every member is rejected
+  either way, so the conclusion survives the correction and the benefit is
+  still only a better message on a pathological program. Against that: `analyze()` is today the
   gate that guarantees safety, so moving safety into `inferTypes` changes what
   that function means for the CLI, the editor and `prepareElaborated`; the
   diagnostic ordering in §6 stops being structural and has to be maintained,
@@ -576,14 +617,23 @@ range path, and is what the regression test uses.
   is re-derived in five places: `checkSafety`, `rebuildVarTypes` (itself called
   four times in `types.ts` and exported to the translator), the translator's
   own Pass 1/2, `planner.ts`'s hand-written mirror, and `finiteness.ts`'s edge
-  builder. `equalityBindingCandidates` is copied into four of them, three
-  identical and `analyzer.ts` divergent for the reason above, which no reader
-  can distinguish from an accident without finding the comment. Collapsing
-  that duplication addresses the hazard the range bug came from without
-  touching the pass structure or the `analyze()` contract.
-  `packages/core/test/diagnostics-snapshot.test.ts` exists to make such a
-  refactor safe: it pins the analyzer's verdict on a corpus of programs, so a
-  changed message shows up as a diff rather than going unnoticed.
+  builder.
+
+  The *helpers* have since been collapsed: `equalityBindingCandidates`,
+  `allVarsBound` and `chooseEqualityBinding` each have one definition in
+  `analyzer.ts`, parameterised by the caller's notion of "ground", with a thin
+  adapter in each consumer. That removed three copies of the first and two
+  each of the other two, and with them a live divergence, since neither
+  `chooseEqualityBinding` had been built on `equalityBindingCandidates` and so
+  neither honoured the `null` rule.
+
+  What remains is the five *loops*: each consumer still drives its own
+  fixed point over the body, interleaved with its own emission. Sharing those
+  is harder than sharing the helpers, because the iteration order is
+  observable in emitted SQL that the translator tests assert, and
+  `packages/core/test/diagnostics-snapshot.test.ts` pins verdicts rather than
+  SQL text, so it cannot protect that refactor. The prerequisite would be a
+  golden file over generated SQL.
 
 ### Divergence that remains
 

@@ -5,8 +5,10 @@ the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
 `DATABASE_URL`) showed that it does not. This note records what diverges, why,
 and what a fix would take. Findings were checked against PostgreSQL 16.13.
 
-Of the 21 examples that failed when the block was first added, 20 are fixed, 1
-is inherent, and 1 remains. The remaining ones are listed in
+Of the 21 examples that failed when the block was first added, 20 are fixed
+and 1 remains. One of the 20 then reappeared under a different cause, a
+last-bit float difference that will not be fixed, so the list holds two
+entries. The remaining ones are listed in
 `POSTGRES_KNOWN_FAILURES` and marked `test.failing`, so the suite stays green
 and a fix forces the entry's removal.
 

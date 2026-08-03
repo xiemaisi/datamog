@@ -53,7 +53,7 @@ num_list(n + 1)    :: Cons :- num(Car), n <= 9, num_list(n).
 ast(i, k)          :: Add(L, R) :- L : ast(i, j), token(j, "plus", _), R : ast(j + 1, k).
 
 # reference / match — qualified by the owning predicate
-list_sum(num_list::Nil, 0).
+list_sum(num_list::Nil(), 0).
 list_sum(num_list::Cons(H, T), S + as_integer(H)) :- list_sum(T, S).
 ```
 
@@ -110,19 +110,24 @@ which does not obviously justify the verbosity.
 
 ## Display
 
-Independent of source syntax: a proof value carries its predicate, so output can
-print **bare when unambiguous** (`Cons(7, Cons(7, Nil()))`) and qualify only a
-sub-proof of a *different* predicate. That keeps nested ADTs readable even under
-A, and needs no inference (the value already knows its predicate). Worth doing
-whichever source rule we pick.
+Independent of source syntax: a proof value carries its predicate, so output
+could print **bare when unambiguous** (`Cons(7, Cons(7, Nil()))`) and qualify
+only a sub-proof of a *different* predicate.
+
+**Not adopted.** `renderProof` strips the qualifier unconditionally, so even a
+genuinely ambiguous `p::Cons` / `q::Cons` prints bare `Cons()`, and a `q::Wrap`
+around a `p::Leaf` prints `Wrap(Leaf())`. Output is therefore unambiguous only
+up to the reader knowing which predicate a row came from.
 
 ## Migration
 
 Whatever the variant:
 
 - **Declarations:** `[Ctor]` → `:: Ctor` everywhere — Chapter 15, the proof-term
-  examples (`proof-terms`, `peano`, `list-ops`, `expr-eval`, the sequent/CNF
-  provers), their `expected.json`, and the case-study chapter.
+  examples (`proof-terms`, `peano`, `list-ops`, `expr-eval`, `parse-to-cnf`),
+  their `expected.json`, and the case-study chapter. The sequent and CNF
+  provers other than `parse-to-cnf` use no constructors and were never
+  affected.
 - **Proof representation:** `$proof` strings become qualified; regenerate every
   `expected.json` and fix any test asserting proof JSON.
 - **References:** under A, every bare match migrates too; under B, only genuinely
@@ -133,7 +138,7 @@ Whatever the variant:
   case becomes ordinary predicate renaming.
 - **post-process:** the proof-term desugar keys off the qualified name.
 
-Doing this while there are ~8 proof-term programs is cheaper than later, but it
+Doing this while there are a handful of proof-term programs is cheaper than later, but it
 is still a broad, breaking change to a shipped, heavily-taught feature.
 
 ## Alternatives

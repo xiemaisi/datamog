@@ -41,7 +41,9 @@ Today this is rejected:
 
 ```
 Negation of 'has_nonconstant_child' in rules for 'constant' is not
-stratifiable (they are mutually recursive)
+stratifiable (they are mutually recursive). Recursion through negation needs
+the two sides to have opposite polarity: mark exactly one of them maximal
+with '^'
 ```
 
 The rejection is correct under the current rules and wrong in spirit. The two
@@ -393,7 +395,7 @@ the real grammar (§9, phase 1): the one shape whose meaning changes is a bare
 a body filter must be boolean and XOR yields an integer. So no working program
 changes meaning.
 
-`~` is the only ASCII punctuation the grammar does not use at all, and would be
+`~` is unused by the grammar, as are `@`, `;`, `$` and `'`, so it would be
 collision-free. Rejected because `~` reads as negation in most languages, and
 the sigil is not a negation: `not bad^(E)` would then look like it negates
 twice. `^` reads as "up", which is what it means.
@@ -432,13 +434,30 @@ SCC, or from a later stratum), since negated atoms contribute no sub-proofs
 already.
 
 **Modules.** The flag lives on `HeadAtom` and `Literal` nodes, which
-`expandModule` rewrites in place when it freshens names, so it carries for
-free. Two things to get right. Generated alias rules (`local(X) :-
-inst$out(X)`) must copy the flag onto both ends, or a maximal output would lose
-its polarity on import. And an SCC that closes through a module boundary
-crosses such an alias rule, which is a positive edge, so both ends need the
-same polarity, and the importing side is an `input predicate` with nowhere to
-put a sigil. Rejected with the ordinary polarity error in v1; allowing
+`expandModule` rewrites in place when it freshens names, so it survives
+expansion. It does **not** survive the alias rule, and the consequence is
+worse than this section originally predicted.
+
+`aliasRule` synthesises its `HeadAtom` and `Literal` with no `maximal` field,
+so selecting a maximal output *by name* fails outright, whether or not an SCC
+is involved:
+
+```
+$ bun run datamog --backend native outer.dl   # := sink from "inner.dl"(node = n)
+'got$0$sink' is a maximal predicate; write 'got$0$sink^' here
+```
+
+That is the spelling check firing on a freshened internal name the user never
+wrote and cannot write, so there is no way to act on it. An SCC closing through
+the boundary gives the same error rather than a polarity error. Selecting the
+module's `?-` default *does* work, because `expandModule` copies the sigil into
+the generated `$default` rule's body and the alias then targets the minimal
+`$default`.
+
+No test covers any of this. Fixing it means copying the flag onto both ends of
+the alias rule, at which point the original prediction applies: an SCC that
+closes through the boundary needs both ends to agree, and the importing side is
+an `input predicate` with nowhere to put a sigil. Allowing
 `input predicate p^(...)` is the later extension.
 
 **Finiteness analysis.** No change needed. `finiteness.ts` only follows positive
@@ -449,11 +468,11 @@ produces no cycle in the value-flow graph and no warning, which is correct.
 **REPL.** The native REPL path re-evaluates the whole accumulated program per
 chunk, so a parity SCC is recomputed from scratch each time. Nothing to do.
 
-**Trace / playground step view.** This is the one consumer that needs real work.
-Today the trace is append-only: `rule-applied` carries the tuples added, and
-`trace-state.ts` accumulates them. Clearing the maximal relations between rounds
-breaks that invariant, so the trace needs a `relation-cleared` event and the
-step panel needs to honour it.
+**Trace / playground step view.** Done. An append-only trace could not express
+clearing the maximal relations between rounds, so `trace.ts` gained
+`round-start` / `round-end` / `relation-cleared`, and `trace-state.ts` treats
+`round-end` as a stop at every granularity, drops cleared relations during
+replay, and labels rounds and clears in its captions.
 
 ## 9 Implementation plan
 

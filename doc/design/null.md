@@ -3,8 +3,8 @@
 Status: implemented. The normative rules are spec §5.4 (sources,
 propagation, three-valued logic) and §2.6 (the two comparison families).
 This note is the rationale, the alternatives rejected, and the sharp edges,
-because none of that survives in a rule list. §5 records one behaviour that
-looks like a bug rather than a decision.
+because none of that survives in a rule list. §5 records one specified
+behaviour that is worth revisiting, and why it was left alone.
 
 ## 1. The reflex, and why it misfires
 
@@ -13,13 +13,13 @@ where every reference type is implicitly nullable, dereferencing is
 unchecked, and the failure mode is a crash at a site far from the mistake.
 None of those three hold here.
 
-Datamog's NULL cannot crash anything. It is an absorbing element of a total
-algebra: every operation is defined on it and returns a value, so there is
-no dereference to get wrong and no exception to propagate. The closer
+Datamog's NULL cannot crash anything. Every operation is defined on it and
+returns a value, so there is no dereference to get wrong and no exception to
+propagate. The closer
 analogy is IEEE `NaN`, or an option type flattened into the value domain
 with all the plumbing done for you. The type system is also not implicitly
 nullable in the way Hoare's target was: `null` has no type of its own
-(spec §1.5, and see §4 below), so no column is declared as "integer, or
+(spec §1.5, and see §6 below), so no column is declared as "integer, or
 maybe not".
 
 That does not make NULL free. The cost is real, but it is a different cost
@@ -142,7 +142,7 @@ This one is a decision, not an oversight. Spec §5.4 states it:
 > doesn't join NULL to NULL. Use an explicit body Equality
 > (`atom(N, V), V = null`) when null-aware matching is wanted.
 
-and [planner.ts:714](../../packages/backend/native/src/planner.ts#L714)
+and [planner.ts:674](../../packages/backend/native/src/planner.ts#L674)
 repeats it in code. The rest of this section is the case for revisiting it,
 not a bug report.
 
@@ -192,8 +192,10 @@ integer join:
 | `t1.x = t2.x` | Hash Join | 6 ms |
 | `t1.x IS NOT DISTINCT FROM t2.x` | Nested Loop | 32,557 ms |
 
-Five thousand times slower, and quadratic, so worse at scale. Whatever
-happens here cannot be a blanket substitution.
+Three to four orders of magnitude slower, and quadratic, so worse at scale.
+The ratio varies by machine and the absolute numbers are not the claim; the
+plan shapes are, and they are stable. Whatever happens here cannot be a
+blanket substitution.
 
 That leaves emitting the null-aware form only where a column can actually
 hold NULL. EDB columns already carry the information: they are `NOT NULL`
@@ -285,10 +287,10 @@ which also covers why the analyser's "no type information" element sits
   `list` skips NULLs to match the rest of the aggregate family (spec §2.7),
   every member of which does, and because a kept NULL would be
   unobservable: a JSON `null` leaf collapses to SQL NULL, and the runtime
-  expression model cannot distinguish it from an absent element (spec §5.4).
+  expression model cannot distinguish it from an absent element (spec §2.9).
   Note that the SQL `FILTER` has to test the *raw* argument rather than the
   lifted one, since `json_quote(NULL)` yields the text `'null'` and would
   otherwise slip a JSON `null` into the array.
 - A `value` column's JSON `null` leaf collapses to SQL NULL for
-  cross-backend uniformity (spec §5.4), so `type_of` on it returns NULL
+  cross-backend uniformity (spec §2.9), so `type_of` on it returns NULL
   rather than the string `"null"`. There is one NULL, not two.

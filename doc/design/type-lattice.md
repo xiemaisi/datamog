@@ -32,11 +32,20 @@ string, a number, an object, `null`). `integer < float` (an integer is a
 usable float). The bottom is spelled `undefined` in the code: the "no
 information yet" seed of the fixed-point, and the identity of the join.
 
+That one `undefined` wears two hats, which is worth knowing before reading
+the code. As the join's identity it is the bottom, which is the reading above
+and the one this document needs. As `meetTypes`' identity it is the *top*: a
+variable nothing constrains meets to whatever its next occurrence says. No
+element can be the unit of both operations, so the two readings are genuinely
+different elements sharing a representation. See
+[typing-and-safety-constraints.md](typing-and-safety-constraints.md) §2 and
+§9, which take the meet's view and so place it above `value`.
+
 [typing-and-safety-constraints.md](typing-and-safety-constraints.md)
-proposes casting the within-a-rule half of this as a single constraint
-solve over one lattice, with safety read off its top element rather than
-computed by a separate pass. That document is a proposal and changes
-behaviour in one respect; this one describes what is implemented.
+casts the within-a-rule half of this as a single constraint solve over one
+lattice, with safety read off its top element rather than computed by a
+separate pass. The behaviour it argued for has since shipped; what is still
+only a model there is the *structure*, one solve in place of two passes.
 
 Two operations fall out, and both are used, in opposite directions:
 

@@ -1,6 +1,6 @@
 # Design notes: finiteness checking
 
-Status: partially implemented. This is the home for design decisions about how
+Status: implemented, both halves. This is the home for design decisions about how
 Datamog keeps recursion from running forever. It has two independent halves, and
 they are meant to grow separately:
 
