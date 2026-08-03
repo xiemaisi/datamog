@@ -201,11 +201,24 @@ unless declared `?`, so an EDB-only join keeps its hash join and is
 semantically unaffected, there being no NULLs to disagree about. IDB columns
 do not: nothing in the language tracks which of them can produce a NULL, and
 any rule can (`1 / 0` suffices). So the precise fix needs a nullability
-analysis over IDB columns, a least fixed point of the same shape as type
-inference. That analysis has independent value, since it is the only way to
-know when the divergence is even reachable, and it would let the compiler
-warn on a join whose semantics are in question rather than quietly picking
-one.
+analysis over IDB columns, and that is the prerequisite for reopening any of
+this.
+
+Such an analysis is a per-(predicate, column) boolean, computed as a least
+fixed point over the dependency graph from "not nullable" upward, the same
+shape as type inference. It originates at the NULL sources in §5.4 (an EDB
+column declared `?`, a partial operation in a head expression, a bare `null`
+head argument) and propagates through any head expression mentioning a
+nullable variable. Aggregates propagate rather than originate: a group exists
+only because a row exists, so `sum(X)` is NULL only where `X` is nullable and
+some group is entirely NULL.
+
+It is not built, because with the decision below it would have no consumer.
+Its standing cost is a coupling to the builtin registry: adding a partial
+builtin without marking it as a NULL source would silently under-approximate.
+That failure mode is benign here, since under-approximating means emitting a
+plain `=`, which is what happens today, but the analysis would only ever be as
+trustworthy as that list.
 
 The remaining cost, whichever way it goes: a nullable-column join pays the
 nested loop. One `1 / 0` in a recursive predicate would poison its column
@@ -216,7 +229,9 @@ does not carry enough weight to justify either a new analysis or a
 performance cliff that appears when someone adds a division to a rule. The
 divergence stays, spec §5.4 stays normative, and the workaround it documents
 (write the equality out when null-aware matching is wanted) is the answer.
-Recorded here so the next reader knows it was weighed rather than missed.
+The nullability analysis stays unbuilt for the same reason, and separately:
+warning on a nullable-column join was considered and declined too, so it
+would have no consumer. Both were weighed rather than missed.
 
 ## 6. Why the static story stays clean
 
