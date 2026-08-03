@@ -11,18 +11,32 @@ survives in a rule list.
 There are five column types: `string`, `integer`, `float`, `boolean`, `value`.
 They are not a flat set. Ordered by "can stand in for", they form a lattice:
 
+```mermaid
+graph BT
+    int["integer"]
+    flt["float"]
+    str["string"]
+    bool["boolean"]
+    val["value<br/>top: any shape, stored as JSON"]
+
+    int --> flt
+    flt --> val
+    str --> val
+    bool --> val
 ```
-              value            (top: any shape, stored as JSON)
-          /    |    \    \
-    string  boolean  float  ...
-                        |
-                     integer
-```
+
+Arrows point from a type to any type it can stand in for.
 
 `value` is the top: every primitive lifts into it (a `value` cell can hold a
 string, a number, an object, `null`). `integer < float` (an integer is a
 usable float). The bottom is spelled `undefined` in the code: the "no
 information yet" seed of the fixed-point, and the identity of the join.
+
+[typing-and-safety-constraints.md](typing-and-safety-constraints.md)
+proposes casting the within-a-rule half of this as a single constraint
+solve over one lattice, with safety read off its top element rather than
+computed by a separate pass. That document is a proposal and changes
+behaviour in one respect; this one describes what is implemented.
 
 Two operations fall out, and both are used, in opposite directions:
 
