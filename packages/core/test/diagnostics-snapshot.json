@@ -1,0 +1,4361 @@
+{
+  "aggregate-count-star": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "s": [
+        "string"
+      ]
+    }
+  },
+  "aggregate-grouped": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string",
+        "integer"
+      ],
+      "s": [
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "aggregate-recursive": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Aggregate predicate 'q' cannot be recursive",
+    "span": [
+      31,
+      40
+    ]
+  },
+  "aggregate/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      66,
+      70
+    ]
+  },
+  "aggregate/float": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      65,
+      69
+    ]
+  },
+  "aggregate/int": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      63,
+      67
+    ]
+  },
+  "aggregate/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      66,
+      70
+    ]
+  },
+  "aggregate/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      65,
+      69
+    ]
+  },
+  "aggregate/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      63,
+      67
+    ]
+  },
+  "aggregate/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' has arity 2 but is used with 1 arguments",
+    "span": [
+      63,
+      67
+    ]
+  },
+  "annotation-narrows": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'q' column 1 is annotated 'integer' but inferred as 'value'",
+    "span": [
+      31,
+      32
+    ]
+  },
+  "annotation-own-recursion-sees-inferred": {
+    "ok": true,
+    "types": {
+      "b": [
+        "integer"
+      ],
+      "p": [
+        "integer"
+      ]
+    }
+  },
+  "annotation-published-to-consumer": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '+' requires numeric or string operands; got 'value'",
+    "span": [
+      70,
+      75
+    ]
+  },
+  "annotation-widens": {
+    "ok": true,
+    "types": {
+      "p": [
+        "integer"
+      ],
+      "q": [
+        "integer"
+      ]
+    }
+  },
+  "arity-mismatch-rules": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'r' has arity 2 but is defined with 1 arguments",
+    "span": [
+      61,
+      65
+    ]
+  },
+  "atom-arg/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Argument 1 of 't(...)' has type 'boolean' but column is declared as 'integer'",
+    "span": [
+      54,
+      58
+    ]
+  },
+  "atom-arg/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "atom-arg/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "atom-arg/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "atom-arg/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Argument 1 of 't(...)' has type 'string' but column is declared as 'integer'",
+    "span": [
+      54,
+      57
+    ]
+  },
+  "atom-arg/unbound": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "atom-arg/varA": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "bitwise-on-float": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '&' requires integer operands; got 'float'",
+    "span": [
+      47,
+      52
+    ]
+  },
+  "cast/bool": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "cast/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "cast/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "cast/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "cast/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "cast/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in equality 'X = ...'",
+    "span": [
+      43,
+      56
+    ]
+  },
+  "cast/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in equality 'X = ...'",
+    "span": [
+      43,
+      56
+    ]
+  },
+  "conflict-across-atoms": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Variable 'X' has conflicting types 'integer' and 'string'",
+    "span": [
+      77,
+      78
+    ]
+  },
+  "conflict-in-equality": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot compare 'integer' and 'string' in equality",
+    "span": [
+      15,
+      26
+    ]
+  },
+  "edb-and-idb": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'p' is both an input predicate and defined by rules",
+    "span": [
+      30,
+      34
+    ]
+  },
+  "eq-arith/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '+' requires numeric or string operands; got 'boolean'",
+    "span": [
+      43,
+      51
+    ]
+  },
+  "eq-arith/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "float"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-arith/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-arith/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-arith/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-arith/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in equality 'X = ...'",
+    "span": [
+      43,
+      48
+    ]
+  },
+  "eq-arith/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in equality 'X = ...'",
+    "span": [
+      43,
+      48
+    ]
+  },
+  "eq-ground/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot compare 'integer' and 'boolean' in equality",
+    "span": [
+      52,
+      60
+    ]
+  },
+  "eq-ground/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-ground/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-ground/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-ground/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot compare 'integer' and 'string' in equality",
+    "span": [
+      52,
+      59
+    ]
+  },
+  "eq-ground/unbound": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-ground/varA": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-lhs/bool": {
+    "ok": true,
+    "types": {
+      "q": [
+        "boolean"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-lhs/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "float"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-lhs/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-lhs/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in left-hand side of equality",
+    "span": [
+      39,
+      40
+    ]
+  },
+  "eq-lhs/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-lhs/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in equality 'X = ...'",
+    "span": [
+      43,
+      44
+    ]
+  },
+  "eq-lhs/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in equality 'X = ...'",
+    "span": [
+      43,
+      44
+    ]
+  },
+  "eq-rhs/bool": {
+    "ok": true,
+    "types": {
+      "q": [
+        "boolean"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-rhs/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "float"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-rhs/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-rhs/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in right-hand side of equality",
+    "span": [
+      46,
+      47
+    ]
+  },
+  "eq-rhs/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "eq-rhs/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in equality 'U = ...'",
+    "span": [
+      43,
+      44
+    ]
+  },
+  "eq-rhs/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in equality 'A = ...'",
+    "span": [
+      43,
+      44
+    ]
+  },
+  "example/adder-debugging/adder-debugging.dl": {
+    "ok": true,
+    "types": {
+      "answer": [
+        "string"
+      ],
+      "bit0_primary": [
+        "string"
+      ],
+      "feeds_and": [
+        "string"
+      ],
+      "feeds_or": [
+        "string"
+      ],
+      "first_carry": [
+        "string"
+      ],
+      "gate": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "half_sum": [
+        "string"
+      ],
+      "primary": [
+        "string"
+      ],
+      "sum_bit": [
+        "string"
+      ],
+      "suspect": [
+        "string",
+        "string"
+      ],
+      "swapped": [
+        "string"
+      ],
+      "top_z": [
+        "string"
+      ],
+      "wire_used": [
+        "string"
+      ],
+      "zgate": [
+        "string"
+      ]
+    }
+  },
+  "example/aggregates/aggregates.dl": {
+    "ok": true,
+    "types": {
+      "all_records": [
+        "string",
+        "value"
+      ],
+      "best_score": [
+        "string",
+        "integer"
+      ],
+      "num_subjects": [
+        "string",
+        "integer"
+      ],
+      "record_count": [
+        "integer"
+      ],
+      "records": [
+        "string",
+        "value"
+      ],
+      "scores": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "strong": [
+        "string"
+      ],
+      "student_avg": [
+        "string",
+        "float"
+      ],
+      "subjects": [
+        "string",
+        "string"
+      ],
+      "total_score": [
+        "string",
+        "integer"
+      ],
+      "worst_score": [
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/arithmetic/arithmetic.dl": {
+    "ok": true,
+    "types": {
+      "doubled": [
+        "string",
+        "integer"
+      ],
+      "scores": [
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/bill-of-materials/bom.dl": {
+    "ok": true,
+    "types": {
+      "all_subparts": [
+        "string",
+        "string"
+      ],
+      "assembly": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "basic_subparts": [
+        "string",
+        "string"
+      ],
+      "bike_build_time": [
+        "integer"
+      ],
+      "faster": [
+        "string",
+        "integer"
+      ],
+      "fastest": [
+        "string",
+        "integer"
+      ],
+      "how_soon": [
+        "string",
+        "integer"
+      ],
+      "larger": [
+        "string",
+        "integer"
+      ],
+      "part_cost": [
+        "string",
+        "string",
+        "float",
+        "integer"
+      ],
+      "time_for_basic": [
+        "string",
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/birds/birds.dl": {
+    "ok": true,
+    "types": {
+      "family": [
+        "string",
+        "string"
+      ],
+      "identified": [
+        "string"
+      ],
+      "observed": [
+        "string",
+        "string"
+      ],
+      "order": [
+        "string",
+        "string"
+      ],
+      "placed_to_family": [
+        "string",
+        "string"
+      ],
+      "seen": [
+        "string"
+      ],
+      "species": [
+        "string",
+        "string"
+      ],
+      "unidentified": [
+        "string"
+      ]
+    }
+  },
+  "example/boolean-ops/boolean-ops.dl": {
+    "ok": true,
+    "types": {
+      "admin_or_active": [
+        "string"
+      ],
+      "both_admin_and_active": [
+        "string"
+      ],
+      "locked": [
+        "string"
+      ],
+      "status": [
+        "string",
+        "boolean",
+        "boolean"
+      ],
+      "user": [
+        "string",
+        "boolean",
+        "boolean"
+      ],
+      "user_status": [
+        "string",
+        "boolean",
+        "boolean"
+      ]
+    }
+  },
+  "example/bridge-crossing/bridge-crossing.dl": {
+    "ok": true,
+    "types": {
+      "bound": [
+        "integer"
+      ],
+      "fastest": [
+        "integer"
+      ],
+      "opp": [
+        "string",
+        "string"
+      ],
+      "shore": [
+        "string"
+      ],
+      "slower": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "state": [
+        "string",
+        "string",
+        "string",
+        "string",
+        "string",
+        "integer"
+      ],
+      "time": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/catch-the-fire-starter/catch-the-fire-starter.dl": {
+    "ok": true,
+    "types": {
+      "bald": [
+        "string"
+      ],
+      "can_travel_north": [
+        "string"
+      ],
+      "child": [
+        "string"
+      ],
+      "fire_starter": [
+        "string"
+      ],
+      "person": [
+        "string",
+        "integer",
+        "string",
+        "string"
+      ],
+      "southerner": [
+        "string"
+      ]
+    }
+  },
+  "example/cnf-falsifiability/cnf-falsifiability.dl": {
+    "ok": true,
+    "types": {
+      "assignment": [
+        "integer"
+      ],
+      "clause": [
+        "string"
+      ],
+      "clause_lit": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "counterexample": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "eval": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "falsifiable": [],
+      "falsifies": [
+        "integer",
+        "string"
+      ],
+      "nvars": [
+        "integer"
+      ],
+      "satisfies": [
+        "integer",
+        "string"
+      ],
+      "theorem": [],
+      "var": [
+        "integer"
+      ]
+    }
+  },
+  "example/cnf-from-ast/cnf-from-ast.dl": {
+    "ok": true,
+    "types": {
+      "assignment": [
+        "integer"
+      ],
+      "clause": [
+        "value"
+      ],
+      "clause_lit": [
+        "value",
+        "integer",
+        "integer"
+      ],
+      "clause_lit_named": [
+        "value",
+        "string",
+        "integer"
+      ],
+      "counterexample": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "eval": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "falsifiable": [],
+      "falsifies": [
+        "integer",
+        "value"
+      ],
+      "merge": [
+        "value",
+        "value"
+      ],
+      "neg": [
+        "integer",
+        "value"
+      ],
+      "node": [
+        "integer",
+        "string"
+      ],
+      "node_child": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "node_var": [
+        "integer",
+        "string"
+      ],
+      "nvars": [
+        "integer"
+      ],
+      "pos": [
+        "integer",
+        "value"
+      ],
+      "rank": [
+        "string",
+        "integer"
+      ],
+      "root": [
+        "integer"
+      ],
+      "root_clause": [
+        "value"
+      ],
+      "satisfies": [
+        "integer",
+        "value"
+      ],
+      "theorem": [],
+      "var": [
+        "integer"
+      ],
+      "var_index": [
+        "string",
+        "integer"
+      ],
+      "varname": [
+        "string"
+      ]
+    }
+  },
+  "example/cnf-tseitin/cnf-tseitin.dl": {
+    "ok": true,
+    "types": {
+      "assignment": [
+        "integer"
+      ],
+      "clause": [
+        "value"
+      ],
+      "clause_lit": [
+        "value",
+        "integer",
+        "integer"
+      ],
+      "counterexample": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "eval": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "falsifies": [
+        "integer",
+        "value"
+      ],
+      "has_model": [],
+      "internal": [
+        "integer"
+      ],
+      "irank": [
+        "integer",
+        "integer"
+      ],
+      "model": [
+        "integer"
+      ],
+      "ninternal": [
+        "integer"
+      ],
+      "node": [
+        "integer",
+        "string"
+      ],
+      "node_child": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "node_var": [
+        "integer",
+        "string"
+      ],
+      "nprop": [
+        "integer"
+      ],
+      "nvars": [
+        "integer"
+      ],
+      "rank": [
+        "string",
+        "integer"
+      ],
+      "root": [
+        "integer"
+      ],
+      "satisfies": [
+        "integer",
+        "value"
+      ],
+      "theorem": [],
+      "tvar": [
+        "integer",
+        "integer"
+      ],
+      "var": [
+        "integer"
+      ],
+      "var_index": [
+        "string",
+        "integer"
+      ],
+      "varname": [
+        "string"
+      ],
+      "violated": [
+        "integer"
+      ]
+    }
+  },
+  "example/collatz/collatz.dl": {
+    "ok": true,
+    "types": {
+      "chain": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "longest": [
+        "integer"
+      ],
+      "peak": [
+        "integer"
+      ],
+      "seed": [
+        "integer"
+      ],
+      "steps": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/constant-expressions/constant-expressions.dl": {
+    "ok": true,
+    "types": {
+      "child": [
+        "string",
+        "string"
+      ],
+      "composite": [
+        "string"
+      ],
+      "constant": [
+        "string"
+      ],
+      "fold_boundary": [
+        "string",
+        "string"
+      ],
+      "has_nonconstant_child": [
+        "string"
+      ],
+      "literal": [
+        "string"
+      ],
+      "not_constant": [
+        "string"
+      ]
+    }
+  },
+  "example/courses/courses.dl": {
+    "ok": true,
+    "types": {
+      "all_prereqs": [
+        "string",
+        "string"
+      ],
+      "prereq": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/crown-the-rightful-heir/crown-the-rightful-heir.dl": {
+    "ok": true,
+    "types": {
+      "ancestor": [
+        "string",
+        "string"
+      ],
+      "child": [
+        "string",
+        "string"
+      ],
+      "criminal": [
+        "string"
+      ],
+      "deceased": [
+        "string"
+      ],
+      "descendant": [
+        "string",
+        "string"
+      ],
+      "eligible_heir": [
+        "string"
+      ],
+      "living_descendant": [
+        "string"
+      ],
+      "parent": [
+        "string",
+        "string"
+      ],
+      "relative": [
+        "string",
+        "string"
+      ],
+      "sibling": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/cryptarithmetic/cryptarithmetic.dl": {
+    "ok": true,
+    "types": {
+      "addition": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "carry": [
+        "integer"
+      ],
+      "col1": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "col2": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "col3": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "dig": [
+        "integer"
+      ],
+      "letters": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "solution": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/cyk-parser/cyk-parser.dl": {
+    "ok": true,
+    "types": {
+      "ambiguous": [
+        "string",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "chart": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "derivation": [
+        "string",
+        "integer",
+        "integer",
+        "string",
+        "string",
+        "integer"
+      ],
+      "grammar": [
+        "string",
+        "string",
+        "string"
+      ],
+      "lexicon": [
+        "string",
+        "string"
+      ],
+      "parses": [],
+      "sentence_end": [
+        "integer"
+      ],
+      "span": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "splits": [
+        "string",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "token": [
+        "integer",
+        "string"
+      ]
+    }
+  },
+  "example/evaluate-formula/evaluate-formula.dl": {
+    "ok": true,
+    "types": {
+      "assignment": [
+        "integer"
+      ],
+      "atom": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "beaten": [
+        "integer"
+      ],
+      "char": [
+        "integer",
+        "string"
+      ],
+      "conj": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "disj": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "formula": [
+        "integer",
+        "integer"
+      ],
+      "impl": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "input": [
+        "string"
+      ],
+      "len": [
+        "integer"
+      ],
+      "lit": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "num_vars": [
+        "integer"
+      ],
+      "prop_var": [
+        "string",
+        "integer"
+      ],
+      "satisfies": [
+        "integer"
+      ]
+    }
+  },
+  "example/expr-eval/expr-eval.dl": {
+    "ok": true,
+    "types": {
+      "ast": [
+        "integer",
+        "integer",
+        "value"
+      ],
+      "eval": [
+        "value",
+        "integer"
+      ],
+      "full_parse": [
+        "value",
+        "integer"
+      ],
+      "input_end": [
+        "integer"
+      ],
+      "token": [
+        "integer",
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/expression-fixer/expression-fixer.dl": {
+    "ok": true,
+    "types": {
+      "addop": [
+        "string"
+      ],
+      "assigned_op": [
+        "integer",
+        "integer",
+        "string"
+      ],
+      "assignment": [
+        "integer"
+      ],
+      "best_fix": [
+        "integer"
+      ],
+      "binop": [
+        "integer",
+        "string",
+        "integer",
+        "integer"
+      ],
+      "change_count": [
+        "integer",
+        "integer"
+      ],
+      "change_flag": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "char": [
+        "integer",
+        "string"
+      ],
+      "edit": [
+        "integer",
+        "integer",
+        "string",
+        "string"
+      ],
+      "eval": [
+        "integer",
+        "integer"
+      ],
+      "eval_as": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "expr": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "factor": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "fix": [
+        "integer"
+      ],
+      "input": [
+        "string"
+      ],
+      "leaf": [
+        "integer",
+        "integer"
+      ],
+      "len": [
+        "integer"
+      ],
+      "min_changes": [
+        "integer"
+      ],
+      "nops": [
+        "integer"
+      ],
+      "num": [
+        "integer",
+        "integer"
+      ],
+      "op_of": [
+        "integer",
+        "string"
+      ],
+      "opnode": [
+        "integer"
+      ],
+      "oprank": [
+        "integer",
+        "integer"
+      ],
+      "oprank_raw": [
+        "integer",
+        "integer"
+      ],
+      "original": [
+        "integer"
+      ],
+      "paren": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "pow3": [
+        "integer",
+        "integer"
+      ],
+      "root": [
+        "integer"
+      ],
+      "split_add": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "split_mul": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "target": [
+        "integer"
+      ],
+      "term": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "want": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/family/family.dl": {
+    "ok": true,
+    "types": {
+      "ancestor": [
+        "string",
+        "string"
+      ],
+      "parent": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/fibonacci/fibonacci.dl": {
+    "ok": true,
+    "types": {
+      "fib_step": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "fibonacci": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/find-the-thief/find-the-thief.dl": {
+    "ok": true,
+    "types": {
+      "avg_height": [
+        "float"
+      ],
+      "dark_hair": [
+        "string"
+      ],
+      "height_180_190": [
+        "string"
+      ],
+      "max_age": [
+        "integer"
+      ],
+      "max_east_age": [
+        "integer"
+      ],
+      "max_height": [
+        "integer"
+      ],
+      "person": [
+        "string",
+        "integer",
+        "string",
+        "integer",
+        "string"
+      ],
+      "suspect": [
+        "string"
+      ]
+    }
+  },
+  "example/flights/flights.dl": {
+    "ok": true,
+    "types": {
+      "flight": [
+        "string",
+        "string",
+        "float"
+      ],
+      "travel": [
+        "string",
+        "string",
+        "float"
+      ]
+    }
+  },
+  "example/grammar/grammar.dl": {
+    "ok": true,
+    "types": {
+      "a": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "at": [
+        "string",
+        "integer",
+        "string"
+      ],
+      "input": [
+        "string"
+      ]
+    }
+  },
+  "example/graph/graph.dl": {
+    "ok": true,
+    "types": {
+      "edge": [
+        "string",
+        "string"
+      ],
+      "reachable": [
+        "string"
+      ]
+    }
+  },
+  "example/guardians/guardians.dl": {
+    "ok": true,
+    "types": {
+      "cell": [
+        "integer"
+      ],
+      "guard": [
+        "integer"
+      ],
+      "how_many": [
+        "integer"
+      ],
+      "turn": [
+        "integer",
+        "integer"
+      ],
+      "turns": [
+        "integer",
+        "integer"
+      ],
+      "unlocked": [
+        "integer"
+      ]
+    }
+  },
+  "example/hanoi/hanoi.dl": {
+    "ok": true,
+    "types": {
+      "discs": [
+        "integer"
+      ],
+      "move": [
+        "integer",
+        "integer",
+        "string",
+        "string"
+      ],
+      "pow2": [
+        "integer",
+        "integer"
+      ],
+      "task": [
+        "integer",
+        "string",
+        "string",
+        "string",
+        "integer"
+      ],
+      "total": [
+        "integer"
+      ]
+    }
+  },
+  "example/integrity-constraints/integrity-constraints.dl": {
+    "ok": true,
+    "types": {
+      "cust": [
+        "string",
+        "boolean"
+      ],
+      "inactive_with_orders": [
+        "string"
+      ],
+      "ord": [
+        "integer",
+        "string",
+        "integer"
+      ],
+      "orphan_order": [
+        "integer",
+        "string"
+      ],
+      "placed_by": [
+        "string"
+      ],
+      "revenue_by_customer": [
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/json-config/json-config.dl": {
+    "ok": true,
+    "types": {
+      "app_name": [
+        "string"
+      ],
+      "app_version": [
+        "string"
+      ],
+      "config": [
+        "value"
+      ],
+      "enabled_feature": [
+        "string"
+      ],
+      "endpoint": [
+        "integer",
+        "string"
+      ]
+    }
+  },
+  "example/json-events/json-events.dl": {
+    "ok": true,
+    "types": {
+      "event": [
+        "value"
+      ],
+      "event_string_header": [
+        "integer",
+        "string",
+        "string"
+      ],
+      "field_types": [
+        "integer",
+        "string",
+        "string"
+      ],
+      "ok_v1_request": [
+        "integer",
+        "string"
+      ],
+      "request": [
+        "integer",
+        "string",
+        "string",
+        "integer"
+      ],
+      "tag_count": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/json-literals/json-literals.dl": {
+    "ok": true,
+    "types": {
+      "employee": [
+        "integer",
+        "string",
+        "integer"
+      ],
+      "employee_record": [
+        "integer",
+        "value"
+      ],
+      "employee_tagged": [
+        "integer",
+        "value"
+      ],
+      "nothing": [
+        "value"
+      ]
+    }
+  },
+  "example/jugs/jugs.dl": {
+    "ok": true,
+    "types": {
+      "reachable": [
+        "integer",
+        "integer"
+      ],
+      "solved": [
+        "integer",
+        "integer"
+      ],
+      "state": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/knights-and-knaves/knights-and-knaves.dl": {
+    "ok": true,
+    "types": {
+      "booleans": [
+        "boolean",
+        "boolean",
+        "boolean"
+      ],
+      "kind": [
+        "boolean"
+      ],
+      "role": [
+        "string",
+        "string"
+      ],
+      "said": [
+        "string",
+        "boolean"
+      ],
+      "solution": [
+        "boolean",
+        "boolean",
+        "boolean"
+      ]
+    }
+  },
+  "example/list-ops/list-ops.dl": {
+    "ok": true,
+    "types": {
+      "append": [
+        "value",
+        "value",
+        "value"
+      ],
+      "demo_append": [
+        "value"
+      ],
+      "demo_member": [
+        "value"
+      ],
+      "demo_reverse": [
+        "value"
+      ],
+      "demo_suffix": [
+        "value"
+      ],
+      "member": [
+        "value",
+        "value"
+      ],
+      "num": [
+        "integer"
+      ],
+      "num_list": [
+        "integer",
+        "value"
+      ],
+      "reverse": [
+        "value",
+        "value"
+      ],
+      "suffix": [
+        "value",
+        "value"
+      ]
+    }
+  },
+  "example/logic-circuit/logic-circuit.dl": {
+    "ok": true,
+    "types": {
+      "answer": [
+        "integer"
+      ],
+      "bit_value": [
+        "integer",
+        "integer"
+      ],
+      "gate": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "init": [
+        "string",
+        "integer"
+      ],
+      "place": [
+        "integer",
+        "integer"
+      ],
+      "pow2": [
+        "integer",
+        "integer"
+      ],
+      "signal": [
+        "string",
+        "integer"
+      ],
+      "topbit": [
+        "integer"
+      ],
+      "zbit": [
+        "string",
+        "integer"
+      ],
+      "zsuffix": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/map-colouring/map-colouring.dl": {
+    "ok": true,
+    "types": {
+      "colour": [
+        "string"
+      ],
+      "colouring": [
+        "string",
+        "string",
+        "string",
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "how_many": [
+        "integer"
+      ]
+    }
+  },
+  "example/modular-order/reach.dl": {
+    "ok": true,
+    "types": {
+      "edge": [
+        "integer",
+        "integer"
+      ],
+      "reach": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/mutual-recursion/mutual-recursion.dl": {
+    "ok": true,
+    "types": {
+      "after_blue": [
+        "string",
+        "string"
+      ],
+      "after_red": [
+        "string",
+        "string"
+      ],
+      "alternating": [
+        "string",
+        "string"
+      ],
+      "blue": [
+        "string",
+        "string"
+      ],
+      "even": [
+        "integer"
+      ],
+      "evens": [
+        "integer"
+      ],
+      "nat": [
+        "integer"
+      ],
+      "odd": [
+        "integer"
+      ],
+      "odds": [
+        "integer"
+      ],
+      "red": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/n-queens/n-queens.dl": {
+    "ok": true,
+    "types": {
+      "attacks": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "d": [
+        "integer"
+      ],
+      "n": [
+        "integer"
+      ],
+      "partial": [
+        "integer"
+      ],
+      "q1": [
+        "integer"
+      ],
+      "q2": [
+        "integer",
+        "integer"
+      ],
+      "q3": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "q4": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "q5": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "q6": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "safe": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "solutions": [
+        "integer"
+      ]
+    }
+  },
+  "example/negation/negation.dl": {
+    "ok": true,
+    "types": {
+      "edge": [
+        "string",
+        "string"
+      ],
+      "frontier": [
+        "string"
+      ],
+      "has_outgoing": [
+        "string"
+      ],
+      "reachable": [
+        "string"
+      ]
+    }
+  },
+  "example/nim/nim.dl": {
+    "ok": true,
+    "types": {
+      "losing": [
+        "integer",
+        "integer"
+      ],
+      "move": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "not_lost": [
+        "integer",
+        "integer"
+      ],
+      "pos": [
+        "integer",
+        "integer"
+      ],
+      "size": [
+        "integer"
+      ],
+      "win": [
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/parity/parity.dl": {
+    "ok": true,
+    "types": {
+      "between": [
+        "string",
+        "string"
+      ],
+      "br": [
+        "string"
+      ],
+      "even": [
+        "string"
+      ],
+      "has_next": [
+        "string"
+      ],
+      "has_preceding": [
+        "string"
+      ],
+      "next": [
+        "string",
+        "string"
+      ],
+      "numbered": [
+        "string",
+        "integer"
+      ],
+      "odd": [
+        "string"
+      ],
+      "parity": [
+        "integer"
+      ],
+      "position": [
+        "string",
+        "integer"
+      ],
+      "size_is_even": [],
+      "size_is_odd": [],
+      "total": [
+        "integer"
+      ]
+    }
+  },
+  "example/parse-json/parse-json.dl": {
+    "ok": true,
+    "types": {
+      "first_element": [
+        "string",
+        "integer"
+      ],
+      "parsed": [
+        "string",
+        "string",
+        "value"
+      ],
+      "parsed_length": [
+        "string",
+        "integer"
+      ],
+      "parsed_type": [
+        "string",
+        "string"
+      ],
+      "raw": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/parse-to-cnf/parse-to-cnf.dl": {
+    "ok": true,
+    "types": {
+      "assignment": [
+        "integer"
+      ],
+      "char": [
+        "integer",
+        "string"
+      ],
+      "clause": [
+        "value"
+      ],
+      "clause_lit": [
+        "value",
+        "integer",
+        "integer"
+      ],
+      "clause_lit_named": [
+        "value",
+        "string",
+        "integer"
+      ],
+      "counterexample": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "eval": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "falsifiable": [],
+      "falsifies": [
+        "integer",
+        "value"
+      ],
+      "input": [
+        "string"
+      ],
+      "len": [
+        "integer"
+      ],
+      "merge": [
+        "value",
+        "value"
+      ],
+      "neg": [
+        "value",
+        "value"
+      ],
+      "node": [
+        "value",
+        "string"
+      ],
+      "node_child": [
+        "value",
+        "integer",
+        "value"
+      ],
+      "node_var": [
+        "value",
+        "string"
+      ],
+      "nvars": [
+        "integer"
+      ],
+      "oper": [
+        "integer"
+      ],
+      "pand": [
+        "integer",
+        "integer",
+        "value"
+      ],
+      "patom": [
+        "integer",
+        "integer",
+        "value"
+      ],
+      "pimp": [
+        "integer",
+        "integer",
+        "value"
+      ],
+      "pnode": [
+        "value",
+        "string"
+      ],
+      "pnode_child": [
+        "value",
+        "integer",
+        "value"
+      ],
+      "pnode_var": [
+        "value",
+        "string"
+      ],
+      "pnot": [
+        "integer",
+        "integer",
+        "value"
+      ],
+      "por": [
+        "integer",
+        "integer",
+        "value"
+      ],
+      "pos": [
+        "value",
+        "value"
+      ],
+      "rank": [
+        "string",
+        "integer"
+      ],
+      "reachable": [
+        "value"
+      ],
+      "root": [
+        "value"
+      ],
+      "root_clause": [
+        "value"
+      ],
+      "satisfies": [
+        "integer",
+        "value"
+      ],
+      "theorem": [],
+      "var": [
+        "integer"
+      ],
+      "var_index": [
+        "string",
+        "integer"
+      ],
+      "varchar": [
+        "integer",
+        "string"
+      ],
+      "varname": [
+        "string"
+      ]
+    }
+  },
+  "example/peano/peano.dl": {
+    "ok": true,
+    "types": {
+      "leq": [
+        "value",
+        "value"
+      ],
+      "leq_pairs": [
+        "value",
+        "value"
+      ],
+      "nat": [
+        "integer",
+        "value"
+      ],
+      "plus": [
+        "value",
+        "value",
+        "value"
+      ],
+      "sum_two_one": [
+        "value"
+      ]
+    }
+  },
+  "example/petri-net/petri-net.dl": {
+    "ok": true,
+    "types": {
+      "can_fire": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "mark": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "reachable_markings": [
+        "integer"
+      ],
+      "terminal": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "wip_over_capacity": [
+        "integer",
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "example/points-to/points-to.dl": {
+    "ok": true,
+    "types": {
+      "address_of": [
+        "string",
+        "string"
+      ],
+      "assign": [
+        "string",
+        "string"
+      ],
+      "may_alias": [
+        "string",
+        "string"
+      ],
+      "points_to": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/population-query/population-query.dl": {
+    "ok": true,
+    "types": {
+      "area": [
+        "string",
+        "integer"
+      ],
+      "close_pair": [
+        "string",
+        "integer",
+        "string",
+        "integer"
+      ],
+      "densest": [
+        "string",
+        "integer"
+      ],
+      "density": [
+        "string",
+        "integer"
+      ],
+      "population": [
+        "string",
+        "integer"
+      ],
+      "top": [
+        "integer"
+      ]
+    }
+  },
+  "example/pretty-print-expression/pretty-print-expression.dl": {
+    "ok": true,
+    "types": {
+      "answer": [
+        "string"
+      ],
+      "binop": [
+        "integer",
+        "string",
+        "integer",
+        "integer"
+      ],
+      "num": [
+        "integer",
+        "integer"
+      ],
+      "prec": [
+        "integer",
+        "integer"
+      ],
+      "root": [
+        "integer"
+      ],
+      "text": [
+        "integer",
+        "string"
+      ],
+      "wrap_left": [
+        "integer",
+        "string"
+      ],
+      "wrap_right": [
+        "integer",
+        "string"
+      ]
+    }
+  },
+  "example/prime-implicants/prime-implicants.dl": {
+    "ok": true,
+    "types": {
+      "cover_count": [
+        "string",
+        "integer"
+      ],
+      "covered": [
+        "string"
+      ],
+      "covers": [
+        "string",
+        "string"
+      ],
+      "essential": [
+        "string"
+      ],
+      "len": [
+        "integer"
+      ],
+      "mergeable": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "merged": [
+        "string"
+      ],
+      "minterm": [
+        "string"
+      ],
+      "mismatch": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "mismatch_any": [
+        "string",
+        "string"
+      ],
+      "prime": [
+        "string"
+      ],
+      "term": [
+        "string"
+      ]
+    }
+  },
+  "example/primes/primes.dl": {
+    "ok": true,
+    "types": {
+      "composite": [
+        "integer"
+      ],
+      "divides": [
+        "integer",
+        "integer"
+      ],
+      "num": [
+        "integer"
+      ],
+      "prime": [
+        "integer"
+      ]
+    }
+  },
+  "example/primitive-conversions/primitive-conversions.dl": {
+    "ok": true,
+    "types": {
+      "formats": [
+        "string",
+        "integer",
+        "float",
+        "boolean"
+      ],
+      "formatted": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "inputs": [
+        "string",
+        "string"
+      ],
+      "lifted": [
+        "string",
+        "value",
+        "value",
+        "value",
+        "value"
+      ],
+      "lifted_round_trip": [
+        "string",
+        "integer",
+        "float",
+        "boolean",
+        "string"
+      ],
+      "parsed_bool": [
+        "string",
+        "boolean"
+      ],
+      "parsed_float": [
+        "string",
+        "float"
+      ],
+      "parsed_int": [
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/proof-term-fold/proof-term-fold.dl": {
+    "ok": true,
+    "types": {
+      "list_sum": [
+        "value",
+        "integer"
+      ],
+      "num": [
+        "integer"
+      ],
+      "num_list": [
+        "integer",
+        "value"
+      ]
+    }
+  },
+  "example/proof-terms/proof-terms.dl": {
+    "ok": true,
+    "types": {
+      "num": [
+        "integer"
+      ],
+      "num_list": [
+        "integer",
+        "value"
+      ],
+      "num_lists": [
+        "integer",
+        "value"
+      ],
+      "suit": [
+        "value"
+      ]
+    }
+  },
+  "example/proplog-forall/proplog-forall.dl": {
+    "ok": true,
+    "types": {
+      "derived": [
+        "string"
+      ],
+      "kb": [
+        "integer",
+        "string",
+        "value"
+      ],
+      "kb_head": [
+        "string"
+      ],
+      "mentioned": [
+        "string"
+      ],
+      "not_derived": [
+        "string"
+      ],
+      "premise": [
+        "integer",
+        "string"
+      ],
+      "unmet": [
+        "integer"
+      ],
+      "unsupported": [
+        "string"
+      ]
+    }
+  },
+  "example/proplog/proplog.dl": {
+    "ok": true,
+    "types": {
+      "body_atom_derived": [
+        "integer",
+        "integer"
+      ],
+      "body_derived": [
+        "integer",
+        "integer"
+      ],
+      "derived": [
+        "string"
+      ],
+      "kb": [
+        "integer",
+        "string",
+        "value"
+      ],
+      "kb_head": [
+        "string"
+      ],
+      "mentioned": [
+        "string"
+      ],
+      "not_derived": [
+        "string"
+      ],
+      "unsupported": [
+        "string"
+      ]
+    }
+  },
+  "example/propositional-logic/propositional-logic.dl": {
+    "ok": true,
+    "types": {
+      "assignment": [
+        "string",
+        "string"
+      ],
+      "bool": [
+        "string"
+      ],
+      "counterexample": [
+        "string",
+        "string"
+      ],
+      "eval_impl1": [
+        "string",
+        "string",
+        "string"
+      ],
+      "eval_impl2": [
+        "string",
+        "string",
+        "string"
+      ],
+      "eval_impl3": [
+        "string",
+        "string",
+        "string"
+      ],
+      "eval_neg0": [
+        "string",
+        "string",
+        "string"
+      ],
+      "eval_p": [
+        "string",
+        "string",
+        "string"
+      ],
+      "eval_q": [
+        "string",
+        "string",
+        "string"
+      ],
+      "eval_root": [
+        "string",
+        "string",
+        "string"
+      ],
+      "has_counterexample": [
+        "string"
+      ],
+      "impl_tt": [
+        "string",
+        "string",
+        "string"
+      ],
+      "is_tautology": [
+        "string"
+      ],
+      "neg_tt": [
+        "string",
+        "string"
+      ],
+      "tautology_result": [
+        "string"
+      ]
+    }
+  },
+  "example/purity/purity.dl": {
+    "ok": true,
+    "types": {
+      "calls": [
+        "string",
+        "string"
+      ],
+      "calls_impure": [
+        "string"
+      ],
+      "calls_impure_opt": [
+        "string"
+      ],
+      "func": [
+        "string"
+      ],
+      "only_optimistic": [
+        "string"
+      ],
+      "pure": [
+        "string"
+      ],
+      "pure_opt": [
+        "string"
+      ],
+      "writes": [
+        "string"
+      ]
+    }
+  },
+  "example/range-filter/range-filter.dl": {
+    "ok": true,
+    "types": {
+      "borderline": [
+        "string"
+      ],
+      "grade": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "honours": [
+        "string"
+      ]
+    }
+  },
+  "example/reaching-defs/reaching-defs.dl": {
+    "ok": true,
+    "types": {
+      "cfg": [
+        "string",
+        "string"
+      ],
+      "gen": [
+        "string",
+        "string"
+      ],
+      "kill": [
+        "string",
+        "string"
+      ],
+      "reaches": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/reflexive-tc/reflexive-tc.dl": {
+    "ok": true,
+    "types": {
+      "edge": [
+        "string",
+        "string"
+      ],
+      "node": [
+        "string"
+      ],
+      "rtc": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/relational-algebra/relational-algebra.dl": {
+    "ok": true,
+    "types": {
+      "a": [
+        "string"
+      ],
+      "b": [
+        "string"
+      ],
+      "c": [
+        "string",
+        "string"
+      ],
+      "cartesian": [
+        "string",
+        "string"
+      ],
+      "diff": [
+        "string"
+      ],
+      "difference": [
+        "string"
+      ],
+      "full_join": [
+        "string",
+        "string"
+      ],
+      "inner_join": [
+        "string"
+      ],
+      "join": [
+        "string"
+      ],
+      "left_join": [
+        "string",
+        "string"
+      ],
+      "lj": [
+        "string",
+        "string"
+      ],
+      "prod": [
+        "string",
+        "string"
+      ],
+      "proj": [
+        "string"
+      ],
+      "projection": [
+        "string"
+      ],
+      "right_join": [
+        "string",
+        "string"
+      ],
+      "rj": [
+        "string",
+        "string"
+      ],
+      "sel": [
+        "string"
+      ],
+      "selection": [
+        "string"
+      ],
+      "uni": [
+        "string"
+      ],
+      "union": [
+        "string"
+      ]
+    }
+  },
+  "example/relational-division/relational-division.dl": {
+    "ok": true,
+    "types": {
+      "counterexample": [
+        "string",
+        "string"
+      ],
+      "covers": [
+        "string"
+      ],
+      "employee": [
+        "string"
+      ],
+      "missing": [
+        "string",
+        "string"
+      ],
+      "smith_project": [
+        "string"
+      ],
+      "work": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/river-crossing/river-crossing.dl": {
+    "ok": true,
+    "types": {
+      "opp": [
+        "string",
+        "string"
+      ],
+      "safe": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "shore": [
+        "string"
+      ],
+      "state": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/same-generation/same-generation.dl": {
+    "ok": true,
+    "types": {
+      "down": [
+        "string",
+        "string"
+      ],
+      "over": [
+        "string",
+        "string"
+      ],
+      "sg": [
+        "string",
+        "string"
+      ],
+      "up": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/sequent-prover/sequent-prover.dl": {
+    "ok": true,
+    "types": {
+      "axiom": [
+        "value"
+      ],
+      "branch": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "carry": [
+        "value",
+        "value",
+        "string",
+        "integer"
+      ],
+      "compound": [
+        "value"
+      ],
+      "counterexample": [
+        "value",
+        "string",
+        "string"
+      ],
+      "countermodel": [
+        "value",
+        "string",
+        "string"
+      ],
+      "decomp": [
+        "string",
+        "string",
+        "integer",
+        "integer",
+        "string"
+      ],
+      "mem": [
+        "value",
+        "string",
+        "integer"
+      ],
+      "node": [
+        "integer",
+        "string"
+      ],
+      "node_child": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "node_var": [
+        "integer",
+        "string"
+      ],
+      "open_branch": [
+        "value"
+      ],
+      "provable": [
+        "value"
+      ],
+      "reach": [
+        "value"
+      ],
+      "root": [
+        "integer"
+      ],
+      "step1": [
+        "value",
+        "value"
+      ],
+      "step2": [
+        "value",
+        "value",
+        "value"
+      ],
+      "theorem": [],
+      "two_premise": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/shannon-entropy/shannon-entropy.dl": {
+    "ok": true,
+    "types": {
+      "char_at": [
+        "integer",
+        "string"
+      ],
+      "contribution": [
+        "string",
+        "float"
+      ],
+      "entropy": [
+        "float"
+      ],
+      "freq": [
+        "string",
+        "integer"
+      ],
+      "prob": [
+        "string",
+        "float"
+      ],
+      "text_input": [
+        "string"
+      ],
+      "total": [
+        "integer"
+      ]
+    }
+  },
+  "example/shortest-path/shortest-path.dl": {
+    "ok": true,
+    "types": {
+      "max_cost": [
+        "integer"
+      ],
+      "path": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "road": [
+        "string",
+        "string",
+        "integer"
+      ],
+      "shortest": [
+        "string",
+        "string",
+        "integer"
+      ]
+    }
+  },
+  "example/sk-proof-terms/sk-proof-terms.dl": {
+    "ok": true,
+    "types": {
+      "app": [
+        "value",
+        "value",
+        "value"
+      ],
+      "k": [
+        "value"
+      ],
+      "normal_form": [
+        "value"
+      ],
+      "reduces": [
+        "value",
+        "value"
+      ],
+      "s": [
+        "value"
+      ],
+      "s_redex": [
+        "value",
+        "value",
+        "value",
+        "value"
+      ],
+      "sk": [
+        "value"
+      ],
+      "spine": [
+        "integer",
+        "value"
+      ],
+      "start": [
+        "value"
+      ],
+      "step": [
+        "value",
+        "value"
+      ],
+      "want": [
+        "value",
+        "value"
+      ]
+    }
+  },
+  "example/sk-strings/sk-strings.dl": {
+    "ok": true,
+    "types": {
+      "decomp": [
+        "string",
+        "string",
+        "string"
+      ],
+      "normal_form": [
+        "string"
+      ],
+      "reduces": [
+        "string",
+        "string"
+      ],
+      "scan": [
+        "string",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "span": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "step": [
+        "string",
+        "string"
+      ],
+      "t": [
+        "string"
+      ]
+    }
+  },
+  "example/social/social.dl": {
+    "ok": true,
+    "types": {
+      "follows": [
+        "string",
+        "string"
+      ],
+      "mutual": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/strings/strings.dl": {
+    "ok": true,
+    "types": {
+      "first_three": [
+        "string",
+        "string"
+      ],
+      "initials": [
+        "string",
+        "string"
+      ],
+      "lengths": [
+        "string",
+        "integer"
+      ],
+      "prefixed": [
+        "string"
+      ],
+      "words": [
+        "string"
+      ]
+    }
+  },
+  "example/symbolic-differentiation/symbolic-differentiation.dl": {
+    "ok": true,
+    "types": {
+      "answer": [
+        "value"
+      ],
+      "answer_node": [
+        "value"
+      ],
+      "deriv": [
+        "value",
+        "value"
+      ],
+      "expr": [
+        "value"
+      ],
+      "input_expr": [
+        "value"
+      ],
+      "node": [
+        "value"
+      ],
+      "node_count": [
+        "integer"
+      ],
+      "result": [
+        "string",
+        "string"
+      ],
+      "show": [
+        "value",
+        "string"
+      ],
+      "step": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/transitive-closure/transitive-closure.dl": {
+    "ok": true,
+    "types": {
+      "edge": [
+        "string",
+        "string"
+      ],
+      "tc": [
+        "string",
+        "string"
+      ]
+    }
+  },
+  "example/zebra/zebra.dl": {
+    "ok": true,
+    "types": {
+      "answer": [
+        "string",
+        "string"
+      ],
+      "cn": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "cnd": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "cnds": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "colours": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "drinks": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "nat": [
+        "integer"
+      ],
+      "nation_at": [
+        "integer",
+        "string"
+      ],
+      "nations": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "next": [
+        "integer",
+        "integer"
+      ],
+      "perm": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "pets": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "smokes": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "sol": [
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ]
+    }
+  },
+  "filter-not-boolean": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Filter expression must be boolean, got 'integer'",
+    "span": [
+      45,
+      50
+    ]
+  },
+  "filter/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot compare 'integer' and 'boolean' in comparison",
+    "span": [
+      52,
+      60
+    ]
+  },
+  "filter/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "filter/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "filter/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "filter/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot compare 'integer' and 'string' in comparison",
+    "span": [
+      52,
+      59
+    ]
+  },
+  "filter/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in filter expression",
+    "span": [
+      52,
+      57
+    ]
+  },
+  "filter/varA": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "float-into-integer-column": {
+    "ok": true,
+    "types": {
+      "p": [
+        "integer"
+      ],
+      "q": [
+        "integer"
+      ]
+    }
+  },
+  "head-arg/bool": {
+    "ok": true,
+    "types": {
+      "q": [
+        "boolean"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arg/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "float"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arg/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arg/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "span": [
+      33,
+      37
+    ]
+  },
+  "head-arg/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arg/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in head of rule for 'q'",
+    "span": [
+      33,
+      34
+    ]
+  },
+  "head-arg/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in head of rule for 'q'",
+    "span": [
+      33,
+      34
+    ]
+  },
+  "head-arith/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '+' requires numeric or string operands; got 'boolean'",
+    "span": [
+      49,
+      57
+    ]
+  },
+  "head-arith/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "float"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arith/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arith/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arith/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "head-arith/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in equality 'X = ...'",
+    "span": [
+      49,
+      54
+    ]
+  },
+  "head-arith/varA": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "iter-source/bool": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "iter-source/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "iter-source/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "iter-source/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "iter-source/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "iter-source/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in source argument of 'object_entry(...)'",
+    "span": [
+      52,
+      53
+    ]
+  },
+  "iter-source/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in source argument of 'object_entry(...)'",
+    "span": [
+      52,
+      53
+    ]
+  },
+  "meet-integer-value": {
+    "ok": true,
+    "types": {
+      "p": [
+        "integer"
+      ],
+      "q": [
+        "integer"
+      ],
+      "v": [
+        "value"
+      ]
+    }
+  },
+  "negated/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Argument 1 of 't(...)' has type 'boolean' but column is declared as 'integer'",
+    "span": [
+      58,
+      62
+    ]
+  },
+  "negated/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "negated/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "negated/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "negated/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Argument 1 of 't(...)' has type 'string' but column is declared as 'integer'",
+    "span": [
+      58,
+      61
+    ]
+  },
+  "negated/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in 'not t(...)'",
+    "span": [
+      58,
+      59
+    ]
+  },
+  "negated/varA": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "negative-subscript": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Negative subscript index is not supported; indices must be non-negative",
+    "span": [
+      18,
+      20
+    ]
+  },
+  "no-contribution-recursive": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 's'",
+    "span": [
+      2,
+      3
+    ]
+  },
+  "no-contribution-tautology": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 's'",
+    "span": [
+      2,
+      3
+    ]
+  },
+  "null-arith-typed": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ]
+    }
+  },
+  "null-binds-nothing": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in left-hand side of equality",
+    "span": [
+      8,
+      9
+    ]
+  },
+  "null-filter-on-ground": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "r": [
+        "integer"
+      ]
+    }
+  },
+  "null-head-arg-sibling": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ]
+    }
+  },
+  "null-range-bound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'N' in left-hand side of equality",
+    "span": [
+      8,
+      9
+    ]
+  },
+  "null-range-literal-bound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "span": [
+      2,
+      3
+    ]
+  },
+  "null-sibling-rule": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in left-hand side of equality",
+    "span": [
+      14,
+      15
+    ]
+  },
+  "null-typed-integer": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ]
+    }
+  },
+  "null-typed-value": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ]
+    }
+  },
+  "order-on-value": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '<' is not defined on value — values have no cross-backend ordering",
+    "span": [
+      43,
+      48
+    ]
+  },
+  "range-filter/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range upper bound has non-numeric type 'boolean'",
+    "span": [
+      63,
+      67
+    ]
+  },
+  "range-filter/float": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "range-filter/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "range-filter/null": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "range-filter/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range upper bound has non-numeric type 'string'",
+    "span": [
+      63,
+      66
+    ]
+  },
+  "range-filter/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in range upper bound",
+    "span": [
+      63,
+      64
+    ]
+  },
+  "range-filter/varA": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "range-hi/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range upper bound has non-numeric type 'boolean'",
+    "span": [
+      50,
+      54
+    ]
+  },
+  "range-hi/float": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Binding range 'X in [...]' requires integer bounds; got 'float' for the upper bound",
+    "span": [
+      50,
+      53
+    ]
+  },
+  "range-hi/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "range-hi/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "span": [
+      33,
+      34
+    ]
+  },
+  "range-hi/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range upper bound has non-numeric type 'string'",
+    "span": [
+      50,
+      53
+    ]
+  },
+  "range-hi/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in range upper bound",
+    "span": [
+      50,
+      51
+    ]
+  },
+  "range-hi/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in range upper bound",
+    "span": [
+      50,
+      51
+    ]
+  },
+  "range-lo/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range lower bound has non-numeric type 'boolean'",
+    "span": [
+      45,
+      49
+    ]
+  },
+  "range-lo/float": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Binding range 'X in [...]' requires integer bounds; got 'float' for the lower bound",
+    "span": [
+      45,
+      48
+    ]
+  },
+  "range-lo/int": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "range-lo/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "span": [
+      33,
+      34
+    ]
+  },
+  "range-lo/string": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range lower bound has non-numeric type 'string'",
+    "span": [
+      45,
+      48
+    ]
+  },
+  "range-lo/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in range lower bound",
+    "span": [
+      45,
+      46
+    ]
+  },
+  "range-lo/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in range lower bound",
+    "span": [
+      45,
+      46
+    ]
+  },
+  "recursive-only-but-typed": {
+    "ok": true,
+    "types": {
+      "b": [
+        "integer"
+      ],
+      "s": [
+        "integer"
+      ]
+    }
+  },
+  "sibling-widen-to-value": {
+    "ok": true,
+    "types": {
+      "q": [
+        "value"
+      ]
+    }
+  },
+  "slice/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Slice requires a string or value operand, got 'boolean'",
+    "span": [
+      43,
+      52
+    ]
+  },
+  "slice/float": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Slice requires a string or value operand, got 'float'",
+    "span": [
+      43,
+      51
+    ]
+  },
+  "slice/int": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Slice requires a string or value operand, got 'integer'",
+    "span": [
+      43,
+      49
+    ]
+  },
+  "slice/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "span": [
+      33,
+      34
+    ]
+  },
+  "slice/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "slice/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in equality 'X = ...'",
+    "span": [
+      43,
+      49
+    ]
+  },
+  "slice/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in equality 'X = ...'",
+    "span": [
+      43,
+      49
+    ]
+  },
+  "stratified-negation": {
+    "ok": true,
+    "types": {
+      "e": [
+        "string",
+        "string"
+      ],
+      "n": [
+        "string"
+      ],
+      "r": [
+        "string"
+      ],
+      "u": [
+        "string"
+      ]
+    }
+  },
+  "subscript/bool": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Subscript requires a string or value operand, got 'boolean'",
+    "span": [
+      43,
+      50
+    ]
+  },
+  "subscript/float": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Subscript requires a string or value operand, got 'float'",
+    "span": [
+      43,
+      49
+    ]
+  },
+  "subscript/int": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Subscript requires a string or value operand, got 'integer'",
+    "span": [
+      43,
+      47
+    ]
+  },
+  "subscript/null": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "span": [
+      33,
+      34
+    ]
+  },
+  "subscript/string": {
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
+  },
+  "subscript/unbound": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'U' in equality 'X = ...'",
+    "span": [
+      43,
+      47
+    ]
+  },
+  "subscript/varA": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'A' in equality 'X = ...'",
+    "span": [
+      43,
+      47
+    ]
+  },
+  "unannotated-defaults-string": {
+    "ok": true,
+    "types": {
+      "p": [
+        "string"
+      ],
+      "q": [
+        "string"
+      ]
+    }
+  },
+  "unannotated-used-numerically": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '*' requires numeric operands; got 'string'",
+    "span": [
+      40,
+      45
+    ]
+  },
+  "undefined-predicate": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Predicate 'nope' is not defined",
+    "span": [
+      8,
+      15
+    ]
+  },
+  "unsafe-head-only": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'Y' in head of rule for 'q'",
+    "span": [
+      36,
+      37
+    ]
+  },
+  "unsafe-via-equality": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in equality 'Y = ...'",
+    "span": [
+      15,
+      20
+    ]
+  },
+  "unsafe-via-filter": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'Y' in filter expression",
+    "span": [
+      45,
+      51
+    ]
+  },
+  "unsafe-via-negation": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'Y' in 'not r(...)'",
+    "span": [
+      29,
+      30
+    ]
+  },
+  "unstratifiable-negation": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Negation of 'g' in rules for 'f' is not stratifiable (they are mutually recursive). Recursion through negation needs the two sides to have opposite polarity: mark exactly one of them maximal with '^'",
+    "span": [
+      44,
+      52
+    ]
+  }
+}

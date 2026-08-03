@@ -559,13 +559,31 @@ range path, and is what the regression test uses.
   the column would silently infer `integer`. Replacing the guard requires
   `⟦·⟧` to be strict in ⊥ while still ignoring ⊤, which is the distinction
   §9 says the single `undefined` cannot make.
-- **Still open: merging the two passes.** They compute the same thing in the
-  same direction, so merging is not needed for correctness. What it would buy
-  is that the disagreement above becomes unrepresentable, and safety could
-  then apply the typed rule rather than the syntactic approximation. Four
-  copies of `equalityBindingCandidates` exist today (`analyzer.ts`,
-  `types.ts`, `finiteness.ts`, `planner.ts`), which is the same drift hazard
-  in a smaller form.
+- **Merging the two passes is not worth it.** An earlier version of this bullet
+  claimed the merge would let safety apply the typed rule instead of the
+  syntactic approximation, and treated that as the payoff. Measured, the gap
+  between the two rules is two programs: `X = null[0]` and `X = null[1:2]`,
+  subscript and slice being the only expressions besides a bare `null` that
+  denote ⊤. Both are rejected either way, so the whole benefit is a better
+  message on a pathological program. Against that: `analyze()` is today the
+  gate that guarantees safety, so moving safety into `inferTypes` changes what
+  that function means for the CLI, the editor and `prepareElaborated`; the
+  diagnostic ordering in §6 stops being structural and has to be maintained,
+  with the failure mode that section warns about; and inference would have to
+  tolerate unsafe rules, which it never sees today.
+
+- **What is worth doing is the deduplication underneath.** Body-binding logic
+  is re-derived in five places: `checkSafety`, `rebuildVarTypes` (itself called
+  four times in `types.ts` and exported to the translator), the translator's
+  own Pass 1/2, `planner.ts`'s hand-written mirror, and `finiteness.ts`'s edge
+  builder. `equalityBindingCandidates` is copied into four of them, three
+  identical and `analyzer.ts` divergent for the reason above, which no reader
+  can distinguish from an accident without finding the comment. Collapsing
+  that duplication addresses the hazard the range bug came from without
+  touching the pass structure or the `analyze()` contract.
+  `packages/core/test/diagnostics-snapshot.test.ts` exists to make such a
+  refactor safe: it pins the analyzer's verdict on a corpus of programs, so a
+  changed message shows up as a diff rather than going unnoticed.
 
 ### Divergence that remains
 

@@ -33,6 +33,7 @@
       "packages/parser/src/generated",
       "doc/courses/flolac-26/slides",
       "packages/cli/examples/**/expected.json",
+      "packages/core/test/diagnostics-snapshot.json",
       "packages/vscode-extension/out",
       "playwright-report",
       "test-results"
