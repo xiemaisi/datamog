@@ -948,32 +948,40 @@ function checkRangeExprTypes(
 }
 
 /**
- * True if `name` is bound by something other than `self` in `rule`'s body:
- * a positive atom's Variable arg, either bare-variable side of an equality,
- * or the LHS of another RangeAtom. Used to decide whether a range is the sole
- * binding site for its expr variable (binding range) or an additional
- * constraint on a variable already bound elsewhere (filter range).
+ * True if `name` is bound by something other than `self` in `rule`'s body: a
+ * positive atom's Variable arg, a binding side of an equality, or an *earlier*
+ * RangeAtom. Used to decide whether a range is the sole binding site for its
+ * expr variable (a binding range, which the translator can only synthesise
+ * over integers) or an additional constraint on a variable already bound
+ * elsewhere (a filter range, where float bounds are fine).
+ *
+ * Two subtleties, both of which produced a backend divergence when got wrong,
+ * because a range wrongly judged a filter keeps float bounds and then has
+ * nothing to enumerate:
+ *
+ * - The equality side defers to `equalityBindingCandidates`, so `X = X` does
+ *   not count. A side can only ground the variable if the *other* side does
+ *   not mention it.
+ * - Only ranges *before* `self` count. Two ranges over one variable would
+ *   otherwise each defer to the other and neither would be the binder. Source
+ *   order makes the first one the binder, which is the order the translator
+ *   and the planner bind them in anyway.
  */
 function isBoundElsewhere(self: RangeAtom, name: string, body: readonly BodyElement[]): boolean {
+  let beforeSelf = true;
   for (const elem of body) {
-    if (elem === self) continue;
+    if (elem === self) {
+      beforeSelf = false;
+      continue;
+    }
     if (elem.$type === "Literal" && !elem.negated) {
       for (const arg of elem.args) {
         if (arg.$type === "Variable" && arg.name === name) return true;
       }
     } else if (elem.$type === "Equality") {
-      if (
-        (elem.left.$type === "Variable" && elem.left.name === name) ||
-        (elem.expr.$type === "Variable" && elem.expr.name === name)
-      ) {
-        return true;
-      }
-    } else if (
-      elem.$type === "RangeAtom" &&
-      elem.expr.$type === "Variable" &&
-      elem.expr.name === name
-    ) {
-      return true;
+      if (equalityBindingCandidates(elem).some((c) => c.variable === name)) return true;
+    } else if (elem.$type === "RangeAtom" && elem.expr.$type === "Variable") {
+      if (beforeSelf && elem.expr.name === name) return true;
     }
   }
   return false;

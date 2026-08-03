@@ -1250,6 +1250,14 @@ export function queryProjection(query: Query): HeadTerm[] {
  * or `parse_json("null")` for a `value`. Where `X` is already grounded,
  * `X = null` is unaffected and remains an `IS NULL` filter.
  *
+ * Nor is a side whose *other* side mentions the same variable, such as
+ * `X = X` or `X = X + 1`. Grounding `X` means evaluating the other side,
+ * which cannot be done without `X` already. Callers that iterate to a fixed
+ * point reject these anyway, by never finding the other side ready, but
+ * callers that only ask "could this equality ground X" need the answer
+ * directly: judging `X = X` a binding is what let a float-bounded range next
+ * to it pass for a filter and diverge across backends.
+ *
  * This is a syntactic approximation of "the other side has no type", which
  * is the rule `doc/design/typing-and-safety-constraints.md` states. Safety
  * runs before type inference, so it cannot ask for the type. The
@@ -1262,10 +1270,16 @@ export function equalityBindingCandidates(eq: Equality): {
   expr: Expression;
 }[] {
   const candidates: { variable: string; expr: Expression }[] = [];
-  if (eq.left.$type === "Variable" && eq.expr.$type !== "NullLiteral") {
+  const grounds = (variable: string, other: Expression): boolean => {
+    if (other.$type === "NullLiteral") return false;
+    const vars = new Set<string>();
+    collectVars(other, vars);
+    return !vars.has(variable);
+  };
+  if (eq.left.$type === "Variable" && grounds(eq.left.name, eq.expr)) {
     candidates.push({ variable: eq.left.name, expr: eq.expr });
   }
-  if (eq.expr.$type === "Variable" && eq.left.$type !== "NullLiteral") {
+  if (eq.expr.$type === "Variable" && grounds(eq.expr.name, eq.left)) {
     candidates.push({ variable: eq.expr.name, expr: eq.left });
   }
   return candidates;

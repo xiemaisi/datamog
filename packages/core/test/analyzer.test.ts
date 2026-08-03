@@ -268,6 +268,20 @@ describe("analyzer", () => {
     );
   });
 
+  test("an equality whose other side mentions the variable grounds nothing", () => {
+    // Grounding X means evaluating the other side, which needs X already. The
+    // fixed-point callers reject these by never finding the other side ready,
+    // but a caller that only asks "could this ground X" needs the direct
+    // answer: reading `X = X` as a binding is what let a float-bounded range
+    // beside it pass for a filter and then diverge across backends.
+    expect(() => analyze(parse("q(X) :- X = X."))).toThrow(/Unsafe variable 'X'/);
+    expect(() => analyze(parse("q(X) :- X = X + 1."))).toThrow(/Unsafe variable 'X'/);
+    // A genuine binding from the same shape is unaffected.
+    expect(
+      analyze(parse("input predicate t(x: integer).\nq(Y) :- t(X), Y = X + 1.")).rules.has("q"),
+    ).toBe(true);
+  });
+
   test("naming the type grounds a null", () => {
     // A call's result type is fixed by its signature whatever its argument
     // denotes, so it supplies the type the bare literal cannot. The value is

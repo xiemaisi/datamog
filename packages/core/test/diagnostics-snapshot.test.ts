@@ -127,6 +127,17 @@ const CURATED: Record<string, string> = {
   "null-typed-value": 'q(X) :- X = parse_json("null").\n?- q(X).\n',
   "null-arith-typed": "q(X) :- X = null + 0.\n?- q(X).\n",
 
+  // A binding range must enumerate integers; a filter range need not. Which a
+  // range is depends on whether something else grounds the variable, and two
+  // constructs used to be miscounted as grounding it, which let a float-bounded
+  // binding range through to a backend that could not enumerate it.
+  "range-float-masked-by-self-equality": "q(X) :- X in [1.5 .. 2.5], X = X.\n?- q(X).\n",
+  "range-float-masked-by-later-range": "q(X) :- X in [1.5 .. 2.5], X in [1 .. 3].\n?- q(X).\n",
+  "range-integer-binder-then-float-filter": "q(X) :- X in [1 .. 3], X in [1.5 .. 2.5].\n?- q(X).\n",
+  "range-float-filter-on-atom-bound": "p(1). p(2).\nq(X) :- p(X), X in [1.5 .. 2.5].\n?- q(X).\n",
+  "self-equality-grounds-nothing": "q(X) :- X = X.\n?- q(X).\n",
+  "self-referential-equality-grounds-nothing": "q(X) :- X = X + 1.\n?- q(X).\n",
+
   // Blame order: both a body variable and a head variable are unsafe.
   "unsafe-head-only": "input predicate b(x: integer).\nq(X, Y) :- b(X).\n?- q(X, Y).\n",
   "unsafe-via-equality": "q(X, Y) :- Y = X + 1.\n?- q(X, Y).\n",

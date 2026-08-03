@@ -3987,6 +3987,35 @@
       ]
     }
   },
+  "range-float-filter-on-atom-bound": {
+    "ok": true,
+    "types": {
+      "p": [
+        "integer"
+      ],
+      "q": [
+        "integer"
+      ]
+    }
+  },
+  "range-float-masked-by-later-range": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Binding range 'X in [...]' requires integer bounds; got 'float' for the lower bound",
+    "span": [
+      14,
+      17
+    ]
+  },
+  "range-float-masked-by-self-equality": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Binding range 'X in [...]' requires integer bounds; got 'float' for the lower bound",
+    "span": [
+      14,
+      17
+    ]
+  },
   "range-hi/bool": {
     "ok": false,
     "error": "AnalyzerError",
@@ -4051,6 +4080,14 @@
       50,
       51
     ]
+  },
+  "range-integer-binder-then-float-filter": {
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ]
+    }
   },
   "range-lo/bool": {
     "ok": false,
@@ -4127,6 +4164,24 @@
         "integer"
       ]
     }
+  },
+  "self-equality-grounds-nothing": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in equality 'X = ...'",
+    "span": [
+      12,
+      13
+    ]
+  },
+  "self-referential-equality-grounds-nothing": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Unsafe variable 'X' in equality 'X = ...'",
+    "span": [
+      12,
+      17
+    ]
   },
   "sibling-widen-to-value": {
     "ok": true,

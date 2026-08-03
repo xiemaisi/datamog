@@ -290,24 +290,29 @@ have float bounds. `isBoundElsewhere`
 ([types.ts:957](../../packages/core/src/types.ts#L957)) is exactly "does
 another binding constraint on x exist", so the condition is syntactic.
 
-**This check is unsound as stated, and as implemented.** "x's only binding"
-is read syntactically, and two constructs satisfy it without grounding
-anything: a self-equality, and a second range. Both suppress the guard, so a
-float-bounded binding range slips through and the backends disagree, which is
-the same symptom pair §8 describes for the bound-typing bug:
+**Getting "x's only binding" right is where this went wrong twice.** Read
+syntactically, two constructs claim to ground `x` without doing so: a
+self-equality, and a second range. Both used to suppress the guard, so a
+float-bounded binding range slipped through and the backends diverged, native
+returning no rows where sqlite and Postgres threw `Unbound variable 'X'`:
 
 ```prolog
-q(X) :- X in [1.5 .. 2.5], X = X.          % native: no rows
-                                           % sqlite, postgres: Unbound variable 'X'
-q(X) :- X in [1.5 .. 2.5], X in [1 .. 3].  % same
+q(X) :- X in [1.5 .. 2.5], X = X.          % both now rejected, on every backend
+q(X) :- X in [1.5 .. 2.5], X in [1 .. 3].
 ```
 
-`X = X` cannot ground `X`, and two ranges each defer to the other. The rule
-above inherits the hole, since in both programs `x` has two bindings and so
-the check is skipped. Stating it over *grounding* bindings rather than
-syntactic ones fixes the model; the implementation needs
-`equalityBindingCandidates` to reject a candidate whose other side mentions
-the variable, and `isBoundElsewhere` to stop counting another range.
+`X = X` cannot ground `X`, because evaluating the other side needs `X` already;
+`equalityBindingCandidates` now rejects any candidate whose other side mentions
+the variable. Two ranges each deferred to the other, so neither was the binder;
+`isBoundElsewhere` now counts only ranges *earlier* in the body, making the
+first one the binder, which is the order the translator and planner bind them
+in anyway. A later range stays a filter and may keep float bounds, so
+`X in [1 .. 3], X in [1.5 .. 2.5]` is still accepted.
+
+The lesson generalises past this rule: "is x bound elsewhere" is a question
+about *grounding*, and answering it by pattern-matching on syntax will keep
+producing this bug. It is the fifth place body-binding logic was re-derived,
+which is the subject of §8.
 
 **Iteration atom** `object_entry(s, k, v)`, `array_element(s, i, v)`
 
