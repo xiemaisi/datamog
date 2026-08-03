@@ -508,6 +508,10 @@ it has two roles:
   bound, and the other side is safe. The equality introduces that
   variable and sets it to the value of the other side. `X = Y + 1`
   and `Y + 1 = X` are therefore equivalent when `Y` is safe.
+  A bare `null` literal is the exception: it names no type (Section
+  1.5), so `X = null` cannot introduce `X`, which stays unsafe. Name
+  the type in the expression to bind a NULL: `X = null + 0` for an
+  integer, `X = null + ""` for a string.
 - **Constraint** — both sides are already bound expressions. Both
   sides are evaluated and compared with logical equality; the rule
   fires when they match (including the case where both are NULL).
@@ -518,7 +522,8 @@ C = X + Y + 1      # binding: C := X + Y + 1
 X + 1 = Y          # binding: Y := X + 1 when X is safe
 length(W) = 3      # constraint
 N = null           # constraint when N is bound (matches null rows);
-                   # binding when N is unbound (binds N to null)
+                   # unsafe when N is unbound: `null` names no type
+N = null + 0       # binding: N := an integer NULL
 ```
 
 `=` is also a Cmp-level operator at expression level (Section 2.6),
@@ -1656,7 +1661,9 @@ roles:
   `expr = X` introduces `X` and sets it to the value of `expr`,
   including when `expr` evaluates to NULL — the row is *not* dropped,
   and subsequent uses of `X` propagate that NULL through any
-  non-logical operation.
+  non-logical operation. `expr` must name a type, so a bare `null`
+  does not bind (Section 2.5): `X = 1 / 0` introduces an integer `X`
+  whose value is NULL, while `X = null` leaves `X` unsafe.
 - **Constraint** (both sides already bound): the body equality emits a
   null-aware comparison. `X = null` matches NULL rows; `Y = Z` with
   both bound matches when both happen to be NULL.

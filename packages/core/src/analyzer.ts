@@ -1227,12 +1227,31 @@ export function queryProjection(query: Query): HeadTerm[] {
   return projection;
 }
 
+/**
+ * The (variable, other-side) pairs by which a body equality can ground a
+ * variable: one per side that is a bare variable.
+ *
+ * A bare `null` literal on the other side is not one of them. `null` is
+ * polymorphic, so `X = null` says nothing about what `X` holds and cannot
+ * determine its column's type; treating it as a binding produces a column
+ * no rule constrains, reported far from the cause. Say the type to bind:
+ * `X = null + 0` grounds `X` as an integer NULL, `X = null + ""` as a
+ * string one. Where `X` is already grounded, `X = null` is unaffected and
+ * remains an `IS NULL` filter.
+ *
+ * This is a syntactic approximation of "the other side has no type", which
+ * is the rule `doc/design/typing-and-safety-constraints.md` states. Safety
+ * runs before type inference, so it cannot ask for the type. The
+ * approximation grounds strictly more variables than the typed rule would,
+ * so it never admits an unsafe program; the gap surfaces as a
+ * cannot-infer-type error rather than an unbound-variable one.
+ */
 function equalityBindingCandidates(eq: Equality): { variable: string; expr: HeadTerm }[] {
   const candidates: { variable: string; expr: HeadTerm }[] = [];
-  if (eq.left.$type === "Variable") {
+  if (eq.left.$type === "Variable" && eq.expr.$type !== "NullLiteral") {
     candidates.push({ variable: eq.left.name, expr: eq.expr });
   }
-  if (eq.expr.$type === "Variable") {
+  if (eq.expr.$type === "Variable" && eq.left.$type !== "NullLiteral") {
     candidates.push({ variable: eq.expr.name, expr: eq.left });
   }
   return candidates;

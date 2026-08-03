@@ -398,10 +398,12 @@ describe("type inference", () => {
     // leaves the translator with no series to build: sqlite throws "Unbound
     // variable 'X'" where native returns no rows. The binding-equality path
     // already declines in the same situation, so the two must agree.
-    expect(() => getTypes("q(X) :- N = null, X in [1 .. N].")).toThrow(
-      /Cannot infer type of column 1 of predicate 'q'/,
-    );
-    expect(() => getTypes("q(X) :- N = null, Y = N + 1, X = Y.")).toThrow(
+    //
+    // The bound is a literal here because that is what still reaches this
+    // path. Routing the untyped bound through a variable
+    // (`N = null, X in [1 .. N]`) is caught earlier, by safety: a bare `null`
+    // does not ground `N`.
+    expect(() => getTypes("q(X) :- X in [1 .. null].")).toThrow(
       /Cannot infer type of column 1 of predicate 'q'/,
     );
   });
@@ -884,13 +886,12 @@ describe("type inference validation errors", () => {
     });
 
     test("a column that no rule constrains the type of is rejected", () => {
-      // `r(X) :- X = null.` leaves X unconstrained — the null literal
-      // is polymorphic, no other body element narrows it. The
-      // fixed-point iteration converges with X's type still undefined;
-      // the finalisation pass catches that explicitly.
+      // The null literal is polymorphic, so `r(null).` contributes nothing to
+      // the column's type. The fixed-point iteration converges with it still
+      // undefined; the finalisation pass catches that explicitly.
       expect(() =>
         getTypes(`
-          r(X) :- X = null.
+          r(null).
         `),
       ).toThrow(/Cannot infer type of column 1 of predicate 'r'/);
     });
@@ -901,7 +902,7 @@ describe("type inference validation errors", () => {
       // squiggly underlined position 0–1 instead of the offending
       // head argument. Verify the error now points at the first
       // rule's head arg for the unconstrained column.
-      const source = "r(X) :- X = null.";
+      const source = "r(null).";
       let caught: unknown;
       try {
         getTypes(source);
@@ -910,9 +911,9 @@ describe("type inference validation errors", () => {
       }
       expect(caught).toBeInstanceOf(AnalyzerError);
       const err = caught as AnalyzerError;
-      const xOffset = source.indexOf("X");
-      expect(err.offset).toBe(xOffset);
-      expect(err.end).toBe(xOffset + 1);
+      const argOffset = source.indexOf("null");
+      expect(err.offset).toBe(argOffset);
+      expect(err.end).toBe(argOffset + "null".length);
     });
 
     test("parse_json maps string to value", () => {

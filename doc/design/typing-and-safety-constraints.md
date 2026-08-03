@@ -1,11 +1,13 @@
 # Design notes: typing and safety as one constraint problem
 
-Status: **proposed, not implemented.** This recasts what `checkSafety`
+Status: **model implemented, structure not.** This recasts what `checkSafety`
 (`core/src/analyzer.ts`) and `rebuildVarTypes` + `validateTypes`
 (`core/src/types.ts`) compute as a single constraint system over a single
-lattice, solved once. It is mostly a reformulation of today's behaviour,
-but it does change it in one respect (§8), and writing it exposed one bug,
-since fixed independently.
+lattice, solved once. The *semantics* described here is what the
+implementation now does: the one behaviour this document argued for has been
+made (§8), and writing it exposed one bug, since fixed. The *structure* is
+still two passes rather than one solve, which is why §8 lists what merging
+them would buy.
 
 Scope: **one rule body, with Σ given.** Σ assigns a type to every
 predicate column. For extensional predicates Σ is declared; for
@@ -148,8 +150,8 @@ Following `inferTermType`
 ⟦[e…]⟧, ⟦{…}⟧  = value
 ```
 
-`⟦null⟧ = ⊤` is the one decision in this document that changes behaviour,
-and §8 spells out what it changes. The reasoning: NULL inhabits every one
+`⟦null⟧ = ⊤` is the one decision in this document that changed behaviour,
+and §8 records what it changed. The reasoning: NULL inhabits every one
 of the five types, as in SQL, so a `null` literal genuinely constrains
 nothing about the column it flows into. `q(X) :- X = 1 / 0.` yields an
 `integer` column holding NULL, and every partial operation in the language
@@ -450,7 +452,7 @@ SELECT __b0."col1" AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE __b0."col1" = __b
 | `not p(_)` | `_ ↦ integer` | ok |
 | `X = 3` | `X ↦ integer` | ok |
 | `X = 1 / 0` | `X ↦ integer` | ok, an integer NULL |
-| `X = null` | `X ↦ ⊤` | X unsafe (differs from today, §8) |
+| `X = null` | `X ↦ ⊤` | X unsafe; see §8 |
 | `X = null + 0` | `X ↦ integer` | ok, a typed NULL |
 | `p(X), X = null` | `X ↦ integer` | ok, the equality is an `IS NULL` filter |
 | `X = Y` | `X, Y ↦ ⊤` | both unsafe |
@@ -470,33 +472,35 @@ The `p(X), X = Y` row against `p(X), Y = X` is the case that distinguishes
 this formulation from an asymmetric equality rule: both give the same
 answer, as they must.
 
-## 8. Differences from the implementation
+## 8. Relationship to the implementation
 
-### The behaviour change
+### The behaviour change, since made
 
-Adopting `⟦null⟧ = ⊤` as a non-binding denotation makes a bare `null`
-unable to ground a variable. One legal program stops being legal:
+`⟦null⟧ = ⊤` as a non-binding denotation makes a bare `null` unable to
+ground a variable. One previously legal program is now rejected:
 
 ```prolog
 q(1).
-q(X) :- X = null.       % accepted today, yields rows 1 and null
-                        % under this proposal: X is unsafe
+q(X) :- X = null.       % Unsafe variable 'X' in head of rule for 'q'
 ```
 
-There is currently no way to write a deliberately all-NULL typed column
-either, since `q(X: integer) :- X = null.` is rejected today with "cannot
-infer type" and annotations are checked rather than used. Under this
-proposal it is rejected as unsafe, which is the better message, and the
-escape hatch is to say the type in the expression: `X = null + 0` for an
-integer NULL, `X = null + ""` for a string one. Both are ugly. A clean
-surface form would be an expression-level type ascription, which is a
-larger feature and is not proposed here.
+The escape hatch is to name the type in the expression: `X = null + 0` for an
+integer NULL, `X = null + ""` for a string one. Both are ugly, and a clean
+surface form would be an expression-level type ascription, which is a larger
+feature and is not proposed here. Note that a `null` *head argument* is
+unaffected, so `q(1). q(null).` still yields both rows: a head argument
+contributes to a column's type rather than grounding a variable, and a
+sibling rule can supply the type.
 
-Three error messages improve. `q(X) :- X = null.`,
+Three messages improved as a side effect. `q(X) :- X = null.`,
 `q(X) :- X = null, Y = X + 1, Y = Y.` and
-`q(X) :- N = null, Y = N + 1, X = Y.` all report "Cannot infer type of
-column 1 of predicate 'q'" today, which describes a symptom; they would
-report the unbound variable instead.
+`q(X) :- N = null, Y = N + 1, X = Y.` all reported "Cannot infer type of
+column 1 of predicate 'q'", which described a symptom; each now names the
+variable that is not grounded.
+
+Spec §2.5 and §5.4 record the rule. §1.5 needed no change: its claim that a
+column "acquires a type from another rule that contributes a non-null value"
+is about head arguments, which still behave that way.
 
 ### The bug this exposed, since fixed
 
@@ -519,16 +523,23 @@ program written through an equality was already rejected on both backends.
 
 Fixed in `rebuildVarTypes`, which now requires both bounds to be typed, so
 the two paths agree. The program is rejected identically on native, sqlite
-and Postgres. That change was independent of Option B: under Option B it
-would be rejected twice over, since the bare `null` also fails to bind `N`.
+and Postgres. That change was independent of the `null` rule below, which now
+rejects the same program one step earlier, since a bare `null` does not
+ground `N`. A literal bound (`X in [1 .. null]`) is what still exercises the
+range path, and is what the regression test uses.
 
-### Implementation notes, if Option B is adopted
+### Implementation notes
 
-- `⟦null⟧` becomes ⊤ everywhere, and the safety pass must stop treating a
-  bare `null` right-hand side as a binder
-  ([analyzer.ts:1011](../../packages/core/src/analyzer.ts#L1011) has no
-  type-awareness today, which is what creates the disagreement between the
-  two passes).
+- **Done, as a syntactic approximation.** `equalityBindingCandidates` in
+  `analyzer.ts` no longer offers a candidate whose other side is a bare
+  `NullLiteral`. The rule this document states is "the other side denotes ⊤",
+  which safety cannot evaluate, since `checkSafety` runs before
+  `inferTypes`. The syntactic version grounds strictly more variables than
+  the typed one, so it never admits an unsafe program; where they differ the
+  program is still rejected, by a cannot-infer-type error instead of an
+  unsafety one. Only the safety copy of the helper changed: `types.ts`
+  already declines to type a null-bound variable, and the `finiteness.ts` and
+  `planner.ts` copies only ever see safety-approved programs.
 - The `allVarsTyped` guard on equality bindings must **stay**, despite
   looking redundant once unsafety and untypedness are fused. It is what
   stops a ⊥-seeded self-reference from manufacturing a type during the
@@ -539,15 +550,13 @@ would be rejected twice over, since the bare `null` also fails to bind `N`.
   the column would silently infer `integer`. Replacing the guard requires
   `⟦·⟧` to be strict in ⊥ while still ignoring ⊤, which is the distinction
   §9 says the single `undefined` cannot make.
-- Merging the two loops into one is optional. They compute the same thing
-  in the same direction; the value of doing it is that the disagreement
-  above becomes unrepresentable.
-- **The spec needs editing, not just the code.** §1.5 currently endorses
-  today's behaviour: "A column can never be declared with type `null`; it
-  acquires a type from another rule that contributes a non-null value, and
-  `null` flows through at runtime." Under Option B a bare `null` contributes
-  nothing and cannot ground its variable, so that sentence and the
-  `q(1). q(X) :- X = null.` case it licenses both have to change.
+- **Still open: merging the two passes.** They compute the same thing in the
+  same direction, so merging is not needed for correctness. What it would buy
+  is that the disagreement above becomes unrepresentable, and safety could
+  then apply the typed rule rather than the syntactic approximation. Four
+  copies of `equalityBindingCandidates` exist today (`analyzer.ts`,
+  `types.ts`, `finiteness.ts`, `planner.ts`), which is the same drift hazard
+  in a smaller form.
 
 ### Divergence that remains
 

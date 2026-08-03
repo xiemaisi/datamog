@@ -225,7 +225,17 @@ it is what keeps the cost contained.
 
 NULL is a runtime phenomenon. There is no `null` type: the literal is
 polymorphic and acquires a type from context, every column has a non-null
-declared base type, and inference never sees nullability. An EDB column may
+declared base type, and inference never sees nullability.
+
+Where there is no context to acquire a type from, the literal is rejected
+rather than allowed through untyped. A bare `null` cannot ground a variable,
+so `q(X) :- X = null.` leaves `X` unsafe; name the type in the expression
+(`X = null + 0`) or supply it from elsewhere in the rule. As a head argument
+it is fine, since a sibling rule can type the column: `q(1). q(null).` yields
+both rows. See spec §2.5 and
+[typing-and-safety-constraints.md](typing-and-safety-constraints.md) §8.
+
+An EDB column may
 be declared nullable with a `?` suffix (`age: integer?`), which changes only
 whether the generated table gets `NOT NULL` and whether loaders may pass a
 NULL through; the Datamog base type used for inference is identical.

@@ -251,6 +251,37 @@ describe("analyzer", () => {
     expect(() => analyze(program)).toThrow(/Unsafe variable 'Y'/);
   });
 
+  test("a bare null does not ground a variable", () => {
+    // `null` is polymorphic, so `X = null` says nothing about what X holds
+    // and cannot determine the column's type. Binding X anyway produces a
+    // column no rule constrains, reported far from the cause.
+    expect(() => analyze(parse("q(X) :- X = null."))).toThrow(/Unsafe variable 'X'/);
+    // Either side, and it does not matter that a sibling rule types the column.
+    expect(() => analyze(parse("q(X) :- null = X."))).toThrow(/Unsafe variable 'X'/);
+    expect(() => analyze(parse("q(1). q(X) :- X = null."))).toThrow(/Unsafe variable 'X'/);
+    // Nor does it help to route it through another variable: an ungrounded N
+    // leaves the range unable to ground X. The head is checked before the
+    // body, so X is what gets named even though N is the cause.
+    expect(() => analyze(parse("q(X) :- N = null, X in [1 .. N]."))).toThrow(/Unsafe variable 'X'/);
+  });
+
+  test("naming the type grounds a null", () => {
+    // Say what the column holds and the binding is fine: the arithmetic has
+    // a result type even though its value is NULL at runtime.
+    expect(analyze(parse("q(X) :- X = null + 0.")).rules.has("q")).toBe(true);
+    expect(analyze(parse('q(X) :- X = null + "".')).rules.has("q")).toBe(true);
+  });
+
+  test("a null equality still filters an already-grounded variable", () => {
+    // `X = null` is unaffected where X is grounded elsewhere: it stays the
+    // null-aware filter that selects NULL rows.
+    const program = parse(`
+      input predicate t(x: integer?).
+      nulls(X) :- t(X), X = null.
+    `);
+    expect(analyze(program).rules.has("nulls")).toBe(true);
+  });
+
   test("accepts safe comparison", () => {
     const program = parse(`
       input predicate scores(name: string, score: integer).
