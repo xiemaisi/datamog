@@ -192,7 +192,8 @@ determined by whichever operands have types and is ⊤ only if none do, so
 ([numericResultType:1137](../../packages/core/src/types.ts#L1137)).
 Comparisons, logical and bitwise operators ignore their operands
 altogether. §5 shows why this is sound, and it is deliberate: it is what
-makes `X = null + 0` a typed NULL.
+lets an expression name a type its operands do not, which is how a typed
+NULL is written (§8).
 
 ## 4. Constraint generation
 
@@ -255,8 +256,9 @@ Symmetric, and the interesting cases all fall out of the one rule:
   `Y + 1` is not bare. So arithmetic does not run backwards, and this is
   the case the system has to get right without a special rule.
 - `X = null` is vacuous, so X stays ⊤ and is unsafe.
-- `X = null + 0` binds X to `integer`, and `X = null + ""` to `string`: an
-  explicitly typed NULL.
+- `X = as_integer(null)` binds X to `integer`: the call's result type is
+  `integer` whatever its argument denotes, so it names the type the literal
+  does not.
 
 **Range** `e in [lo .. hi]`
 
@@ -459,7 +461,7 @@ SELECT __b0."col1" AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE __b0."col1" = __b
 | `X = 3` | `X ↦ integer` | ok |
 | `X = 1 / 0` | `X ↦ integer` | ok, an integer NULL |
 | `X = null` | `X ↦ ⊤` | X unsafe; see §8 |
-| `X = null + 0` | `X ↦ integer` | ok, a typed NULL |
+| `X = as_integer(null)` | `X ↦ integer` | ok, a typed NULL |
 | `p(X), X = null` | `X ↦ integer` | ok, the equality is an `IS NULL` filter |
 | `X = Y` | `X, Y ↦ ⊤` | both unsafe |
 | `p(X), X = Y` | `X, Y ↦ integer` | ok, either written order |
@@ -490,10 +492,11 @@ q(1).
 q(X) :- X = null.       % Unsafe variable 'X' in equality 'X = ...'
 ```
 
-The escape hatch is to name the type in the expression: `X = null + 0` for an
-integer NULL, `X = null + ""` for a string one. Both are ugly, and a clean
-surface form would be an expression-level type ascription, which is a larger
-feature and is not proposed here. Note that a `null` *head argument* is
+To write a NULL, name its type: `X = as_integer(null)`, and likewise
+`as_string`, `as_float`, `as_boolean`, with `parse_json("null")` for a
+`value`. Each call's result type is fixed by its signature regardless of what
+its argument denotes, so it supplies exactly what the bare literal cannot. No
+dedicated ascription syntax is needed. Note that a `null` *head argument* is
 unaffected, so `q(1). q(null).` still yields both rows: a head argument
 contributes to a column's type rather than grounding a variable, and a
 sibling rule can supply the type.

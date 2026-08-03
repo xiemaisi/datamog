@@ -1529,9 +1529,16 @@ function asciiFoldSql(sql: string, from: string, to: string): string {
  * promise.
  *
  * No-op when `expectedType` is anything other than `json`, when
- * `exprType` is already `json` (no double-wrap), or when either type
- * is undefined (the analyzer either resolved them or already
- * rejected the program).
+ * `exprType` is already `json` (no double-wrap), or when
+ * `expectedType` is undefined (the analyzer either resolved it or
+ * already rejected the program).
+ *
+ * An expression with no static type is the `null` literal, whose value
+ * is NULL whatever slot it lands in. It still needs the slot's type:
+ * Postgres cannot resolve `#>>` and the other jsonb operators against
+ * an untyped NULL and fails with "operator is not unique", where the
+ * SQLite family, being dynamically typed, does not care. Casting is
+ * enough, since a NULL of any type is still NULL.
  */
 function liftToJsonIfNeeded(
   sql: string,
@@ -1540,7 +1547,8 @@ function liftToJsonIfNeeded(
   dialect: SqlDialect,
 ): string {
   if (expectedType !== "value") return sql;
-  if (exprType === undefined || exprType === "value") return sql;
+  if (exprType === "value") return sql;
+  if (exprType === undefined) return `CAST(${sql} AS ${sqlTypeFor(dialect, "value")})`;
   return primitiveToJsonSql(sql, exprType, dialect);
 }
 

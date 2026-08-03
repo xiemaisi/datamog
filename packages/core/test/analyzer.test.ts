@@ -269,10 +269,15 @@ describe("analyzer", () => {
   });
 
   test("naming the type grounds a null", () => {
-    // Say what the column holds and the binding is fine: the arithmetic has
-    // a result type even though its value is NULL at runtime.
+    // A call's result type is fixed by its signature whatever its argument
+    // denotes, so it supplies the type the bare literal cannot. The value is
+    // still NULL at runtime.
+    for (const cast of ["as_integer", "as_string", "as_float", "as_boolean"]) {
+      expect(analyze(parse(`q(X) :- X = ${cast}(null).`)).rules.has("q")).toBe(true);
+    }
+    expect(analyze(parse('q(X) :- X = parse_json("null").')).rules.has("q")).toBe(true);
+    // Arithmetic works the same way, since an untyped operand is ignored.
     expect(analyze(parse("q(X) :- X = null + 0.")).rules.has("q")).toBe(true);
-    expect(analyze(parse('q(X) :- X = null + "".')).rules.has("q")).toBe(true);
   });
 
   test("a null equality still filters an already-grounded variable", () => {

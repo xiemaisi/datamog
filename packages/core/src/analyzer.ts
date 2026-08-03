@@ -1239,10 +1239,10 @@ export function queryProjection(query: Query): HeadTerm[] {
  * A bare `null` literal on the other side is not one of them. `null` is
  * polymorphic, so `X = null` says nothing about what `X` holds and cannot
  * determine its column's type; treating it as a binding produces a column
- * no rule constrains, reported far from the cause. Say the type to bind:
- * `X = null + 0` grounds `X` as an integer NULL, `X = null + ""` as a
- * string one. Where `X` is already grounded, `X = null` is unaffected and
- * remains an `IS NULL` filter.
+ * no rule constrains, reported far from the cause. Name the type to bind a
+ * NULL: `X = as_integer(null)`, and likewise the other `as_*` projections,
+ * or `parse_json("null")` for a `value`. Where `X` is already grounded,
+ * `X = null` is unaffected and remains an `IS NULL` filter.
  *
  * This is a syntactic approximation of "the other side has no type", which
  * is the rule `doc/design/typing-and-safety-constraints.md` states. Safety

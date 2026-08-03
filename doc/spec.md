@@ -509,9 +509,9 @@ it has two roles:
   variable and sets it to the value of the other side. `X = Y + 1`
   and `Y + 1 = X` are therefore equivalent when `Y` is safe.
   A bare `null` literal is the exception: it names no type (Section
-  1.5), so `X = null` cannot introduce `X`, which stays unsafe. Name
-  the type in the expression to bind a NULL: `X = null + 0` for an
-  integer, `X = null + ""` for a string.
+  1.5), so `X = null` cannot introduce `X`, which stays unsafe. To
+  bind a NULL, name the type: the `as_*` projections give the four
+  primitives, `parse_json("null")` gives a `value`.
 - **Constraint** — both sides are already bound expressions. Both
   sides are evaluated and compared with logical equality; the rule
   fires when they match (including the case where both are NULL).
@@ -523,7 +523,9 @@ X + 1 = Y          # binding: Y := X + 1 when X is safe
 length(W) = 3      # constraint
 N = null           # constraint when N is bound (matches null rows);
                    # unsafe when N is unbound: `null` names no type
-N = null + 0       # binding: N := an integer NULL
+N = as_integer(null)     # binding: N := an integer NULL
+S = as_string(null)      # binding: S := a string NULL
+V = parse_json("null")   # binding: V := a value NULL
 ```
 
 `=` is also a Cmp-level operator at expression level (Section 2.6),

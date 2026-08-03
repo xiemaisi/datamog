@@ -229,8 +229,9 @@ declared base type, and inference never sees nullability.
 
 Where there is no context to acquire a type from, the literal is rejected
 rather than allowed through untyped. A bare `null` cannot ground a variable,
-so `q(X) :- X = null.` leaves `X` unsafe; name the type in the expression
-(`X = null + 0`) or supply it from elsewhere in the rule. As a head argument
+so `q(X) :- X = null.` leaves `X` unsafe. Name the type to write a NULL:
+`as_integer(null)`, `as_string(null)`, `as_float(null)`, `as_boolean(null)`,
+or `parse_json("null")` for a `value`. As a head argument
 it is fine, since a sibling rule can type the column: `q(1). q(null).` yields
 both rows. See spec §2.5 and
 [typing-and-safety-constraints.md](typing-and-safety-constraints.md) §8.

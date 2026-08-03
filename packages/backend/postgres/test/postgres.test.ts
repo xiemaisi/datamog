@@ -115,6 +115,29 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     ]);
   });
 
+  test("Regression: a bare `null` in a value-typed slot carries the slot's type", async () => {
+    // `as_*` takes a `value`, so a bare `null` argument reaches a jsonb slot.
+    // Without a cast it arrives as an untyped NULL and postgres cannot resolve
+    // the jsonb operators against it ("operator is not unique: unknown #>>
+    // unknown"), where the SQLite family is dynamically typed and does not
+    // care. This is also the idiom for writing a typed NULL, since a bare
+    // `null` cannot ground a variable on its own.
+    const executor = new DatamogExecutor(backend);
+    const results = await executor.execute(`
+      i(X) :- X = as_integer(null).
+      s(X) :- X = as_string(null).
+      f(X) :- X = as_float(null).
+      b(X) :- X = as_boolean(null).
+      ?- i(X).
+      output predicate os(X) :- s(X).
+      output predicate of(X) :- f(X).
+      output predicate ob(X) :- b(X).
+    `);
+    for (const result of results) {
+      expect(result.rows).toEqual([{ X: null }]);
+    }
+  });
+
   test("`null` literal, `=`/`<>` (logical), `==`/`!=` (3VL)", async () => {
     // Cross-backend invariant from §5 of the spec: divide-by-zero
     // yields NULL, `=`/`<>` are NULL-aware (IS NOT DISTINCT FROM in
