@@ -245,7 +245,7 @@ export abstract class BaseDatalogEvaluator {
   private snapshot(predicates: string[]): Set<string> {
     const keys = new Set<string>();
     for (const p of predicates) {
-      for (const k of this.relations.get(p)!.keys) keys.add(`${p} ${k}`);
+      for (const k of this.relations.get(p)!.keys) keys.add(`${p}\x00${k}`);
     }
     return keys;
   }
