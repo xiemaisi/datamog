@@ -392,6 +392,20 @@ describe("type inference", () => {
     );
   });
 
+  test("Regression: a binding range types its variable only if both bounds are typed", () => {
+    // A `null` bound has no type, so the range determines nothing about `X`.
+    // Typing `X` from the other bound alone passes every static check and then
+    // leaves the translator with no series to build: sqlite throws "Unbound
+    // variable 'X'" where native returns no rows. The binding-equality path
+    // already declines in the same situation, so the two must agree.
+    expect(() => getTypes("q(X) :- N = null, X in [1 .. N].")).toThrow(
+      /Cannot infer type of column 1 of predicate 'q'/,
+    );
+    expect(() => getTypes("q(X) :- N = null, Y = N + 1, X = Y.")).toThrow(
+      /Cannot infer type of column 1 of predicate 'q'/,
+    );
+  });
+
   test("accepts range filter with float expression", () => {
     const typed = getTypes(`
       input predicate vals(x: float).

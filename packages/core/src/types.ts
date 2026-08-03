@@ -276,8 +276,15 @@ export function rebuildVarTypes(
         if (elem.expr.$type !== "Variable" || varTypes.has(elem.expr.name)) continue;
         const lowType = inferTermType(elem.low, varTypes, types);
         const highType = inferTermType(elem.high, varTypes, types);
-        const rangeType =
-          lowType && highType ? joinTypes(lowType, highType) : (lowType ?? highType);
+        // A range types its variable only once *both* bounds are typed —
+        // the same condition the binding-equality path applies via
+        // `allVarsTyped`. One typed bound does not determine the variable's
+        // type, and accepting it lets `X in [1 .. N]` with an untyped `N`
+        // through the analyzer as `integer`, which the translator cannot
+        // then build a series for. Leaving the variable untyped is what
+        // surfaces the real problem (the untyped bound).
+        if (!lowType || !highType) continue;
+        const rangeType = joinTypes(lowType, highType);
         if (rangeType) {
           varTypes.set(elem.expr.name, rangeType);
           changed = true;
