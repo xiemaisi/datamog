@@ -1,5 +1,8 @@
 # Postgres backend alignment
 
+Status: one open cause (an anchor/recursive column-type mismatch), one won't-fix
+(a last-bit float difference).
+
 Every backend is meant to compute the same answer for the same program. Running
 the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
 `DATABASE_URL`) showed that it does not. This note records what diverges, why,
