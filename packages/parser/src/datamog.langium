@@ -216,6 +216,9 @@ Filter:
 // `null = X` is false). Body-level Equality (`X = expr`) reuses the same
 // operator and additionally binds an unbound LHS. Ordering is total too,
 // with null an isolated point in the order. See doc/design/null.md §5.
+//
+// `!=` is a spelling of `<>` for programmers who expect it. `parseRaw`
+// rewrites it, so no stage past parsing sees the alias.
 
 Expression:
     Or;
@@ -241,7 +244,7 @@ BitAnd infers Expression:
 // operand never yields null), so a second, three-valued family would be
 // indistinguishable from this one.
 Cmp infers Expression:
-    Shift ({infer BinaryExpr.left=current} op=('<' | '<=' | '>' | '>=' | '=' | '<>') right=Shift)?;
+    Shift ({infer BinaryExpr.left=current} op=('<' | '<=' | '>' | '>=' | '=' | '<>' | '!=') right=Shift)?;
 
 Shift infers Expression:
     Addition ({infer BinaryExpr.left=current} op=('<<' | '>>' | '>>>') right=Addition)*;

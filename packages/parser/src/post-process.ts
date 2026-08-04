@@ -19,6 +19,7 @@ import type {
 } from "./generated/ast.js";
 import {
   isAnnotatedHeadTerm,
+  isBinaryExpr,
   isBracketAccess,
   isColumnDecl,
   isExtDecl,
@@ -282,6 +283,18 @@ export function defaultColumnTypes(program: Program): void {
     for (const col of stmt.columns) {
       if (col.type === undefined) col.type = "string";
     }
+  }
+}
+
+/**
+ * Rewrite operator aliases to their canonical spelling. `!=` is an accepted
+ * spelling of `<>`, offered because most programmers reach for it first.
+ * Runs in `parseRaw`, so nothing past parsing has to know about the alias:
+ * there is one inequality operator, spelled two ways.
+ */
+export function normalizeOperatorAliases(program: Program): void {
+  for (const node of streamAll(program)) {
+    if (isBinaryExpr(node) && node.op === "!=") node.op = "<>";
   }
 }
 

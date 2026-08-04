@@ -84,7 +84,12 @@ export type BinaryOp =
   | "="
   | "<>";
 
-export { defaultColumnTypes, liftHeadAnnotations, postProcess } from "./post-process.js";
+export {
+  defaultColumnTypes,
+  liftHeadAnnotations,
+  normalizeOperatorAliases,
+  postProcess,
+} from "./post-process.js";
 export { createDatamogServices } from "./datamog-module.js";
 export {
   DatamogGeneratedModule,
@@ -96,7 +101,12 @@ import type { AstNode } from "langium";
 import { GrammarUtils } from "langium";
 import { createDatamogServices } from "./datamog-module.js";
 import type { Program } from "./generated/ast.js";
-import { defaultColumnTypes, liftHeadAnnotations, postProcess } from "./post-process.js";
+import {
+  defaultColumnTypes,
+  liftHeadAnnotations,
+  normalizeOperatorAliases,
+  postProcess,
+} from "./post-process.js";
 
 /**
  * Source span of a single assigned property, for consumers that need to
@@ -220,10 +230,11 @@ export function parseRaw(source: string, file?: string): Program {
   }
   // Normalise the tree before any consumer (elaboration, post-processing,
   // analysis) sees it: lift head type annotations onto each head's `argTypes`
-  // (keeping AnnotatedHeadTerm out of every later stage) and default unannotated
-  // input-predicate columns to `string`.
+  // (keeping AnnotatedHeadTerm out of every later stage), default unannotated
+  // input-predicate columns to `string`, and rewrite the `!=` spelling of `<>`.
   liftHeadAnnotations(result.value);
   defaultColumnTypes(result.value);
+  normalizeOperatorAliases(result.value);
   return result.value;
 }
 

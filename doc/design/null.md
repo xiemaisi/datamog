@@ -7,7 +7,7 @@ survives in a rule list.
 
 Two things to know before reading the rest. **Comparison in Datamog is
 total**: no comparison ever returns NULL, so the language has one
-equality rather than SQL's two, and `==` / `!=` do not exist. And that
+equality rather than SQL's two, and there is no `==`. And that
 choice has a price, paid on exactly one backend: see the warning in §6
 before running a large join on Postgres.
 
@@ -167,8 +167,14 @@ SQL needs two equalities because its `=` is three-valued and unusable
 against NULL, so it bolts on `IS NOT DISTINCT FROM`. Datamog's `=` is
 null-aware from the start, so the second one has nothing left to do.
 A three-valued `==` would differ from `=` only in its null behaviour, and
-that behaviour is gone, so `==` and `!=` are not operators in the language.
-Write `=` and `<>`.
+that behaviour is gone, so there is no second family. Write `=` and `<>`.
+
+`!=` is accepted as a spelling of `<>`, since it is what most programmers
+type first. It is not a second operator: `parseRaw` rewrites it, so nothing
+past parsing can tell the two apart and they cannot drift. There is
+deliberately no `==` alias for `=`, because `=` at body level also *binds*
+an unbound variable, and a second spelling for it would invite the
+expectation that one of them only compares.
 
 This also removes the one spelling that could make an implicit and an
 explicit equality disagree, which is what §4 is about.
@@ -327,7 +333,8 @@ which also covers why the analyser's "no type information" element sits
   silently drops the row you meant to keep. This is the answer to the one
   residual oddity in §5: `X < 2` and `X >= 2` do not cover the NULL row
   between them.
-- There is one equality. `=` and `<>` are it; `==` and `!=` do not exist.
+- There is one equality. `=` and `<>` are it, with `!=` accepted as a
+  spelling of `<>`. There is no `==`.
 - A shared variable and a spelled-out `=` mean the same thing, so refactor
   between them freely.
 - On the Postgres backend, a large join over nullable columns is quadratic.

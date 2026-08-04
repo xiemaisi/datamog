@@ -41,6 +41,8 @@ export function datamogToken(stream: StringStream): string | null {
     stream.match("<=") ||
     stream.match(">=") ||
     stream.match("<>") ||
+    // `!=` before the single-char `!` below, so it tokenises whole.
+    stream.match("!=") ||
     stream.match("&&") ||
     stream.match("||") ||
     stream.match("..")

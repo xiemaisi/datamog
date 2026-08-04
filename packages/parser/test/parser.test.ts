@@ -490,6 +490,9 @@ describe("parser", () => {
       ["X <= 1", "<="],
       ["X >= 1", ">="],
       ["X <> 1", "<>"],
+      // `!=` is an accepted spelling of `<>`; `parseRaw` normalises it, so
+      // the AST carries the canonical operator.
+      ["X != 1", "<>"],
     ] as const) {
       const program = parse(`foo(X) :- bar(X), ${src}.`);
       const rule = program.statements[0] as Rule;

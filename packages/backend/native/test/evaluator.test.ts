@@ -1507,6 +1507,25 @@ describe("native backend — NULL semantics (§5.4)", () => {
     expect(sortRows(results[3]!)).toEqual([{ X: 0 }, { X: 1 }]);
   });
 
+  test("`!=` is the same operator as `<>`, null-awareness included", async () => {
+    // A spelling, not a second operator: normalised away in `parseRaw`, so
+    // it cannot drift from `<>`. Notably `Y != null` is true/false, never
+    // null, because there is only the one null-aware inequality.
+    const results = await run(`
+      t(0). t(1).
+      p(X, Y) :- t(X), Y = 1 / X.
+      ?- p(A, B), p(C, D), B != D.
+      output predicate angle(A, B, C, D) :- p(A, B), p(C, D), B <> D.
+      output predicate guard(X) :- p(X, Y), Y != null.
+    `);
+    expect(sortRows(results[0]!)).toEqual(sortRows(results[1]!));
+    expect(sortRows(results[0]!)).toEqual([
+      { A: 0, B: null, C: 1, D: 1 },
+      { A: 1, B: 1, C: 0, D: null },
+    ]);
+    expect(results[2]).toEqual([{ X: 1 }]);
+  });
+
   test("all-NULL aggregate group: sum/avg/min/max/concat → NULL", async () => {
     // Group 1 has every row's expression evaluate to NULL (1/0); group
     // 2 has well-defined values. Per §5.4, all-NULL groups produce NULL

@@ -184,7 +184,7 @@ groups interact with the predicate, column, and variable namespaces.
 Arithmetic:    +  -  *  /  %  **
 Boolean:       &&  ||  !
 Bitwise:       &  |  ^  <<  >>  >>>
-Comparison:    <  >  <=  >=  =  <>
+Comparison:    <  >  <=  >=  =  <>  (!= spells <>)
 Rule:          :-
 Query:         ?-
 Constraint:    !-
@@ -200,6 +200,10 @@ Separators:    ,  :  .
 null-aware: `null = null` is true. Every comparison is total, so none of
 them ever returns NULL (§5.4). Body-level Equality reuses the same
 operator and can bind an unbound bare variable on either side.
+
+`!=` is an accepted spelling of `<>`, for programmers who reach for it
+first. It is normalised during parsing, so the two are the same operator
+in every respect; this document uses `<>`.
 
 `^` serves twice. Between two expressions it is bitwise XOR; immediately after
 a predicate name and before its argument list (`bad^(E)`) it marks the
@@ -600,7 +604,8 @@ And            ::= BitOr ('&&' BitOr)*
 BitOr          ::= BitXor ('|' BitXor)*
 BitXor         ::= BitAnd ('^' BitAnd)*
 BitAnd         ::= Cmp ('&' Cmp)*
-Cmp            ::= Shift (('<' | '<=' | '>' | '>=' | '=' | '<>') Shift)?
+Cmp            ::= Shift (('<' | '<=' | '>' | '>=' | '=' | CmpNeq) Shift)?
+CmpNeq         ::= '<>' | '!='   (* the same operator, two spellings *)
 Shift          ::= Addition (('<<' | '>>' | '>>>') Addition)*
 Addition       ::= Multiplication (('+' | '-') Multiplication)*
 Multiplication ::= Exponent (('*' | '/' | '%') Exponent)*
@@ -627,7 +632,7 @@ ObjectEntry    ::= STRING ':' Expression
 4. Multiplication, division, modulo: `*`, `/`, `%`
 5. Addition, subtraction: `+`, `-`
 6. Bit shifts: `<<`, `>>`, `>>>`
-7. Comparison: `<`, `<=`, `>`, `>=`, `=`, `<>`
+7. Comparison: `<`, `<=`, `>`, `>=`, `=`, `<>` (`!=`)
    (non-associative — `X > Y > Z` is a parse error)
 8. Bitwise and: `&`
 9. Bitwise xor: `^`
@@ -666,7 +671,7 @@ point in the order, comparable only to itself.
 | operator | meaning | NULL behaviour | SQL emit |
 |----------|---------|----------------|----------|
 | `=` | equality | `null = null` is true; `null = X` is false | `IS NOT DISTINCT FROM` (Postgres), `IS` (SQLite / sql.js) |
-| `<>` | inequality | inverse of `=` | `IS DISTINCT FROM` / `IS NOT` |
+| `<>` (also `!=`) | inequality | inverse of `=` | `IS DISTINCT FROM` / `IS NOT` |
 | `<` `>` | strict ordering | false whenever either side is null | `COALESCE(a < b, FALSE)` |
 | `<=` `>=` | ordering | true when both sides are null, otherwise false if either is | `COALESCE(a <= b, (a IS NULL AND b IS NULL))` |
 
@@ -1217,7 +1222,7 @@ BitOr          ::= BitXor ('|' BitXor)*
 BitXor         ::= BitAnd ('^' BitAnd)*
 BitAnd         ::= Cmp ('&' Cmp)*
 Cmp            ::= Shift (CmpOp Shift)?
-CmpOp          ::= '<' | '<=' | '>' | '>=' | '=' | '<>'
+CmpOp          ::= '<' | '<=' | '>' | '>=' | '=' | '<>' | '!='
 Shift          ::= Addition (('<<' | '>>' | '>>>') Addition)*
 Addition       ::= Multiplication (('+' | '-') Multiplication)*
 Multiplication ::= Exponent (('*' | '/' | '%') Exponent)*
