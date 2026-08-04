@@ -20,4 +20,6 @@ implemented without the structure it proposes.
 | [`imports-as-functors.md`](./imports-as-functors.md) | largely implemented | A file as a function from its input relations to its output relations, wired with `:=` |
 | [`typing-and-safety-constraints.md`](./typing-and-safety-constraints.md) | model implemented, structure not | Recasting safety checking and type inference as one constraint system over one lattice |
 | [`postgres-alignment.md`](./postgres-alignment.md) | one open cause, one won't-fix | Where the Postgres backend disagrees with the others, and what each fix would take |
+| [`functional-sublanguage.md`](./functional-sublanguage.md) | proposal, nothing implemented; datatype half deferred | Recursive functions over `value` and a conditional expression, so a computation can be named over an argument the caller supplies |
+| [`value-construction.md`](./value-construction.md) | proposal, nothing implemented | Two small gaps that make `value` read-mostly: literal-only object keys, and `list` ordering by its own argument |
 | [`imports.md`](./imports.md) | not adopted, not planned | The conventional module system, kept because it is the road not taken |
