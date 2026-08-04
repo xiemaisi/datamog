@@ -16,7 +16,7 @@ input predicate doubles_move(move: string).
 learns_priority(Name, Move, Priority) :-
   learns(Name, Move),
   not doubles_move(Move),
-  Move != "bide",
+  Move <> "bide",
   move_priority(Move, Priority),
   Priority > 0.
 

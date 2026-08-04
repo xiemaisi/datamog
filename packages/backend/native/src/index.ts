@@ -45,7 +45,6 @@ export {
   compareOp,
   evalTerm,
   logicalEq,
-  valueEq,
 } from "./values.ts";
 
 /**

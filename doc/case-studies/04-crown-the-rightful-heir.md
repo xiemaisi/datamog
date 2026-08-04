@@ -157,10 +157,10 @@ Result: edmund, diana, george, alice, bob, eve, frank, henry, carol.
 Two people are siblings if they share a parent:
 
 ```prolog
-sibling(X, Y) :- parent(P, X), parent(P, Y), X != Y.
+sibling(X, Y) :- parent(P, X), parent(P, Y), X <> Y.
 ```
 
-The `X != Y` condition prevents a person from being their own sibling.
+The `X <> Y` condition prevents a person from being their own sibling.
 
 ### Exercise
 
@@ -259,7 +259,7 @@ child(X, Y) :- parent(Y, X).
 ancestor(X, Y) :- parent(X, Y).
 ancestor(X, Y) :- parent(X, Z), ancestor(Z, Y).
 descendant(X, Y) :- ancestor(Y, X).
-sibling(X, Y) :- parent(P, X), parent(P, Y), X != Y.
+sibling(X, Y) :- parent(P, X), parent(P, Y), X <> Y.
 living_descendant(X) :- descendant(X, "basil"), not deceased(X).
 eligible_heir(X) :- living_descendant(X), not criminal(X).
 
@@ -287,7 +287,7 @@ ancestor of both X and Y.
 <summary>Solution</summary>
 
 ```prolog
-relative(X, Y) :- ancestor(A, X), ancestor(A, Y), X != Y.
+relative(X, Y) :- ancestor(A, X), ancestor(A, Y), X <> Y.
 ```
 
 </details>

@@ -1630,14 +1630,6 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                     },
                     {
                       "$type": "Keyword",
-                      "value": "=="
-                    },
-                    {
-                      "$type": "Keyword",
-                      "value": "!="
-                    },
-                    {
-                      "$type": "Keyword",
                       "value": "="
                     },
                     {

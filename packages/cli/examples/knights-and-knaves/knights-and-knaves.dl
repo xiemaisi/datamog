@@ -16,16 +16,16 @@
 # Represent each islander by a boolean: true for knight, false for knave.
 # The rule of the island is that an islander is a knight exactly when their
 # statement is true, so each speech becomes one biconditional. Datalog has
-# no biconditional, but `==` on two booleans is one.
+# no biconditional, but `=` on two booleans is one.
 
 kind(true).
 kind(false).
 
 solution(A, B, C) :-
   kind(A), kind(B), kind(C),
-  A == !B,
-  B == ((A && !C) || (!A && C)),
-  C == A.
+  A = !B,
+  B = ((A && !C) || (!A && C)),
+  C = A.
 
 # Spell the answer out rather than leaving it as three booleans.
 role(Who, "knight") :- said(Who, true).

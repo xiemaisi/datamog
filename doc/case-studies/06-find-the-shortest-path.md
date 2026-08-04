@@ -190,13 +190,13 @@ between them.
 town(X) :- road(X, _, _).
 town(X) :- road(_, X, _).
 
-unreachable(X, Y) :- town(X), town(Y), X != Y, not shortest(X, Y, _).
+unreachable(X, Y) :- town(X), town(Y), X <> Y, not shortest(X, Y, _).
 
 ?- unreachable(X, Y).
 ```
 
 Result: bridge is unreachable from itself and has no outgoing roads, so
-every pair `(bridge, Y)` with `Y != bridge` appears.
+every pair `(bridge, Y)` with `Y <> bridge` appears.
 
 </details>
 

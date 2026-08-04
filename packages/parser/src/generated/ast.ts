@@ -19,7 +19,6 @@ export type DatamogTerminalNames = keyof typeof DatamogTerminals;
 
 export type DatamogKeywordNames =
     | "!"
-    | "!="
     | "%"
     | "&"
     | "&&"
@@ -41,7 +40,6 @@ export type DatamogKeywordNames =
     | "<="
     | "<>"
     | "="
-    | "=="
     | ">"
     | ">="
     | ">>"
@@ -143,7 +141,7 @@ export interface BinaryExpr extends langium.AstNode {
     readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'BinaryExpr';
     left: Expression;
-    op: '!=' | '%' | '&&' | '&' | '*' | '**' | '+' | '-' | '/' | '<' | '<<' | '<=' | '<>' | '=' | '==' | '>' | '>=' | '>>' | '>>>' | '^' | '|' | '||';
+    op: '%' | '&&' | '&' | '*' | '**' | '+' | '-' | '/' | '<' | '<<' | '<=' | '<>' | '=' | '>' | '>=' | '>>' | '>>>' | '^' | '|' | '||';
     right: Expression;
 }
 

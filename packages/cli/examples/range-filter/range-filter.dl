@@ -3,7 +3,7 @@
 # the rule fires when the expression evaluates to `true`.
 #
 # Equivalent to a SQL `WHERE (score > 80) AND (score < 95) AND
-# (year >= 2020) AND (year != 2022)`. Datamog parses each operator
+# (year >= 2020) AND (year <> 2022)`. Datamog parses each operator
 # with its standard precedence — so `&&` binds tighter than `||` and
 # comparisons bind tighter than both — and the SQL translator emits
 # the WHERE clause directly from the boolean expression.
@@ -21,12 +21,12 @@ grade("helen", 94, 2024).
 # the broken grade scale.
 honours(N) :-
     grade(N, S, Y),
-    (S > 80) && (S < 95) && (Y >= 2020) && (Y != 2022).
+    (S > 80) && (S < 95) && (Y >= 2020) && (Y <> 2022).
 
 # Edge cases: a learner is borderline if they were either right at the
-# lower threshold (==) or just one off the upper one.
+# lower threshold (=) or just one off the upper one.
 output predicate borderline(N) :-
     grade(N, S, _),
-    (S == 80) || (S == 94).
+    (S = 80) || (S = 94).
 
 ?- honours(N).

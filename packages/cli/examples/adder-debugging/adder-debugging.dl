@@ -47,7 +47,7 @@ first_carry(W)  :- gate(W, "AND", A, B), bit0_primary(A), bit0_primary(B).
 
 # --- four structural faults, one per swapped wire ---
 suspect(W, "a sum bit z.. not produced by an XOR") :-
-    zgate(W), top_z(T), W != T, gate(W, K, _, _), K != "XOR".
+    zgate(W), top_z(T), W <> T, gate(W, K, _, _), K <> "XOR".
 
 suspect(W, "an XOR that is neither a half-sum nor a sum bit") :-
     gate(W, "XOR", _, _), not half_sum(W), not sum_bit(W).

@@ -7,6 +7,7 @@ import {
   type BitwiseOp,
   type BodyElement,
   COMPARISON_OPS,
+  EQUALITY_OPS,
   type Equality,
   type Expression,
   type Filter,
@@ -15,6 +16,7 @@ import {
   type HeadTerm,
   type Literal,
   type NumberLiteral,
+  ORDERING_OPS,
   type Overload,
   type PrimitiveType,
   type Query,
@@ -758,7 +760,10 @@ function translateRule(
   // WHERE conditions
   const conditions: string[] = [];
 
-  // Join conditions from shared variables
+  // Join conditions from shared variables. A repeated variable means the
+  // same equality the `=` operator does, so these are null-aware unless one
+  // side is a constant that cannot be NULL. See doc/design/null.md §4, and
+  // §6 for what that costs on Postgres.
   for (const [, refs] of bindings) {
     if (refs.length < 2) continue;
     const first = refs[0]!;
@@ -771,6 +776,7 @@ function translateRule(
           bindingToSql(other),
           other.type,
           dialect,
+          isLiteralBinding(first) || isLiteralBinding(other),
         ),
       );
     }
@@ -811,7 +817,13 @@ function translateRule(
           dialect,
         );
         const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
-        conditions.push(markSpan(atom, `${alias}.${ident(col)} = ${lifted}`));
+        const colSql = `${alias}.${ident(col)}`;
+        conditions.push(
+          markSpan(
+            atom,
+            cannotBeNull(term) ? `${colSql} = ${lifted}` : dialect.logicalEq(colSql, lifted),
+          ),
+        );
       }
     }
   }
@@ -830,7 +842,10 @@ function translateRule(
       const termType = inferTermType(arg, varTypes, columnTypes);
       const termSql = termToSql(arg, bindings, varTypes, columnTypes, functionOverloads, dialect);
       const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
-      conditions.push(markSpan(atom, `${slotSql[k]} = ${lifted}`));
+      const slot = slotSql[k]!;
+      conditions.push(
+        markSpan(atom, cannotBeNull(arg) ? `${slot} = ${lifted}` : dialect.logicalEq(slot, lifted)),
+      );
     }
   }
 
@@ -846,7 +861,11 @@ function translateRule(
         if (refs && refs.length > 0) {
           const varType = varTypes.get(term.name);
           const lifted = liftToJsonIfNeeded(bindingToSql(refs[0]!), varType, expectedType, dialect);
-          subConditions.push(`${ident(col)} = ${lifted}`);
+          subConditions.push(
+            isLiteralBinding(refs[0]!)
+              ? `${ident(col)} = ${lifted}`
+              : dialect.logicalEq(ident(col), lifted),
+          );
         }
       } else {
         const termType = inferTermType(term, varTypes, columnTypes);
@@ -859,7 +878,9 @@ function translateRule(
           dialect,
         );
         const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
-        subConditions.push(`${ident(col)} = ${lifted}`);
+        subConditions.push(
+          cannotBeNull(term) ? `${ident(col)} = ${lifted}` : dialect.logicalEq(ident(col), lifted),
+        );
       }
     }
     const tag = tagMap?.get(atom.predicate);
@@ -1155,13 +1176,12 @@ function termToSql(
       // needed.
       if (term.op === "&&") return `(${leftSql} AND ${rightSql})`;
       if (term.op === "||") return `(${leftSql} OR ${rightSql})`;
-      // For equality variants, lift the primitive side when the other
-      // is json so SQL can compare across the type-tag boundary.
-      // Ordering ops (`<`, `<=`, `>`, `>=`) are rejected for json by
-      // the analyzer, so they don't need this. Arithmetic ops fall
-      // through unchanged — the analyzer already gates them to
-      // numeric operands.
-      if (term.op === "==" || term.op === "!=" || term.op === "=" || term.op === "<>") {
+      // For equality, lift the primitive side when the other is json so
+      // SQL can compare across the type-tag boundary. Ordering ops are
+      // rejected for json by the analyzer, so they don't need this.
+      // Arithmetic ops fall through unchanged, the analyzer having already
+      // gated them to numeric operands.
+      if (EQUALITY_OPS.has(term.op)) {
         const leftType = inferTermType(term.left, varTypes, columnTypes);
         const rightType = inferTermType(term.right, varTypes, columnTypes);
         if (leftType === "value" && rightType !== undefined && rightType !== "value") {
@@ -1170,23 +1190,18 @@ function termToSql(
           leftSql = primitiveToJsonSql(leftSql, leftType, dialect);
         }
       }
-      // Comparisons. `==`/`!=` are 3VL — map straight to SQL's `=`/`<>`,
-      // which already do 3VL. `=`/`<>` are logical (null-aware), so they
-      // route through the dialect-specific null-aware emitter (Postgres
-      // uses `IS NOT DISTINCT FROM`, SQLite / sql.js use `IS`).
-      // Orderings carry over verbatim and stay 3VL.
-      if (term.op === "==") return `(${leftSql} = ${rightSql})`;
-      if (term.op === "!=") return `(${leftSql} <> ${rightSql})`;
+      // Equality is null-aware, so it routes through the dialect-specific
+      // emitter (Postgres `IS NOT DISTINCT FROM`, SQLite / sql.js `IS`).
       if (term.op === "=") return dialect.logicalEq(leftSql, rightSql);
       if (term.op === "<>") return dialect.logicalNeq(leftSql, rightSql);
-      if (term.op === "<" || term.op === "<=" || term.op === ">" || term.op === ">=") {
+      if (ORDERING_OPS.has(term.op)) {
         const leftType = inferTermType(term.left, varTypes, columnTypes);
         const rightType = inferTermType(term.right, varTypes, columnTypes);
         if (leftType === "string" || rightType === "string") {
           leftSql = dialect.stringOrder(leftSql);
           rightSql = dialect.stringOrder(rightSql);
         }
-        return `(${leftSql} ${term.op} ${rightSql})`;
+        return totalOrderingSql(term.op, leftSql, rightSql, term.left, term.right);
       }
       // Bitwise / shift ops: each dialect owns the emission (XOR / `>>>`
       // emulation, 32-bit wrapping). The analyzer has already gated the
@@ -1424,6 +1439,25 @@ function isSelfRecursive(rule: Rule, predicate: string): boolean {
 }
 
 /** True if a binding resolves to a pure SQL literal (number or quoted string). */
+/**
+ * True if a term can never evaluate to NULL, so a plain SQL `=` against it
+ * agrees with the null-aware form. Deliberately syntactic and conservative:
+ * this is not the nullability analysis of doc/design/null.md §6, only the
+ * literal cases, which are what atom arguments mostly are.
+ */
+function cannotBeNull(term: Expression): boolean {
+  switch (term.$type) {
+    case "StringLiteral":
+    case "NumberLiteral":
+    case "BooleanLiteral":
+      return true;
+    case "UnaryExpr":
+      return term.op === "-" && cannotBeNull(term.operand);
+    default:
+      return false;
+  }
+}
+
 function isLiteralBinding(b: Binding): boolean {
   if (b.kind === "col") return false;
   // Accept the parenthesised `(-N)` / `(-N.M)` form that termToSql emits
@@ -1520,12 +1554,51 @@ function primitiveToJsonSql(sql: string, exprType: PrimitiveType, dialect: SqlDi
   return dialect.toJson(liftedSql, exprType);
 }
 
+/**
+ * An ordering comparison, made total. SQL's `<` and friends yield NULL when
+ * either operand is NULL; Datamog treats null as an isolated point in the
+ * order, so `<` / `>` are false whenever a side is null and `<=` / `>=` are
+ * true only when both are. See doc/design/null.md §5.
+ *
+ * In a plain WHERE conjunct the wrapper is redundant, NULL and FALSE both
+ * dropping the row, but it is needed under `not` and wherever the result is
+ * bound to a variable. Emitting it unconditionally costs nothing measurable:
+ * no backend creates an index, and an ordering predicate is never a hash or
+ * merge join key.
+ */
+function totalOrderingSql(
+  op: string,
+  leftSql: string,
+  rightSql: string,
+  left: Expression,
+  right: Expression,
+): string {
+  const cmp = `${leftSql} ${op} ${rightSql}`;
+  // Neither side can be null, so SQL's own answer is already total.
+  if (cannotBeNull(left) && cannotBeNull(right)) return `(${cmp})`;
+  // `<=` and `>=` hold of two nulls, but only if both sides can be one.
+  if ((op === "<=" || op === ">=") && !cannotBeNull(left) && !cannotBeNull(right)) {
+    return `COALESCE(${cmp}, (${leftSql} IS NULL AND ${rightSql} IS NULL))`;
+  }
+  return `COALESCE(${cmp}, FALSE)`;
+}
+
+/**
+ * Equality between two matching positions, with the json lift applied when
+ * one side is a primitive and the other a `value`.
+ *
+ * `plainEq` opts out of the null-aware operator where one side cannot be
+ * NULL. Both forms drop the row when the other side is NULL, one via NULL
+ * and one via FALSE, so they are interchangeable in a WHERE conjunct, and
+ * the plain form keeps the emitted SQL readable and hash-joinable.
+ */
 function sqlEqWithJsonLift(
   leftSql: string,
   leftType: PrimitiveType | undefined,
   rightSql: string,
   rightType: PrimitiveType | undefined,
   dialect: SqlDialect,
+  plainEq = false,
 ): string {
   let lhs = leftSql;
   let rhs = rightSql;
@@ -1534,7 +1607,7 @@ function sqlEqWithJsonLift(
   } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
     lhs = primitiveToJsonSql(lhs, leftType, dialect);
   }
-  return `${lhs} = ${rhs}`;
+  return plainEq ? `${lhs} = ${rhs}` : dialect.logicalEq(lhs, rhs);
 }
 
 /** Translate an aggregate function call to SQL. */

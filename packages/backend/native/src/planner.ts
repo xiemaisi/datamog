@@ -33,7 +33,6 @@ import {
   evalTerm,
   logicalEq,
   scrubNonFiniteForJson,
-  valueEq,
 } from "./values.ts";
 
 /** An in-memory relation: ordered tuples plus a dedup key set. */
@@ -292,7 +291,7 @@ export function matchAtom(
       const prev = next.get(arg.name);
       if (prev === undefined) {
         next.set(arg.name, val);
-      } else if (!valueEq(prev, val)) {
+      } else if (!logicalEq(prev, val)) {
         return null;
       }
     } else {
@@ -302,7 +301,7 @@ export function matchAtom(
       // computed arg, but negation safety guarantees its variables are
       // already bound, so evaluating left to right is sufficient.
       const expected = evalTerm(arg, next, env);
-      if (!valueEq(expected, val)) return null;
+      if (!logicalEq(expected, val)) return null;
     }
   }
   return next;
@@ -340,15 +339,14 @@ function isSimpleArg(arg: Expression): boolean {
  * imposes any ordering constraint of its own — the computed argument's
  * dependency becomes a filter that runs once its variables are bound.
  *
- * The constraint uses the `==` comparison operator, not an `=` equality:
- * `==` yields NULL (row dropped) when either side is NULL, matching the
- * join semantics of an atom position on the SQL backends (`col = expr` never
- * matches a NULL). An `=` equality would instead treat `NULL = NULL` as
- * true. Negated atoms and built-in body atoms are left as-is (their
- * variables are bound before they run, so a computed argument evaluates
- * directly). Fresh variables need no entry in the type environment: they
- * appear only in an atom position (bound by matchAtom) and as one side of a
- * `==`, never inside an expression whose type is inspected.
+ * The constraint uses `=`, the language's only equality, so a hoisted
+ * argument matches an atom position exactly as an unhoisted one would:
+ * null-aware, `NULL = NULL` included. Negated atoms and built-in body atoms
+ * are left as-is (their variables are bound before they run, so a computed
+ * argument evaluates directly). Fresh variables need no entry in the type
+ * environment: they appear only in an atom position (bound by matchAtom)
+ * and as one side of the `=`, never inside an expression whose type is
+ * inspected.
  */
 function hoistAtomArgs(body: BodyElement[]): BodyElement[] {
   let counter = 0;
@@ -375,7 +373,7 @@ function hoistAtomArgs(body: BodyElement[]): BodyElement[] {
       constraints.push({
         $type: "Filter",
         negated: false,
-        expr: { $type: "BinaryExpr", op: "==", left: freshVar, right: arg },
+        expr: { $type: "BinaryExpr", op: "=", left: freshVar, right: arg },
       } as unknown as Filter);
     }
     result.push({ ...elem, args: newArgs });
@@ -671,9 +669,9 @@ export function* enumerate(
       return;
     }
     case "filterEq": {
-      // Body-level Equality is the logical (null-aware)
-      // equality — `null = null` matches, `null = X` doesn't. Atom
-      // matching keeps the SQL-style 3VL semantics via `valueEq`.
+      // Body-level Equality is null-aware: `null = null` matches,
+      // `null = X` doesn't. Atom matching uses the same `logicalEq`, so a
+      // repeated variable and a spelled-out `=` denote the same join.
       const l = evalTerm(step.left, sub, env);
       const r = evalTerm(step.right, sub, env);
       if (!logicalEq(l, r)) return;
@@ -682,10 +680,10 @@ export function* enumerate(
     }
     case "filter": {
       // The filter expression must evaluate to `true` for the row to
-      // pass. NULL (3VL "unknown") is treated as "doesn't match",
-      // matching SQL's WHERE semantics — `compareOp` and the binary
-      // comparison ops return NULL for null operands; this step then
-      // drops the row by failing the `=== true` check.
+      // pass. Comparisons are total so they never yield NULL here, but a
+      // NULL can still reach filter position through a nullable boolean
+      // column or a null-propagating expression; the `=== true` check
+      // drops that row, matching SQL's WHERE semantics.
       const v = evalTerm(step.expr, sub, env);
       if (v !== true) return;
       yield* enumerate(steps, i + 1, sub, env, relations, deltaOverride);
@@ -755,7 +753,7 @@ export function* enumerate(
  * Bind one bound-position argument of a built-in body atom against an
  * iteration-emitted value. Variable args become substitutions (after a
  * repeated-variable consistency check); literal/expression args are
- * compared via `valueEq` and either pass through or kill the row.
+ * compared via `logicalEq` and either pass through or kill the row.
  * Anonymous variables (parser-generated internal names for source-level `_`)
  * are accepted unconditionally
  * and not added to the substitution — matching positive-atom behaviour
@@ -775,8 +773,8 @@ function bindJsonSlot(
       next.set(arg.name, value);
       return next;
     }
-    return valueEq(prev, value) ? sub : null;
+    return logicalEq(prev, value) ? sub : null;
   }
   const expected = evalTerm(arg, sub, env);
-  return valueEq(expected, value) ? sub : null;
+  return logicalEq(expected, value) ? sub : null;
 }

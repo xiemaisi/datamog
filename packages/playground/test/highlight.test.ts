@@ -51,9 +51,9 @@ describe("playground highlight", () => {
   });
 
   test("Regression: logical and comparison operators tokenise as whole operators", () => {
-    const tokens = tokensFor("!A && B || C == D <> E != F <= G >= H");
+    const tokens = tokensFor("!A && B || C = D <> E <= F >= G");
     const operatorTexts = tokens.filter((t) => t.tag === "operator").map((t) => t.text);
-    expect(operatorTexts).toEqual(["!", "&&", "||", "==", "<>", "!=", "<=", ">="]);
+    expect(operatorTexts).toEqual(["!", "&&", "||", "=", "<>", "<=", ">="]);
   });
 });
 

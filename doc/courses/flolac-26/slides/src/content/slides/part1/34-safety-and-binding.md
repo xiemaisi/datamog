@@ -7,7 +7,7 @@ tight: true
 
 A variable is **bound** by a positive predicate atom, or by an **equality** `X = e` once every variable in `e` is bound.
 
-Other comparisons (`<`, `>`, `!=`, …) and negated atoms only **test** variables; they never bind them.
+Other comparisons (`<`, `>`, `<>`, …) and negated atoms only **test** variables; they never bind them.
 
 A rule is **safe** when every variable in the head, in a comparison, and under `not` is bound.
 

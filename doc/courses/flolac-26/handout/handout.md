@@ -34,14 +34,14 @@ Intensional predicates are defined by one or more _rules_ expressed as _Horn cla
 
 ```prolog
 same_age(Person1, Person2) :- person(Person1, Age), person(Person2, Age),
-                              Person1 != Person2.
+                              Person1 <> Person2.
 ```
 
 A Horn clause consists of a _head atom_ and zero or more _body literals_.
 
 The head atom (`same_age(Person1, Person2)` in our example) specifies the name of the predicate (`same_age`) and its arguments (here the variables `Person1` and `Person2`). Predicate names are lower-case, while variables are upper-case.
 
-The body is a comma-separated list of _literals_. An _atom_ is either a _predicate atom_ — a predicate applied to arguments, such as `person(Person1, Age)` — or a _built-in atom_, such as `Age1 < Age2` or `Person1 != Person2`. A _literal_ is an atom or a _negated atom_ (such as `not same_age(Person1, Person2)`).
+The body is a comma-separated list of _literals_. An _atom_ is either a _predicate atom_ — a predicate applied to arguments, such as `person(Person1, Age)` — or a _built-in atom_, such as `Age1 < Age2` or `Person1 <> Person2`. A _literal_ is an atom or a _negated atom_ (such as `not same_age(Person1, Person2)`).
 
 Arguments to atoms (either in the head or the body) can be variables, constants (such as string or number literals) or more complex expressions built using arithmetic or string operators.
 
@@ -68,13 +68,13 @@ Each occurrence of `_` is logically interpreted as a different variable, so two 
 
 Furthermore, `_` is scoped as tightly as possible: a negated literal `not p(X, _)` is logically interpreted as $\neg \exists V. \mathtt{p}(X, V)$, and not $\exists V.\neg \mathtt{p}(X, V)$.
 
-Note that the order of literals in the body of a rule does not matter. However, each rule must be _safe_: every variable that appears in the head, in a negated predicate atom, or inside a compound expression (such as `X + 1`) must be _bound_. Variables are initially bound only by positive ordinary predicate calls, i.e., unnegated calls to extensional or intensional predicates. Built-in comparisons such as `X < Y` or `X != Y`, and negated atoms such as `not p(X)`, are filters: they do not bind any variable. In addition, an equality may bind a bare variable on one side if all variables on the other side are already bound. (This is symmetric: `X = Y + 1` and `Y + 1 = X` both bind `X`, provided `Y` is bound.) These rules are applied repeatedly until no further variables become bound, so that an equality can bind a variable only once the variables it depends on have themselves been established as bound.
+Note that the order of literals in the body of a rule does not matter. However, each rule must be _safe_: every variable that appears in the head, in a negated predicate atom, or inside a compound expression (such as `X + 1`) must be _bound_. Variables are initially bound only by positive ordinary predicate calls, i.e., unnegated calls to extensional or intensional predicates. Built-in comparisons such as `X < Y` or `X <> Y`, and negated atoms such as `not p(X)`, are filters: they do not bind any variable. In addition, an equality may bind a bare variable on one side if all variables on the other side are already bound. (This is symmetric: `X = Y + 1` and `Y + 1 = X` both bind `X`, provided `Y` is bound.) These rules are applied repeatedly until no further variables become bound, so that an equality can bind a variable only once the variables it depends on have themselves been established as bound.
 
 ### Built-in predicates
 
 #### Syntax
 
-Built-in predicates are neither declared nor defined in the program, but come predefined. The built-in comparison predicates are equality (`=`), disequality (`!=`), and the orderings `<`, `<=`, `>`, and `>=`. For example, `Person1 = Person2`, `Person1 != Person2`, and `Age1 < Age2` are all built-in atoms.
+Built-in predicates are neither declared nor defined in the program, but come predefined. The built-in comparison predicates are equality (`=`), disequality (`<>`), and the orderings `<`, `<=`, `>`, and `>=`. For example, `Person1 = Person2`, `Person1 <> Person2`, and `Age1 < Age2` are all built-in atoms.
 
 The expressions that appear as arguments (in atoms, comparisons, and rule heads) are built from constants and variables using arithmetic operators (`+`, `-`, `*`, `/`, and `%` for modulo) and string operators (such as concatenation), together with a library of built-in functions (for example `length`, `abs`, and `sqrt`). Division or modulo by zero, and other out-of-domain operations, yield the special value `null`.
 
@@ -159,8 +159,8 @@ Stratification ensures that the program has a well-defined _stratified model_. W
 > odd(N) :- number(N), even(N - 1).
 >
 > divides(P, Q) :- number(P), P > 0, number(N), Q = P * N.
-> properly_divides(P, Q) :- divides(P, Q), P != Q.
-> composite(N) :- properly_divides(D, N), D != 1.
+> properly_divides(P, Q) :- divides(P, Q), P <> Q.
+> composite(N) :- properly_divides(D, N), D <> 1.
 > prime(N) :- number(N), N > 1, not composite(N).
 >
 > ?- prime(N), even(N).

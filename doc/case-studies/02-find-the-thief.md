@@ -71,8 +71,8 @@ in a rule body.
 Write a rule `suspect(Name)` that selects every person matching clues 1--6:
 
 - **Clue 1** (taller than 150): `Height > 150`
-- **Clue 2** (not blond): `Hair != "blond"`
-- **Clue 3** (not bald): `Hair != "bald"`
+- **Clue 2** (not blond): `Hair <> "blond"`
+- **Clue 3** (not bald): `Hair <> "bald"`
 - **Clue 4** (not younger than 30): `Age >= 30`
 - **Clue 5** (lives east): `"east"` goes directly in the atom
 
@@ -100,8 +100,8 @@ Your rule should look like this, with blanks filled in:
 suspect(Name) :-
   person(Name, Age, Hair, Height, ___),
   Height > ___,
-  Hair != ___,
-  Hair != ___,
+  Hair <> ___,
+  Hair <> ___,
   Age >= ___,
   dark_hair(Hair).
 ```
@@ -120,8 +120,8 @@ dark_hair("brown").
 suspect(Name) :-
   person(Name, Age, Hair, Height, "east"),
   Height > 150,
-  Hair != "blond",
-  Hair != "bald",
+  Hair <> "blond",
+  Hair <> "bald",
   Age >= 30,
   dark_hair(Hair).
 
@@ -161,7 +161,7 @@ max_age(max(Age)) :- person(_, Age, _, _, _).
 max_height(max(Height)) :- person(_, _, _, Height, _).
 ```
 
-Then in the suspect rule: `max_age(MaxAge), Age != MaxAge` ensures the suspect
+Then in the suspect rule: `max_age(MaxAge), Age <> MaxAge` ensures the suspect
 is not the oldest.
 
 ### Clue 10: Shorter than average
@@ -214,13 +214,13 @@ max_east_age(max(Age)) :- person(_, Age, _, _, "east").
 suspect(Name) :-
   person(Name, Age, Hair, Height, "east"),
   Height > 150,
-  Hair != "blond",
-  Hair != "bald",
+  Hair <> "blond",
+  Hair <> "bald",
   Age >= 30,
   dark_hair(Hair),
   not height_180_190(Name),
-  max_age(MaxAge), Age != MaxAge,
-  max_height(MaxH), Height != MaxH,
+  max_age(MaxAge), Age <> MaxAge,
+  max_height(MaxH), Height <> MaxH,
   avg_height(AvgH), Height < AvgH,
   max_east_age(MaxEAge), Age = MaxEAge.
 
@@ -235,7 +235,7 @@ The thief is **kate**!
 
 - **Conjunction**: comma-separated conditions in a rule body mean "and"
 - **Disjunction**: use a helper predicate with multiple facts (or multiple rules for the same head) to express "or"
-- **Comparisons**: `>`, `<`, `>=`, `<=`, `!=` in rule bodies
+- **Comparisons**: `>`, `<`, `>=`, `<=`, `<>` in rule bodies
 - **Negation**: `not predicate(...)` — define what you want to negate as a predicate, then negate it
 - **Aggregates**: `max`, `min`, `avg`, `count`, `sum` appear in rule heads; reference the derived values in other rules
 

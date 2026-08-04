@@ -40,8 +40,6 @@ export function datamogToken(stream: StringStream): string | null {
   if (
     stream.match("<=") ||
     stream.match(">=") ||
-    stream.match("==") ||
-    stream.match("!=") ||
     stream.match("<>") ||
     stream.match("&&") ||
     stream.match("||") ||

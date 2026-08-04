@@ -7,7 +7,7 @@ tight: true
 
 An **atom** is either
 - a **predicate atom** (a predicate applied to expressions, like `even(N)`), or
-- a **comparison** of two expressions (`=`, `!=`, `<`, `>`, `<=`, `>=`).
+- a **comparison** of two expressions (`=`, `<>`, `<`, `>`, `<=`, `>=`).
 
 They differ in how they are evaluated:
 - A **predicate atom** is matched against that predicate's relation: variables are **bound** to the matching values, while constants and the don't-care `_` only filter.

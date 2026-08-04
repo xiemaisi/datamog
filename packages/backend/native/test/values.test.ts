@@ -49,16 +49,23 @@ describe("compareOp — runtime type assertions", () => {
     expect(() => compareOp(">", true, false)).toThrow(/expected number or string/);
   });
 
-  test("null operand returns null (3VL), no throw", () => {
-    expect(compareOp("<", null, 1)).toBe(null);
-    expect(compareOp(">=", "a", null)).toBe(null);
-    expect(compareOp("=", null, null)).toBe(null);
-    expect(compareOp("!=", 1, null)).toBe(null);
+  test("comparison is total: a null operand never yields null, and never throws", () => {
+    // Null is an isolated point in the order: `<` / `>` are false whenever a
+    // side is null, `<=` / `>=` are true only when both are. Equality is
+    // null-aware. See doc/design/null.md §5.
+    expect(compareOp("<", null, 1)).toBe(false);
+    expect(compareOp("<", null, null)).toBe(false);
+    expect(compareOp(">=", "a", null)).toBe(false);
+    expect(compareOp("<=", null, null)).toBe(true);
+    expect(compareOp(">=", null, null)).toBe(true);
+    expect(compareOp("=", null, null)).toBe(true);
+    expect(compareOp("<>", null, null)).toBe(false);
+    expect(compareOp("<>", 1, null)).toBe(true);
   });
 
-  test("equality across mismatched types is permitted (= / != never throw)", () => {
+  test("equality across mismatched types is permitted (= / <> never throw)", () => {
     expect(compareOp("=", 1, "1")).toBe(false);
-    expect(compareOp("!=", 1, "1")).toBe(true);
+    expect(compareOp("<>", 1, "1")).toBe(true);
     expect(compareOp("=", true, 1)).toBe(false);
   });
 
@@ -69,7 +76,7 @@ describe("compareOp — runtime type assertions", () => {
     // use canonical structural equality.
     expect(compareOp("=", { a: 1 }, { a: 1 })).toBe(true);
     expect(compareOp("=", { b: 2, a: 1 }, { a: 1, b: 2 })).toBe(true);
-    expect(compareOp("!=", [1, { a: true }], [1, { a: true }])).toBe(false);
+    expect(compareOp("<>", [1, { a: true }], [1, { a: true }])).toBe(false);
   });
 });
 
@@ -231,12 +238,15 @@ describe("evalTerm — NULL propagation through non-boolean expressions", () => 
     expect(evalTerm(binary("+", str("x"), variable("N")), sub, env)).toBe(null);
   });
 
-  test("comparisons: NULL on either side returns NULL", () => {
+  test("comparisons absorb NULL rather than propagating it", () => {
+    // The one place NULL stops travelling: comparison is total, so no
+    // operand combination yields null. See doc/design/null.md §5.
     const sub = nullSub();
-    expect(evalTerm(binary("<", variable("N"), num(1)), sub, env)).toBe(null);
-    expect(evalTerm(binary(">=", num(1), variable("N")), sub, env)).toBe(null);
-    expect(evalTerm(binary("==", variable("N"), num(1)), sub, env)).toBe(null);
-    expect(evalTerm(binary("!=", num(1), variable("N")), sub, env)).toBe(null);
+    expect(evalTerm(binary("<", variable("N"), num(1)), sub, env)).toBe(false);
+    expect(evalTerm(binary(">=", num(1), variable("N")), sub, env)).toBe(false);
+    expect(evalTerm(binary("<=", variable("N"), variable("N")), sub, env)).toBe(true);
+    expect(evalTerm(binary("=", variable("N"), num(1)), sub, env)).toBe(false);
+    expect(evalTerm(binary("<>", num(1), variable("N")), sub, env)).toBe(true);
   });
 
   test("string functions: length/upper/lower/trim/replace propagate NULL", () => {

@@ -1,10 +1,15 @@
 # Design notes: why Datamog has NULL
 
-Status: implemented. The normative rules are spec §5.4 (sources,
-propagation, three-valued logic) and §2.6 (the two comparison families).
-This note is the rationale, the alternatives rejected, and the sharp edges,
-because none of that survives in a rule list. §5 records one specified
-behaviour that is worth revisiting, and why it was left alone.
+Status: implemented. The normative rules are spec §5.4 (sources and
+propagation) and §2.6 (comparison). This note is the rationale, the
+alternatives rejected, and the costs accepted, because none of that
+survives in a rule list.
+
+Two things to know before reading the rest. **Comparison in Datamog is
+total**: no comparison ever returns NULL, so the language has one
+equality rather than SQL's two, and `==` / `!=` do not exist. And that
+choice has a price, paid on exactly one backend: see the warning in §6
+before running a large join on Postgres.
 
 ## 1. The reflex, and why it misfires
 
@@ -19,11 +24,11 @@ propagate. The closer
 analogy is IEEE `NaN`, or an option type flattened into the value domain
 with all the plumbing done for you. The type system is also not implicitly
 nullable in the way Hoare's target was: `null` has no type of its own
-(spec §1.5, and see §6 below), so no column is declared as "integer, or
+(spec §1.5, and see §7 below), so no column is declared as "integer, or
 maybe not".
 
 That does not make NULL free. The cost is real, but it is a different cost
-from the one the reflex is reaching for, and §4 states it exactly.
+from the one the reflex is reaching for, and §6 states it exactly.
 
 ## 2. Totality is the reason
 
@@ -82,11 +87,13 @@ for the failure branch, roughly doubling every program that divides.
 genuinely worse option: it makes wrong answers indistinguishable from right
 ones, where NULL at least propagates and is visible in the output.
 
-## 4. What it actually costs: three notions of sameness
+## 4. One notion of sameness
 
-Here is the real price, and it is sharper than "null is untidy". NULL is a
-value for some purposes and not for others, and Datamog ends up with three
-distinct notions of "the same".
+The obvious way to get NULL wrong is to end up with several answers to
+"are these two values the same". SQL has that problem: `GROUP BY` folds
+NULLs together, `DISTINCT` folds them together, and `=` does not. Datamog
+has one answer, used everywhere, under which `null` equals itself and
+nothing else.
 
 **Tuple identity, used by set semantics.** Two NULLs are the same tuple, so
 they deduplicate:
@@ -98,144 +105,190 @@ q(7).
 ?- q(X).                  % {null, 7}: one null row, not two
 ```
 
-**Logical equality `=` / `<>`, null-aware by design** (spec §2.6,
-`IS NOT DISTINCT FROM` on Postgres, `IS` on the SQLite family). `null = null`
-is true, and a filter built from it is total: it returns true or false,
-never NULL. This is what makes `X <> null` a usable guard.
+**Aggregate grouping.** `GROUP BY` puts all the NULLs of a group key in one
+group, on every backend and in both interpreters.
 
-**Three-valued equality, used everywhere else.** `==`, the ordering
-operators, the implicit equality of a repeated variable, and negation all
-treat NULL as SQL's "unknown", so NULL matches nothing, including itself.
+**The `=` and `<>` operators**, and body-level Equality. `null = null` is
+true. Both are total: they return true or false, never NULL, which is what
+makes `X <> null` a usable guard.
 
-Two consequences follow that no amount of documentation makes comfortable.
-
-**A filter and its negation do not partition.** Verified on native and
-sqlite:
-
-```prolog
-p(1). p(X) :- X = 3 / 0.
-output predicate lo(X) :- p(X), X < 2.          % {1}
-output predicate hi(X) :- p(X), not (X < 2).    % {}
-```
-
-The NULL row is in neither. This one is irreducible: asking whether an
-undefined number is below 2 has no good answer, and every SQL user already
-lives with it. The mitigation is a `<> null` guard, not a language change.
-
-**Negation is not complementation.** With `q` containing a NULL row, that
-row is still in `not q`:
-
-```prolog
-q(X) :- X = 1 / 0.  q(7).
-p(1). p(X) :- X = 3 / 0.
-output predicate negated(X) :- p(X), not q(X).  % {1, null}
-```
-
-`null` appears in the result even though `q` contains `null`.
-
-## 5. A specified divergence worth revisiting
-
-This one is a decision, not an oversight. Spec §5.4 states it:
-
-> Atom matching keeps SQL-style 3VL join semantics — a literal `null` in an
-> atom argument never matches, and a shared variable across two atoms
-> doesn't join NULL to NULL. Use an explicit body Equality
-> (`atom(N, V), V = null`) when null-aware matching is wanted.
-
-and [planner.ts:674](../../packages/backend/native/src/planner.ts#L674)
-repeats it in code. The rest of this section is the case for revisiting it,
-not a bug report.
-
-A repeated variable and an explicit `=` are otherwise interchangeable. That
-is what a variable *means* in Datalog: `p(X), q(X)` is `∃x. p(x) ∧ q(x)`,
-and writing the equality out is a meaning-preserving refactor. Here they
-differ, identically on native and sqlite:
+**Atom matching**, meaning a repeated variable across two atoms and a
+literal argument against a column. A repeated variable and an explicit
+equality are therefore interchangeable, which is what a variable *means* in
+Datalog: `p(X), q(X)` is `∃x. p(x) ∧ q(x)`, and writing the equality out is
+a meaning-preserving refactor.
 
 ```prolog
 p(1). p(X) :- X = 1 / 0.
 q(2). q(X) :- X = 1 / 0.
-output predicate shared(X)        :- p(X), q(X).             % {}
-output predicate logical(X)       :- p(X), q(Y), X = Y.      % {null}
-output predicate computational(X) :- p(X), q(Y), X == Y.     % {}
+output predicate shared(X)  :- p(X), q(X).             % {null}
+output predicate spelled(X) :- p(X), q(Y), X = Y.      % {null}, the same
 ```
 
-The repeated variable compiles to a plain SQL `=` (three-valued), while the
-`=` operator compiles to `IS NOT DISTINCT FROM` (null-aware).
+**Negation**, whose inner comparison is atom matching, so negation is
+complementation:
 
-Which one should move? The argument favours making the join null-aware,
-because **Datamog's NULL does not mean "unknown"**. It means "this
-operation has no defined result", which is a definite fact about a definite
-value. `1 / 0` and `2 / 0` denote the same thing. Two of the three notions
-of sameness in §4 already agree with that reading: dedup treats NULLs as one
-tuple, and `=` treats them as equal. Only the join dissents, and the spec's
-stated reason is fidelity to SQL. But SQL is the wrong authority on this
-particular point: SQL has no repeated variables, so it never has to make an
-implicit equality agree with an explicit one. Datalog does, and its
-semantics says they are the same thing.
+```prolog
+q(X) :- X = 1 / 0.  q(7).
+p(1). p(X) :- X = 3 / 0.
+output predicate negated(X) :- p(X), not q(X).         % {1}
+```
 
-One change would align it, and it fixes two of the three sharp edges at
-once, since negation's inner comparison is the same equality:
+The NULL row of `p` is excluded, because `q` has one too.
 
-- `shared` would become `{null}`, matching `logical`, so the refactor is
-  meaning-preserving again.
-- `negated` would become `{1}`, so negation is complementation again.
-- The `lo`/`hi` partition failure stays, because that is about ordering
-  rather than equality, and it is genuinely irreducible.
+### Why this departs from SQL
 
-Doing it unconditionally is nonetheless ruled out, by a measured margin.
-`IS NOT DISTINCT FROM` is not a hashable or mergeable join predicate on
-Postgres, so it collapses a hash join into a nested loop. On a 50k × 50k
-integer join:
+SQL would give `{}` for `shared` and `{1, null}` for `negated`, because its
+join equality is three-valued: NULL matches nothing, including itself.
+Datamog does not follow it, for two reasons.
 
-| join condition | plan | execution |
-| --- | --- | --- |
-| `t1.x = t2.x` | Hash Join | 6 ms |
-| `t1.x IS NOT DISTINCT FROM t2.x` | Nested Loop | 32,557 ms |
+**Datamog's NULL does not mean "unknown".** It means "this operation has no
+defined result", which is a definite fact about a definite value. `1 / 0`
+and `2 / 0` denote the same thing. Three-valued equality encodes the
+unknown-value reading, and that reading is simply not what §2 produces.
 
-Three to four orders of magnitude slower, and quadratic, so worse at scale.
-The ratio varies by machine and the absolute numbers are not the claim; the
-plan shapes are, and they are stable. Whatever happens here cannot be a
-blanket substitution.
+**SQL is not an authority here, because it never faced the question.** SQL
+has no repeated variables, so it never had to make an implicit equality
+agree with an explicit one. Datalog does, and its semantics says the two are
+the same thing. Following SQL would mean `p(X), q(X)` and
+`p(X), q(Y), X = Y` denote different relations, with no way to write the
+first one's behaviour out longhand.
 
-That leaves emitting the null-aware form only where a column can actually
-hold NULL. EDB columns already carry the information: they are `NOT NULL`
-unless declared `?`, so an EDB-only join keeps its hash join and is
-semantically unaffected, there being no NULLs to disagree about. IDB columns
-do not: nothing in the language tracks which of them can produce a NULL, and
-any rule can (`1 / 0` suffices). So the precise fix needs a nullability
-analysis over IDB columns, and that is the prerequisite for reopening any of
-this.
+The cost of departing is real and lands on one backend. §6 states it.
 
-Such an analysis is a per-(predicate, column) boolean, computed as a least
-fixed point over the dependency graph from "not nullable" upward, the same
-shape as type inference. It originates at the NULL sources in §5.4 (an EDB
-column declared `?`, a partial operation in a head expression, a bare `null`
-head argument) and propagates through any head expression mentioning a
-nullable variable. Aggregates propagate rather than originate: a group exists
-only because a row exists, so `sum(X)` is NULL only where `X` is nullable and
-some group is entirely NULL.
+## 5. Comparison is total
 
-It is not built, because with the decision below it would have no consumer.
-Its standing cost is a coupling to the builtin registry: adding a partial
-builtin without marking it as a NULL source would silently under-approximate.
-That failure mode is benign here, since under-approximating means emitting a
-plain `=`, which is what happens today, but the analysis would only ever be as
-trustworthy as that list.
+No comparison operator ever returns NULL. That is the single rule; the rest
+of this section is what it forces.
 
-The remaining cost, whichever way it goes: a nullable-column join pays the
-nested loop. One `1 / 0` in a recursive predicate would poison its column
-and make a large recursive join quadratic, which is a sharp edge of its own.
+### One equality, not two
 
-**Decision: leave the behaviour as specified.** The semantics argument above
-does not carry enough weight to justify either a new analysis or a
-performance cliff that appears when someone adds a division to a rule. The
-divergence stays, spec §5.4 stays normative, and the workaround it documents
-(write the equality out when null-aware matching is wanted) is the answer.
-The nullability analysis stays unbuilt for the same reason, and separately:
-warning on a nullable-column join was considered and declined too, so it
-would have no consumer. Both were weighed rather than missed.
+SQL needs two equalities because its `=` is three-valued and unusable
+against NULL, so it bolts on `IS NOT DISTINCT FROM`. Datamog's `=` is
+null-aware from the start, so the second one has nothing left to do.
+A three-valued `==` would differ from `=` only in its null behaviour, and
+that behaviour is gone, so `==` and `!=` are not operators in the language.
+Write `=` and `<>`.
 
-## 6. Why the static story stays clean
+This also removes the one spelling that could make an implicit and an
+explicit equality disagree, which is what §4 is about.
+
+### Ordering: null is an isolated point
+
+The non-null values keep their total order. `null` sits outside it,
+comparable only to itself:
+
+| left | right | `=` | `<>` | `<` | `<=` | `>` | `>=` |
+|--------|--------|-------|-------|-------|-------|-------|-------|
+| `5` | `5` | true | false | false | true | false | true |
+| `5` | `6` | false | true | true | true | false | false |
+| `5` | `null` | false | true | false | false | false | false |
+| `null` | `5` | false | true | false | false | false | false |
+| `null` | `null` | true | false | false | true | false | true |
+
+This is a partial order and it satisfies the laws you would want of one:
+`<=` is reflexive (including at null), antisymmetric, and transitive, and
+`a < b` is equivalent to `a <= b ∧ a <> b` in every cell. What fails is
+trichotomy, deliberately: an undefined number is neither below 2 nor
+at-or-above it.
+
+The alternative was to give null a position in the order, bottom being the
+obvious pick, which would restore trichotomy. It is rejected because it
+contradicts the aggregates: `min` and `max` skip NULLs on every backend
+(spec §2.7), so `min` over `{1, null}` is `1`. If null were the bottom of
+the order, that answer would be wrong. Treating null as outside the order
+is what the aggregates already assume.
+
+### What that fixes, and what it does not
+
+**Fixed: `not` is complementation over comparisons.** A comparison is now
+always true or false, so negating it always flips it:
+
+```prolog
+p(1). p(X) :- X = 3 / 0.
+output predicate lo(X) :- p(X), X < 2.          % {1}
+output predicate hi(X) :- p(X), not (X < 2).    % {null}
+```
+
+`lo` and `hi` partition `p`.
+
+**Not fixed: `not (X < 2)` is not `X >= 2`.** The NULL row is in the first
+and not the second, because it is in neither `<` nor `>=`. That follows
+from incomparability and no ordering design avoids it without inventing a
+position for null in the order. Guard with `<> null` when it matters.
+
+### What stays three-valued
+
+The boolean connectives. `!null` is `null`, `null && true` is `null`, and
+the rest of the table in spec §5.4 stands. Comparisons no longer *produce* a
+NULL boolean, but one can still arrive from a nullable `boolean?` column,
+from `as_boolean(null)`, or from any expression that propagates a NULL into
+boolean position. Killing 3VL in the connectives would not remove NULL from
+the language, only hide it, so the connectives keep propagating.
+
+The line to draw: NULL propagates through *operations* and is absorbed by
+*comparisons*.
+
+## 6. The price: null-aware joins on Postgres
+
+> ⚠️ **WARNING — read before running a large join on the Postgres backend.**
+> A join between two columns that can hold NULL compiles to
+> `IS NOT DISTINCT FROM`, which Postgres cannot hash or merge. The plan
+> degrades to a nested loop, which is quadratic. On a 50k × 50k integer
+> join this is roughly five thousand times slower. The other four backends
+> are unaffected. If you hit it, the fix is to make the columns non-nullable
+> or to shrink the input; there is no flag.
+
+Null-aware joins are what §4 buys, and they are not free everywhere.
+Measured, on a 50k × 50k integer join:
+
+| backend | plain `=` | null-aware | verdict |
+| --- | --- | --- | --- |
+| native, seminaive | scan | scan | free |
+| sqlite, sql.js | 13 ms, automatic covering index | 13 ms, same plan | free |
+| postgres | 6 ms, Hash Join | 32,557 ms, Nested Loop | ~5000× |
+
+The interpreters are free because there is nothing to lose: the atom step
+in `planner.ts` is a scan over `rel.tuples` with a per-tuple match, so the
+equality predicate is called the same number of times either way. The
+SQLite family is free because SQLite has no hash join to give up and builds
+an automatic covering index for `IS` exactly as it does for `=`. Postgres is
+the only engine whose planner has a strategy that the null-aware operator
+cannot use.
+
+Absolute numbers vary by machine and are not the claim. The plan shapes are,
+and they are stable.
+
+**Why this is accepted.** Datamog is a teaching implementation. Postgres is
+its optional backend, skipped entirely unless `DATABASE_URL` is set, while
+SQLite is the CLI default and sql.js is the playground. Paying a
+large-join penalty on the one backend nobody runs by default, in exchange
+for a language with a single notion of equality, is the right trade for
+what this codebase is for. A production Datalog would decide differently.
+
+**The escape hatch, if anyone ever needs it.** Emit the null-aware form
+only where a column can actually hold NULL. EDB columns already carry the
+information: they are `NOT NULL` unless declared `?`, so an EDB-only join
+could keep its hash join with no semantic difference, there being no NULLs
+to disagree about. IDB columns do not, since nothing tracks which of them
+can produce a NULL and any rule can (`1 / 0` suffices). The missing piece is
+a nullability analysis over IDB columns: a per-(predicate, column) boolean,
+computed as a least fixed point over the dependency graph from "not
+nullable" upward, the same shape as type inference. It originates at the
+NULL sources in spec §5.4 (an EDB column declared `?`, a partial operation
+in a head expression, a bare `null` head argument) and propagates through
+any head expression mentioning a nullable variable. Aggregates propagate
+rather than originate: a group exists only because a row exists, so `sum(X)`
+is NULL only where `X` is nullable and some group is entirely NULL.
+
+It is not built. Its standing cost would be a coupling to the builtin
+registry, since adding a partial builtin without marking it as a NULL source
+would silently under-approximate. That failure mode is benign, because
+under-approximating means emitting a plain `=` and getting SQL's answer, but
+it means the analysis is only ever as trustworthy as that list. Not worth
+carrying until someone has a program that needs it.
+
+## 7. Why the static story stays clean
 
 None of the above leaks into the type system, which is worth saying because
 it is what keeps the cost contained.
@@ -268,17 +321,17 @@ null-typed, always-empty predicate. See
 which also covers why the analyser's "no type information" element sits
 *above* `value` rather than below the primitives.
 
-## 7. Writing programs that survive NULL
+## 8. Writing programs that survive NULL
 
 - Guard with `<> null` when a column can hold one. It is total, so it never
-  silently drops the row you meant to keep.
-- Reach for `=` when you want null-aware matching and `==` when you want
-  SQL's three-valued behaviour. The spelling difference is the whole
-  interface; there is no flag.
-- A shared variable joins three-valued, so it does not match NULL to NULL.
-  When you want a join that does, write the equality out: `p(X), q(Y), X = Y`
-  rather than `p(X), q(X)`. See §5, which is the one place the two are not
-  interchangeable.
+  silently drops the row you meant to keep. This is the answer to the one
+  residual oddity in §5: `X < 2` and `X >= 2` do not cover the NULL row
+  between them.
+- There is one equality. `=` and `<>` are it; `==` and `!=` do not exist.
+- A shared variable and a spelled-out `=` mean the same thing, so refactor
+  between them freely.
+- On the Postgres backend, a large join over nullable columns is quadratic.
+  See the warning in §6.
 - Remember that `count(*)` counts rows while `count(expr)` counts rows where
   `expr` is non-null, and that `list` filters NULLs out of the array
   entirely. So `length(list(V))` is not the row count; `count(*)` is. An

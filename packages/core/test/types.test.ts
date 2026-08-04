@@ -118,11 +118,11 @@ describe("type inference", () => {
     expect(typed.columnTypes.get("r")).toEqual(["boolean"]);
   });
 
-  test("== and != in expression position infer boolean", () => {
+  test("= and <> in expression position infer boolean", () => {
     const typed = getTypes(`
       input predicate t(a: integer).
-      eq_zero(C) :- t(X), C = X == 0.
-      ne_zero(C) :- t(X), C = X != 0.
+      eq_zero(C) :- t(X), C = (X = 0).
+      ne_zero(C) :- t(X), C = (X <> 0).
     `);
     expect(typed.columnTypes.get("eq_zero")).toEqual(["boolean"]);
     expect(typed.columnTypes.get("ne_zero")).toEqual(["boolean"]);
@@ -499,7 +499,7 @@ describe("type inference", () => {
     const typed = getTypes(`
       input predicate flags(b: boolean).
       same(X, Y) :- flags(X), flags(Y), X = Y.
-      diff(X, Y) :- flags(X), flags(Y), X != Y.
+      diff(X, Y) :- flags(X), flags(Y), X <> Y.
     `);
     expect(typed.columnTypes.get("same")).toEqual(["boolean", "boolean"]);
     expect(typed.columnTypes.get("diff")).toEqual(["boolean", "boolean"]);
@@ -1048,7 +1048,7 @@ describe("type inference — function and aggregate return types", () => {
   test("primitive-to-value auto-lift accepted in comparison ops", () => {
     const typed = getTypes(`
       input predicate t(j: value).
-      r(J) :- t(J), J == 5.
+      r(J) :- t(J), J = 5.
     `);
     expect(typed.columnTypes.get("r")).toEqual(["value"]);
   });
@@ -1209,7 +1209,7 @@ describe("bitwise / shift operator types", () => {
       input predicate base(x: integer).
       masked(X, M) :- base(X), M = X & 255.
       shifted(X, S) :- base(X), S = (X << 2) | 1.
-      xored(X, R) :- base(X), R = X ^ 1, X >>> 1 == 0.
+      xored(X, R) :- base(X), R = X ^ 1, X >>> 1 = 0.
     `);
     expect(typed.columnTypes.get("masked")).toEqual(["integer", "integer"]);
     expect(typed.columnTypes.get("shifted")).toEqual(["integer", "integer"]);

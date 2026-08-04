@@ -177,7 +177,7 @@ integer` stays `integer`, but `integer + float` is `float`.
 
 Primitive values also embed automatically into `value` slots:
 `t(5)` can match a `value` column containing the numeric leaf `5`,
-`J == 5` works when `J : value`, and `type_of(5)` first treats `5`
+`J = 5` works when `J : value`, and `type_of(5)` first treats `5`
 as a `value` leaf. Other primitive mismatches widen to `value` across
 sibling rules (above), but within a rule and in comparisons they still
 require compatible types.
@@ -240,12 +240,10 @@ compiling to a SQL comparison would give per-backend results
 Operator '>' does not order booleans
 ```
 
-The equality operators (`=`, `<>`, `==`, `!=`) all work on
-booleans — equality is well-defined on every type. They split into
-two families: `=` / `<>` are *logical* equality (null-aware:
-`null = null` is `true`), and `==` / `!=` are *computational*
-equality with three-valued logic. We'll come back to that
-distinction in Chapter 8 once `null` shows up.
+The equality operators (`=`, `<>`) work on booleans — equality is
+well-defined on every type. There is only the one pair, and it is
+null-aware: `null = null` is `true`. We'll come back to what that
+means once `null` shows up in Chapter 8.
 
 ## Putting safety and typing together
 

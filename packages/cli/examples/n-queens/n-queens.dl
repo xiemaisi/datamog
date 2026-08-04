@@ -29,7 +29,7 @@
 n(I) :- I in [1 .. 6].
 d(D) :- D in [1 .. 5].
 
-attacks(R1, R2, D) :- n(R1), n(R2), d(D), (R1 == R2 || R1 - R2 == D || R2 - R1 == D).
+attacks(R1, R2, D) :- n(R1), n(R2), d(D), (R1 = R2 || R1 - R2 = D || R2 - R1 = D).
 safe(R1, R2, D) :- n(R1), n(R2), d(D), not attacks(R1, R2, D).
 
 q1(A) :- n(A).

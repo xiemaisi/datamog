@@ -5,14 +5,14 @@ seating(Alice, Bob, Carol) :-
     Bob in [1..3],
     Carol in [1..3],
     # All distinct.
-    Alice != Bob,
-    Alice != Carol,
-    Bob != Carol,
+    Alice <> Bob,
+    Alice <> Carol,
+    Bob <> Carol,
     # Clue 1: Alice is not in seat 1.
-    Alice != 1,
+    Alice <> 1,
     # Clue 2: Bob is to the left of Carol.
     Bob < Carol,
     # Clue 3: Carol is not in seat 3.
-    Carol != 3.
+    Carol <> 3.
 
 ?- seating(Alice, Bob, Carol).

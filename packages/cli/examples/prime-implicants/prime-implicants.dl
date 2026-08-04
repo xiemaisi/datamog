@@ -31,7 +31,7 @@ term(S) :- minterm(S).
 # and the other 1 (neither a dash).
 mergeable(S1, S2, P) :- term(S1), term(S2), len(N), P in [0 .. N - 1],
     S1[0:P] = S2[0:P], S1[P + 1:N] = S2[P + 1:N],
-    S1[P] != S2[P], S1[P] != "-", S2[P] != "-".
+    S1[P] <> S2[P], S1[P] <> "-", S2[P] <> "-".
 merged(MS) :- mergeable(S1, S2, P), len(N), MS = S1[0:P] + "-" + S1[P + 1:N].
 term(S) :- merged(S).
 
@@ -40,7 +40,7 @@ covered(S) :- mergeable(S, _, _).
 prime(S) :- term(S), not covered(S).
 
 # A prime covers a minterm when they agree on every non-dash position.
-mismatch(P, M, I) :- prime(P), minterm(M), len(N), I in [0 .. N - 1], P[I] != "-", P[I] != M[I].
+mismatch(P, M, I) :- prime(P), minterm(M), len(N), I in [0 .. N - 1], P[I] <> "-", P[I] <> M[I].
 mismatch_any(P, M) :- mismatch(P, M, _).
 output predicate covers(P, M) :- prime(P), minterm(M), not mismatch_any(P, M).
 

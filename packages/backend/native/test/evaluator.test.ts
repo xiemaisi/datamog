@@ -496,18 +496,19 @@ describe("native backend — body elements", () => {
     expect(sortRows(results[0]!)).toEqual([{ X: 1, Y: 2 }]);
   });
 
-  test("computed atom arg matching a NULL column never joins", async () => {
-    // `n(A, A/0)` stores a NULL second column (divide by zero). The body atom
-    // `n(A, 1/0)` computes NULL for that position. A NULL never joins (SQL
-    // `col = NULL` is UNKNOWN), so p must be empty — the hoisted constraint
-    // uses `==` (NULL-dropping), not `=` (which treats NULL = NULL as true).
+  test("computed atom arg matching a NULL column joins null-aware", async () => {
+    // `n(A, A/0)` stores a NULL second column (divide by zero) and the body
+    // atom `n(A, 1/0)` computes NULL for that position. Atom matching is
+    // null-aware, so the two NULLs match and every row survives. The
+    // hoisted constraint uses `=`, the language's only equality, so a
+    // hoisted argument behaves exactly like an unhoisted one.
     const results = await run(`
       e(1). e(2).
       n(A, A/0) :- e(A).
       p(A) :- e(A), n(A, 1/0).
       ?- p(A).
     `);
-    expect(sortRows(results[0]!)).toEqual([]);
+    expect(sortRows(results[0]!)).toEqual([{ A: 1 }, { A: 2 }]);
   });
 
   test("anonymous variables stand for distinct any-values", async () => {
@@ -530,7 +531,7 @@ describe("native backend — body elements", () => {
       output predicate le(X, Y) :- n(X), n(Y), X <= Y, X = 2.
       output predicate gt(X, Y) :- n(X), n(Y), X > Y, X = 4.
       output predicate ge(X, Y) :- n(X), n(Y), X >= Y, X = 4.
-      output predicate ne(X, Y) :- n(X), n(Y), X != Y, X = 3.
+      output predicate ne(X, Y) :- n(X), n(Y), X <> Y, X = 3.
     `);
     expect(sortRows(results[0]!)).toEqual([
       { X: 2, Y: 3 },
@@ -1190,10 +1191,10 @@ describe("native backend — stratification and dependency depth", () => {
       tc(X, Y) :- edge(X, Y).
       tc(X, Y) :- edge(X, Z), tc(Z, Y).
 
-      unreachable(X, Y) :- node(X), node(Y), X != Y, not tc(X, Y).
+      unreachable(X, Y) :- node(X), node(Y), X <> Y, not tc(X, Y).
       ?- unreachable("a", Y).
     `);
-    // From "a", tc reaches {b, c}. Unreachable = {d}; X != Y rules out "a".
+    // From "a", tc reaches {b, c}. Unreachable = {d}; X <> Y rules out "a".
     expect(sortRows(results[0]!)).toEqual([{ Y: "d" }]);
   });
 
@@ -1473,38 +1474,37 @@ describe("native backend — NULL semantics (§5.4)", () => {
     ]);
   });
 
-  test("`null` literal, `=` (logical), `<>`, and `==`/`!=` (3VL)", async () => {
-    // §5.4: logical equality (`=`, `<>`) is null-aware — `null = null` is
-    // true, `null = X` is false. Computational equality (`==`, `!=`) is
-    // 3VL — `null == anything` is null, which a filter drops.
+  test("`null` literal, null-aware `=` / `<>`, and total ordering", async () => {
+    // Comparison is total: `=` / `<>` are null-aware (`null = null` is
+    // true), and ordering treats null as an isolated point, so `Y < 1` is
+    // false rather than null for the NULL row. See doc/design/null.md §5.
     const results = await run(`
       t(0). t(1). t(2).
-      maybe_null(X, Y, IsNull, EqEq) :-
+      maybe_null(X, Y, IsNull, Below, AtMost) :-
         t(X),
         Y = 1 / X,
         IsNull = (Y = null),
-        EqEq = (Y == null).
+        Below = (Y < 1),
+        AtMost = (Y <= Y).
 
-      ?- maybe_null(X, Y, IsNull, EqEq).
+      ?- maybe_null(X, Y, IsNull, Below, AtMost).
       output predicate filter_logical(X) :- t(X), Y = 1 / X, Y = null.
-      output predicate filter_compute(X) :- t(X), Y = 1 / X, Y == null.
       output predicate neq_logical(X)    :- t(X), Y = 1 / X, Y <> null.
+      output predicate not_below(X)      :- t(X), Y = 1 / X, not (Y < 1).
     `);
     // For X=0, Y is null. For X=1,2, Y is integer (integer/integer
-    // truncates: 1/1=1, 1/2=0). `IsNull = (Y = null)` is null-aware so
-    // it's true/false. `EqEq = (Y == null)` is 3VL — even for non-null
-    // Y, the result is null because 3VL `a == null` is always null.
+    // truncates: 1/1=1, 1/2=0). `Y <= Y` is reflexive even at null.
     expect(sortRows(results[0]!)).toEqual([
-      { X: 0, Y: null, IsNull: true, EqEq: null },
-      { X: 1, Y: 1, IsNull: false, EqEq: null },
-      { X: 2, Y: 0, IsNull: false, EqEq: null },
+      { X: 0, Y: null, IsNull: true, Below: false, AtMost: true },
+      { X: 1, Y: 1, IsNull: false, Below: false, AtMost: true },
+      { X: 2, Y: 0, IsNull: false, Below: true, AtMost: true },
     ]);
-    // Logical `Y = null` keeps the X=0 row, drops the others.
+    // `Y = null` keeps the X=0 row, drops the others.
     expect(results[1]).toEqual([{ X: 0 }]);
-    // Computational `Y == null` is always null → filter drops every row.
-    expect(results[2]).toEqual([]);
-    // Logical `Y <> null` is the inverse of `Y = null`.
-    expect(sortRows(results[3]!)).toEqual([{ X: 1 }, { X: 2 }]);
+    // `Y <> null` is the inverse of `Y = null`.
+    expect(sortRows(results[2]!)).toEqual([{ X: 1 }, { X: 2 }]);
+    // `not (Y < 1)` complements `Y < 1`, the NULL row included.
+    expect(sortRows(results[3]!)).toEqual([{ X: 0 }, { X: 1 }]);
   });
 
   test("all-NULL aggregate group: sum/avg/min/max/concat → NULL", async () => {

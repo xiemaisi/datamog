@@ -105,7 +105,7 @@ error predicate duplicate_employee_id(Id) :-
 
 Not recursion — the head isn't in the body — so it runs on every backend.
 
-> **`<>`, not `!=`.** `null <> "bob"` is true; `null != "bob"` is `null`, so a duplicate with a null name is silently missed.
+> **`<>` is null-aware.** `null <> "bob"` is true, so a duplicate with a null name still gets flagged.
 
 `!-` takes a conjunction directly when the constraint needs no name:
 

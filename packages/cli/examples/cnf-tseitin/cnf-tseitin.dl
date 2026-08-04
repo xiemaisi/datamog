@@ -57,7 +57,7 @@ nprop(count(Name)) :- varname(Name).
 
 # Internal nodes: everything that is not a leaf, ranked by id and given a
 # fresh index starting just after the propositional variables.
-internal(N) :- node(N, Kind), Kind != "var".
+internal(N) :- node(N, Kind), Kind <> "var".
 irank(N, count(M)) :- internal(N), internal(M), M <= N.
 ninternal(count(N)) :- internal(N).
 

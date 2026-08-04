@@ -22,7 +22,7 @@
 # premise by *copying* the conclusion's members except the principal and
 # adding the subformulas -- a relational copy, no set construction. Dropping
 # the principal needs disequality on the member node id, which is why this
-# only works now that =/!= are defined on value operands (ordering is not).
+# only works now that `=` / `<>` are defined on value operands (ordering is not).
 #
 # The inference rules themselves are data: branch/decomp below describe how
 # each (connective, side) decomposes, and a handful of generic rules apply
@@ -95,8 +95,8 @@ mem(["step", S, PSide, N, Br], AddSide, Child) :-
 # Copy every member of the conclusion to the premise except the principal:
 # keep a member whose side differs, or whose node differs (their union is
 # everything but the exact principal pair). Disequality on value node ids.
-mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), S2 != PS.
-mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), N2 != PN.
+mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), S2 <> PS.
+mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), N2 <> PN.
 
 # --- Proof edges and provability -----------------------------------------
 

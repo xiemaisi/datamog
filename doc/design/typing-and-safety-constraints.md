@@ -91,7 +91,7 @@ turn a conflict into an always-empty predicate.
 
 **⊤** means "no constraint on the type". It sits *above* `value`, because
 `value` is a concrete type (a `value`-typed variable can be compared with
-`==`, subscripted, embedded in an array) whereas ⊤ is the absence of
+`=`, subscripted, embedded in an array) whereas ⊤ is the absence of
 information. It is the identity of the meet, which is what the
 implementation's `undefined` is doing at
 [types.ts:1152](../../packages/core/src/types.ts#L1152). `value` being the

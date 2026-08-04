@@ -34,17 +34,17 @@ input_expr({
 # Every subterm of the input. `deriv` is defined over these, so the set has
 # to be closed under taking children.
 expr(E) :- input_expr(E).
-expr(C) :- expr(E), E["kind"] == "op", C = E["l"].
-expr(C) :- expr(E), E["kind"] == "op", C = E["r"].
+expr(C) :- expr(E), E["kind"] = "op", C = E["l"].
+expr(C) :- expr(E), E["kind"] = "op", C = E["r"].
 
 # A constant differentiates to zero, and so does any variable other than x.
-deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] == "num".
-deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] == "var", E["name"] <> "x".
-deriv(E, {"kind": "num", "value": 1}) :- expr(E), E["kind"] == "var", E["name"] == "x".
+deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] = "num".
+deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] = "var", E["name"] <> "x".
+deriv(E, {"kind": "num", "value": 1}) :- expr(E), E["kind"] = "var", E["name"] = "x".
 
 # Sum rule: d(u + v) = du + dv.
 deriv(E, D) :-
-  expr(E), E["kind"] == "op", E["op"] == "+",
+  expr(E), E["kind"] = "op", E["op"] = "+",
   L = E["l"], R = E["r"],
   deriv(L, DL), deriv(R, DR),
   D = {"kind": "op", "op": "+", "l": DL, "r": DR}.
@@ -52,7 +52,7 @@ deriv(E, D) :-
 # Product rule: d(u * v) = du*v + u*dv. Three nodes built at once, none of
 # which occurs in the input.
 deriv(E, D) :-
-  expr(E), E["kind"] == "op", E["op"] == "*",
+  expr(E), E["kind"] = "op", E["op"] = "*",
   L = E["l"], R = E["r"],
   deriv(L, DL), deriv(R, DR),
   D = {"kind": "op", "op": "+",
@@ -68,13 +68,13 @@ answer(D) :- input_expr(E), deriv(E, D).
 # differentiate their own output, over and over, and never reach a fixed point.
 node(E) :- expr(E).
 node(D) :- deriv(_, D).
-node(C) :- node(N), N["kind"] == "op", C = N["l"].
-node(C) :- node(N), N["kind"] == "op", C = N["r"].
+node(C) :- node(N), N["kind"] = "op", C = N["l"].
+node(C) :- node(N), N["kind"] = "op", C = N["r"].
 
-show(N, S) :- node(N), N["kind"] == "num", S = to_string(as_integer(N["value"])).
-show(N, S) :- node(N), N["kind"] == "var", S = as_string(N["name"]).
+show(N, S) :- node(N), N["kind"] = "num", S = to_string(as_integer(N["value"])).
+show(N, S) :- node(N), N["kind"] = "var", S = as_string(N["name"]).
 show(N, S) :-
-  node(N), N["kind"] == "op",
+  node(N), N["kind"] = "op",
   L = N["l"], R = N["r"],
   show(L, SL), show(R, SR),
   S = "(" + SL + " " + as_string(N["op"]) + " " + SR + ")".
@@ -89,8 +89,8 @@ result(Expr, Derivative) :-
 # multiplications by 0 and 1 behind. Simplifying them away is the natural
 # follow-on exercise, and the node count is how you would score it.
 answer_node(D) :- answer(D).
-answer_node(C) :- answer_node(N), N["kind"] == "op", C = N["l"].
-answer_node(C) :- answer_node(N), N["kind"] == "op", C = N["r"].
+answer_node(C) :- answer_node(N), N["kind"] = "op", C = N["l"].
+answer_node(C) :- answer_node(N), N["kind"] = "op", C = N["r"].
 
 output predicate node_count(count(*)) :- answer_node(_).
 output predicate step(Subterm, Derivative) :-

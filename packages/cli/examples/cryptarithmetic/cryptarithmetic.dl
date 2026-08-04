@@ -25,20 +25,20 @@ carry(C) :- C in [0 .. 1].
 col1(D, E, Y, C1) :-
   dig(D), dig(E), dig(Y), carry(C1),
   D <> E, D <> Y, E <> Y,
-  D + E == Y + 10 * C1.
+  D + E = Y + 10 * C1.
 
 # Column 2:  N + R + C1 = E + 10*C2
 col2(D, E, Y, N, R, C2) :-
   col1(D, E, Y, C1), dig(N), dig(R), carry(C2),
   N <> D, N <> E, N <> Y,
   R <> D, R <> E, R <> Y, R <> N,
-  N + R + C1 == E + 10 * C2.
+  N + R + C1 = E + 10 * C2.
 
 # Column 3:  E + O + C2 = N + 10*C3
 col3(D, E, Y, N, R, O, C3) :-
   col2(D, E, Y, N, R, C2), dig(O), carry(C3),
   O <> D, O <> E, O <> Y, O <> N, O <> R,
-  E + O + C2 == N + 10 * C3.
+  E + O + C2 = N + 10 * C3.
 
 # Column 4:  S + M + C3 = O + 10*C4, and column 5 forces C4 = M.
 # M is the leading digit of a five-digit sum, so it is a carry out and cannot
@@ -48,7 +48,7 @@ solution(S, E, N, D, M, O, R, Y) :-
   S <> 0, M <> 0,
   S <> D, S <> E, S <> Y, S <> N, S <> R, S <> O,
   M <> D, M <> E, M <> Y, M <> N, M <> R, M <> O, M <> S,
-  S + M + C3 == O + 10 * M.
+  S + M + C3 = O + 10 * M.
 
 addition(Send, More, Money) :-
   solution(S, E, N, D, M, O, R, Y),

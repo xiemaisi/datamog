@@ -184,7 +184,7 @@ groups interact with the predicate, column, and variable namespaces.
 Arithmetic:    +  -  *  /  %  **
 Boolean:       &&  ||  !
 Bitwise:       &  |  ^  <<  >>  >>>
-Comparison:    <  >  <=  >=  ==  !=  =  <>
+Comparison:    <  >  <=  >=  =  <>
 Rule:          :-
 Query:         ?-
 Constraint:    !-
@@ -196,9 +196,10 @@ Grouping:      (  )  [  ]
 Separators:    ,  :  .
 ```
 
-`=`/`<>` are *logical* equality and inequality (null-aware); `==`/`!=`
-are *computational* (3VL — see §5.4). Body-level Equality reuses the
-logical operator and can bind an unbound bare variable on either side.
+`=`/`<>` are the language's only equality and inequality, and they are
+null-aware: `null = null` is true. Every comparison is total, so none of
+them ever returns NULL (§5.4). Body-level Equality reuses the same
+operator and can bind an unbound bare variable on either side.
 
 `^` serves twice. Between two expressions it is bitwise XOR; immediately after
 a predicate name and before its argument list (`bad^(E)`) it marks the
@@ -565,7 +566,7 @@ Filter      ::= ('not')? Expression
 
 Any boolean Expression on its own line is a **filter**: the rule fires
 when the expression evaluates to `true`. Comparisons (`<`, `<=`, `>`,
-`>=`, `==`, `!=`) and the logical operators (`&&`, `||`, `!`) live in
+`>=`, `=`, `<>`) and the logical operators (`&&`, `||`, `!`) live in
 the expression hierarchy (Section 2.6), so they compose freely:
 
 A leading `not` negates a built-in atom — `not e` is sugar for the filter
@@ -575,17 +576,17 @@ comparison). This is the negation referred to under *Literals* above.
 
 ```
 Age >= 30                          # single comparison
-X != Y                             # single comparison
+X <> Y                             # single comparison
 (S > 80) && (S < 95)               # compound filter
-(N == 3) || (N == 5) || (N == 7)   # disjunction of equalities
+(N = 3) || (N = 5) || (N = 7)      # disjunction of equalities
 ```
 
 A filter expression must have type `boolean` — non-boolean filters
-(`X + 1`, `length(S)`) are rejected at analysis time. NULL (3VL
-"unknown") is treated as "doesn't match", same as SQL's `WHERE`.
-A row whose filter expression is NULL is therefore dropped, but a
-filter that uses logical equality (e.g. `Y = null`, `X <> null`) is
-total: it never returns NULL, only true or false.
+(`X + 1`, `length(S)`) are rejected at analysis time. A NULL filter
+value is treated as "doesn't match", same as SQL's `WHERE`, so the row
+is dropped. Comparisons are total (§2.6) and never produce that NULL;
+it can only arrive from a nullable `boolean?` column or an expression
+that propagates one into boolean position.
 
 ### 2.6 Expressions
 
@@ -599,8 +600,7 @@ And            ::= BitOr ('&&' BitOr)*
 BitOr          ::= BitXor ('|' BitXor)*
 BitXor         ::= BitAnd ('^' BitAnd)*
 BitAnd         ::= Cmp ('&' Cmp)*
-Cmp            ::= Shift (('<' | '<=' | '>' | '>=' | '==' | '!='
-                                | '=' | '<>') Shift)?
+Cmp            ::= Shift (('<' | '<=' | '>' | '>=' | '=' | '<>') Shift)?
 Shift          ::= Addition (('<<' | '>>' | '>>>') Addition)*
 Addition       ::= Multiplication (('+' | '-') Multiplication)*
 Multiplication ::= Exponent (('*' | '/' | '%') Exponent)*
@@ -627,7 +627,7 @@ ObjectEntry    ::= STRING ':' Expression
 4. Multiplication, division, modulo: `*`, `/`, `%`
 5. Addition, subtraction: `+`, `-`
 6. Bit shifts: `<<`, `>>`, `>>>`
-7. Comparison: `<`, `<=`, `>`, `>=`, `==`, `!=`, `=`, `<>`
+7. Comparison: `<`, `<=`, `>`, `>=`, `=`, `<>`
    (non-associative — `X > Y > Z` is a parse error)
 8. Bitwise and: `&`
 9. Bitwise xor: `^`
@@ -658,30 +658,46 @@ Section 5.4 for the truth tables and short-circuit rules.
 
 #### Comparison Operators
 
-The comparison operators all produce `boolean`. They split into two
-families that differ in null behaviour:
+The comparison operators all produce `boolean`, and all of them are
+**total**: no operand combination returns NULL. There is one equality,
+`=` / `<>`, which is null-aware. Ordering treats `null` as an isolated
+point in the order, comparable only to itself.
 
-| operator | family | NULL behaviour | SQL emit |
-|----------|--------|----------------|----------|
-| `=` | logical equality | `null = null` is true; `null = X` is false | `IS NOT DISTINCT FROM` (Postgres), `IS` (SQLite / sql.js) |
-| `<>` | logical inequality | inverse of `=` | `IS DISTINCT FROM` / `IS NOT` |
-| `==` | computational equality | 3VL — null on either side returns null | `=` |
-| `!=` | computational inequality | 3VL | `<>` |
-| `<` `<=` `>` `>=` | ordering | 3VL — null on either side returns null | same operator |
+| operator | meaning | NULL behaviour | SQL emit |
+|----------|---------|----------------|----------|
+| `=` | equality | `null = null` is true; `null = X` is false | `IS NOT DISTINCT FROM` (Postgres), `IS` (SQLite / sql.js) |
+| `<>` | inequality | inverse of `=` | `IS DISTINCT FROM` / `IS NOT` |
+| `<` `>` | strict ordering | false whenever either side is null | `COALESCE(a < b, FALSE)` |
+| `<=` `>=` | ordering | true when both sides are null, otherwise false if either is | `COALESCE(a <= b, (a IS NULL AND b IS NULL))` |
+
+The full table, with `5` standing for any non-null value:
+
+| left | right | `=` | `<>` | `<` | `<=` | `>` | `>=` |
+|--------|--------|-------|-------|-------|-------|-------|-------|
+| `5` | `5` | true | false | false | true | false | true |
+| `5` | `null` | false | true | false | false | false | false |
+| `null` | `5` | false | true | false | false | false | false |
+| `null` | `null` | true | false | false | true | false | true |
+
+This is a partial order: `<=` is reflexive, antisymmetric and
+transitive, and `a < b` is equivalent to `a <= b && a <> b`. It is not
+total — `null` and `5` are incomparable, so neither `X < 2` nor
+`X >= 2` holds of a NULL `X`. Guard with `<> null` where that matters.
+There is no three-valued comparison family; a second equality would be
+indistinguishable from `=`.
 
 ```
-Age >= 30                             # ordering (3VL)
-X != Y                                # computational (3VL)
-X = Y                                 # logical (null-aware)
-N = null                              # logical: matches null rows
-N <> null                             # logical: matches non-null rows
-B = (Score == 100)                    # bind B to a 3VL boolean
+Age >= 30                             # ordering
+X <> Y                                # inequality
+X = Y                                 # equality (null-aware)
+N = null                              # matches null rows
+N <> null                             # matches non-null rows
+B = (Score = 100)                     # bind B to a boolean
 ```
 
 Operands must have compatible types (same type, or `integer`/`float`
 joining via Section 5.6); the `null` literal is polymorphic and
-composes with any operand type for `=`/`<>` and the 3VL operators.
-Booleans support equality only — both equality families accept them
+composes with any operand type. Booleans support equality only
 (set equality is well-defined) but ordering operators reject them.
 String ordering is lexicographic by Unicode code point, independent
 of backend locale.
@@ -1046,8 +1062,7 @@ raising.
 
 `value` operands are compared by structural equality:
 
-- `=` and `<>` (logical equality / inequality) are allowed.
-- `==` and `!=` (3VL equality / inequality) are allowed.
+- `=` and `<>` (equality / inequality) are allowed.
 - `<`, `<=`, `>`, `>=` are **rejected** at type-check (cross-
   backend ordering on `value` does not agree).
 
@@ -1060,8 +1075,8 @@ primitive expression:
 - **Atom args** matching a `value`-typed column: `t(5)` over
   `input predicate t(j: value)` matches rows where the column's
   contents are the numeric leaf `5`.
-- **Equality variants** (`==`, `!=`, `=`, `<>`): `J == 5` where
-  `J : value` matches rows where `J` is the numeric leaf `5`.
+- **Equality** (`=`, `<>`): `J = 5` where `J : value` matches rows
+  where `J` is the numeric leaf `5`.
 - **Function arguments** whose parameter type is `value`:
   `type_of(5)`, `as_integer(5)`, and `to_json("hi")` are accepted
   by embedding the primitive argument first.
@@ -1202,7 +1217,7 @@ BitOr          ::= BitXor ('|' BitXor)*
 BitXor         ::= BitAnd ('^' BitAnd)*
 BitAnd         ::= Cmp ('&' Cmp)*
 Cmp            ::= Shift (CmpOp Shift)?
-CmpOp          ::= '<' | '<=' | '>' | '>=' | '==' | '!=' | '=' | '<>'
+CmpOp          ::= '<' | '<=' | '>' | '>=' | '=' | '<>'
 Shift          ::= Addition (('<<' | '>>' | '>>>') Addition)*
 Addition       ::= Multiplication (('+' | '-') Multiplication)*
 Multiplication ::= Exponent (('*' | '/' | '%') Exponent)*
@@ -1222,8 +1237,8 @@ Variable       ::= Identifier
 ```
 
 `Cmp` is non-associative — `X > Y > Z` is a parse error rather than
-a misleading `(X > Y) > Z`. `=`/`<>` and `==`/`!=` are the two
-equality families (Section 2.6 / 5.4); the LHS of body Equality
+a misleading `(X > Y) > Z`. `=`/`<>` is the only equality
+(Section 2.6 / 5.4); the LHS of body Equality
 is parsed at `Addition` precedence so `D = X * 2` reliably parses
 as a binding rather than a Cmp filter. A body element that doesn't
 match Literal / Equality / RangeAtom falls through to Filter, whose
@@ -1636,23 +1651,26 @@ decides the answer, NULL on the other side does not propagate.
 
 #### Comparisons and filters
 
-The orderings `<`, `<=`, `>`, `>=` and the *computational*
-equalities `==`, `!=` follow SQL three-valued logic — NULL on
-either side returns NULL. Body-level filters (Section 2.5) treat
-that NULL the same as `false`: the row is dropped.
+**Comparison is where NULL stops travelling.** Every comparison
+operator is total: no operand combination returns NULL, so a filter
+built from comparisons alone never drops a row "silently for null
+reasons", and `not` over a comparison is genuine complementation.
 
-The *logical* equalities `=` and `<>` are total: `null = null` is
-`true`, `null = X` and `null <> X` are well-defined booleans. They
-never return NULL, so a filter using logical equality never drops a
-row "silently for null reasons."
+`=` and `<>` are null-aware (`null = null` is `true`). Ordering treats
+`null` as an isolated point in the order, comparable only to itself.
 
-| left   | right  | `=`    | `<>`   | `==`  | `!=`  |
-|--------|--------|--------|--------|-------|-------|
-| `5`    | `5`    | true   | false  | true  | false |
-| `5`    | `6`    | false  | true   | false | true  |
-| `5`    | `null` | false  | true   | null  | null  |
-| `null` | `5`    | false  | true   | null  | null  |
-| `null` | `null` | true   | false  | null  | null  |
+| left   | right  | `=`    | `<>`   | `<`   | `<=`  | `>`   | `>=`  |
+|--------|--------|--------|--------|-------|-------|-------|-------|
+| `5`    | `5`    | true   | false  | false | true  | false | true  |
+| `5`    | `6`    | false  | true   | true  | true  | false | false |
+| `5`    | `null` | false  | true   | false | false | false | false |
+| `null` | `5`    | false  | true   | false | false | false | false |
+| `null` | `null` | true   | false  | false | true  | false | true  |
+
+A NULL can still reach filter position from elsewhere: a nullable
+`boolean?` column, `as_boolean(null)`, or an expression that
+propagates a NULL into a boolean slot. Such a row is dropped, matching
+SQL's `WHERE`. See Section 2.6 and `doc/design/null.md` §5.
 
 #### Equalities (body-level)
 
@@ -1670,10 +1688,14 @@ roles:
   null-aware comparison. `X = null` matches NULL rows; `Y = Z` with
   both bound matches when both happen to be NULL.
 
-Atom matching keeps SQL-style 3VL join semantics — a literal `null`
-in an atom argument never matches, and a shared variable across two
-atoms doesn't join NULL to NULL. Use an explicit body Equality
-(`atom(N, V), V = null`) when null-aware matching is wanted.
+Atom matching uses the same null-aware equality: a literal `null` in
+an atom argument matches a NULL column, and a shared variable across
+two atoms joins NULL to NULL. `p(X), q(X)` and `p(X), q(Y), X = Y`
+therefore denote the same relation, as they should, and a NULL row of
+`q` is excluded from `not q(X)`. This departs from SQL, which joins
+three-valued; `doc/design/null.md` §4 gives the reasoning and §6 the
+cost, which is a quadratic plan for a large nullable-column join on
+the Postgres backend.
 
 #### Aggregates
 
@@ -1878,9 +1900,9 @@ error (§5.7). A `NULL` operand propagates to `NULL` (§5.4).
 | `a >> b` | arithmetic right shift (sign-extending)                        |
 | `a >>> b`| logical right shift (zero-fill), result reinterpreted as int32 |
 
-The shift count is taken **mod 32** (so `1 << 32 == 1`, and a negative
+The shift count is taken **mod 32** (so `1 << 32` is `1`, and a negative
 count `n` shifts by `n & 31`). Left shifts wrap within 32 bits, so
-`1 << 31 == -2147483648`. These rules make every result fit the
+`1 << 31` is `-2147483648`. These rules make every result fit the
 `integer` column type and be identical on every backend.
 
 The 32-bit width is not incidental: it is the width of the `integer`
@@ -2096,7 +2118,7 @@ dialect-specific SQL:
 | Mutual recursion         | tagged combined CTE, `LATERAL` fold | tagged combined CTE          |
 | Range source             | `generate_series`            | recursive CTE                |
 | `concat`           | `STRING_AGG(expr::TEXT, ',' ORDER BY expr)` | `GROUP_CONCAT(expr, ',' ORDER BY expr)` |
-| `!=`                     | `<>`                         | `<>`                         |
+| `<>` (null-aware)        | `IS DISTINCT FROM`           | `IS NOT`                     |
 | bitwise XOR `^`          | `#`                          | emulated `(a\|b) & ~(a&b)`    |
 | `>>>` (logical shift)    | `bigint` mask + reinterpret  | unsigned mask + int32 wrap   |
 | `<<` / `>>` count        | masked mod 32                | masked mod 32; result int32-wrapped |

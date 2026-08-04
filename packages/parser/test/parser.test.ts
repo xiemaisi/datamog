@@ -49,7 +49,7 @@ describe("parser", () => {
   test("quoted predicate and column identifiers", () => {
     const program = parse(`
       input predicate \`http-event\`(\`content-type\`: string, \`in\`: integer).
-      \`ok-response\`(Kind) :- \`http-event\`(Kind, Code), Code == 200.
+      \`ok-response\`(Kind) :- \`http-event\`(Kind, Code), Code = 200.
       ?- \`ok-response\`(Kind).
     `);
     const decl = program.statements[0] as ExtDecl;
@@ -489,8 +489,7 @@ describe("parser", () => {
       ["X > 1", ">"],
       ["X <= 1", "<="],
       ["X >= 1", ">="],
-      ["X != 1", "!="],
-      ["X == 1", "=="],
+      ["X <> 1", "<>"],
     ] as const) {
       const program = parse(`foo(X) :- bar(X), ${src}.`);
       const rule = program.statements[0] as Rule;
@@ -883,11 +882,11 @@ describe("bitwise / shift operators", () => {
     });
   });
 
-  test("equality binds tighter than bitwise-and: A & B == C => A & (B == C)", () => {
-    expect(rhs("r(X) :- X = A & B == C.")).toMatchObject({
+  test("equality binds tighter than bitwise-and: A & B <> C => A & (B <> C)", () => {
+    expect(rhs("r(X) :- X = A & B <> C.")).toMatchObject({
       $type: "BinaryExpr",
       op: "&",
-      right: { $type: "BinaryExpr", op: "==" },
+      right: { $type: "BinaryExpr", op: "<>" },
     });
   });
 

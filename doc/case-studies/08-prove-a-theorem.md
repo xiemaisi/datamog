@@ -235,12 +235,12 @@ its derivation, and its contents live in a membership relation
 members except the principal, then adding the subformulas:
 
 ```prolog
-mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), S2 != PS.
-mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), N2 != PN.
+mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), S2 <> PS.
+mem(Prem, S2, N2) :- carry(S, Prem, PS, PN), mem(S, S2, N2), N2 <> PN.
 ```
 
 Together the two rules keep every member except the exact principal pair
-`(PS, PN)`. That `N2 != PN` is disequality on `value` node ids — which works
+`(PS, PN)`. That `N2 <> PN` is disequality on `value` node ids — which works
 because equality and inequality *are* defined on values (only ordering is not:
 there is no total order on JSON that every backend agrees on).
 

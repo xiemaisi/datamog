@@ -16,7 +16,7 @@ input predicate pokemon_ability(name: string, ability: string).
 
 learns_priority(Name, Move, Priority) :-
   learns(Name, Move),
-  not doubles_move(Move), not protection_move(Move), Move != "bide",
+  not doubles_move(Move), not protection_move(Move), Move <> "bide",
   move_priority(Move, Priority), Priority > 0.
 
 learns_effective_priority(Name, Move, Priority + 1) :-

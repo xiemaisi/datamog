@@ -31,7 +31,7 @@ state(A + T, B - T) :- state(A, B), T = 4 - A, B >= T.   # big fills up
 state(A + B, 0)     :- state(A, B), T = 4 - A, B < T.    # small runs dry
 
 # Every state that holds 2 litres in one of the jugs.
-solved(A, B) :- state(A, B), (A == 2 || B == 2).
+solved(A, B) :- state(A, B), (A = 2 || B = 2).
 
 ?- solved(Big, Small).
 

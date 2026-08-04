@@ -31,24 +31,24 @@ t("@@@SKKK").
 # matters: keep walking and the count would return to zero again further right,
 # reporting a span that is two subterms wide.
 scan(T, I, I, 1) :- t(T), I in [0 .. 20], I < length(T).
-scan(T, I, J + 1, N + 1) :- scan(T, I, J, N), N > 0, T[J] == "@", J < length(T).
-scan(T, I, J + 1, N - 1) :- scan(T, I, J, N), N > 0, T[J] != "@", J < length(T).
+scan(T, I, J + 1, N + 1) :- scan(T, I, J, N), N > 0, T[J] = "@", J < length(T).
+scan(T, I, J + 1, N - 1) :- scan(T, I, J, N), N > 0, T[J] <> "@", J < length(T).
 span(T, I, J) :- scan(T, I, J, 0).
 
 # An application splits into function and argument: T = @ F X.
-decomp(T, F, X) :- t(T), T[0] == "@", span(T, 1, J), F = T[1:J], X = T[J:length(T)].
+decomp(T, F, X) :- t(T), T[0] = "@", span(T, 1, J), F = T[1:J], X = T[J:length(T)].
 t(F) :- decomp(_, F, _).
 t(X) :- decomp(_, _, X).
 
 # --- The two reduction rules ----------------------------------------------
 # K x y -> x. "@@K" is `@ (@ K x) y`, so x starts at 3 and the reduct is a
 # slice: no term is built here.
-step(T, X) :- t(T), T[0:3] == "@@K", span(T, 3, J), X = T[3:J].
+step(T, X) :- t(T), T[0:3] = "@@K", span(T, 3, J), X = T[3:J].
 
 # S x y z -> x z (y z), which in prefix is @@<x><z>@<y><z>. Note z appearing
 # twice in the result -- this is the rule that makes terms grow.
 step(T, "@@" + X + Z + "@" + Y + Z) :-
-  t(T), T[0:4] == "@@@S",
+  t(T), T[0:4] = "@@@S",
   span(T, 4, J1), X = T[4:J1],
   span(T, J1, J2), Y = T[J1:J2],
   Z = T[J2:length(T)].

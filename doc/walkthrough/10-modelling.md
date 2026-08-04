@@ -128,13 +128,11 @@ rest to disagree. This is not recursion — `duplicate_employee_id`
 doesn't mention itself — so the linear-recursion restriction doesn't
 apply and it runs on every backend.
 
-> **Use `<>`, not `!=`.** For a nullable column these differ, and the
-> difference is silent. `<>` is *logical* inequality: `null <> "bob"`
-> is true. `!=` is *computational* (three-valued): `null != "bob"` is
-> `null`, which isn't true, so the row is never flagged. A duplicate
-> id where one row has a null name is caught by `<>` and missed
-> entirely by `!=`. See [Chapter 7](07-safety.md) on the two equality
-> families.
+> **Nullable columns behave here.** `<>` is null-aware, so
+> `null <> "bob"` is true and a duplicate id where one row has a null
+> name still gets flagged. Datamog has no second, three-valued
+> inequality to reach for by mistake. See
+> [Chapter 7](07-safety.md).
 
 A **composite key** is the same shape: join on every key column, and
 require some non-key column to differ. If `(emp_id, dept_id)` were the
@@ -304,7 +302,7 @@ thumb worth knowing once you're building something non-trivial:
 - State a schema's key invariants as constraints rather than leaving
   them a convention. A foreign key is `not` over the referenced
   predicate; a primary key joins the predicate to itself on the key
-  and requires the rest to differ (with `<>`, not `!=`). Put the
+  and requires the rest to differ (with `<>`, which is null-aware). Put the
   offending values in the constraint's head — those are what a
   violation reports.
 - A violated constraint suppresses every output and exits non-zero,

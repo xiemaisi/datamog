@@ -52,9 +52,8 @@ function args, iteration sources, IDB column unification).
 | `p(X, Y)`                      | predicate atom (EDB or IDB)   |
 | `not p(X, Y)`                  | negated atom (stratified)     |
 | `X = expr`, `expr = X`         | equality (binds a bare variable or filters) |
-| `X = Y`, `X <> Y` | logical (null-aware) equality / inequality (filter or binding) |
-| `X == Y`, `X != Y` | computational (3VL) equality / inequality (filter) |
-| `X < Y`, `X <= Y`, `X > Y`, `X >= Y` | ordering comparisons (filter) |
+| `X = Y`, `X <> Y` | equality / inequality, null-aware (filter or binding) |
+| `X < Y`, `X <= Y`, `X > Y`, `X >= Y` | ordering comparisons (filter); total, with `null` an isolated point |
 | `X in [lo .. hi]`              | range atom (generates integers) |
 | `object_entry(O, K, V)`        | iterate `K`/`V` over each entry of object value `O` |
 | `array_element(A, I, V)`       | iterate `I`/`V` over each element of array value `A` |
@@ -65,7 +64,7 @@ function args, iteration sources, IDB column unification).
 | -------------- | ----------------------------------------------------------- |
 | arithmetic     | `+`, `-`, `*`, `/`, `%`, `**` (exponentiation, float-valued) |
 | bitwise        | `&`, `\|`, `^`, `<<`, `>>`, `>>>` (32-bit signed integers; `>>` arithmetic, `>>>` logical; see spec §5.9) |
-| comparison     | `=`, `<>`, `==`, `!=`, `<`, `<=`, `>`, `>=`                 |
+| comparison     | `=`, `<>`, `<`, `<=`, `>`, `>=` (all total: never yield `null`) |
 | boolean        | `&&`, `\|\|`, `!` (three-valued logic on `null`)              |
 | string         | `+` (concat), `length(W)`, `upper(W)`, `lower(W)`, `trim(W)`, `replace(W, old, new)`, `W[i]`, `W[i:j]`, `W[:j]`, `W[i:]` |
 | math           | `abs(x)`, `round(x)` / `round(x, n)`, `floor(x)`, `ceil(x)`, `sqrt(x)`, `ln(x)`, `exp(x)` (exponentiation is the `**` operator) |

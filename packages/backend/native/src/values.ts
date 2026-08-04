@@ -7,10 +7,9 @@
 //   - `sqrt(x<0)`, `ln(x<=0)`, `0 ** neg`, `neg ** fractional` → NULL
 //   - slice bounds that would walk backwards → empty string
 //   - NULL propagates through arithmetic, functions, subscript/slice
-//   - NULL in a comparison expression → NULL (SQL three-valued logic). Filters
-//     and atom-matching then treat NULL as "doesn't match" — see `valueEq`,
-//     which is the lower-level shortcut used by atom matching / filterEq
-//     where the only observable outcome is row-drop.
+//   - comparison is total: NULL never comes back out of one. Equality is
+//     null-aware (`logicalEq`) and ordering treats NULL as an isolated point
+//     in the order. See doc/design/null.md §5.
 //
 // Integer-vs-float division follows the same type-driven decision as the
 // translator: both operands integer → truncating division; otherwise
@@ -81,6 +80,14 @@ function asOrderable(v: Value): number | string {
   }
   return v;
 }
+
+/**
+ * The ordering operators, which are total: a null operand never yields
+ * null. Null is an isolated point in the order, so `<` and `>` are false
+ * whenever either side is null, and `<=` / `>=` are true only when both
+ * are. See doc/design/null.md §5.
+ */
+const ORDERING_OPS: ReadonlySet<string> = new Set(["<", "<=", ">", ">="]);
 
 function compareStrings(a: string, b: string): number {
   const acp = [...a];
@@ -163,15 +170,23 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
         if (l === null || r === null) return null;
         return asBoolean(l) || asBoolean(r);
       }
-      // `=` / `<>` are logical equality: null-aware, never propagate.
-      // JS `===` / `!==` already give the right answer for null values
-      // (`null === null` is true, `null === X` is false). For JSON values
-      // — arrays/objects — `===` is reference identity, which would
-      // diverge from the SQL backends' structural equality; route
-      // through `valueStructuralEq` which canonicalises on demand.
+      // `=` / `<>` are null-aware equality. JS `===` / `!==` already give
+      // the right answer for null values (`null === null` is true,
+      // `null === X` is false). For JSON values (arrays / objects) `===` is
+      // reference identity, which would diverge from the SQL backends'
+      // structural equality, so route through `valueStructuralEq`, which
+      // canonicalises on demand.
       if (term.op === "=") return valueStructuralEq(l, r);
       if (term.op === "<>") return !valueStructuralEq(l, r);
-      if (l === null || r === null) return null;
+      // Ordering is total: null is an isolated point in the order,
+      // comparable only to itself. See doc/design/null.md §5.
+      if (l === null || r === null) {
+        if (ORDERING_OPS.has(term.op)) {
+          return (term.op === "<=" || term.op === ">=") && l === null && r === null;
+        }
+        // Every other operator propagates.
+        return null;
+      }
       return evalBinary(term.op, l, r, term.left, term.right, env);
     }
     case "FunctionCall":
@@ -328,17 +343,10 @@ function evalBinary(
   if (op === ">>>") return (asNumber(l) >>> asNumber(r)) | 0;
   // Exponentiation: float-valued, with the same domain guards as the SQL `**`.
   if (op === "**") return evalPower(asNumber(l), asNumber(r));
-  // Comparison ops. Both operands are non-null at this point (the
-  // BinaryExpr case in evalTerm short-circuits null compare → null
-  // before calling here, matching SQL three-valued logic). 3VL `==`
-  // and `!=` use the same structural compare as logical `=` here —
-  // the difference between the operator families is null handling
-  // (`==` is 3VL: NULL operand → NULL; `=` is null-aware: NULL = NULL),
-  // and that distinction is decided in `evalTerm`'s BinaryExpr case
-  // before reaching this function.
-  if (op === "==") return valueStructuralEq(l, r);
-  if (op === "!=") return !valueStructuralEq(l, r);
-  if (op === "<" || op === "<=" || op === ">" || op === ">=") {
+  // Ordering ops. Both operands are non-null at this point: `evalTerm`'s
+  // BinaryExpr case decides every null case before calling here, since
+  // ordering is total and null is an isolated point in the order.
+  if (ORDERING_OPS.has(op)) {
     const av = asOrderable(l);
     const bv = asOrderable(r);
     const cmp = compareOrderable(av, bv);
@@ -678,38 +686,30 @@ function valueStructuralEq(a: Value, b: Value): boolean {
 }
 
 /**
- * Equality under SQL's "NULL = anything is UNKNOWN" rule. Used by atom
- * matching (literal vs. tuple, repeated variables across columns) where
- * the join semantics match SQL — NULL never satisfies the join.
+ * Null-aware equality: the runtime behind the `=` and `<>` operators,
+ * body-level Equality, and atom matching alike. `null = null` is true,
+ * `null = X` is false. This is the language's only notion of sameness,
+ * shared with tuple dedup and aggregate grouping, so a repeated variable
+ * and a spelled-out `=` denote the same join. See doc/design/null.md §4.
  *
- * Body-level Equality constraints and the expression-level `=` operator
- * use `logicalEq` instead, which is null-aware.
- */
-export function valueEq(a: Value, b: Value): boolean {
-  if (a === null || b === null) return false;
-  return valueStructuralEq(a, b);
-}
-
-/**
- * Logical (null-aware) equality — the runtime behind the `=` and `<>`
- * operators and body-level Equality. `null = null` is true, `null = X`
- * is false. JS strict equality is the fast path for primitives;
- * structural equality kicks in for json compounds.
+ * JS strict equality is the fast path for primitives; structural equality
+ * kicks in for json compounds.
  */
 export function logicalEq(a: Value, b: Value): boolean {
   return valueStructuralEq(a, b);
 }
 
 /**
- * Comparison operators with SQL three-valued logic: a NULL operand
- * yields NULL, matching the spec's §5.4 rule that comparisons return
- * NULL when either operand is NULL. Filter contexts treat that NULL
- * as "doesn't match" themselves; this function does not collapse it.
+ * Comparison operators, all total: no operand combination yields null.
+ * Equality is null-aware, and ordering treats null as an isolated point
+ * comparable only to itself. See doc/design/null.md §5.
  */
 export function compareOp(op: string, a: Value, b: Value): Value {
-  if (a === null || b === null) return null;
   if (op === "=") return valueStructuralEq(a, b);
-  if (op === "!=") return !valueStructuralEq(a, b);
+  if (op === "<>") return !valueStructuralEq(a, b);
+  if (a === null || b === null) {
+    return (op === "<=" || op === ">=") && a === null && b === null;
+  }
   // Ordering operators require both sides to be the same primitive type
   // (number-number or string-string). The analyzer already enforces this
   // statically; the runtime check guards against analyzer/planner bugs.

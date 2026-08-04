@@ -22,13 +22,13 @@ max_east_age(max(Age)) :- person(_, Age, _, _, "east").
 suspect(Name) :-
   person(Name, Age, Hair, Height, "east"),
   Height > 150,
-  Hair != "blond",
-  Hair != "bald",
+  Hair <> "blond",
+  Hair <> "bald",
   Age >= 30,
   dark_hair(Hair),
   not height_180_190(Name),
-  max_age(MaxAge), Age != MaxAge,
-  max_height(MaxH), Height != MaxH,
+  max_age(MaxAge), Age <> MaxAge,
+  max_height(MaxH), Height <> MaxH,
   avg_height(AvgH), Height < AvgH,
   max_east_age(MaxEAge), Age = MaxEAge.
 

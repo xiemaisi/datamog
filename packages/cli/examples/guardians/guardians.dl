@@ -15,12 +15,12 @@
 cell(C) :- C in [1 .. 100].
 guard(G) :- G in [1 .. 100].
 
-turn(G, C) :- guard(G), cell(C), C % G == 0.
+turn(G, C) :- guard(G), cell(C), C % G = 0.
 
 # Aggregating over `turn` groups by the non-aggregate head argument, C.
 turns(C, count(*)) :- turn(_, C).
 
-unlocked(C) :- turns(C, K), K % 2 == 1.
+unlocked(C) :- turns(C, K), K % 2 = 1.
 
 ?- unlocked(Cell).
 

@@ -313,7 +313,7 @@ describe("seminaive backend — body elements", () => {
       output predicate le(X, Y) :- n(X), n(Y), X <= Y, X = 2.
       output predicate gt(X, Y) :- n(X), n(Y), X > Y, X = 4.
       output predicate ge(X, Y) :- n(X), n(Y), X >= Y, X = 4.
-      output predicate ne(X, Y) :- n(X), n(Y), X != Y, X = 3.
+      output predicate ne(X, Y) :- n(X), n(Y), X <> Y, X = 3.
     `);
     expect(sortRows(results[0]!)).toEqual([
       { X: 2, Y: 3 },
@@ -757,10 +757,10 @@ describe("seminaive backend — stratification and dependency depth", () => {
       tc(X, Y) :- edge(X, Y).
       tc(X, Y) :- edge(X, Z), tc(Z, Y).
 
-      unreachable(X, Y) :- node(X), node(Y), X != Y, not tc(X, Y).
+      unreachable(X, Y) :- node(X), node(Y), X <> Y, not tc(X, Y).
       ?- unreachable("a", Y).
     `);
-    // From "a", tc reaches {b, c}. Unreachable = {d}; X != Y rules out "a".
+    // From "a", tc reaches {b, c}. Unreachable = {d}; X <> Y rules out "a".
     expect(sortRows(results[0]!)).toEqual([{ Y: "d" }]);
   });
 

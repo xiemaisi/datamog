@@ -123,31 +123,28 @@ export type { AggregateFunction, BinaryOp } from "datamog-parser";
 export type { Expression as Term } from "datamog-parser";
 
 /**
- * Subset of `BinaryExpr.op` values that mean "comparison" — the
- * operators that yield a boolean. Two equality families: `=`/`<>` are
- * *logical* (null-aware) and `==`/`!=` are *computational* (3VL); the
- * orderings are 3VL because null isn't orderable. The split sets below
- * let downstream code (type inference, translator, runtime) distinguish
- * the families without re-spelling the literals.
+ * Subset of `BinaryExpr.op` values that mean "comparison", i.e. the
+ * operators that yield a boolean. Every one of them is total: a null
+ * operand never produces a null result. There is a single equality,
+ * `=`/`<>`, which is null-aware; the orderings treat null as an isolated
+ * point in the order. See doc/design/null.md §5.
  */
-export type ComparisonOp = "<" | "<=" | ">" | ">=" | "==" | "!=" | "=" | "<>";
+export type ComparisonOp = "<" | "<=" | ">" | ">=" | "=" | "<>";
 
 export const COMPARISON_OPS: ReadonlySet<string> = new Set<ComparisonOp>([
   "<",
   "<=",
   ">",
   ">=",
-  "==",
-  "!=",
   "=",
   "<>",
 ]);
 
-/** `=` and `<>` — null-aware (`null = null` is true). */
-export const LOGICAL_EQ_OPS: ReadonlySet<string> = new Set(["=", "<>"]);
+/** `=` and `<>`, the language's only equality (`null = null` is true). */
+export const EQUALITY_OPS: ReadonlySet<string> = new Set(["=", "<>"]);
 
-/** `==` and `!=` — 3VL (`null == X` is null). */
-export const COMPUTATIONAL_EQ_OPS: ReadonlySet<string> = new Set(["==", "!="]);
+/** `<`, `<=`, `>`, `>=`: null is an isolated point, so these are total. */
+export const ORDERING_OPS: ReadonlySet<string> = new Set(["<", "<=", ">", ">="]);
 
 export const LOGICAL_BINARY_OPS: ReadonlySet<string> = new Set(["&&", "||"]);
 

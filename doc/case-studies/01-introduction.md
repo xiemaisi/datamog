@@ -108,7 +108,7 @@ A rule body can contain several kinds of conditions, separated by commas
 travel(X, Y, T) :- flight(X, Y, T).
 ```
 
-**Comparisons** — `<`, `>`, `<=`, `>=`, `!=`:
+**Comparisons** — `<`, `>`, `<=`, `>=`, `<>`:
 ```prolog
 long_flight(X, Y) :- flight(X, Y, T), T > 5.0.
 ```

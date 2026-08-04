@@ -31,7 +31,7 @@ signal(W, A ^ B) :- gate(W, "XOR", I, J), signal(I, A), signal(J, B).
 # Recover each bit index from the name. The two-digit suffix has a leading zero
 # for 00..09, which `to_integer` rejects, so strip it in that case.
 zsuffix(W, W[1:3]) :- signal(W, _), W[0:1] = "z".
-zbit(W, Idx) :- zsuffix(W, S), S[0:1] != "0", Idx = to_integer(S).
+zbit(W, Idx) :- zsuffix(W, S), S[0:1] <> "0", Idx = to_integer(S).
 zbit(W, Idx) :- zsuffix(W, S), S[0:1] = "0", Idx = to_integer(S[1:2]).
 
 # Weight each bit by 2^Idx and sum. Build the powers of two with bounded

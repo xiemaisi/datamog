@@ -95,7 +95,7 @@ fix(A) :- root(Id), target(T), eval_as(A, Id, V), V = T.
 # Per fix, flag each operator 1 (changed) or 0 (unchanged) and sum. Summing
 # flags keeps a row even for a fix that changes none or all of the operators.
 
-change_flag(A, Id, 1) :- fix(A), opnode(Id), assigned_op(A, Id, New), binop(Id, Old, _, _), New != Old.
+change_flag(A, Id, 1) :- fix(A), opnode(Id), assigned_op(A, Id, New), binop(Id, Old, _, _), New <> Old.
 change_flag(A, Id, 0) :- fix(A), opnode(Id), assigned_op(A, Id, New), binop(Id, Old, _, _), New = Old.
 change_count(A, sum(F)) :- change_flag(A, Id, F).
 output predicate min_changes(min(N)) :- change_count(_, N).
@@ -103,6 +103,6 @@ best_fix(A) :- change_count(A, N), min_changes(N).
 
 # Each best fix as the edits it makes: in fix A, at character position Pos,
 # change operator Old to New.
-output predicate edit(A, Pos, Old, New) :- best_fix(A), opnode(Pos), assigned_op(A, Pos, New), binop(Pos, Old, _, _), New != Old.
+output predicate edit(A, Pos, Old, New) :- best_fix(A), opnode(Pos), assigned_op(A, Pos, New), binop(Pos, Old, _, _), New <> Old.
 
 ?- original(V).

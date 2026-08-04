@@ -38,9 +38,9 @@ export type {
 export {
   BITWISE_OPS,
   COMPARISON_OPS,
-  COMPUTATIONAL_EQ_OPS,
+  EQUALITY_OPS,
   LOGICAL_BINARY_OPS,
-  LOGICAL_EQ_OPS,
+  ORDERING_OPS,
   isFloatLiteral,
 } from "./ast.ts";
 export {

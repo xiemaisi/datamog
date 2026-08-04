@@ -21,7 +21,7 @@ The design is **primarily destructure**: most data enters a
 program through the EDB as a `value` and gets read, projected,
 and coerced down to primitives. Construction is also supported:
 primitives auto-lift wherever a `value` is expected (so
-`r(J) :- t(J), J == 5` "just works"), `parse_json` parses a
+`r(J) :- t(J), J = 5` "just works"), `parse_json` parses a
 string into a value (or `NULL`, on malformed input), and array
 / object literals (`[1, 2, X]`, `{"k": V}`) build composites
 directly. The finiteness checker (Chapter 5's lens, formalised
@@ -223,7 +223,7 @@ output predicate endpoint(I, Path) :-
 
 ## Equality on `value`s
 
-You can compare two `value`s with `=`, `<>`, `==`, `!=`:
+You can compare two `value`s with `=` and `<>`:
 
 ```prolog
 same_payload(A, B) :- event(A), event(B), A = B.

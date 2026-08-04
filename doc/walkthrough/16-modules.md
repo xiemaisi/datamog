@@ -482,7 +482,7 @@ what happens without it?
 ### Exercise 16.3 — Filter, then reach ★★★
 
 Write `filter.dl` with an input `raw(a: integer, b: integer)` and an output
-`kept` that drops self-loops (`a != b`). In `main.dl`, bind a `clean` input to an
+`kept` that drops self-loops (`a <> b`). In `main.dl`, bind a `clean` input to an
 instance of `filter.dl`, then wire `reach.dl`'s `edge` to `clean` instead of
 straight to `road`, so the closure runs over the filtered edges. (This chains two
 modules — `filter`'s output into `reach`'s input; the instantiation graph is a
@@ -520,7 +520,7 @@ which of the two styles you would rather write.
 ### Exercise 16.8 — A law that only the importer can state ★★★
 
 `order.dl` cannot know whether its order should be *total*. Add that law
-(`!- elem(X), elem(Y), X != Y, not lt(X, Y), not lt(Y, X).`) to a copy of the
+(`!- elem(X), elem(Y), X <> Y, not lt(X, Y), not lt(Y, X).`) to a copy of the
 module and instantiate it against the diamond covers from `order-demo.dl`. Why
 does it fire? Where should such a law live — in the module, or in the importer?
 

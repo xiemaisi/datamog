@@ -94,7 +94,7 @@ describe("translator", () => {
     const sql = norm(result.createViews[0]!);
     // Z is shared between parent(X, Z) and parent(Z, Y)
     // Should produce a join condition on the child column of b0 and name column of b1
-    expect(sql).toContain('__b0."child" = __b1."name"');
+    expect(sql).toContain('__b0."child" IS NOT DISTINCT FROM __b1."name"');
   });
 
   test("generates WHERE for constants in rule body", () => {
@@ -293,16 +293,16 @@ describe("translator", () => {
     expect(sql).toContain("> 0");
   });
 
-  test("translates == to SQL =, != to SQL <>", () => {
+  test("translates = / <> in expression position to the null-aware operators", () => {
     const result = translateSource(`
       input predicate t(a: integer).
-      r1(C) :- t(X), C = X == 0.
-      r2(C) :- t(X), C = X != 0.
+      r1(C) :- t(X), C = (X = 0).
+      r2(C) :- t(X), C = (X <> 0).
     `);
     const sql1 = norm(result.createViews[0]!);
-    expect(sql1).toMatch(/= 0/);
+    expect(sql1).toContain("IS NOT DISTINCT FROM 0");
     const sql2 = norm(result.createViews[1]!);
-    expect(sql2).toContain("<> 0");
+    expect(sql2).toContain("IS DISTINCT FROM 0");
   });
 
   test("compound filter translates with AND", () => {
@@ -353,13 +353,13 @@ describe("translator", () => {
     );
   });
 
-  test("generates SQL for != comparison", () => {
+  test("generates SQL for <> comparison", () => {
     const result = translateSource(`
       input predicate pairs(a: integer, b: integer).
-      diff(X, Y) :- pairs(X, Y), X != Y.
+      diff(X, Y) :- pairs(X, Y), X <> Y.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("<>");
+    expect(sql).toContain("IS DISTINCT FROM");
   });
 
   test("generates SQL for = constraint (non-binding equality)", () => {
@@ -502,7 +502,7 @@ describe("translator", () => {
     expect(sql).toContain("NOT EXISTS");
     expect(sql).toContain('SELECT 1 FROM "reachable"');
     // The subquery should bind to the outer variable
-    expect(sql).toContain('"col1" = __b0."name"');
+    expect(sql).toContain('"col1" IS NOT DISTINCT FROM __b0."name"');
   });
 
   test("generates a tagged combined CTE for mutual recursion (postgres)", () => {
@@ -813,7 +813,7 @@ describe("translator", () => {
       r(X) :- i(X), j(X).
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain('to_jsonb(__b0."x") = __b1."x"');
+    expect(sql).toContain('to_jsonb(__b0."x") IS NOT DISTINCT FROM __b1."x"');
     expect(sql).toContain('__b0."x" AS col1');
     expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
@@ -828,7 +828,7 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain('__b1."x" AS col1');
-    expect(sql).toContain('to_jsonb(__b1."x") = __b0."x"');
+    expect(sql).toContain('to_jsonb(__b1."x") IS NOT DISTINCT FROM __b0."x"');
     expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
 
@@ -852,10 +852,10 @@ describe("translator", () => {
     expect(sql).toContain("jsonb_each(CASE WHEN");
   });
 
-  test("comparison J == 5 (value vs int) lifts the primitive side (postgres)", () => {
+  test("comparison J = 5 (value vs int) lifts the primitive side (postgres)", () => {
     const result = translateSource(`
       input predicate t(j: value).
-      r(J) :- t(J), J == 5.
+      r(J) :- t(J), J = 5.
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("to_jsonb(5)");
@@ -953,7 +953,7 @@ describe("translator", () => {
     expect(sql).toContain('AS "X"');
     expect(sql).toMatch(/"a" AS (col1|"col1")/);
     expect(sql).not.toMatch(/"b" AS .*"X"/);
-    expect(sql).toMatch(/"a" = [^,)]*"b"/);
+    expect(sql).toMatch(/"a" IS NOT DISTINCT FROM [^,)]*"b"/);
   });
 
   test("repeated variables in query atom on IDB predicate", () => {
@@ -964,7 +964,7 @@ describe("translator", () => {
     `);
     const sql = norm(result.queries[0]!);
     expect(sql).toContain('AS "X"');
-    expect(sql).toMatch(/"col1" = [^,)]*"col2"/);
+    expect(sql).toMatch(/"col1" IS NOT DISTINCT FROM [^,)]*"col2"/);
   });
 
   test("integer literal head arg is omitted from GROUP BY", () => {
@@ -2004,14 +2004,19 @@ q(X, Y) :- t(X, Y), X <> Y.
     expect(pgSql).toContain("IS DISTINCT FROM");
   });
 
-  test("`==` and `!=` keep their 3VL spelling (plain `=` / `<>`)", () => {
-    const source = `input predicate t(a: integer, b: integer).
-q(X, Y) :- t(X, Y), X == Y.
+  test("a repeated variable joins null-aware, like a spelled-out `=`", () => {
+    // The two forms denote the same relation, so they must emit the same
+    // operator. See doc/design/null.md §4.
+    const shared = `input predicate t(a: integer, b: integer).
+q(X, Y) :- t(X, Y), X = Y.
 ?- q(X, Y).`;
-    const sql = translateTyped(source, sqlite).createViews.join("\n");
-    // `==` should compile to plain SQL `=`, never IS / IS NOT DISTINCT FROM.
-    expect(sql).not.toContain(" IS ");
-    expect(sql).toContain('__b0."a" = __b0."b"');
+    const repeated = `input predicate t(a: integer, b: integer).
+q(X, X) :- t(X, X).
+?- q(X, Y).`;
+    for (const source of [shared, repeated]) {
+      const sql = translateTyped(source, sqlite).createViews.join("\n");
+      expect(sql).toContain('__b0."a" IS __b0."b"');
+    }
   });
 });
 

@@ -16,8 +16,8 @@ seed(N) :- N in [1 .. 27].
 
 # chain(Seed, Value, K): starting from Seed, Value is reached after K steps.
 chain(N, N, 0) :- seed(N).
-chain(N, M, K) :- chain(N, P, K0), P > 1, P % 2 == 0, M = P / 2,     K = K0 + 1.
-chain(N, M, K) :- chain(N, P, K0), P > 1, P % 2 == 1, M = 3 * P + 1, K = K0 + 1.
+chain(N, M, K) :- chain(N, P, K0), P > 1, P % 2 = 0, M = P / 2,     K = K0 + 1.
+chain(N, M, K) :- chain(N, P, K0), P > 1, P % 2 = 1, M = 3 * P + 1, K = K0 + 1.
 
 steps(N, K) :- chain(N, 1, K).
 

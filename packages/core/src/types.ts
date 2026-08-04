@@ -6,7 +6,7 @@ import {
 } from "./analyzer.ts";
 import type { AnalyzedProgram, BuiltinBodyAtomSpec } from "./analyzer.ts";
 import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } from "./ast.ts";
-import { BITWISE_OPS, COMPARISON_OPS, isFloatLiteral } from "./ast.ts";
+import { BITWISE_OPS, COMPARISON_OPS, EQUALITY_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
 
 export interface TypedProgram extends AnalyzedProgram {
@@ -707,15 +707,11 @@ function validateBinaryExprTypes(
   }
   if (COMPARISON_OPS.has(term.op)) {
     // Comparison expressions: operands must be type-compatible.
-    // Equality variants (`==`, `!=`) accept booleans (set equality is
-    // well-defined); ordering ops do not (Datalog has no order on
-    // booleans, SQL backends would silently coerce to 0/1).
+    // Equality (`=`, `<>`) accepts booleans (set equality is well-defined);
+    // ordering ops do not (Datalog has no order on booleans, SQL backends
+    // would silently coerce to 0/1).
     checkComparableTypes(leftType, rightType, term, "comparison");
-    if (
-      term.op !== "==" &&
-      term.op !== "!=" &&
-      (leftType === "boolean" || rightType === "boolean")
-    ) {
+    if (!EQUALITY_OPS.has(term.op) && (leftType === "boolean" || rightType === "boolean")) {
       throw new AnalyzerError(
         `Operator '${term.op}' does not order booleans`,
         cst?.offset,
@@ -724,16 +720,9 @@ function validateBinaryExprTypes(
     }
     // Ordering on json is rejected because cross-backend ordering
     // semantics disagree (Postgres jsonb has a defined order;
-    // SQLite/sql.js do not). Equality (`=`/`<>`/`==`/`!=`) is allowed
-    // — structural on Postgres jsonb, textual-after-canonicalisation
-    // on the SQLite-family backends.
-    if (
-      term.op !== "==" &&
-      term.op !== "!=" &&
-      term.op !== "=" &&
-      term.op !== "<>" &&
-      (leftType === "value" || rightType === "value")
-    ) {
+    // SQLite/sql.js do not). Equality is allowed: structural on Postgres
+    // jsonb, textual-after-canonicalisation on the SQLite-family backends.
+    if (!EQUALITY_OPS.has(term.op) && (leftType === "value" || rightType === "value")) {
       throw new AnalyzerError(
         `Operator '${term.op}' is not defined on value — values have no cross-backend ordering`,
         cst?.offset,

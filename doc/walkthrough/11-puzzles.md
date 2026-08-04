@@ -221,7 +221,7 @@ produce the unique solution.
 
 Hint: use ranges for seat numbers `[1..3]`, generate `seating(A,
 B, C)` with distinct seat assignments (you'll need comparisons to
-enforce distinctness — inequality between variables is `!=`),
+enforce distinctness — inequality between variables is `<>`),
 then filter by the clues.
 
 ---

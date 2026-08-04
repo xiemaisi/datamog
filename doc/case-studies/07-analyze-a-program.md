@@ -222,7 +222,7 @@ alias (i.e., point to the same location)?
 Two variables **may alias** if they may both point to the same location:
 
 ```prolog
-may_alias(X, Y) :- points_to(X, L), points_to(Y, L), X != Y.
+may_alias(X, Y) :- points_to(X, L), points_to(Y, L), X <> Y.
 ```
 
 </details>
@@ -242,7 +242,7 @@ assign("a", "r").
 points_to(V, L) :- address_of(V, L).
 points_to(V, L) :- assign(V, W), points_to(W, L).
 
-output predicate may_alias(X, Y) :- points_to(X, L), points_to(Y, L), X != Y.
+output predicate may_alias(X, Y) :- points_to(X, L), points_to(Y, L), X <> Y.
 
 ?- points_to(Var, Location).
 ```

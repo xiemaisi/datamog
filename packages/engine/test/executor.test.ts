@@ -214,7 +214,7 @@ describe("DatamogExecutor", () => {
         flag("alice", true).
         flag("bob",   false).
         derived(N, B) :- flag(N, B).
-        comparison(N, B) :- flag(N, _), B = (N == "alice").
+        comparison(N, B) :- flag(N, _), B = (N = "alice").
         ?- derived(N, B).
         output predicate cmp(N, B) :- comparison(N, B).
       `);
@@ -235,52 +235,55 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("`null` literal, `=`/`<>` (logical), `==`/`!=` (3VL) on the SQLite backend", async () => {
-    // `=` and `<>` are null-aware; the dialect emits `IS` on SQLite. `==`
-    // and `!=` keep 3VL semantics. The native evaluator's same-named test
-    // pins the parallel result; this one verifies SQL agreement.
+  test("`null` literal and null-aware `=` / `<>` on the SQLite backend", async () => {
+    // `=` and `<>` are the only equality and are null-aware; the dialect
+    // emits `IS` on SQLite. The native evaluator's same-named test pins the
+    // parallel result; this one verifies SQL agreement.
     const backend = await createSqlite();
     const executor = new DatamogExecutor(backend);
     try {
       const results = await executor.execute(`
         t(0). t(1). t(2).
-        maybe_null(X, Y, IsNull, EqEq) :-
+        maybe_null(X, Y, IsNull, Below) :-
           t(X),
           Y = 1 / X,
           IsNull = (Y = null),
-          EqEq = (Y == null).
+          Below = (Y < 1).
 
         filter_logical(X) :- t(X), Y = 1 / X, Y = null.
-        filter_compute(X) :- t(X), Y = 1 / X, Y == null.
         neq_logical(X)    :- t(X), Y = 1 / X, Y <> null.
-        ?- maybe_null(X, Y, IsNull, EqEq).
+        ?- maybe_null(X, Y, IsNull, Below).
         output predicate fl(X) :- filter_logical(X).
-        output predicate fc(X) :- filter_compute(X).
         output predicate nl(X) :- neq_logical(X).
       `);
+      // `Y < 1` is false, not null, for the NULL row: ordering is total.
       expect(sortRows(results[0]!.rows)).toEqual([
-        { X: 0, Y: null, IsNull: true, EqEq: null },
-        { X: 1, Y: 1, IsNull: false, EqEq: null },
-        { X: 2, Y: 0, IsNull: false, EqEq: null },
+        { X: 0, Y: null, IsNull: true, Below: false },
+        { X: 1, Y: 1, IsNull: false, Below: false },
+        { X: 2, Y: 0, IsNull: false, Below: true },
       ]);
       expect(results[1]!.rows).toEqual([{ X: 0 }]);
-      expect(results[2]!.rows).toEqual([]);
-      expect(sortRows(results[3]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
+      expect(sortRows(results[2]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
     } finally {
       await backend.close();
     }
   });
 
-  test("atom matching keeps SQL-style NULL semantics across backends", async () => {
+  test("atom matching is null-aware across backends", async () => {
+    // A literal `null` argument matches a NULL column, and a repeated
+    // variable joins NULL to NULL, both agreeing with the `=` operator.
+    // See doc/design/null.md §4.
     const program = `
       source(0).
       source(1).
       maybe(X, Y) :- source(X), Y = 1 / X.
       literal_match(X) :- maybe(X, null).
       self_join(X1, X2) :- maybe(X1, Y), maybe(X2, Y).
+      spelled(X1, X2) :- maybe(X1, Y1), maybe(X2, Y2), Y1 = Y2.
       ?- maybe(X, Y).
       output predicate lm(X) :- literal_match(X).
       output predicate sj(X1, X2) :- self_join(X1, X2).
+      output predicate sp(X1, X2) :- spelled(X1, X2).
     `;
 
     for (const results of await executeOnSqliteAndNative(program)) {
@@ -288,8 +291,13 @@ describe("DatamogExecutor", () => {
         { X: 0, Y: null },
         { X: 1, Y: 1 },
       ]);
-      expect(results[1]!).toEqual([]);
-      expect(results[2]!).toEqual([{ X1: 1, X2: 1 }]);
+      expect(results[1]!).toEqual([{ X: 0 }]);
+      expect(sortRows(results[2]!)).toEqual([
+        { X1: 0, X2: 0 },
+        { X1: 1, X2: 1 },
+      ]);
+      // The repeated variable and the spelled-out equality agree.
+      expect(sortRows(results[3]!)).toEqual(sortRows(results[2]!));
     }
   });
 
@@ -793,7 +801,7 @@ describe("DatamogExecutor", () => {
     const program = `
       data(5).
       data([1, 2]).
-      matches_5(X) :- data(X), X == 5.
+      matches_5(X) :- data(X), X = 5.
       ?- matches_5(X).
       output predicate da(X) :- data(X).
     `;

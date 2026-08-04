@@ -99,7 +99,7 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
       flag("alice", true).
       flag("bob",   false).
       derived(N, B) :- flag(N, B).
-      comparison(N, B) :- flag(N, _), B = (N == "alice").
+      comparison(N, B) :- flag(N, _), B = (N = "alice").
       ?- derived(N, B).
       output predicate cmp(N, B) :- comparison(N, B).
     `);
@@ -138,37 +138,38 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     }
   });
 
-  test("`null` literal, `=`/`<>` (logical), `==`/`!=` (3VL)", async () => {
-    // Cross-backend invariant from §5 of the spec: divide-by-zero
-    // yields NULL, `=`/`<>` are NULL-aware (IS NOT DISTINCT FROM in
-    // postgres), `==`/`!=` keep 3VL. Same shape as the SQLite version.
+  test("`null` literal, null-aware `=` / `<>`, and total ordering", async () => {
+    // Cross-backend invariant from §5.4 of the spec: divide-by-zero yields
+    // NULL, `=`/`<>` are null-aware (IS NOT DISTINCT FROM on Postgres), and
+    // ordering is total. Same shape as the SQLite version.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
       t(0). t(1). t(2).
-      maybe_null(X, Y, IsNull, EqEq) :-
+      maybe_null(X, Y, IsNull, Below, AtMost) :-
         t(X),
         Y = 1 / X,
         IsNull = (Y = null),
-        EqEq = (Y == null).
+        Below = (Y < 1),
+        AtMost = (Y <= Y).
 
       filter_logical(X) :- t(X), Y = 1 / X, Y = null.
-      filter_compute(X) :- t(X), Y = 1 / X, Y == null.
       neq_logical(X)    :- t(X), Y = 1 / X, Y <> null.
-      ?- maybe_null(X, Y, IsNull, EqEq).
+      not_below(X)      :- t(X), Y = 1 / X, not (Y < 1).
+      ?- maybe_null(X, Y, IsNull, Below, AtMost).
       output predicate fl(X) :- filter_logical(X).
-      output predicate fc(X) :- filter_compute(X).
       output predicate nl(X) :- neq_logical(X).
+      output predicate nb(X) :- not_below(X).
     `);
     const sorted = (rows: Record<string, unknown>[]) =>
       [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     expect(sorted(results[0]!.rows)).toEqual([
-      { X: 0, Y: null, IsNull: true, EqEq: null },
-      { X: 1, Y: 1, IsNull: false, EqEq: null },
-      { X: 2, Y: 0, IsNull: false, EqEq: null },
+      { X: 0, Y: null, IsNull: true, Below: false, AtMost: true },
+      { X: 1, Y: 1, IsNull: false, Below: false, AtMost: true },
+      { X: 2, Y: 0, IsNull: false, Below: true, AtMost: true },
     ]);
     expect(results[1]!.rows).toEqual([{ X: 0 }]);
-    expect(results[2]!.rows).toEqual([]);
-    expect(sorted(results[3]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
+    expect(sorted(results[2]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
+    expect(sorted(results[3]!.rows)).toEqual([{ X: 0 }, { X: 1 }]);
   });
 
   test("primitive conversions: parse string → integer / float / boolean (NULL on bad input)", async () => {

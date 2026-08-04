@@ -212,11 +212,10 @@ Filter:
 // propagates. The 32-bit width matches the integer column type so the
 // result is identical on every backend (see spec §5.9).
 //
-// Two equality families: `=`/`<>` are *logical* equality (null-aware —
-// `null = null` is true, `null = X` is false), and `==`/`!=` are
-// *computational* equality (3VL — `null == X` is null). Body-level
-// Equality (`X = expr`) reuses the logical operator and additionally
-// binds an unbound LHS.
+// One equality: `=`/`<>`, null-aware (`null = null` is true,
+// `null = X` is false). Body-level Equality (`X = expr`) reuses the same
+// operator and additionally binds an unbound LHS. Ordering is total too,
+// with null an isolated point in the order. See doc/design/null.md §5.
 
 Expression:
     Or;
@@ -238,8 +237,11 @@ BitAnd infers Expression:
 
 // Non-associative: `?` rather than `*` so `X > Y > Z` is a parse
 // error rather than a misleading `(X > Y) > Z`.
+// There is one equality, `=` / `<>`. Every comparison is total (a null
+// operand never yields null), so a second, three-valued family would be
+// indistinguishable from this one.
 Cmp infers Expression:
-    Shift ({infer BinaryExpr.left=current} op=('<' | '<=' | '>' | '>=' | '==' | '!=' | '=' | '<>') right=Shift)?;
+    Shift ({infer BinaryExpr.left=current} op=('<' | '<=' | '>' | '>=' | '=' | '<>') right=Shift)?;
 
 Shift infers Expression:
     Addition ({infer BinaryExpr.left=current} op=('<<' | '>>' | '>>>') right=Addition)*;
