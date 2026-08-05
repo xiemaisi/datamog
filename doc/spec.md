@@ -2438,6 +2438,13 @@ A proof mark may be applied only to a positive atom of a proof-carrying
 predicate. Applying one to an extensional or unnamed predicate, or to a negated
 atom, is an error.
 
+A negated atom therefore never observes a proof. It is written at the declared
+arity like any other reference, and `not p(args)` holds exactly when `p(args)`
+has *no* proof, rather than when some particular derivation is missing. Since
+§8.2 gives a proof-carrying predicate one row per derivation, this is the reading
+to keep in mind when negating one: a fact with several derivations is no less
+present than a fact with one.
+
 ### 8.4 Destructuring and matching
 
 The `V :` capture surfaces a whole proof term; to look inside one, put a

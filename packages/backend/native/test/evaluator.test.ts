@@ -1627,4 +1627,19 @@ describe("native backend — conjunctive queries", () => {
     // bob->carol chain. The `_` placeholder doesn't project.
     expect(sortRows(results[0]!)).toEqual([{ C: "bob" }]);
   });
+
+  test("negating a proof-carrying predicate ignores the proof column (spec 8.3)", async () => {
+    // `p(1)` has two derivations, `p(2)` one, `p(3)` none. Writing `not p(X)`
+    // at the declared arity would be an arity error if the implicit proof
+    // column counted as an argument, so this pins that it does not, and that
+    // the atom asks whether any proof exists rather than a particular one.
+    const results = await run(`
+      seed(1). seed(2). seed(3).
+      p(X) :: A :- seed(X), X < 3.
+      p(X) :: B :- seed(X), X < 2.
+      unproven(X) :- seed(X), not p(X).
+      ?- unproven(X).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ X: 3 }]);
+  });
 });
