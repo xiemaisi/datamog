@@ -146,7 +146,7 @@ CREATE OR REPLACE VIEW "orphan" AS
   SELECT __b0."col1" AS col1
   FROM "person" AS __b0
   WHERE NOT EXISTS (
-    SELECT 1 FROM "has_parent" WHERE "col1" = __b0."col1"
+    SELECT 1 FROM "has_parent" WHERE ("col1" IS NOT DISTINCT FROM __b0."col1")
   );
 ```
 

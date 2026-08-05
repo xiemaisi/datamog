@@ -68,8 +68,10 @@ backends:
 - Slice bounds going the wrong way (`W[5:2]`) return the empty
   string.
 
-A `NULL` in an intermediate equality silently fails the whole rule
-— so a row "badly computed" just doesn't appear in the output.
+A `NULL` from one of these flows on through the rule rather than
+killing it: `Y = 10 / X` with `X = 0` binds `Y` to `NULL`, and the
+row still appears with the `NULL` in it. Add `Y <> null` if you want
+badly computed rows gone.
 
 ## Range atoms: generating values
 

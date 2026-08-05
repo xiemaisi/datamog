@@ -14,8 +14,8 @@ cousin_of_greg(X) :- parent(P, X), parent(P, Y), grandparent(G, Y), Y = "greg".
    introduce a new alias.
 
 2. **WHERE conditions: three.**
-   - Shared variable `P`: `__b0."parent_name" = __b1."parent_name"`.
-   - Shared variable `Y`: `__b1."child_name" = __b2."col2"` (the
+   - Shared variable `P`: `__b0."parent_name" IS __b1."parent_name"`.
+   - Shared variable `Y`: `__b1."child_name" IS __b2."col2"` (the
      second column of the `grandparent` view).
    - Constant-through-equality `Y = "greg"`: appears as a literal
      filter on whichever alias binds `Y`. In practice Datamog will

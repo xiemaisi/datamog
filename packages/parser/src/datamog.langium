@@ -193,7 +193,7 @@ Filter:
 //   |   (bitwise or)
 //   ^   (bitwise xor)
 //   &   (bitwise and)
-//   <  <=  >  >=  ==  !=  =  <>   (comparison, non-associative)
+//   <  <=  >  >=  =  <>  !=   (comparison, non-associative)
 //   << >> >>> (bit shifts)
 //   +/- (additive)
 //   * / % (multiplicative — `%` is modulo)
@@ -203,8 +203,8 @@ Filter:
 // `&&`/`||`/`!` are *logical*, not bitwise — operands and result must
 // be boolean. Three-valued logic with NULL matches SQL semantics
 // (`NULL && false = false`, `NULL || true = true`, `!NULL = NULL`),
-// so the same expression behaves identically across all four backends
-// and the native evaluator. Comparisons return boolean.
+// so the same expression behaves identically on every backend.
+// Comparisons return boolean.
 //
 // `&`/`|`/`^`/`<<`/`>>`/`>>>` are *bitwise*, operating on 32-bit signed
 // two's-complement integers (Java/JS `int` semantics): operands and

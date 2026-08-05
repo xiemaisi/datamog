@@ -16,7 +16,7 @@ Constructors are currently a single **global** namespace: a `[Ctor]` annotation
 names a rule, and the name must be unique across the whole program (spec §8.1,
 §1.8). This proposal scopes a constructor to its predicate — `p::Cons` rather
 than a free-floating `Cons` — declared and referenced with a `::` qualifier. The
-motivation and, more importantly, the honest cost/benefit are below; the short
+motivation and, more importantly, the full cost/benefit are below; the short
 version is that it is a coherent, more principled model whose benefits are
 mostly cosmetic and whose costs (verbosity, migration) are real, so the
 recommendation is to **defer** unless a concrete trigger appears.

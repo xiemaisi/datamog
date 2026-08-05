@@ -94,9 +94,9 @@ request(Id, Method, Path, Status) :-
 `E` has type `value`. The expressions `E["id"]`, `E["method"]`,
 ... return `value`s of whatever shape sits at that key — always
 `value`, regardless of whether the underlying contents are a
-number, a string, an object, or null. Missing keys produce SQL
-`NULL` (which then propagates through the equality and drops
-the row, exactly as `NULL` does elsewhere).
+number, a string, an object, or null. A missing key produces SQL
+`NULL`, which the equality binds like any other value, so the row
+still appears with a `NULL` in that column. Add `<> null` to drop it.
 
 Indexing rules:
 

@@ -67,7 +67,7 @@ Datamog normalises runtime partials to `NULL` / `""` across all backends:
 | `0 ** -n`, `-x ** fractional` | `NULL` |
 | `W[5:2]` (start ≥ end) | `""` |
 
-`NULL` in an intermediate equality silently fails the whole rule — a row "badly computed" just doesn't appear.
+`NULL` flows on through the rule rather than killing it: `Y = 10 / X` with `X = 0` binds `Y` to `NULL` and the row still appears. Filter with `Y <> null`.
 
 ---
 

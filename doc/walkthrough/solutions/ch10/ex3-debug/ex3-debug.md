@@ -9,7 +9,7 @@ grandparent(X, Z) :- parent(X, Y), parent(Z, W), Y = W.
 Run under `--dry-run`, the generated SQL contains
 
 ```sql
-WHERE __b0."child_name" = __b1."child_name"
+WHERE (__b0."child_name" IS __b1."child_name")
 ```
 
 i.e. "`X`'s child and `Z`'s child are the same". That's the

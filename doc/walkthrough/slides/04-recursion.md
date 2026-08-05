@@ -142,7 +142,7 @@ CREATE OR REPLACE VIEW "ancestor" AS
     UNION
     SELECT __b0."parent_name", __b1."col2"
     FROM "parent" AS __b0, "ancestor" AS __b1
-    WHERE __b0."child_name" = __b1."col1"
+    WHERE (__b0."child_name" IS NOT DISTINCT FROM __b1."col1")
   )
   SELECT * FROM "ancestor";
 ```

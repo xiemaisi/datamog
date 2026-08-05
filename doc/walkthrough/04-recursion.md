@@ -208,7 +208,7 @@ and so no left/right asymmetry.
 >     UNION
 >     SELECT __b0."parent_name" AS col1, __b1."col2" AS col2
 >     FROM "parent" AS __b0, "ancestor" AS __b1
->     WHERE __b0."child_name" = __b1."col1"
+>     WHERE (__b0."child_name" IS __b1."col1")
 >   )
 >   SELECT * FROM "ancestor"
 > ;

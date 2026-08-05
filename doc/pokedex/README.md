@@ -228,7 +228,7 @@ move_priority(Move, Priority) :-
 itself an object mapping move id → source codes. We only want the keys,
 so the inner value is a don't-care.
 
-But there's a seam to close first. The learnsets key Pokémon by Showdown
+But the keys don't line up yet. The learnsets key Pokémon by Showdown
 *id* (`"bulbasaur"`), whereas `pokemon`, `type`, and friends key on the
 national-dex `Id` (`1`). (Move ids like `"absorb"` are shared between
 `moves.json` and the learnsets, so `move_category`/`move_priority` join

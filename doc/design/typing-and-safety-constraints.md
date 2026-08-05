@@ -485,7 +485,7 @@ s(X) :- s(X), b(X).      % accepted; `s` is empty
 CREATE RECURSIVE VIEW "s" (col1) AS (
   SELECT CAST(NULL AS INTEGER) AS col1 WHERE 1 = 0
   UNION
-SELECT __b0."col1" AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE __b0."col1" = __b1."col1"
+SELECT __b0."col1" AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE (__b0."col1" IS NOT DISTINCT FROM __b1."col1")
 );
 ```
 

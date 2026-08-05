@@ -385,8 +385,8 @@ small set of deliberate choices:
   something you can read in the generated output rather than take on faith.
 - **It runs several backends against each other.** The two in-memory
   interpreters are readable reference semantics; the SQL backends are checked
-  against them. Divergence is a bug, which keeps the teaching implementation
-  honest.
+  against them. Divergence is a bug, so the SQL backends cannot quietly drift
+  from the readable reference.
 - **It has a first-class JSON `value` type.** Nested data is handled directly,
   which most classical Datalogs (flat, typed or untyped tuples) do not offer.
 - **It presents algebraic datatypes as proof terms.** Naming a rule turns its

@@ -215,16 +215,16 @@ producing rows without you touching the rule.
 >          __b1."child_name"  AS col2
 >   FROM   "parent" AS __b0,
 >          "parent" AS __b1
->   WHERE  __b0."child_name" = __b1."parent_name"
+>   WHERE  (__b0."child_name" IS __b1."parent_name")
 > ;
 > ```
 >
-> (That's the default SQLite output — Postgres would say `CREATE OR REPLACE VIEW`. The view body is identical.)
+> (That's the default SQLite output. Postgres says `CREATE OR REPLACE VIEW`, and spells the null-aware equality `IS NOT DISTINCT FROM` where SQLite spells it `IS`.)
 >
 > A rule becomes a view. The two body atoms become two aliases for
 > the `parent` table (`__b0` and `__b1` — Datamog names them by
 > position). The shared variable `Y` in the rule becomes the `WHERE`
-> condition `__b0."child_name" = __b1."parent_name"`. The head
+> condition `__b0."child_name" IS __b1."parent_name"`. The head
 > variables `X` and `Z` become the `SELECT` columns, aliased to
 > positional names `col1`, `col2` because an IDB predicate's columns
 > are addressed by position.

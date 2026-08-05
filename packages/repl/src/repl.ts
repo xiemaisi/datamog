@@ -6,8 +6,8 @@ import type { ErrorEvent, ReplEvent, SchemaPredicate } from "./events.ts";
 
 /** Caller-supplied factory for backend-bound sessions. The REPL calls it
  *  once on first use and again on every `:reset`, closing the previous
- *  binding via the returned `close` callback. The factory is the seam
- *  through which the CLI plugs in its chosen backend / loaders without
+ *  binding via the returned `close` callback. The factory is the single
+ *  point at which the CLI plugs in its chosen backend / loaders, without
  *  the REPL knowing about either. */
 export type SessionFactory = () => Promise<{
   session: IncrementalSession;

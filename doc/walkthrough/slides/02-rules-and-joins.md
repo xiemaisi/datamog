@@ -125,7 +125,7 @@ CREATE OR REPLACE VIEW "grandparent" AS
   SELECT __b0."parent_name" AS col1,
          __b1."child_name"  AS col2
   FROM   "parent" AS __b0, "parent" AS __b1
-  WHERE  __b0."child_name" = __b1."parent_name";
+  WHERE  (__b0."child_name" IS NOT DISTINCT FROM __b1."parent_name");
 ```
 
 - A rule → a view.

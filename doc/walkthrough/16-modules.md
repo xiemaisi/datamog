@@ -155,7 +155,7 @@ Everything merges into one program with one least fixed point.
 >     SELECT __b0."src", __b0."dst" FROM "road" AS __b0
 >     UNION
 >     SELECT __b0."col1", __b1."dst" FROM "road_reach$0$reach" __b0, "road" __b1
->       WHERE __b0."col2" = __b1."src"
+>       WHERE (__b0."col2" IS __b1."src")
 >   ) SELECT * FROM "road_reach$0$reach";
 >
 > CREATE VIEW IF NOT EXISTS "road_reach" AS      -- the alias

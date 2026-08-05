@@ -41,7 +41,7 @@ Two facts bound the whole space and are worth stating up front:
   sound but incomplete: it can only accept a decidable subclass and must be
   conservative about the rest.
 - **The exact terminating class is only semi-decidable** (Calimeri et al. 2008),
-  so a runtime backstop is the honest complement to the static check, not a
+  so a runtime backstop is a necessary complement to the static check, not a
   substitute we could replace with a better analysis.
 
 ## Part 1: the static analysis (why it is only a warning)
@@ -117,7 +117,7 @@ teachable moment into a stack trace.
   incomplete: stratified negation assumes its input is fully computed, so
   `not p(...)` over an under-approximated `p` over-approximates, and an aggregate
   over a capped stratum is simply wrong. The "results are incomplete" banner is
-  the honest signal; we do not try to detect this precisely.
+  all the warning we give; we do not try to detect this precisely.
 - The cap bounds **loop count, not per-iteration work**. A rule that doubles a
   term's size each step can still blow memory within a few dozen iterations. If
   that ever bites, a companion "max total derived tuples" cap is a natural

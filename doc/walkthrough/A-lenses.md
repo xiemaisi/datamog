@@ -20,7 +20,7 @@ views we've developed across the tutorial.
 | ------------------ | ------------------------------------ | ------------------------- | ---------------------------- |
 | `X` (uppercase)    | universally-quantified variable      | `SELECT` column alias     | loop variable                |
 | `_` (don't-care)   | existentially-quantified / anonymous | `SELECT` with col ignored | `_` (same convention)        |
-| shared `X` in body | unification (same value)             | `WHERE a.c1 = b.c2`       | `if x1 == x2:` in the loop   |
+| shared `X` in body | unification (same value)             | `WHERE a.c1 IS NOT DISTINCT FROM b.c2` | `if x1 == x2:` in the loop   |
 | constant `"s"`     | ground term                          | `WHERE col = 's'`         | `if x == "s":`               |
 
 ## Recursion, negation, aggregation

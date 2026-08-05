@@ -16,7 +16,7 @@ The generated SQL makes the condition explicit:
 CREATE OR REPLACE VIEW "self_parent" AS
   SELECT __b0."parent_name" AS col1
   FROM   "parent" AS __b0
-  WHERE  __b0."parent_name" = __b0."child_name"
+  WHERE  (__b0."parent_name" IS NOT DISTINCT FROM __b0."child_name")
 ;
 ```
 

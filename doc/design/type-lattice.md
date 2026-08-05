@@ -104,7 +104,7 @@ We chose this deliberately over the stricter alternative (reject `string` +
    join; it is an ad-hoc "these must match" check wearing a join's clothes.
 2. **`value` is the JSON escape hatch the language already has.** A column whose
    rows are sometimes strings and sometimes integers genuinely *is* a
-   heterogeneous JSON column. Widening to `value` describes it honestly, and the
+   heterogeneous JSON column. Widening to `value` describes it accurately, and the
    translator already knows how to lift each primitive branch (`to_jsonb` /
    `json_quote`), so no new machinery is needed.
 
