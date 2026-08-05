@@ -2503,7 +2503,50 @@ that universe*: concatenating two lists whose result exceeds the cap yields no
 matching proof, and that row drops out. To invent a value that is not a proof of
 any predicate, use a raw `value` literal (§7), not constructor syntax.
 
-### 8.5 Finiteness
+### 8.5 Proving a universal quantification
+
+Because §4.1 range-restricts every variable, "every `C` related to `S` satisfies
+`P`" quantifies over a finite relation, so it is a finite conjunction and its
+proof is the finite list of the sub-proofs. Both ways of building one use only
+what is already here; which applies depends on whether the quantification sits
+inside a recursion.
+
+**Outside a recursion, count and collect.** Aggregate the sub-proofs in a helper
+predicate, and join against the size of the domain so the list is known to be
+complete:
+
+```prolog
+pass(S, C) :: Pass :- did_pass(S, C).
+
+n_took(S, count(*))          :- took(S, _).
+passes(S, count(*), list(P)) :- took(S, C), P : pass(S, C).
+
+all_passed(S) :: Forall(Ps) :- n_took(S, N), passes(S, N, Ps).
+```
+
+Two things carry the weight. The aggregates sit in `passes`, which is not
+proof-carrying, so §8.1's rule against aggregates in a proof-carrying predicate
+is satisfied; and matching `passes`'s count against `n_took`'s is what makes the
+claim universal rather than existential, since without it the rule would fire
+whenever *some* course was passed. `all_passed` itself uses no aggregate, and
+§8.2's explicit-argument form takes the collected list as it stands.
+
+**Inside a recursion, walk the domain positionally.** §4.5 forbids a recursive
+aggregate, so the encoding above is unavailable and the standard answer is a
+prefix counter, where `p(X, N)` means "the first `N` elements satisfy it":
+
+```prolog
+body_derived(Clause, 0)     :: BNil  :- kb(Clause, _, _).
+body_derived(Clause, N + 1) :: BCons :- body_derived(Clause, N), body_atom_derived(Clause, N).
+```
+
+Here the list comes for free: the counter's recursion is structural, so the proof
+term is already a `Nil`/`Cons` chain of the elements' sub-proofs, the same shape
+as any other list-valued proof. `examples/proplog` is the full program, and
+`examples/proplog-forall` writes the same thing with a maximal predicate (§4.3)
+instead of a counter.
+
+### 8.6 Finiteness
 
 The set of derivations can be infinite even when the set of facts is finite: a
 recursion whose constructor nests a sub-proof (for example transitive closure
@@ -2514,7 +2557,7 @@ unbounded. Suppressing the recursive sub-proof with `_ :` removes the growth and
 keeps the proof terms finite; it is the way to record a shallow derivation over
 cyclic data.
 
-### 8.6 Evaluation
+### 8.7 Evaluation
 
 Proof terms are a source-level feature: a proof-carrying predicate gains one
 extra `value` column that its named rules fill with a tagged object, and every
