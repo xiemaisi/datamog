@@ -139,6 +139,39 @@ describe("native backend — parity-stratified recursion", () => {
     `);
     expect(col(rows!, "X")).toEqual(["a", "b"]);
   });
+
+  test("a maximal predicate may be proof-carrying (spec 8.6)", async () => {
+    // Each side of a parity stratum is a least fixed point, so a maximal
+    // predicate's derivations are finite and its proof terms are ordinary.
+    // Here the proof records which child made the parent non-constant.
+    const facts = `
+      literal("n1"). composite("add"). composite("mul").
+      child("add", "n1").
+      child("mul", "n1"). child("mul", "x").
+      constant(E) :- literal(E).
+      constant(E) :- composite(E), not bad^(E).
+    `;
+    const [proofs] = await run(`
+      ${facts}
+      bad^(E) :: Nonconstant :- child(E, C), not constant(C).
+      ?- P : bad^(E).
+    `);
+    expect(proofs).toEqual([{ E: "mul", P: { $proof: "bad::Nonconstant", args: ["x"] } }]);
+
+    // Naming the rules must not change which tuples are derived.
+    const [named] = await run(`
+      ${facts}
+      bad^(E) :: Nonconstant :- child(E, C), not constant(C).
+      ?- constant(E).
+    `);
+    const [unnamed] = await run(`
+      ${facts}
+      bad^(E) :- child(E, C), not constant(C).
+      ?- constant(E).
+    `);
+    expect(named).toEqual(unnamed!);
+    expect(col(named!, "E")).toEqual(["add", "n1"]);
+  });
 });
 
 describe("native backend — parity trace events", () => {

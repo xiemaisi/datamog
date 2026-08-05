@@ -2528,6 +2528,22 @@ SQL with nested accessor chains that can exceed a SQL engine's parser or
 expression-depth limit; the in-memory interpreters have no such limit, so they
 are the reliable target for substantial proof-term manipulation.
 
+A **maximal predicate** (§4.3) may be proof-carrying, and its proof terms are
+ordinary ones. Each side of a parity stratum is a least fixed point, rebuilt from
+∅ in every round of the alternating fixed point, so a derivation is finite and
+the proof term records the one that survived to the round at which the
+alternation converged. The polarity rule puts the opposite side only under
+negation, and a negated atom contributes no sub-proof (§8.2), so every sub-proof
+inside a maximal predicate's proof term belongs to a predicate of the same
+polarity. Like parity stratification itself, this is interpreter-only.
+
+```prolog
+# "every child is constant" as a maximal predicate, whose proof term records
+# the counterexample child it found.
+bad^(E) :: Nonconstant :- child(E, C), not constant(C).
+constant(E) :- composite(E), not bad^(E).
+```
+
 ## 9 Modules
 
 A Datamog file is a **function from input relations to output relations**: its
