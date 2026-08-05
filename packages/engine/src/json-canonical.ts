@@ -71,12 +71,19 @@ export function bigintSafeReplacer(_key: string, value: unknown): unknown {
   return value;
 }
 
-/** Render a single argument of a proof term (recursing into nested ones). */
+/**
+ * Render a single argument of a proof term, recursing into nested ones and
+ * through arrays. An array element can itself be a proof term, which is what
+ * a `list` aggregate over captured proofs produces, so descending into arrays
+ * is what keeps such a proof printing as `Forall([Pass(), Pass()])` rather
+ * than as raw JSON.
+ */
 function formatProofArg(value: unknown): string {
   const nested = formatProofTerm(value);
   if (nested !== undefined) return nested;
   if (typeof value === "string") return JSON.stringify(value);
   if (value === null) return "null";
+  if (Array.isArray(value)) return `[${value.map(formatProofArg).join(", ")}]`;
   if (typeof value === "object") return JSON.stringify(value, bigintSafeReplacer);
   return String(value);
 }

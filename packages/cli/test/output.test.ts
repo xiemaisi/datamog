@@ -81,6 +81,18 @@ describe("formatProofTerm", () => {
     expect(formatProofTerm(cons(7, cons(7, nil)))).toBe("Cons(7, Cons(7, Nil()))");
   });
 
+  test("descends into array arguments, which is what a list of proofs is", () => {
+    const pass = { $proof: "pass::Pass", args: [] };
+    expect(formatProofTerm({ $proof: "Forall", args: [[pass, pass]] })).toBe(
+      "Forall([Pass(), Pass()])",
+    );
+    // Nesting is arbitrarily deep, and non-proof elements keep their JSON form.
+    expect(formatProofTerm({ $proof: "F", args: [[[pass], "s", 1, null]] })).toBe(
+      'F([[Pass()], "s", 1, null])',
+    );
+    expect(formatProofTerm({ $proof: "F", args: [[]] })).toBe("F([])");
+  });
+
   test("returns undefined for anything that is not exactly a proof term", () => {
     expect(formatProofTerm({ a: 1 })).toBeUndefined();
     expect(formatProofTerm({ $proof: "X" })).toBeUndefined(); // no args
