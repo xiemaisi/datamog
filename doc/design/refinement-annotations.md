@@ -50,25 +50,40 @@ Decisions taken (see §2.1, §4, §5 for what each entails):
 
 ## 1 What the annotation is
 
-### 1.1 It is not a column
+### 1.1 The witness is proof-irrelevant, which is what makes erasure free
 
-Taken literally as an extra argument it breaks, and the reason is worth stating
-because it constrains the whole design. Datamog relations are sets, and spec
-§8.2 makes two distinct derivations of one fact into two rows. If a witness were
-a real column, `p(1, 2, w₁)` and `p(1, 2, w₂)` would be two tuples that erasure
-collapses to one, changing every `count` downstream. Erasure would not preserve
-meaning.
+A tier-1 proposition is a decidable comparison over concrete values. It either
+holds or it does not, and a witness that it holds carries no information beyond
+that fact, so the proposition has **at most one inhabitant**. Two derivations of
+`p(1, 2)` therefore produce the same witness, because there is only one witness
+to produce.
 
-The reading that works: the annotation is an **invariant of the erased
-predicate**, and no witness exists at any stage.
+That is the whole soundness argument for erasure, and it is worth stating
+carefully because the failure it rules out is real. Datamog relations are sets,
+so a witness that *varied* between derivations would make `p(1, 2, w₁)` and
+`p(1, 2, w₂)` two tuples, which erasure collapses into one, changing every
+`count` downstream. That is exactly what §8 proof terms do: §8.2 makes two
+distinct derivations of one fact into two rows, which is why they are observable
+data and not erasable. A refinement witness does not vary, so a column holding it
+would be constant-valued, and dropping a constant column changes no cardinality.
+
+**So the constraint to hold on to is that the annotation language stays
+proof-irrelevant.** No connective may make a witness observable. An existential
+would: in `exists Z. p(X, Z)` different `Z` are different witnesses, so the
+proposition has more than one inhabitant and erasure stops being sound. Tier 1
+has no existential, and tier 2's `forall` (§7) is safe, a function into a
+subsingleton being itself unique. Anything added later must clear the same bar.
+
+Given uniqueness, whether the witness "is a column" is a question of
+representation rather than of meaning: a constant column and no column denote the
+same relation. Nothing is kept (§6), and the convenient reading is as an
+**invariant of the erased predicate**:
 
 ```
 p(X, Y, _: Y > X)      means      ∀ x y, P x y → y > x
 ```
 
-with `P` the ordinary binary relation the rules define. There is nothing to
-erase because there was never anything there, which is also why the feature
-needs no runtime support of any kind.
+with `P` the ordinary binary relation the rules define.
 
 ### 1.2 It is not §8's proof term
 
@@ -479,8 +494,9 @@ express.
 ## 6 Erasure
 
 There is no erasure step. §5.10 already establishes that head annotations never
-reach codegen ("Codegen uses `columnTypes` only"), and §1.1 establishes that the
-annotation was never a column. So the feature is analysis-only:
+reach codegen ("Codegen uses `columnTypes` only"), and §1.1 establishes that a
+witness is unique, so a column holding one would be constant-valued and is simply
+never built. So the feature is analysis-only:
 
 - no grammar change beyond the one production,
 - no change to the translator, to any SQL dialect, or to either interpreter,
@@ -513,6 +529,13 @@ reach(X, Y, _: forall Z. reach(Y, Z) -> reach(X, Z)) :- ...
 
 The second is worth noticing: it expresses transitivity *per tuple*, which is
 otherwise a relation-level property (§8).
+
+Both stay proof-irrelevant, which §1.1 requires and which bounds what tier 2 may
+grow into. `not` and `forall` are safe, a function into a subsingleton being
+unique. An existential is not: `_: exists Z. p(X, Z)` has one inhabitant per
+witnessing `Z`, so it is proof-relevant and would make erasure unsound. If that
+is ever wanted, it belongs with §8's proof terms, which are observable data
+precisely because they record such a choice.
 
 What changes:
 
