@@ -903,30 +903,25 @@ whatever residual survives the decision. None is blocking.
    between two aggregates over one base, so it would be a different feature, and
    nothing else in the corpus asks for it.
 
-## Appendix: adjacent findings
+## Appendix: adjacent findings, all fixed
 
-Turned up while investigating this and independent of it.
+Turned up while investigating this, independent of it, and dealt with rather
+than left in a list. Recorded because each says something about proof terms that
+the spec had not said.
 
-1. **Universal-quantifier proof terms already work**, in §8's sense, with no
-   language change. Three encodings, each verified by running it: counting plus
-   `list` in a non-proof-carrying helper for the non-recursive case; the prefix
-   counter of `examples/proplog` for the recursive case, whose named rules yield
-   `BCons(BCons(BNil(), Atom(…)), Atom(…))`, a list of the premise sub-proofs;
-   and naming a maximal predicate's rules, which works because each side of a
-   parity stratum is a least fixed point (`examples/proplog-forall` with
-   `unmet^(Id) :: Unmet` gives correct proofs and an unchanged extension).
-2. **`formatProofArg` does not recurse into arrays.**
-   `engine/src/json-canonical.ts:75` handles a directly nested proof term but
-   sends an array argument to `JSON.stringify`, so a `list` aggregate over
-   captured proofs prints as raw JSON rather than as `Forall([Pass(), Pass()])`.
-   Two-line fix.
-3. **`::` on a `^` predicate is unchecked and should be defined, not rejected.**
-   Nothing in `core/src/analyzer.ts` rejects a proof-carrying maximal predicate,
-   and per finding 1 the combination behaves. What is missing is spec text, an
-   example and a test.
-4. **A negated atom of a proof-carrying predicate is unspecified.** §8.3 says
-   only that a proof *mark* on a negated atom is an error, not whether the atom
-   counts the implicit proof column. It does not, so `not derived(A)` is legal at
-   the declared arity even when `derived` is proof-carrying (verified). That is
-   the right semantics, since `not p(X)` means "no proof exists" and so
-   quantifies over proofs rather than naming one, but it is unstated.
+1. **Universal-quantifier proof terms already worked**, with no language change,
+   and nothing documented how. Range restriction makes every quantification
+   finite, so a universal claim's proof is the finite list of its sub-proofs;
+   what was missing was how to build one. Now spec §8.5, with the two encodings
+   split by whether the quantification sits inside a recursion.
+2. **`formatProofArg` did not recurse into arrays**, so a `list` aggregate over
+   captured proofs printed as raw tagged JSON instead of
+   `Forall([Pass(), Pass()])`. Fixed in `engine/src/json-canonical.ts`.
+3. **`::` on a `^` predicate was neither rejected nor specified.** It works and
+   should: each side of a parity stratum is a least fixed point, so derivations
+   are finite. Now spec §8.7, with a test in the native parity suite.
+4. **Negating a proof-carrying predicate was unspecified.** A mark is the only
+   way to reach the implicit proof column and a mark on a negated atom is an
+   error, so a negated atom never observes a proof: it is written at the
+   declared arity, and `not p(args)` holds when the fact has no proof at all.
+   Now spec §8.3.
