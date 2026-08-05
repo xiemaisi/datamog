@@ -9,6 +9,7 @@ import {
   elaborate,
   findInertPolarity,
   findInfiniteRisks,
+  findNullnessRisks,
   inferTypes,
 } from "datamog-core";
 import { CsvLoader, parseCsvContent } from "datamog-csv";
@@ -583,6 +584,15 @@ function emitPolarityWarnings(analyzed: Parameters<typeof findInertPolarity>[0])
   }
 }
 
+// Also always reported, and for the same reason: the symptom of both is a row
+// that quietly is not there. Neither fires unless a NULL can actually reach the
+// place in question, so a program with no nullable columns never sees these.
+function emitNullnessWarnings(typed: Parameters<typeof findNullnessRisks>[0]): void {
+  for (const d of findNullnessRisks(typed)) {
+    console.error(`warning: ${d.message}`);
+  }
+}
+
 function csvEscape(value: string): string {
   // `\r` on its own (old-Mac line endings) is as structurally significant
   // for CSV as `\n`; without it a value containing a bare CR would leak
@@ -807,6 +817,7 @@ async function main() {
   const analyzed = inferTypes(analyze(program, programPath));
   checkModuleBoundaries(analyzed, boundaries);
   emitPolarityWarnings(analyzed);
+  emitNullnessWarnings(analyzed);
 
   if (dryRun) {
     if (warnFiniteness) emitFinitenessWarnings(analyzed);

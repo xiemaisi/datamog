@@ -8,6 +8,7 @@ import {
   AnalyzerError,
   findInertPolarity,
   findInfiniteRisks,
+  findNullnessRisks,
   findPredicateReferences,
   findRecursiveCalls,
 } from "datamog-core";
@@ -417,6 +418,13 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 cycle: elideCycleLabels(d.cycle, msg.source),
               }
             : undefined,
+        })),
+        ...findNullnessRisks(typed).map((d) => ({
+          message: d.message,
+          from: d.offset,
+          to: d.end,
+          severity: "warning" as const,
+          cycle: undefined,
         })),
       ];
       // Recursive-call spans drive the editor's superscript glyph

@@ -186,10 +186,17 @@ function computePublishedNullness(
  * first, and every conjunct holds of every derived tuple. Run as a fixed point
  * so the result does not depend on the order the conjuncts happen to be in.
  */
-function refineBody(
+export function refineBody(
   owner: BodyOwner,
   columnNullness: ReadonlyMap<string, readonly boolean[]>,
   ctx: NullnessContext,
+  /**
+   * A conjunct to leave out. Used to ask what a variable's nullness would be
+   * without a particular guard, which is how the ordering-gap diagnostic avoids
+   * being talked out of its own premise: `X < 2` proves `X` non-null, so
+   * reading the refined set would hide the very gap the comparison creates.
+   */
+  skip?: BodyElement,
 ): ReadonlySet<string> {
   const nonNull = new Set<string>();
   let changed = true;
@@ -205,6 +212,7 @@ function refineBody(
     };
 
     for (const elem of owner.body) {
+      if (elem === skip) continue;
       switch (elem.$type) {
         case "Literal": {
           // A negated atom binds nothing, so it proves nothing.

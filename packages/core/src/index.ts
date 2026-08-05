@@ -104,6 +104,7 @@ export {
   type NullnessContext,
   type NullnessInfo,
 } from "./nullness.ts";
+export { findNullnessRisks, type NullnessDiagnostic } from "./nullness-diagnostics.ts";
 export { findRecursiveCalls, type RecursiveCall } from "./recursion.ts";
 export { findPredicateReferences, type PredicateReference } from "./references.ts";
 export {

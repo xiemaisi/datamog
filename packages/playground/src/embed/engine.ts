@@ -9,7 +9,12 @@ import {
   formatIterationCap,
 } from "datamog-backend-native";
 import { create as createSeminaive } from "datamog-backend-seminaive";
-import { AnalyzerError, findInertPolarity, findInfiniteRisks } from "datamog-core";
+import {
+  AnalyzerError,
+  findInertPolarity,
+  findInfiniteRisks,
+  findNullnessRisks,
+} from "datamog-core";
 import { DatamogExecutor, type QueryResult } from "datamog-engine";
 import { ParseError } from "datamog-parser";
 import { InMemoryCsvLoader } from "../lib/csv-loader.ts";
@@ -53,6 +58,7 @@ export function lintSource(source: string): EmbedLintResult {
     const diagnostics: SimpleDiagnostic[] = [
       ...findInertPolarity(typed),
       ...findInfiniteRisks(typed),
+      ...findNullnessRisks(typed),
     ].map((d) => ({
       from: d.offset ?? 0,
       to: d.end ?? source.length,
