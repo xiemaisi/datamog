@@ -330,6 +330,52 @@ describe("DatamogExecutor", () => {
     }
   });
 
+  test("an inferred-nullable join still matches NULL to NULL across backends", async () => {
+    // null.md §4's own example. Both columns get their NULL from a division,
+    // not from a declaration, so the join lowering has to be driven by the
+    // inferred nullness. If it were not, the plain `=` would drop the NULL row
+    // on SQLite and disagree with the interpreter.
+    const program = `
+      p(1). p(X) :- X = 1 / 0.
+      q(2). q(X) :- X = 1 / 0.
+      output predicate shared(X) :- p(X), q(X).
+      ?- shared(X).
+    `;
+    for (const results of await executeOnSqliteAndNative(program)) {
+      expect(results[0]!).toEqual([{ X: null }]);
+    }
+  });
+
+  test("a guard that proves non-nullness keeps the same answer across backends", async () => {
+    // The guard makes the join lower to a plain `=`. The NULL row is excluded
+    // either way, so the guarded program agrees with what the null-aware form
+    // would have produced.
+    const program = `
+      p(1). p(2). p(X) :- X = 1 / 0.
+      q(2). q(3). q(X) :- X = 1 / 0.
+      output predicate shared(X) :- p(X), q(X), X <> null.
+      ?- shared(X).
+    `;
+    for (const results of await executeOnSqliteAndNative(program)) {
+      expect(sortRows(results[0]!)).toEqual([{ X: 2 }]);
+    }
+  });
+
+  test("a declared-nullable join matches NULL to NULL across backends", async () => {
+    // The same invariant reached through a `?` declaration rather than through
+    // a partial operation. No rows are loaded, so the NULLs come from the
+    // facts, which is enough to exercise the lowering choice.
+    const program = `
+      input predicate t(a: integer?).
+      p(1). p(X) :- X = 1 / 0.
+      output predicate both(X) :- p(X), not t(X).
+      ?- both(X).
+    `;
+    for (const results of await executeOnSqliteAndNative(program)) {
+      expect(sortRows(results[0]!)).toEqual([{ X: 1 }, { X: null }]);
+    }
+  });
+
   test("shared integer/float variable meets to integer across backends", async () => {
     // X appears in an integer column and a float column, so its meet type is
     // integer — narrow enough to feed the bitwise `&` (rejected on floats).

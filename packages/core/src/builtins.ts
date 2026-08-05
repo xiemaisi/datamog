@@ -1,10 +1,40 @@
 import type { PrimitiveType } from "./ast.ts";
 
 /**
+ * How an overload behaves on NULL. The nullness analysis needs both
+ * directions, and they are independent — see
+ * doc/design/nullness-tracking.md §4.1.
+ *
+ * `strict`: a NULL argument forces a NULL result, so a non-null *result*
+ * proves every argument was non-null. This is what licenses reasoning
+ * backwards from a guard, which is how `f(X) < 2` refines `X`.
+ *
+ * `total`: non-null arguments never produce NULL, so nullness does not
+ * originate here. This is what licenses reasoning forwards, which is how a
+ * head expression's nullness is computed.
+ *
+ * Every builtin is strict (spec §5.4 propagates NULL through all of them),
+ * but the field is stated rather than assumed, because a future non-strict
+ * builtin would otherwise inherit refinement it does not license. Totality
+ * is the one that varies: the parsing, projection and domain-error families
+ * are all partial.
+ */
+export interface NullBehaviour {
+  readonly strict: boolean;
+  readonly total: boolean;
+}
+
+/** Strict, and never NULL when its arguments are not. */
+const TOTAL: NullBehaviour = { strict: true, total: true };
+
+/** Strict, but a NULL source: can yield NULL from non-null arguments. */
+const PARTIAL: NullBehaviour = { strict: true, total: false };
+
+/**
  * One overload of a built-in function. Backends key their SQL-emit and
  * native-impl tables on `key`; the analyzer/type-inference layer cares
- * only about `params` (for arity + arg-type compatibility) and `result`
- * (for the call's result type after resolution).
+ * about `params` (for arity + arg-type compatibility), `result`
+ * (for the call's result type after resolution) and `nulls` (for nullness).
  *
  * Keys follow the convention `<name>.<param-types-joined-by-_>` so that
  * a single-overload built-in has a predictable name (e.g. `upper.string`)
@@ -14,6 +44,7 @@ export interface Overload {
   readonly key: string;
   readonly params: readonly PrimitiveType[];
   readonly result: PrimitiveType;
+  readonly nulls: NullBehaviour;
 }
 
 export interface Builtin {
@@ -21,10 +52,23 @@ export interface Builtin {
   readonly overloads: readonly Overload[];
 }
 
-const ov = (key: string, params: PrimitiveType[], result: PrimitiveType): Overload => ({
+/**
+ * `nulls` is a required parameter, not a defaulted one. A new partial
+ * builtin that inherited `TOTAL` by omission would make the analysis claim
+ * non-nullness it cannot prove, which is the unsound direction and the exact
+ * risk null.md §6 declined this analysis over. Omitting it is a compile
+ * error instead.
+ */
+const ov = (
+  key: string,
+  params: PrimitiveType[],
+  result: PrimitiveType,
+  nulls: NullBehaviour,
+): Overload => ({
   key,
   params,
   result,
+  nulls,
 });
 
 const builtin = (name: string, overloads: Overload[]): [string, Builtin] => [
@@ -48,57 +92,69 @@ const builtin = (name: string, overloads: Overload[]): [string, Builtin] => [
  */
 export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   // String → string
-  builtin("upper", [ov("upper.string", ["string"], "string")]),
-  builtin("lower", [ov("lower.string", ["string"], "string")]),
-  builtin("trim", [ov("trim.string", ["string"], "string")]),
+  builtin("upper", [ov("upper.string", ["string"], "string", TOTAL)]),
+  builtin("lower", [ov("lower.string", ["string"], "string", TOTAL)]),
+  builtin("trim", [ov("trim.string", ["string"], "string", TOTAL)]),
   builtin("replace", [
-    ov("replace.string_string_string", ["string", "string", "string"], "string"),
+    ov("replace.string_string_string", ["string", "string", "string"], "string", TOTAL),
   ]),
 
-  // Math
-  builtin("abs", [ov("abs.integer", ["integer"], "integer"), ov("abs.float", ["float"], "float")]),
+  // Math. The domain-error family (`sqrt`, `ln`, `exp`) is partial by spec
+  // §5.4; the rest are total because rounding or negating a finite number
+  // stays finite, so their `finiteOrNull` guards are unreachable. The
+  // exception is two-argument `round`, where scaling by `10 ** n` can
+  // overflow before the rounding happens (`values.ts` `roundToScale`).
+  builtin("abs", [
+    ov("abs.integer", ["integer"], "integer", TOTAL),
+    ov("abs.float", ["float"], "float", TOTAL),
+  ]),
   builtin("round", [
     // arity-1: result is always integer (rounding to nearest whole). Single
     // (float) → integer overload covers integer inputs via promotion — the
     // result type doesn't depend on the input domain.
-    ov("round.float", ["float"], "integer"),
+    ov("round.float", ["float"], "integer", TOTAL),
     // arity-2: result follows the first arg's domain.
-    ov("round.integer_integer", ["integer", "integer"], "integer"),
-    ov("round.float_integer", ["float", "integer"], "float"),
+    ov("round.integer_integer", ["integer", "integer"], "integer", PARTIAL),
+    ov("round.float_integer", ["float", "integer"], "float", PARTIAL),
   ]),
-  builtin("floor", [ov("floor.float", ["float"], "integer")]),
-  builtin("ceil", [ov("ceil.float", ["float"], "integer")]),
-  builtin("sqrt", [ov("sqrt.float", ["float"], "float")]),
-  builtin("ln", [ov("ln.float", ["float"], "float")]),
-  builtin("exp", [ov("exp.float", ["float"], "float")]),
+  builtin("floor", [ov("floor.float", ["float"], "integer", TOTAL)]),
+  builtin("ceil", [ov("ceil.float", ["float"], "integer", TOTAL)]),
+  builtin("sqrt", [ov("sqrt.float", ["float"], "float", PARTIAL)]),
+  builtin("ln", [ov("ln.float", ["float"], "float", PARTIAL)]),
+  builtin("exp", [ov("exp.float", ["float"], "float", PARTIAL)]),
 
   // Value coercion / introspection. All take a single `value`
   // argument and dispatch to per-dialect SQL fragments at translation
-  // time.
-  builtin("as_string", [ov("as_string.value", ["value"], "string")]),
-  builtin("as_integer", [ov("as_integer.value", ["value"], "integer")]),
-  builtin("as_float", [ov("as_float.value", ["value"], "float")]),
-  builtin("as_boolean", [ov("as_boolean.value", ["value"], "boolean")]),
+  // time. The projections are partial: a wrong-shape argument yields NULL
+  // rather than raising (spec §5.4). `type_of` is total, its NULL result
+  // being strictness on a NULL argument rather than a shape failure.
+  builtin("as_string", [ov("as_string.value", ["value"], "string", PARTIAL)]),
+  builtin("as_integer", [ov("as_integer.value", ["value"], "integer", PARTIAL)]),
+  builtin("as_float", [ov("as_float.value", ["value"], "float", PARTIAL)]),
+  builtin("as_boolean", [ov("as_boolean.value", ["value"], "boolean", PARTIAL)]),
   builtin("length", [
-    ov("length.value", ["value"], "integer"),
-    ov("length.string", ["string"], "integer"),
+    // Non-collection `value` → NULL; a string always has a length.
+    ov("length.value", ["value"], "integer", PARTIAL),
+    ov("length.string", ["string"], "integer", TOTAL),
   ]),
-  builtin("type_of", [ov("type_of.value", ["value"], "string")]),
+  builtin("type_of", [ov("type_of.value", ["value"], "string", TOTAL)]),
 
   // Object helpers. `has_key` is a boolean presence test. `keys`
   // returns a sorted array of the object's keys (as JSON strings);
   // `values` returns the corresponding array of values, ordered by key
   // for cross-backend determinism. The projection helpers return
   // `NULL` on non-object input.
-  builtin("has_key", [ov("has_key.value_string", ["value", "string"], "boolean")]),
-  builtin("keys", [ov("keys.value", ["value"], "value")]),
-  builtin("values", [ov("values.value", ["value"], "value")]),
+  // `has_key` is total: a missing key or non-object receiver is `false`, not
+  // NULL. `keys` / `values` are partial, non-object input yielding NULL.
+  builtin("has_key", [ov("has_key.value_string", ["value", "string"], "boolean", TOTAL)]),
+  builtin("keys", [ov("keys.value", ["value"], "value", PARTIAL)]),
+  builtin("values", [ov("values.value", ["value"], "value", PARTIAL)]),
 
   // Serialise a `value` to its canonical JSON text — the inverse of
   // `parse_json`. Object keys are sorted, numbers normalised, no
   // whitespace inserted; the result is identical across every
   // backend so it's safe as a hash / dedup key.
-  builtin("to_json", [ov("to_json.value", ["value"], "string")]),
+  builtin("to_json", [ov("to_json.value", ["value"], "string", TOTAL)]),
 
   // Primitive conversions. `to_string` is polymorphic over numeric and
   // boolean inputs; the parsing variants (`to_integer`/`to_float`/
@@ -109,13 +165,13 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   // automatically, and `floor`/`ceil`/`round` cover the lossy
   // float-to-integer direction.
   builtin("to_string", [
-    ov("to_string.integer", ["integer"], "string"),
-    ov("to_string.float", ["float"], "string"),
-    ov("to_string.boolean", ["boolean"], "string"),
+    ov("to_string.integer", ["integer"], "string", TOTAL),
+    ov("to_string.float", ["float"], "string", TOTAL),
+    ov("to_string.boolean", ["boolean"], "string", TOTAL),
   ]),
-  builtin("to_integer", [ov("to_integer.string", ["string"], "integer")]),
-  builtin("to_float", [ov("to_float.string", ["string"], "float")]),
-  builtin("to_boolean", [ov("to_boolean.string", ["string"], "boolean")]),
+  builtin("to_integer", [ov("to_integer.string", ["string"], "integer", PARTIAL)]),
+  builtin("to_float", [ov("to_float.string", ["string"], "float", PARTIAL)]),
+  builtin("to_boolean", [ov("to_boolean.string", ["string"], "boolean", PARTIAL)]),
 
   // Parse a string as JSON. Returns NULL on malformed input rather
   // than raising — matching the rest of the parsing family
@@ -124,7 +180,7 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   // can manufacture an unbounded family of JSON values, so the
   // finiteness checker flags such cycles via the same general
   // FunctionCall-as-PLUS rule that flags string concat / arithmetic.
-  builtin("parse_json", [ov("parse_json.string", ["string"], "value")]),
+  builtin("parse_json", [ov("parse_json.string", ["string"], "value", PARTIAL)]),
 ]);
 
 /** Set of all overload keys defined in the registry. */

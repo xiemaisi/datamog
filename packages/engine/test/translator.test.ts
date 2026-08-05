@@ -93,8 +93,31 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     // Z is shared between parent(X, Z) and parent(Z, Y)
-    // Should produce a join condition on the child column of b0 and name column of b1
+    // Should produce a join condition on the child column of b0 and name column of b1.
+    // Both columns are declared without `?`, so neither can hold NULL and the
+    // plain `=` agrees with the null-aware form.
+    expect(sql).toContain('__b0."child" = __b1."name"');
+  });
+
+  test("a join on a nullable column stays null-aware", () => {
+    const result = translateSource(`
+      input predicate parent(name: string?, child: string?).
+      grandparent(X, Y) :- parent(X, Z), parent(Z, Y).
+    `);
+    const sql = norm(result.createViews[0]!);
     expect(sql).toContain('__b0."child" IS NOT DISTINCT FROM __b1."name"');
+  });
+
+  test("a guard on a nullable join column recovers the plain equality", () => {
+    // `Z <> null` proves the shared variable non-null, so the null-aware form
+    // has nothing left to do. See doc/design/nullness-tracking.md §4.2.
+    const result = translateSource(`
+      input predicate parent(name: string?, child: string?).
+      grandparent(X, Y) :- parent(X, Z), parent(Z, Y), Z <> null.
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain('__b0."child" = __b1."name"');
+    expect(sql).not.toContain("IS NOT DISTINCT FROM");
   });
 
   test("generates WHERE for constants in rule body", () => {
@@ -363,12 +386,12 @@ describe("translator", () => {
   });
 
   test("generates SQL for = constraint (non-binding equality)", () => {
-    // Body `X + 1 = Y` is a constraint — both sides bound. After the
-    // null-aware-equality migration this routes through the dialect's
-    // logical-equality emitter (Postgres uses `IS NOT DISTINCT FROM`,
-    // SQLite uses `IS`).
+    // Body `X + 1 = Y` is a constraint — both sides bound. This routes through
+    // the dialect's logical-equality emitter (Postgres uses `IS NOT DISTINCT
+    // FROM`, SQLite uses `IS`). Nullable columns, since a non-null side would
+    // take the plain `=` instead.
     const result = translateSource(`
-      input predicate pairs(a: integer, b: integer).
+      input predicate pairs(a: integer?, b: integer?).
       match(X, Y) :- pairs(X, Y), X + 1 = Y.
     `);
     const sql = norm(result.createViews[0]!);
@@ -501,8 +524,9 @@ describe("translator", () => {
     const sql = norm(unreachableView!);
     expect(sql).toContain("NOT EXISTS");
     expect(sql).toContain('SELECT 1 FROM "reachable"');
-    // The subquery should bind to the outer variable
-    expect(sql).toContain('"col1" IS NOT DISTINCT FROM __b0."name"');
+    // The subquery should bind to the outer variable. Non-null columns, so the
+    // binding is a plain `=`.
+    expect(sql).toContain('"col1" = __b0."name"');
   });
 
   test("generates a tagged combined CTE for mutual recursion (postgres)", () => {
@@ -813,7 +837,7 @@ describe("translator", () => {
       r(X) :- i(X), j(X).
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain('to_jsonb(__b0."x") IS NOT DISTINCT FROM __b1."x"');
+    expect(sql).toContain('to_jsonb(__b0."x") = __b1."x"');
     expect(sql).toContain('__b0."x" AS col1');
     expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
@@ -828,7 +852,7 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain('__b1."x" AS col1');
-    expect(sql).toContain('to_jsonb(__b1."x") IS NOT DISTINCT FROM __b0."x"');
+    expect(sql).toContain('to_jsonb(__b1."x") = __b0."x"');
     expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
 
@@ -861,16 +885,17 @@ describe("translator", () => {
     expect(sql).toContain("to_jsonb(5)");
   });
 
-  test("filter equality J = 5 (value vs int) lifts via dialect logicalEq (postgres)", () => {
-    // Binding-shaped equality where J is already bound by t(J)
-    // becomes a filter equality; the dialect's null-aware operator
-    // sees a lifted RHS so jsonb_col IS NOT DISTINCT FROM to_jsonb(5).
+  test("filter equality J = 5 (value vs int) lifts the primitive side (postgres)", () => {
+    // Binding-shaped equality where J is already bound by t(J) becomes a
+    // filter equality, and the primitive side is lifted so both operands are
+    // jsonb. The literal `5` cannot be NULL, so the comparison itself is a
+    // plain `=`; what this test pins is the lift.
     const result = translateSource(`
       input predicate t(j: value).
       r(J) :- t(J), J = 5.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("IS NOT DISTINCT FROM to_jsonb(5)");
+    expect(sql).toContain("= to_jsonb(5)");
   });
 
   test("IDB column unifies to value across primitive and value rules (postgres)", () => {
@@ -953,7 +978,7 @@ describe("translator", () => {
     expect(sql).toContain('AS "X"');
     expect(sql).toMatch(/"a" AS (col1|"col1")/);
     expect(sql).not.toMatch(/"b" AS .*"X"/);
-    expect(sql).toMatch(/"a" IS NOT DISTINCT FROM [^,)]*"b"/);
+    expect(sql).toMatch(/"a" = [^,)]*"b"/);
   });
 
   test("repeated variables in query atom on IDB predicate", () => {
@@ -964,7 +989,7 @@ describe("translator", () => {
     `);
     const sql = norm(result.queries[0]!);
     expect(sql).toContain('AS "X"');
-    expect(sql).toMatch(/"col1" IS NOT DISTINCT FROM [^,)]*"col2"/);
+    expect(sql).toMatch(/"col1" = [^,)]*"col2"/);
   });
 
   test("integer literal head arg is omitted from GROUP BY", () => {
@@ -1982,7 +2007,9 @@ maybe(X, B) :- t(X, _), B = (X = null).
   });
 
   test("`=` (logical equality) emits IS / IS NOT DISTINCT FROM per dialect", () => {
-    const source = `input predicate t(a: integer, b: integer).
+    // Nullable columns: with non-null ones the plain `=` agrees and is emitted
+    // instead, which the nullness test below covers.
+    const source = `input predicate t(a: integer?, b: integer?).
 q(X, Y) :- t(X, Y), X = Y.
 ?- q(X, Y).`;
     const sqliteSql = translateTyped(source, sqlite).createViews.join("\n");
@@ -2004,18 +2031,27 @@ q(X, Y) :- t(X, Y), X <> Y.
     expect(pgSql).toContain("IS DISTINCT FROM");
   });
 
-  test("a repeated variable joins null-aware, like a spelled-out `=`", () => {
+  test("a repeated variable joins like a spelled-out `=`, whatever the nullness", () => {
     // The two forms denote the same relation, so they must emit the same
-    // operator. See doc/design/null.md §4.
-    const shared = `input predicate t(a: integer, b: integer).
+    // operator. See doc/design/null.md §4. Which operator that is depends on
+    // whether a NULL can reach the join, so check both declarations: the
+    // invariant is that the two spellings agree, not that either operator is
+    // always the one emitted.
+    const cases = [
+      { columns: "a: integer, b: integer", expected: '__b0."a" = __b0."b"' },
+      { columns: "a: integer?, b: integer?", expected: '__b0."a" IS __b0."b"' },
+    ];
+    for (const { columns, expected } of cases) {
+      const shared = `input predicate t(${columns}).
 q(X, Y) :- t(X, Y), X = Y.
 ?- q(X, Y).`;
-    const repeated = `input predicate t(a: integer, b: integer).
+      const repeated = `input predicate t(${columns}).
 q(X, X) :- t(X, X).
 ?- q(X, Y).`;
-    for (const source of [shared, repeated]) {
-      const sql = translateTyped(source, sqlite).createViews.join("\n");
-      expect(sql).toContain('__b0."a" IS __b0."b"');
+      for (const source of [shared, repeated]) {
+        const sql = translateTyped(source, sqlite).createViews.join("\n");
+        expect(sql).toContain(expected);
+      }
     }
   });
 });

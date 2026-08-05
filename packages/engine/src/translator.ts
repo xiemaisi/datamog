@@ -15,6 +15,7 @@ import {
   type HeadAtom,
   type HeadTerm,
   type Literal,
+  type NullnessContext,
   type NumberLiteral,
   ORDERING_OPS,
   type Overload,
@@ -30,6 +31,7 @@ import {
   allVarsBound as coreAllVarsBound,
   chooseEqualityBinding as coreChooseEqualityBinding,
   inferTermType,
+  mayBeNull,
   meetTypes,
   queryProjection,
   rebuildVarTypes,
@@ -400,6 +402,13 @@ function translateRule(
     return translateFact(rule, analyzed, dialect);
   }
 
+  // Variables this body proves non-null, and enough context to ask the same
+  // question of a whole expression. Both feed the choice between the plain and
+  // the null-aware equality below. A body with no entry (a synthetic rule the
+  // analysis never saw) reads as "nothing proven", which keeps the null-aware
+  // form.
+  const nonNullVars = analyzed.nullness.nonNullVars.get(rule.body) ?? new Set<string>();
+
   // Categorize body elements and register bindings. Positive atoms are
   // processed first so ranges and equalities can reference variables bound by
   // atoms appearing later in the rule body (safety is order-independent).
@@ -760,13 +769,30 @@ function translateRule(
   // WHERE conditions
   const conditions: string[] = [];
 
+  // Nullness of an arbitrary expression under this body's refinements. Types
+  // come from the same `varTypes` the SQL emission uses, so the two agree on
+  // what an expression is.
+  const nullCtx: NullnessContext = {
+    overloads: functionOverloads,
+    typeOf: (_owner, expr) => inferTermType(expr, varTypes, columnTypes),
+  };
+  const cannotBeNullHere = (term: HeadTerm): boolean =>
+    !mayBeNull(term, nonNullVars, rule, nullCtx);
+
   // Join conditions from shared variables. A repeated variable means the
-  // same equality the `=` operator does, so these are null-aware unless one
-  // side is a constant that cannot be NULL. See doc/design/null.md §4, and
-  // §6 for what that costs on Postgres.
-  for (const [, refs] of bindings) {
+  // same equality the `=` operator does, so these are null-aware unless the
+  // variable cannot be NULL, in which case the two forms agree and the plain
+  // one keeps a hash join available. One non-null side is enough: a NULL on
+  // the other side is false under both operators, `IS NOT DISTINCT FROM`
+  // comparing it against a non-null value and a plain `=` yielding NULL for
+  // the filter to drop. The refinement pass already sets a variable non-null
+  // when any of its atom positions is a non-null column, so that condition is
+  // exactly what `nonNullVars` answers. See doc/design/null.md §4 and §6, and
+  // doc/design/nullness-tracking.md §1.
+  for (const [name, refs] of bindings) {
     if (refs.length < 2) continue;
     const first = refs[0]!;
+    const plainEq = nonNullVars.has(name);
     for (let i = 1; i < refs.length; i++) {
       const other = refs[i]!;
       conditions.push(
@@ -776,7 +802,7 @@ function translateRule(
           bindingToSql(other),
           other.type,
           dialect,
-          isLiteralBinding(first) || isLiteralBinding(other),
+          plainEq || isLiteralBinding(first) || isLiteralBinding(other),
         ),
       );
     }
@@ -821,7 +847,7 @@ function translateRule(
         conditions.push(
           markSpan(
             atom,
-            cannotBeNull(term) ? `${colSql} = ${lifted}` : dialect.logicalEq(colSql, lifted),
+            cannotBeNullHere(term) ? `${colSql} = ${lifted}` : dialect.logicalEq(colSql, lifted),
           ),
         );
       }
@@ -844,7 +870,10 @@ function translateRule(
       const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
       const slot = slotSql[k]!;
       conditions.push(
-        markSpan(atom, cannotBeNull(arg) ? `${slot} = ${lifted}` : dialect.logicalEq(slot, lifted)),
+        markSpan(
+          atom,
+          cannotBeNullHere(arg) ? `${slot} = ${lifted}` : dialect.logicalEq(slot, lifted),
+        ),
       );
     }
   }
@@ -862,7 +891,7 @@ function translateRule(
           const varType = varTypes.get(term.name);
           const lifted = liftToJsonIfNeeded(bindingToSql(refs[0]!), varType, expectedType, dialect);
           subConditions.push(
-            isLiteralBinding(refs[0]!)
+            isLiteralBinding(refs[0]!) || nonNullVars.has(term.name)
               ? `${ident(col)} = ${lifted}`
               : dialect.logicalEq(ident(col), lifted),
           );
@@ -879,7 +908,9 @@ function translateRule(
         );
         const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
         subConditions.push(
-          cannotBeNull(term) ? `${ident(col)} = ${lifted}` : dialect.logicalEq(ident(col), lifted),
+          cannotBeNullHere(term)
+            ? `${ident(col)} = ${lifted}`
+            : dialect.logicalEq(ident(col), lifted),
         );
       }
     }
@@ -916,6 +947,11 @@ function translateRule(
   // evaluator's `logicalEq`. When one side is `json` and the other a
   // primitive, lift the primitive so the dialect's null-aware operator
   // sees two compatible operands.
+  //
+  // A provably non-null side takes the plain `=` for the same reason the
+  // shared-variable join does. Doing it here as well as there is what keeps a
+  // repeated variable and a spelled-out equality emitting the same operator,
+  // which is the invariant null.md §4 rests on.
   for (const eq of equalityConstraints) {
     let lhs = termToSql(eq.left, bindings, varTypes, columnTypes, functionOverloads, dialect);
     let rhs = termToSql(eq.expr, bindings, varTypes, columnTypes, functionOverloads, dialect);
@@ -926,7 +962,8 @@ function translateRule(
     } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
       lhs = primitiveToJsonSql(lhs, leftType, dialect);
     }
-    conditions.push(markSpan(eq, dialect.logicalEq(lhs, rhs)));
+    const plainEq = cannotBeNullHere(eq.left) || cannotBeNullHere(eq.expr);
+    conditions.push(markSpan(eq, plainEq ? `(${lhs} = ${rhs})` : dialect.logicalEq(lhs, rhs)));
   }
 
   // Filter range conditions (non-binding ranges)
@@ -1171,9 +1208,8 @@ function termToSql(
         !isNumericArithmetic,
       );
       // Logical and/or: map the source's `&&`/`||` to SQL's `AND`/`OR`.
-      // Three-valued logic (NULL handling) is identical across all four
-      // SQL dialects and the native evaluator, so no extra wrapping is
-      // needed.
+      // Three-valued logic (NULL handling) is identical across every SQL
+      // dialect and the native evaluator, so no extra wrapping is needed.
       if (term.op === "&&") return `(${leftSql} AND ${rightSql})`;
       if (term.op === "||") return `(${leftSql} OR ${rightSql})`;
       // For equality, lift the primitive side when the other is json so
@@ -1441,9 +1477,15 @@ function isSelfRecursive(rule: Rule, predicate: string): boolean {
 /** True if a binding resolves to a pure SQL literal (number or quoted string). */
 /**
  * True if a term can never evaluate to NULL, so a plain SQL `=` against it
- * agrees with the null-aware form. Deliberately syntactic and conservative:
- * this is not the nullability analysis of doc/design/null.md §6, only the
- * literal cases, which are what atom arguments mostly are.
+ * agrees with the null-aware form. Syntactic and conservative: only the
+ * literal cases.
+ *
+ * Used by `totalOrderingSql`, which runs inside `termToSql` and so has no
+ * access to the enclosing body's refinements. The real analysis
+ * (`mayBeNull`, see doc/design/nullness-tracking.md §4) is what the equality
+ * sites use, where the body is in scope. Keeping the syntactic one here costs
+ * nothing measurable: an ordering comparison is never a hash or merge join
+ * key, so the wrapper it fails to remove is not on any plan's critical path.
  */
 function cannotBeNull(term: Expression): boolean {
   switch (term.$type) {

@@ -8,6 +8,7 @@ import type { AnalyzedProgram, BuiltinBodyAtomSpec } from "./analyzer.ts";
 import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } from "./ast.ts";
 import { BITWISE_OPS, COMPARISON_OPS, EQUALITY_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
+import { type BodyOwner, type NullnessInfo, inferNullness } from "./nullness.ts";
 
 export interface TypedProgram extends AnalyzedProgram {
   /** Column types for every predicate (EDB and IDB). Used by codegen. */
@@ -27,6 +28,14 @@ export interface TypedProgram extends AnalyzedProgram {
    * dispatch — no name-based switches downstream.
    */
   functionOverloads: Map<FunctionCall, Overload>;
+  /**
+   * Which columns can hold SQL NULL, and which variables each body proves
+   * cannot. A second component beside the base type rather than an element
+   * within it, so `columnTypes` is unchanged by it. Codegen reads this to
+   * choose between the null-aware and the plain equality; see
+   * doc/design/nullness-tracking.md.
+   */
+  nullness: NullnessInfo;
 }
 
 /**
@@ -165,7 +174,24 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     publishedTypes.set(pred, pubTypes);
   }
 
-  return { ...analyzed, columnTypes, publishedTypes, functionOverloads };
+  // Nullness is a second component beside the base type, inferred by its own
+  // fixed point once the types it reads are final. Variable types per body are
+  // memoised: they no longer change here, but `inferNullness` revisits each
+  // rule on every round of its outer loop.
+  const varTypeCache = new Map<BodyOwner, Map<string, PrimitiveType>>();
+  const nullness = inferNullness(analyzed, {
+    overloads: functionOverloads,
+    typeOf: (owner, expr) => {
+      let vars = varTypeCache.get(owner);
+      if (!vars) {
+        vars = rebuildVarTypes(owner.body, types);
+        varTypeCache.set(owner, vars);
+      }
+      return inferTermType(expr, vars, types);
+    },
+  });
+
+  return { ...analyzed, columnTypes, publishedTypes, functionOverloads, nullness };
 }
 
 function isNumericType(t: PrimitiveType | undefined): boolean {
@@ -802,8 +828,8 @@ function validateAggregateArgType(
  * earlier in `analyze` (`checkFunctionCalls`), so we don't repeat those
  * messages here. If args are still under-determined at validation time
  * — the only realistic case is a `null` literal in arg position — we
- * leave the overload unrecorded and let the runtime three-valued
- * evaluation produce NULL; the type system has already accepted a
+ * leave the overload unrecorded and let NULL propagate at runtime;
+ * the type system has already accepted a
  * non-undefined result type via `agreedResultType`.
  */
 function resolveAndRecordCall(
