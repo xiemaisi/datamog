@@ -75,19 +75,27 @@ Call this `T̂`. The five user-visible types are `T = {string, integer,
 float, boolean, value}`; `T̂` adds two elements the surface language cannot
 name.
 
-**⊥** arises only from a meet of incompatible requirements. Note that it
-is genuinely uninhabited, and NULL is not a counterexample: a variable
-shared between two atoms is an equijoin, and NULL never joins with NULL.
+**⊥** arises only from a meet of incompatible requirements, and it is genuinely
+uninhabited. NULL is not a counterexample, but the reason is not the obvious one.
+It is *not* that NULL fails to join with itself: since comparison became total a
+shared variable joins NULL to NULL (null.md §4), so the two NULL-carrying columns
+below do meet.
 
 ```prolog
 p(1). p(X) :- X = 1 / 0.
 q(2). q(X) :- X = 1 / 0.
-r(X) :- p(X), q(X).      % empty on native, seminaive and sqlite
+r(X) :- p(X), q(X).      % {null} on native, seminaive and sqlite
 ```
 
-So there is no type below the primitives inhabited by NULL, and adding a
-surface `null` type below them would make `string ⊓ integer` inhabited and
-turn a conflict into an always-empty predicate.
+The reason is that nullness is a second component beside the base type rather
+than an element within it
+([nullness-tracking.md](./nullness-tracking.md) §7), so a NULL cannot inhabit a
+base-type conflict. Nothing met to ⊥ above: `p` and `q` are both `integer`. A
+variable shared between a `string` atom and an `integer` atom is rejected
+statically and never runs at all. So there is no type below the primitives
+inhabited by NULL, and adding a surface `null` type below them would make
+`string ⊓ integer` inhabited and turn a conflict into a predicate that silently
+carries NULL rows.
 
 **⊤** means "no constraint on the type". It sits *above* `value`, because
 `value` is a concrete type (a `value`-typed variable can be compared with
@@ -156,9 +164,11 @@ of the five types, as in SQL, so a `null` literal genuinely constrains
 nothing about the column it flows into. `q(X) :- X = 1 / 0.` yields an
 `integer` column holding NULL, and every partial operation in the language
 (`/`, `%`, `sqrt`, `ln`, `**`, a reversed slice) can produce one.
-Nullability is orthogonal to the lattice (an EDB column declares it with a
-`?` suffix, which changes the generated `NOT NULL` and what loaders may
-pass but not the base type inference sees), so ⊤ is the right element, and
+Nullability is orthogonal to the lattice: it rides as a second component beside
+the base type, declarable with a `?` suffix on an EDB column or a head
+annotation and inferred per column elsewhere
+([nullness-tracking.md](./nullness-tracking.md)), and none of it changes the
+base type inference sees. So ⊤ is the right element, and
 because ⊤ is the meet's identity no precision is lost where the variable
 has another source: `p(X), X = null` keeps `X ↦ Σ(p)₁`, with the equality
 acting as an `IS NULL` filter. Where the variable has no other source, the

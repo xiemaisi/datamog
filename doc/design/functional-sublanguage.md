@@ -196,8 +196,10 @@ and the exhaustiveness check.
 It also deletes a trap. Guards do not partition in general: `=` and `<>` are exact
 complements in every cell, so `X = "x"` against `X <> "x"` would have been fine, but
 `N < 0` against `N >= 0` is not, since null is incomparable and falls in neither. A
-checker that believed `N < 0 ∨ N >= 0` was total would be wrong. With a single
-clause there is nothing to partition.
+checker that believed `N < 0 ∨ N >= 0` was total would be wrong. That shape is now
+reported directly by `core/src/nullness-diagnostics.ts` as an ordering gap over a
+nullable operand, which is a warning a clause-guard checker would have had to
+duplicate. With a single clause there is nothing to partition.
 
 Worth having on its own, which is why it leads the ladder: one grammar production,
 one `CASE`, one branch in `values.ts`, and the inferred type is the join of the two
@@ -277,10 +279,12 @@ Worth stating, because it bounds the feature's reach.
 Comparison became total in `a205ee8`, and [`null.md`](./null.md) §5 draws the line
 as: NULL propagates through *operations* and is absorbed by *comparisons*.
 
-**A function is an operation, so it propagates.** Out-of-shape input needs no
-special rule: subscripting a leaf yields NULL, arithmetic on NULL yields NULL, and
-the depth budget yields NULL. That is the answer `3 / 0` and `sqrt(-1)` already
-give, so a function applied to garbage returns NULL rather than raising.
+**The operations inside a function propagate, so out-of-shape input needs no
+special rule.** Subscripting a leaf yields NULL, arithmetic on NULL yields NULL,
+and the depth budget yields NULL. That is the answer `3 / 0` and `sqrt(-1)`
+already give, so a function applied to garbage returns NULL rather than raising.
+Note this is a statement about the body, not about the function: a function as a
+whole need not propagate, which is the subject of the nullness decision below.
 
 **The conditional's condition absorbs.** A condition is a test, and tests absorb,
 so a NULL condition takes the else branch and the conditional is total. That is the
@@ -301,11 +305,33 @@ matters (`null.md` §8).
 evaluation mutually recursive with stratification, polarity and the finiteness
 graph.
 
-**Do not touch the lattice.** A non-recursive function inlines, so the existing
-inference types it with no new machinery. A recursive one destructures its argument
-by subscript, so that parameter is `value` and so is the result unless every branch
-agrees on a primitive. Nullability does not enter: there is no `null` type and
-inference never sees one ([`null.md`](./null.md) §7).
+**Do not touch the base lattice.** A non-recursive function inlines, so the
+existing inference types it with no new machinery. A recursive one destructures
+its argument by subscript, so that parameter is `value` and so is the result
+unless every branch agrees on a primitive. There is still no `null` type and no
+new base element ([`null.md`](./null.md) §7).
+
+**Nullness is a separate obligation, and it is not free.** Since
+[`nullness-tracking.md`](./nullness-tracking.md) shipped through stage 2, every
+builtin overload carries a `NullBehaviour` of `{strict, total}`, required rather
+than defaulted because inheriting `total` by omission would claim non-nullness
+the analysis cannot prove. A `fun` is a call in expression position, so it needs
+the same two bits, and neither comes for free:
+
+- **Never `total`.** The depth budget yields NULL from non-null arguments, so no
+  recursive function can claim it. `{strict, total: false}` is the ceiling, which
+  puts `fun` in the same class as the parsing and domain-error families.
+- **Usually not `strict` either.** Every builtin is strict. A function with a
+  null base case is not: `rev(null, Acc)` returns `Acc`, so a NULL argument gives
+  a non-NULL result. That is the *idiomatic* shape for recursion over cons-pairs,
+  not a corner case, so `fun` would be the first routinely non-strict callee in
+  the language. `builtins.ts` calls this out as exactly the case that would
+  otherwise inherit refinement it does not license.
+
+So the two bits have to be inferred from the body, which for recursive functions
+is a fixed point over the call graph, or else declared. Either way it is analysis
+work, and it is the part of this proposal that the nullness work has made more
+expensive rather than less.
 
 **First-order kills the payoff.** Without higher-order functions there is no `map`
 and no `fold`, and each traversal is hand-written, which is what a recursive
@@ -355,9 +381,9 @@ currently sidesteps:
    five backends, and nothing downstream learns the feature exists. It does not give
    you `double` in body-atom position, since this is an expression and not a
    relation.
-3. **Recursive `fun`**, interpreter-only, with the static subscript-chain rule and
-   the runtime depth budget. Removes the universe enumeration and the subterm
-   closures.
+3. **Recursive `fun`**, interpreter-only, with the static subscript-chain rule,
+   the runtime depth budget, and a `NullBehaviour` per function. Removes the
+   universe enumeration and the subterm closures.
 4. **Compile-time higher-order**, so `map` and `fold` exist. Only if 3 earns it.
 
 Steps 1 and 2 are worth doing regardless of what happens to the rest, and step 1 is

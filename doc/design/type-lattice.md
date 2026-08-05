@@ -206,8 +206,8 @@ inferred one.
 Whether a column can hold NULL is not one of the five types and not a position in
 the order. A `?` suffix (`age: integer?`) leaves the inferred base type identical.
 [null.md](./null.md) §7 records why a `null` *type* below the primitives does not
-work: it would make `string ⊓ integer` inhabited and turn a conflict into an
-always-empty predicate.
+work: it would make `string ⊓ integer` inhabited and turn a conflict into a
+predicate that silently carries NULL rows.
 
 It is instead a second component beside the base type, which keeps that verdict
 intact and reuses this document's machinery wholesale: componentwise meet within

@@ -105,7 +105,11 @@ than propagating:
 SELECT json_object(NULL, 1)   -- ERROR: json_object() labels must be TEXT
 ```
 
-So a guard is required either way. Yielding NULL for the whole object matches "NULL
+So a guard is required wherever the key may be NULL, and the nullness analysis
+([`nullness-tracking.md`](./nullness-tracking.md)) can now say where that is: the
+same reasoning that lets the translator emit a plain `=` against a provably
+non-null side would let the object builder skip its guard. Yielding NULL for the
+whole object matches "NULL
 propagates through operations" (`null.md` §5); skipping the entry is the
 alternative and is harder to justify, since it silently produces an object of a
 different shape.

@@ -69,8 +69,9 @@ states for head annotations, and it is what keeps the feature cheap.
 The obvious design is a `null` type below the primitives. It is already dead, and
 the reason is worth restating so this proposal is not read as reopening it:
 `p(X), X = null` requires `null` below every primitive, which makes
-`string ⊓ integer` inhabited and turns a type conflict into an always-empty
-predicate (null.md §7, [typing-and-safety-constraints.md](./typing-and-safety-constraints.md) §2).
+`string ⊓ integer` inhabited and turns a type conflict into a predicate that
+silently carries NULL rows
+(null.md §7, [typing-and-safety-constraints.md](./typing-and-safety-constraints.md) §2).
 That verdict stands.
 
 Nullness is orthogonal to the base type, so it belongs in a second component:

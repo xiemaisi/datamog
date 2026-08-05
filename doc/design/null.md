@@ -342,7 +342,8 @@ is worth recording so nobody re-derives it. For `p(X), X = null` to keep
 working, `null` would have to be below every primitive. But then
 `string ⊓ integer` is inhabited by it, so a variable shared between a string
 column and an integer column stops being a type error and becomes a
-null-typed, always-empty predicate. See
+null-typed predicate that silently carries NULL rows, since a shared
+variable joins NULL to NULL (§4). See
 [typing-and-safety-constraints.md](typing-and-safety-constraints.md) §2,
 which also covers why the analyser's "no type information" element sits
 *above* `value` rather than below the primitives.
