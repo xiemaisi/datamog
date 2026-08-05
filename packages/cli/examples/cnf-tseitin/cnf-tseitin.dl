@@ -67,6 +67,27 @@ tvar(N, Idx) :- internal(N), irank(N, R), nprop(P), Idx = P + R - 1.
 # Total number of variables the engine enumerates over.
 nvars(V) :- nprop(P), ninternal(I), V = P + I.
 
+# --- What the numbering has to guarantee ---
+#
+# The enumeration below ranges over 0 .. nvars-1, so the encoding is only
+# correct if the assignment above is a bijection onto exactly that range. Two
+# nodes sharing an index would silently produce a wrong formula.
+#
+# The property is easy to state wrongly. `tvar` is NOT injective: two
+# occurrences of the same propositional variable share an index, which is the
+# whole point of a var leaf reusing its name's index. Injectivity holds only
+# *up to variable naming*, which is what the first four say. The last two are
+# what makes `nvars` the right bound rather than merely an upper one.
+
+index_used(I) :- tvar(_, I).
+
+!- var_index(N1, I), var_index(N2, I), N1 <> N2.              # names injective
+!- tvar(A, I), tvar(B, I), A <> B, internal(A), internal(B).   # internals too
+!- tvar(V, I), tvar(N, I), node(V, "var"), internal(N).        # ranges disjoint
+!- tvar(N, I1), tvar(N, I2), I1 <> I2.                         # one index a node
+!- tvar(_, I), nvars(V), (I < 0) || (I >= V).                  # within the range
+!- nvars(V), I in [0 .. V - 1], not index_used(I).             # and onto it
+
 # --- Definitional clauses, one block per connective ---
 #
 # Clause ids are [Node, K] for the K-th clause of a node; the root assertion
