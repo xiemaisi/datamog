@@ -347,7 +347,7 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ```
 Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
-HeadTerm    ::= (AggregateCall | Expression) (':' PrimitiveType)?
+HeadTerm    ::= (AggregateCall | Expression) (':' PrimitiveType '?'?)?
 ```
 
 A **rule** defines a derived predicate (IDB) in terms of other predicates.
@@ -1629,6 +1629,52 @@ introduce NULL through those extensional columns — coercion failures raise
 load-time errors instead. EDB columns declared with `?` omit `NOT NULL`
 and may contain runtime NULLs.
 
+#### Nullness tracking
+
+Whether a column can hold a NULL is inferred, as a second component beside the
+base type rather than a type of its own. It is checked where annotations and
+module boundaries are checked (§5.10, §9.3), it feeds two warnings, and it
+selects between the two equality lowerings (§6). It never changes which tuples a
+program derives.
+
+An extensional column is nullable exactly when declared `?`. An intensional
+column is nullable when some rule for it can contribute a NULL, computed as a
+least fixed point seeded at non-null, so a recursive predicate is non-null when
+its base case is and its recursive step propagates. A head expression can
+contribute a NULL when it mentions a nullable variable, or when it applies an
+operation that is partial on non-null arguments (the sources above). `count` is
+never NULL; the other aggregates are NULL exactly when their argument is, a
+group existing only because a row does.
+
+Within a rule, a variable is **non-null** if the body proves it so. A body is a
+conjunction, so this is not order-sensitive: a guard written last constrains an
+atom written first. The following prove it:
+
+| body element (holding) | proves |
+|---|---|
+| a positive atom position whose column is non-null | that variable |
+| `X <> null`, `null <> X`, `not (X = null)` | `X` |
+| `e1 < e2` or `e1 > e2` | every variable in a strict position of `e1` and `e2` |
+| `X in [lo .. hi]` | every variable in a strict position of `X` |
+| `X = e` where `e` cannot be NULL | every variable in a strict position of `X` |
+| `f1 && f2` | whatever either proves |
+| `f1 \|\| f2` | whatever both prove |
+
+`<=` and `>=` prove nothing, being true of two NULLs, and neither does a negated
+ordering comparison, `not (X < 2)` being exactly where a NULL `X` lands. A
+negated atom proves nothing, binding nothing. A variable occurs in a **strict
+position** of an expression when the path to it passes only through operations
+that propagate NULL; `=`, `<>`, the orderings and the connectives are not among
+them, so nothing under one of those is proven.
+
+Two conditions are warned about rather than rejected, since both are specified
+behaviour that is sometimes wanted:
+
+- a filter that can evaluate to NULL, which drops its row as a false one would;
+- two rule bodies comparing the same operands with complementary operators
+  (`<` against `>=`, or `<=` against `>`), which read as a partition but leave
+  out NULL.
+
 #### Propagation in expressions
 
 NULL propagates through arithmetic, string concatenation, subscript,
@@ -1967,6 +2013,26 @@ recursive body computes with. See the type-lattice design note
 
 Module boundaries (§9.3) apply this same directional subtype check: the value
 flowing across a boundary must fit within the type declared for it.
+
+#### Nullness annotations
+
+A head annotation may carry a `?` after the type (`ratio(X: integer?)`),
+spelled as an input column spells it (§2.2). It is checked in the same
+direction as the type and by the same rules: per rule, per argument, and
+declared-must-equal-or-widen-inferred.
+
+- A `?` where the rule's contribution can be NULL is required. Omitting it is
+  an error naming the annotation that fixes it.
+- A `?` where the contribution cannot be NULL is accepted, and documents
+  looseness the way annotating `value` on an integer column does.
+- Nullness is inferred whether or not anything is annotated (§5.4), so the
+  annotation adds a check and never an inference input.
+- The published contract widens by `?` exactly as it widens by type, so
+  consumers and module boundaries (§9.3) see the declared nullness while the
+  predicate's own body sees the inferred one.
+
+Codegen reads the inferred nullness, never the declared one, so a `?` on a
+provably non-null column does not change the emitted SQL.
 
 ## 6 SQL Translation
 
@@ -2613,6 +2679,12 @@ proof column is named only for the declaration's own sake, since a query hides i
   declaring `integer` for a column contracted `value` is a static error, since
   the declaration would promise more than the contract guarantees. A mismatch
   either way is a static error.
+
+  Nullness travels the same contract (§5.4). A column whose published nullness
+  admits a NULL may not cross a boundary whose declaration omits `?`, in either
+  direction: not into a module input, and not out under an importing
+  declaration. As with types, the declaration may be looser than the contract
+  (declaring `?` for a column that never holds one) but never tighter.
 
 ## 10 Examples
 

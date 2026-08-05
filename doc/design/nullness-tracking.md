@@ -1,6 +1,8 @@
 # Design notes: tracking nullness in the type system
 
-Status: proposal. Nothing implemented, nothing in the spec.
+Status: implemented through stage 2 (§6); stage 3 declined (§7). The normative
+rules are spec §5.4 (tracking and refinement), §5.10 (annotations) and §9.3
+(boundaries). This note is the rationale and the alternatives rejected.
 
 [null.md](./null.md) §7 records that nullness stays out of the type system, and
 §6 records the one analysis that would have needed it as designed but
@@ -324,32 +326,48 @@ under-approximation would silently change which tuples a program derives, not
 just which plan it uses. That is the one outcome §1's invariant forbids, which is
 why the default has to point the other way.
 
-## 6. Staging
+## 6. Staging, as built
 
-Each stage is useful alone, and the order puts the payoff with a number on it
+Each stage was useful alone, and the order put the payoff with a number on it
 first.
 
-**Stage 0, analysis only.** §4 with no surface syntax and no diagnostics. Feeds
-one consumer: the translator emits a plain `=` for a join with at least one
-non-null side (`translator.ts:1194`, see §1) and drops the `COALESCE` wrappers on
-`<` and `<=` where both operands are non-null (`translator.ts:1581`). The
-comparison wrappers need both, and unlike the join they need the operator's result
-to stay in filter position: `not (X < 2)` reads the comparison as a value and must
-see `FALSE` rather than NULL for a NULL `X`, which is what the wrapper is for. Invisible, and
-testable by asserting emitted SQL plus a cross-backend result comparison on
-programs that mix nullable and non-null columns.
+**Stage 0, analysis only.** §4 with no surface syntax and no diagnostics, in
+`core/src/nullness.ts`. Its consumer is the translator, which emits a plain `=`
+where one side cannot be NULL, at the shared-variable join, the atom-argument
+matches and the body-level equality.
 
-**Stage 1, annotations.** §3.2 and §3.3. Grammar, `liftHeadAnnotations`,
-`argTypes` shape, `publishedTypes`, `checkHeadAnnotations`,
-`checkModuleBoundaries`. Touch points are the ones CLAUDE.md lists for a
-language feature, minus the interpreters, which need nothing: nullness never
-changes what they evaluate.
+Two notes from building it. The body-level equality had to be done at the same
+time as the join, not after: a repeated variable and a spelled-out `X = Y` are
+the same relation (null.md §4), so lowering one and not the other made the two
+spellings emit different operators, which a test caught immediately. And the
+`COALESCE` wrappers on `<` and `<=` were left alone. They sit inside `termToSql`,
+which has no access to the enclosing body's refinements, and threading it there
+would touch thirty call sites to buy nothing measurable: as `translator.ts`
+already observed before any of this, an ordering comparison is never a hash or
+merge join key. They keep the syntactic literal check.
 
-**Stage 2, diagnostics.** The two warnings from §1 payoff 2. Both want a fix
-suggestion in the message, since "this filter can be NULL" without "guard with
-`<> null`" is not much of a warning.
+**Stage 1, annotations.** §3.2 and §3.3. One grammar production, plus
+`liftHeadAnnotations`, the `argTypes` shape, `publishedNullness`,
+`checkHeadAnnotations` and `checkModuleBoundaries`. The interpreters needed
+nothing, as expected: nullness never changes what they evaluate.
 
-**Stage 3, declined.** Requiring `?` (§8).
+**Stage 2, diagnostics.** The two warnings from §1 payoff 2, in
+`core/src/nullness-diagnostics.ts`, surfaced by the CLI, the playground worker
+and the embed.
+
+The ordering-gap warning has one trap worth recording, because it inverts the
+obvious implementation. Its premise is that the operand can be NULL, but a strict
+comparison *proves* its operands non-null (§4.2), so reading the refined set
+answers "no" for the very comparison being warned about and the warning never
+fires. It has to ask what the operand's nullness would be *without* that
+conjunct, which is why `refineBody` takes a conjunct to skip.
+
+The sweep this stage was expected to need did not happen: across the 181 `.dl`
+files under `examples/`, the walkthrough and the solutions, neither warning
+fires. Both require a NULL to actually reach the place in question, and the
+corpus does not put one there.
+
+**Stage 3, declined.** Requiring `?` (§7).
 
 ## 7. Alternatives rejected
 

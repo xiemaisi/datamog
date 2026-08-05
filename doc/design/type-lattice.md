@@ -204,18 +204,17 @@ inferred one.
 ## Nullness is not in this lattice
 
 Whether a column can hold NULL is not one of the five types and not a position in
-the order. An input column's `?` suffix (`age: integer?`) leaves the inferred base
-type identical and reaches only the generated DDL and the loaders; a rule head
-has no such suffix at all. [null.md](./null.md) §7 records why a `null` *type*
-below the primitives does not work: it would make `string ⊓ integer` inhabited
-and turn a conflict into an always-empty predicate.
+the order. A `?` suffix (`age: integer?`) leaves the inferred base type identical.
+[null.md](./null.md) §7 records why a `null` *type* below the primitives does not
+work: it would make `string ⊓ integer` inhabited and turn a conflict into an
+always-empty predicate.
 
-[nullness-tracking.md](./nullness-tracking.md) proposes adding it as a second
-component beside the base type rather than an element within it, which keeps that
-verdict intact and reuses this document's machinery wholesale: componentwise meet
-within a rule and join across rules, `?` on head annotations under the same
-assume-guarantee split, the published type carrying the bit to consumers and to
+It is instead a second component beside the base type, which keeps that verdict
+intact and reuses this document's machinery wholesale: componentwise meet within
+a rule and join across rules, `?` on head annotations under the same
+assume-guarantee split, a published bit carrying the contract to consumers and to
 `checkModuleBoundaries`, and codegen reading the inferred bit only. The one place
 it departs is the invariant above, deliberately: a non-null column is what lets
 the translator emit a plain `=` instead of the null-aware form, so unlike a base
-type the inferred nullness does reach codegen. Annotations still do not.
+type the inferred nullness does reach codegen. Annotations still do not. See
+[nullness-tracking.md](./nullness-tracking.md) and spec §5.4.
