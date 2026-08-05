@@ -101,14 +101,15 @@ HeadAtom:
     predicate=Identifier (maximal?='^')? '(' (args+=HeadTerm (',' args+=HeadTerm)*)? ')';
 
 // A head term is an Expression, optionally carrying a type annotation
-// (`x: integer`). When the `:` is present the parsed expression is wrapped in
-// an AnnotatedHeadTerm; post-processing lifts the type onto the head's
-// `argTypes` and unwraps the expression, so downstream stages still see a
-// plain head term. Aggregate calls (`count(X)`, `sum(X)`, ...) are
-// syntactically FunctionCalls here; post-processing rewrites those into
-// AggregateCall.
+// (`x: integer`), which may itself carry a `?` marking the column nullable
+// (`x: integer?`), spelled the same way a ColumnDecl spells it. When the `:`
+// is present the parsed expression is wrapped in an AnnotatedHeadTerm;
+// post-processing lifts the type and the nullness onto the head's `argTypes`
+// and unwraps the expression, so downstream stages still see a plain head
+// term. Aggregate calls (`count(X)`, `sum(X)`, ...) are syntactically
+// FunctionCalls here; post-processing rewrites those into AggregateCall.
 HeadTerm:
-    Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType)?;
+    Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType (nullable?='?')?)?;
 
 // Not referenced directly by the grammar — synthesised by post-processing
 // so downstream stages (analyzer, translator) can rely on the AggregateCall

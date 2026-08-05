@@ -36,6 +36,11 @@ const MODULES: Record<string, string> = {
     output predicate opt() :: None.
     output predicate opt() :: Some :- elem(V).
   `,
+  // Divides, so its output column can hold NULL and its contract says so.
+  "ratio.dl": `
+    input predicate pair(a: integer, b: integer).
+    output predicate ratio(X, Y: integer?) :- pair(A, B), X = A, Y = A / B.
+  `,
   // Asserts an invariant about its own input, both anonymously and by name.
   "checked.dl": `
     input predicate p(a: integer, b: integer).
@@ -150,6 +155,51 @@ describe("module binding end-to-end", () => {
         "main.dl",
       ),
     ).toThrow(/bound to 'narrowed': column 1 has type 'value' but 'integer' was declared/);
+  });
+
+  test("a boundary rejects a nullable module output declared without `?`", () => {
+    // ratio.dl's second column is declared `integer?`, so the contract says it
+    // can hold NULL. Receiving it without a `?` promises more than the module
+    // proves, exactly as a narrowed type does.
+    expect(() =>
+      DatamogExecutor.prepareElaborated(
+        `pr(6, 3). input predicate got(x: integer, y: integer) := ratio from "ratio.dl"(pair = pr).`,
+        resolve,
+        "main.dl",
+      ),
+    ).toThrow(/bound to 'got': column 2 can hold NULL but 'integer' was declared without '\?'/);
+  });
+
+  test("a boundary accepts a nullable module output declared with `?`", async () => {
+    const { program } = DatamogExecutor.prepareElaborated(
+      `pr(6, 3). pr(1, 0).
+       input predicate got(x: integer, y: integer?) := ratio from "ratio.dl"(pair = pr).`,
+      resolve,
+      "main.dl",
+    );
+    const backend = await create();
+    try {
+      const results = await new DatamogExecutor(backend).executeAnalyzed(program);
+      expect(byLabel(results, "got")).toEqual([
+        { x: 1, y: null },
+        { x: 6, y: 2 },
+      ]);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  test("a nullable actual cannot be wired into a non-null module input", () => {
+    // The other direction of the same boundary: the importer's relation can
+    // hold NULL, and reach.dl's input does not admit one.
+    expect(() =>
+      DatamogExecutor.prepareElaborated(
+        `road(1, 2). road(X, Y) :- road(A, B), X = A / B, Y = B.
+         input predicate rr(a: integer, b: integer) := reach from "reach.dl"(edge = road).`,
+        resolve,
+        "main.dl",
+      ),
+    ).toThrow(/can hold NULL but 'integer' was declared without '\?'/);
   });
 
   test("imported ADT constructors are writable and distinct per instance", async () => {

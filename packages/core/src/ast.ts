@@ -7,6 +7,7 @@ import type {
   BinaryExpr,
   BooleanLiteral,
   FunctionCall,
+  HeadAnnotation,
   NullLiteral,
   NumberLiteral,
   HeadAtom as ParserHeadAtom,
@@ -32,6 +33,7 @@ export type {
   ExtDecl,
   Filter,
   FunctionCall,
+  HeadAnnotation,
   Literal,
   NullLiteral,
   NumberLiteral,
@@ -88,11 +90,12 @@ export type HeadTerm = AggregateCall | Expression;
 
 // Mirror the parser's HeadAtom/Rule shapes but broaden `args` to include the
 // synthesised AggregateCall nodes. `argTypes` carries optional per-column head
-// type annotations (`h(x: integer)`): the declared type per position, undefined
-// for unannotated positions; the whole array is absent when the rule has none.
+// type annotations (`h(x: integer)`, `h(x: integer?)`): the declared annotation
+// per position, undefined for unannotated positions; the whole array is absent
+// when the rule has none.
 export type HeadAtom = Omit<ParserHeadAtom, "args"> & {
   args: HeadTerm[];
-  argTypes?: (string | undefined)[];
+  argTypes?: (HeadAnnotation | undefined)[];
 };
 export type Rule = Omit<ParserRule, "head"> & { head: HeadAtom };
 

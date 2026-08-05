@@ -43,6 +43,13 @@ export interface DataSource {
 export interface BoundaryConstraint {
   predicate: string;
   expected: PrimitiveType[];
+  /**
+   * Per column, whether the declaration permits a NULL there (`integer?`).
+   * Same direction as `expected`: the wired predicate may be narrower than the
+   * declaration but never wider, so a nullable relation cannot be wired into a
+   * column declared without `?`.
+   */
+  expectedNullable: boolean[];
   /** Human-readable description of the boundary, for the error message. */
   note: string;
   /** Source position (offset, end) of the binding. */
@@ -270,6 +277,7 @@ function collectActualBoundaries(
       predicate: mergedActual(actual.arg),
       // An unannotated column defaults to `string` (parseRaw already sets this).
       expected: inputDecl.columns.map((c) => c.type ?? "string"),
+      expectedNullable: inputDecl.columns.map((c) => c.nullable === true),
       note: `actual '${actual.arg}' wired to input '${actual.param}' of "${binding.source}"`,
       pos: nodePos(importerDecl),
       file: importerFile,
@@ -291,6 +299,7 @@ function outputBoundary(
   return {
     predicate: output,
     expected: importerDecl.columns.map((c) => c.type ?? "string"),
+    expectedNullable: importerDecl.columns.map((c) => c.nullable === true),
     note: `output of "${binding.source}" bound to '${importerDecl.predicate}'`,
     pos: nodePos(importerDecl),
     file: importerFile,
@@ -320,10 +329,20 @@ export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryC
         b,
       );
     }
+    // Nullness rides the same contract: the published bit, so a `?` annotation
+    // on the wired predicate is honoured across the boundary even where its
+    // body currently produces no NULL.
+    const actualNullable = typed.nullness.publishedNullness.get(b.predicate);
     for (let i = 0; i < b.expected.length; i++) {
       if (!columnTypesCompatible(actual[i]!, b.expected[i]!)) {
         throw boundaryError(
           `${b.note}: column ${i + 1} has type '${actual[i]}' but '${b.expected[i]}' was declared`,
+          b,
+        );
+      }
+      if (actualNullable?.[i] === true && b.expectedNullable[i] !== true) {
+        throw boundaryError(
+          `${b.note}: column ${i + 1} can hold NULL but '${b.expected[i]}' was declared without '?'`,
           b,
         );
       }

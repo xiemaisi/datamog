@@ -86,6 +86,7 @@ export type BinaryOp =
 
 export {
   defaultColumnTypes,
+  type HeadAnnotation,
   liftHeadAnnotations,
   normalizeOperatorAliases,
   postProcess,

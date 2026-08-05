@@ -110,12 +110,14 @@ export interface AnnotatedHeadTerm extends langium.AstNode {
     readonly $container: HeadAtom;
     readonly $type: 'AnnotatedHeadTerm';
     expr: Expression;
+    nullable: boolean;
     type: PrimitiveType;
 }
 
 export const AnnotatedHeadTerm = {
     $type: 'AnnotatedHeadTerm',
     expr: 'expr',
+    nullable: 'nullable',
     type: 'type'
 } as const;
 
@@ -701,6 +703,10 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
             properties: {
                 expr: {
                     name: AnnotatedHeadTerm.expr
+                },
+                nullable: {
+                    name: AnnotatedHeadTerm.nullable,
+                    defaultValue: false
                 },
                 type: {
                     name: AnnotatedHeadTerm.type

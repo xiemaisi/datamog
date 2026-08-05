@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parse } from "datamog-parser";
+import { type HeadAnnotation, parse } from "datamog-parser";
 import { AnalyzerError, analyze } from "../src/analyzer.ts";
 import { inferTypes } from "../src/types.ts";
 
@@ -20,9 +20,12 @@ describe("head type annotations", () => {
   test("parsing lifts annotations onto head.argTypes and unwraps the term", () => {
     const program = parse('p("a": string, 2: integer).');
     const rule = program.statements[0] as {
-      head: { args: { $type: string }[]; argTypes?: (string | undefined)[] };
+      head: { args: { $type: string }[]; argTypes?: (HeadAnnotation | undefined)[] };
     };
-    expect(rule.head.argTypes).toEqual(["string", "integer"]);
+    expect(rule.head.argTypes).toEqual([
+      { type: "string", nullable: false },
+      { type: "integer", nullable: false },
+    ]);
     // The wrapper is gone: the args are ordinary terms again.
     expect(rule.head.args[0]!.$type).toBe("StringLiteral");
     expect(rule.head.args[1]!.$type).toBe("NumberLiteral");
@@ -184,5 +187,80 @@ describe("head annotations as consumer contracts (assume-guarantee)", () => {
         p(X: integer) :- raw(X).
       `),
     ).toThrow(/column 1 is annotated 'integer' but inferred as 'value'/);
+  });
+});
+
+// The nullness half of the same annotation: `h(x: integer?)`. Checked in the
+// same direction as the type (declared must equal or widen inferred) and, like
+// the type, never used to drive inference. See
+// doc/design/nullness-tracking.md §3.3.
+describe("head nullness annotations", () => {
+  test("parsing records the `?` alongside the type", () => {
+    const program = parse("p(1: integer, 2: integer?).");
+    const rule = program.statements[0] as {
+      head: { argTypes?: (HeadAnnotation | undefined)[] };
+    };
+    expect(rule.head.argTypes).toEqual([
+      { type: "integer", nullable: false },
+      { type: "integer", nullable: true },
+    ]);
+  });
+
+  test("`?` is accepted where the rule can produce a NULL", () => {
+    // Integer division truncates, so the type stays integer; what the `?`
+    // records is the zero divisor.
+    const typed = check(`
+      input predicate p(a: integer, b: integer).
+      ratio(X: integer?) :- p(A, B), X = A / B.
+    `);
+    expect(typed.columnTypes.get("ratio")).toEqual(["integer"]);
+    expect(typed.nullness.columnNullness.get("ratio")).toEqual([true]);
+  });
+
+  test("omitting `?` where the rule can produce a NULL is rejected", () => {
+    expect(() =>
+      check(`
+        input predicate p(a: integer, b: integer).
+        ratio(X: integer) :- p(A, B), X = A / B.
+      `),
+    ).toThrow(/column 1 is annotated 'integer' but this rule can produce NULL/);
+  });
+
+  test("`?` on a provably non-null column is allowed and documents looseness", () => {
+    // The mirror of annotating `value` on an integer column: the declaration
+    // may be looser than the body, never tighter.
+    const typed = check(`
+      input predicate p(a: integer).
+      q(X: integer?) :- p(X).
+    `);
+    // Inference is unchanged by the annotation; only the contract widens.
+    expect(typed.nullness.columnNullness.get("q")).toEqual([false]);
+    expect(typed.nullness.publishedNullness.get("q")).toEqual([true]);
+  });
+
+  test("a guard is enough to justify omitting `?`", () => {
+    const typed = check(`
+      input predicate p(a: integer?).
+      q(X: integer) :- p(X), X <> null.
+    `);
+    expect(typed.nullness.columnNullness.get("q")).toEqual([false]);
+  });
+
+  test("annotations are per rule, so siblings may disagree", () => {
+    const typed = check(`
+      input predicate p(a: integer, b: integer).
+      q(X: integer) :- p(X, _).
+      q(X: integer?) :- p(A, B), X = A / B.
+    `);
+    expect(typed.nullness.columnNullness.get("q")).toEqual([true]);
+  });
+
+  test("an aggregate position takes the annotation too", () => {
+    expect(() =>
+      check(`
+        input predicate p(a: integer?).
+        total(sum(X): integer) :- p(X).
+      `),
+    ).toThrow(/column 1 is annotated 'integer' but this rule can produce NULL/);
   });
 });

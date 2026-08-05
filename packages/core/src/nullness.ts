@@ -46,6 +46,19 @@ export interface NullnessInfo {
    * query's own `body` array. Keying on the node would miss every query.
    */
   readonly nonNullVars: ReadonlyMap<readonly BodyElement[], ReadonlySet<string>>;
+  /**
+   * Per rule, per head argument: that rule's own contribution, before the join
+   * across sibling rules. This is what a head annotation is checked against,
+   * annotations being per rule.
+   */
+  readonly headArgNullness: ReadonlyMap<Rule, readonly boolean[]>;
+  /**
+   * What each predicate advertises to consumers: `columnNullness` widened by
+   * any `?` head annotations on it. Module boundaries and consumers are checked
+   * against this; a predicate's own body and all of codegen use the inferred
+   * `columnNullness`, so an annotation never changes emitted SQL.
+   */
+  readonly publishedNullness: ReadonlyMap<string, readonly boolean[]>;
 }
 
 /**
@@ -114,7 +127,55 @@ export function inferNullness(analyzed: AnalyzedProgram, ctx: NullnessContext): 
     nonNullVars.set(owner.body, refineBody(owner, columnNullness, ctx));
   }
 
-  return { columnNullness, nonNullVars };
+  // Per-rule contributions, recomputed once now that the fixed point has
+  // converged: the loop above skips positions already known nullable, so it
+  // never has the full picture for every rule.
+  const headArgNullness = new Map<Rule, readonly boolean[]>();
+  for (const rules of analyzed.rules.values()) {
+    for (const rule of rules) {
+      const nonNull = nonNullVars.get(rule.body) ?? new Set<string>();
+      headArgNullness.set(
+        rule,
+        rule.head.args.map((arg) => mayBeNull(arg, nonNull, rule, ctx)),
+      );
+    }
+  }
+
+  return {
+    columnNullness,
+    nonNullVars,
+    headArgNullness,
+    publishedNullness: computePublishedNullness(analyzed, columnNullness),
+  };
+}
+
+/**
+ * The inferred nullness widened by `?` head annotations, which is the contract
+ * a predicate's consumers are held to.
+ *
+ * Only widening is possible: a `?` on a provably non-null column publishes it
+ * as nullable, documenting looseness the way a `value` annotation documents a
+ * loose type. The reverse is not a widening and is rejected by
+ * `checkHeadAnnotations` rather than quietly narrowing the contract.
+ */
+function computePublishedNullness(
+  analyzed: AnalyzedProgram,
+  columnNullness: ReadonlyMap<string, readonly boolean[]>,
+): ReadonlyMap<string, readonly boolean[]> {
+  const published = new Map<string, boolean[]>();
+  for (const [predicate, cols] of columnNullness) published.set(predicate, [...cols]);
+  for (const [predicate, rules] of analyzed.rules) {
+    const cols = published.get(predicate);
+    if (!cols) continue;
+    for (const rule of rules) {
+      const annotations = rule.head.argTypes;
+      if (annotations === undefined) continue;
+      for (let i = 0; i < annotations.length && i < cols.length; i++) {
+        if (annotations[i]?.nullable === true) cols[i] = true;
+      }
+    }
+  }
+  return published;
 }
 
 /**

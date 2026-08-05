@@ -138,7 +138,25 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
   // this map during the walk and threaded back out via TypedProgram.
   const functionOverloads = new Map<FunctionCall, Overload>();
   validateTypes(analyzed, types, published, functionOverloads);
-  checkHeadAnnotations(analyzed, types, published);
+
+  // Nullness is a second component beside the base type, inferred by its own
+  // fixed point once the types it reads are settled and the calls it reads are
+  // resolved. Variable types per body are memoised: they no longer change here,
+  // but `inferNullness` revisits each rule on every round of its outer loop.
+  const varTypeCache = new Map<BodyOwner, Map<string, PrimitiveType>>();
+  const nullness = inferNullness(analyzed, {
+    overloads: functionOverloads,
+    typeOf: (owner, expr) => {
+      let vars = varTypeCache.get(owner);
+      if (!vars) {
+        vars = rebuildVarTypes(owner.body, types);
+        varTypeCache.set(owner, vars);
+      }
+      return inferTermType(expr, vars, types);
+    },
+  });
+
+  checkHeadAnnotations(analyzed, types, published, nullness);
 
   // Finalize: reject unconstrained column types. `publishedTypes` is
   // `columnTypes` widened by annotations (`published` ≥ inferred, so it is
@@ -173,23 +191,6 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     columnTypes.set(pred, finalTypes);
     publishedTypes.set(pred, pubTypes);
   }
-
-  // Nullness is a second component beside the base type, inferred by its own
-  // fixed point once the types it reads are final. Variable types per body are
-  // memoised: they no longer change here, but `inferNullness` revisits each
-  // rule on every round of its outer loop.
-  const varTypeCache = new Map<BodyOwner, Map<string, PrimitiveType>>();
-  const nullness = inferNullness(analyzed, {
-    overloads: functionOverloads,
-    typeOf: (owner, expr) => {
-      let vars = varTypeCache.get(owner);
-      if (!vars) {
-        vars = rebuildVarTypes(owner.body, types);
-        varTypeCache.set(owner, vars);
-      }
-      return inferTermType(expr, vars, types);
-    },
-  });
 
   return { ...analyzed, columnTypes, publishedTypes, functionOverloads, nullness };
 }
@@ -1215,7 +1216,7 @@ function computePublishedTypes(
       const argTypes = rule.head.argTypes;
       if (argTypes === undefined) continue;
       for (let i = 0; i < argTypes.length; i++) {
-        const declared = argTypes[i] as PrimitiveType | undefined;
+        const declared = argTypes[i]?.type as PrimitiveType | undefined;
         if (declared !== undefined) cols[i] = unifyColumnType(cols[i], declared);
       }
     }
@@ -1254,11 +1255,17 @@ function contextForPredicate(
  * assume-guarantee context as validation (callees contribute their published
  * type, `pred`'s own references their inferred type). Checked only; annotations
  * do not drive codegen.
+ *
+ * The `?` half is checked the same way and in the same direction: a `?` on a
+ * provably non-null position is allowed and documents looseness, while omitting
+ * it where the rule can produce a NULL is rejected. Nullness is per rule too,
+ * so the contribution read here is the rule's own, not the joined column.
  */
 function checkHeadAnnotations(
   analyzed: AnalyzedProgram,
   inferred: Map<string, (PrimitiveType | undefined)[]>,
   published: Map<string, (PrimitiveType | undefined)[]>,
+  nullness: NullnessInfo,
 ): void {
   for (const [pred, rules] of analyzed.rules) {
     const types = contextForPredicate(pred, inferred, published);
@@ -1266,15 +1273,25 @@ function checkHeadAnnotations(
       const argTypes = rule.head.argTypes;
       if (argTypes === undefined) continue;
       const varTypes = rebuildVarTypes(rule.body, types);
+      const argNullness = nullness.headArgNullness.get(rule);
       for (let i = 0; i < rule.head.args.length; i++) {
-        const declared = argTypes[i] as PrimitiveType | undefined;
-        if (declared === undefined) continue; // this position is unannotated in this rule
-        const inferred = inferTermType(rule.head.args[i]!, varTypes, types);
-        if (inferred === undefined) continue; // unconstrained: the finalize step reports it
-        if (!columnTypesCompatible(inferred, declared)) {
-          const cst = rule.head.args[i]!.$cstNode ?? rule.head.$cstNode;
+        const annotation = argTypes[i];
+        if (annotation === undefined) continue; // this position is unannotated in this rule
+        const declared = annotation.type as PrimitiveType;
+        const cst = rule.head.args[i]!.$cstNode ?? rule.head.$cstNode;
+        const inferredType = inferTermType(rule.head.args[i]!, varTypes, types);
+        // An unconstrained type is reported by the finalize step; skip the type
+        // half here but still check the nullness half, which does not need it.
+        if (inferredType !== undefined && !columnTypesCompatible(inferredType, declared)) {
           throw new AnalyzerError(
-            `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but inferred as '${inferred}'`,
+            `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but inferred as '${inferredType}'`,
+            cst?.offset,
+            cst?.end,
+          );
+        }
+        if (argNullness?.[i] === true && !annotation.nullable) {
+          throw new AnalyzerError(
+            `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but this rule can produce NULL; annotate '${declared}?'`,
             cst?.offset,
             cst?.end,
           );

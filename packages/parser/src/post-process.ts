@@ -238,13 +238,24 @@ function replaceNode(oldNode: AstNode, newNode: AstNode): void {
  *    `Literal.negated` flag — they are negation-as-failure, not `!`.)
  */
 /**
+ * One head type annotation, as lifted onto `HeadAtom.argTypes`: the declared
+ * type and whether it carried a `?`. The two travel together rather than in
+ * parallel arrays, which would be free to drift out of step at the same
+ * argument position.
+ */
+export interface HeadAnnotation {
+  type: string;
+  nullable: boolean;
+}
+
+/**
  * Lift optional head-term type annotations onto the head. The grammar wraps an
- * annotated head term `h(x: integer)` in an AnnotatedHeadTerm{expr, type}; this
- * replaces each wrapper with its inner expression and records the declared type
- * in a parallel `argTypes` array on the head (undefined for unannotated
- * positions). The array is attached only when a rule annotates at least one
- * argument; the per-predicate all-or-nothing rule is enforced later, during
- * type inference.
+ * annotated head term `h(x: integer)` in an
+ * AnnotatedHeadTerm{expr, type, nullable}; this replaces each wrapper with its
+ * inner expression and records the declared type and nullness in a parallel
+ * `argTypes` array on the head (undefined for unannotated positions). The array
+ * is attached only when a rule annotates at least one argument; the
+ * per-predicate all-or-nothing rule is enforced later, during type inference.
  *
  * Runs in `parseRaw`, before elaboration and post-processing, so no later stage
  * ever sees an AnnotatedHeadTerm node.
@@ -254,12 +265,12 @@ export function liftHeadAnnotations(program: Program): void {
     if (!isRule(stmt)) continue;
     const args = stmt.head.args;
     let annotated = false;
-    const argTypes: (string | undefined)[] = new Array(args.length).fill(undefined);
+    const argTypes: (HeadAnnotation | undefined)[] = new Array(args.length).fill(undefined);
     for (let i = 0; i < args.length; i++) {
       const arg = args[i]!;
       if (!isAnnotatedHeadTerm(arg)) continue;
       annotated = true;
-      argTypes[i] = arg.type;
+      argTypes[i] = { type: arg.type, nullable: arg.nullable === true };
       const inner = arg.expr;
       (inner as { $container: AstNode }).$container = stmt.head;
       (inner as { $containerProperty?: string }).$containerProperty = "args";
@@ -267,7 +278,7 @@ export function liftHeadAnnotations(program: Program): void {
       (args as unknown as Expression[])[i] = inner;
     }
     if (annotated) {
-      (stmt.head as { argTypes?: (string | undefined)[] }).argTypes = argTypes;
+      (stmt.head as { argTypes?: (HeadAnnotation | undefined)[] }).argTypes = argTypes;
     }
   }
 }
