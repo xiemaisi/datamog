@@ -294,6 +294,14 @@ under-approximating means emitting a plain `=` and getting SQL's answer, but
 it means the analysis is only ever as trustworthy as that list. Not worth
 carrying until someone has a program that needs it.
 
+[nullness-tracking.md](./nullness-tracking.md) proposes building it, with a
+surface syntax and a per-rule refinement rule on top. It answers the coupling
+objection by making the declaration a required field on `Overload` (so a new
+builtin that omits it does not compile) and defaulting to nullable where a
+default is unavoidable, and it disputes "benign" above: emitting a plain `=`
+where a NULL can arrive is SQL's three-valued join, which is what §4 refuses,
+so an under-approximation would change results rather than only plans.
+
 ## 7. Why the static story stays clean
 
 None of the above leaks into the type system, which is worth saying because
@@ -315,7 +323,15 @@ both rows. See spec §2.5 and
 An EDB column may
 be declared nullable with a `?` suffix (`age: integer?`), which changes only
 whether the generated table gets `NOT NULL` and whether loaders may pass a
-NULL through; the Datamog base type used for inference is identical.
+NULL through; the Datamog base type used for inference is identical. There is
+no such suffix on a rule head, and nothing tracks which IDB columns can hold a
+NULL.
+
+[nullness-tracking.md](./nullness-tracking.md) proposes changing that: a
+nullness bit beside the base type rather than inside it, inferred per column,
+refined per rule from the guards that imply non-nullness. It keeps this
+section's verdict on a `null` *type* intact, since the bit is a second
+component and so cannot inhabit a base-type conflict.
 
 Adding `null` as a *type* below the primitives does not work, and the reason
 is worth recording so nobody re-derives it. For `p(X), X = null` to keep
