@@ -39,6 +39,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 !.claude/bug-hunt.md
 CLAUDE.local.md
 
+# Codex. Local tooling, so none of it is tracked. `/AGENTS.md` mirrors
+# `.claude/CLAUDE.md`, which is tracked; committing both would mean keeping two
+# copies of the project instructions in sync. Anchored for the same reason
+# `/core` is: unanchored, they would ignore a nested file of either name.
+/.codex/
+/AGENTS.md
+
 # Devcontainer env file — may hold a host gh token (GH_TOKEN); never commit it
 .devcontainer/.env
 
