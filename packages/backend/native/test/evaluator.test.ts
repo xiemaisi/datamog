@@ -1644,6 +1644,37 @@ describe("native backend — conjunctive queries", () => {
     ]);
   });
 
+  test("a named head argument can be used by the head's other arguments", async () => {
+    const results = await run(`
+      q(1). q(2). q(3).
+      p(count(*) as N, N + 1) :- q(_).
+      ?- p(A, B).
+    `);
+    expect(results[0]).toEqual([{ A: 3, B: 4 }]);
+  });
+
+  test("a name may be referenced by an earlier argument", async () => {
+    // Order-independent, like every other binding in the language.
+    const results = await run(`
+      q(1). q(2).
+      p(N + 1, count(*) as N) :- q(_).
+      ?- p(A, B).
+    `);
+    expect(results[0]).toEqual([{ A: 3, B: 2 }]);
+  });
+
+  test("naming does not disturb grouping", async () => {
+    const results = await run(`
+      q("a", 1). q("a", 2). q("b", 3).
+      p(K, count(*) as N, N * 10) :- q(K, _).
+      ?- p(K, N, M).
+    `);
+    expect(sortRows(results[0]!)).toEqual([
+      { K: "a", N: 2, M: 20 },
+      { K: "b", N: 1, M: 10 },
+    ]);
+  });
+
   test("an ungrouped aggregate expression still yields its one row", async () => {
     const results = await run(`
       q(1). q(2). q(3).

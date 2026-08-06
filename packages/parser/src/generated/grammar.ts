@@ -807,30 +807,93 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "operator": "="
               },
               {
-                "$type": "Keyword",
-                "value": ":"
-              },
-              {
-                "$type": "Assignment",
-                "feature": "type",
-                "operator": "=",
-                "terminal": {
-                  "$type": "RuleCall",
-                  "rule": {
-                    "$ref": "#/rules@6"
+                "$type": "Alternatives",
+                "elements": [
+                  {
+                    "$type": "Group",
+                    "elements": [
+                      {
+                        "$type": "Keyword",
+                        "value": "as"
+                      },
+                      {
+                        "$type": "Assignment",
+                        "feature": "name",
+                        "operator": "=",
+                        "terminal": {
+                          "$type": "RuleCall",
+                          "rule": {
+                            "$ref": "#/rules@34"
+                          },
+                          "arguments": []
+                        }
+                      },
+                      {
+                        "$type": "Group",
+                        "elements": [
+                          {
+                            "$type": "Keyword",
+                            "value": ":"
+                          },
+                          {
+                            "$type": "Assignment",
+                            "feature": "type",
+                            "operator": "=",
+                            "terminal": {
+                              "$type": "RuleCall",
+                              "rule": {
+                                "$ref": "#/rules@6"
+                              },
+                              "arguments": []
+                            }
+                          },
+                          {
+                            "$type": "Assignment",
+                            "feature": "nullable",
+                            "operator": "?=",
+                            "terminal": {
+                              "$type": "Keyword",
+                              "value": "?"
+                            },
+                            "cardinality": "?"
+                          }
+                        ],
+                        "cardinality": "?"
+                      }
+                    ]
                   },
-                  "arguments": []
-                }
-              },
-              {
-                "$type": "Assignment",
-                "feature": "nullable",
-                "operator": "?=",
-                "terminal": {
-                  "$type": "Keyword",
-                  "value": "?"
-                },
-                "cardinality": "?"
+                  {
+                    "$type": "Group",
+                    "elements": [
+                      {
+                        "$type": "Keyword",
+                        "value": ":"
+                      },
+                      {
+                        "$type": "Assignment",
+                        "feature": "type",
+                        "operator": "=",
+                        "terminal": {
+                          "$type": "RuleCall",
+                          "rule": {
+                            "$ref": "#/rules@6"
+                          },
+                          "arguments": []
+                        }
+                      },
+                      {
+                        "$type": "Assignment",
+                        "feature": "nullable",
+                        "operator": "?=",
+                        "terminal": {
+                          "$type": "Keyword",
+                          "value": "?"
+                        },
+                        "cardinality": "?"
+                      }
+                    ]
+                  }
+                ]
               }
             ],
             "cardinality": "?"

@@ -32,6 +32,7 @@ import {
   isRule,
   isVariable,
 } from "./generated/ast.js";
+import { substituteHeadNames } from "./head-names.ts";
 import { ParseError } from "./parse-error.js";
 
 // Post-processing attaches the original source text of numeric literals on
@@ -332,17 +333,30 @@ export function liftHeadAnnotations(program: Program): void {
     const args = stmt.head.args;
     let annotated = false;
     const argTypes: (HeadAnnotation | undefined)[] = new Array(args.length).fill(undefined);
+    const named = new Map<string, Expression>();
     for (let i = 0; i < args.length; i++) {
       const arg = args[i]!;
       if (!isAnnotatedHeadTerm(arg)) continue;
-      annotated = true;
-      argTypes[i] = { type: arg.type, nullable: arg.nullable === true };
+      // A wrapper may carry a name, a type, or both. Only a type marks the
+      // position annotated; a name is substituted away below and leaves no
+      // trace for `checkHeadAnnotations` to check.
+      if (arg.type !== undefined) {
+        annotated = true;
+        argTypes[i] = { type: arg.type, nullable: arg.nullable === true };
+      }
       const inner = arg.expr;
       (inner as { $container: AstNode }).$container = stmt.head;
       (inner as { $containerProperty?: string }).$containerProperty = "args";
       (inner as { $containerIndex?: number }).$containerIndex = i;
       (args as unknown as Expression[])[i] = inner;
+      if (arg.name !== undefined) {
+        if (named.has(arg.name)) {
+          throw parseErrorAtNode(`Duplicate head argument name '${arg.name}'`, arg);
+        }
+        named.set(arg.name, inner);
+      }
     }
+    if (named.size > 0) substituteHeadNames(stmt, named, parseErrorAtNode);
     if (annotated) {
       (stmt.head as { argTypes?: (HeadAnnotation | undefined)[] }).argTypes = argTypes;
     }

@@ -100,16 +100,20 @@ Query:
 HeadAtom:
     predicate=Identifier (maximal?='^')? '(' (args+=HeadTerm (',' args+=HeadTerm)*)? ')';
 
-// A head term is an Expression, optionally carrying a type annotation
-// (`x: integer`), which may itself carry a `?` marking the column nullable
-// (`x: integer?`), spelled the same way a ColumnDecl spells it. When the `:`
-// is present the parsed expression is wrapped in an AnnotatedHeadTerm;
-// post-processing lifts the type and the nullness onto the head's `argTypes`
-// and unwraps the expression, so downstream stages still see a plain head
-// term. Aggregate calls (`count(X)`, `sum(X)`, ...) are syntactically
-// FunctionCalls here; post-processing rewrites those into AggregateCall.
+// A head term is an Expression, optionally carrying a name (`e as N`) and a
+// type annotation (`x: integer`), which may itself carry a `?` marking the
+// column nullable (`x: integer?`), spelled the same way a ColumnDecl spells
+// it. `as` binds tighter than `:`, since a thing is named before it is typed.
+// When either is present the parsed expression is wrapped in an
+// AnnotatedHeadTerm; post-processing substitutes each name away, lifts the
+// type and the nullness onto the head's `argTypes`, and unwraps the
+// expression, so downstream stages still see a plain head term. Aggregate
+// calls (`count(X)`, `sum(X)`, ...) are syntactically FunctionCalls here;
+// post-processing rewrites those into AggregateCall.
 HeadTerm:
-    Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType (nullable?='?')?)?;
+    Expression ({infer AnnotatedHeadTerm.expr=current}
+        ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
+        | ':' type=PrimitiveType (nullable?='?')?))?;
 
 // Not referenced directly by the grammar — synthesised by post-processing
 // so downstream stages (analyzer, translator) can rely on the AggregateCall

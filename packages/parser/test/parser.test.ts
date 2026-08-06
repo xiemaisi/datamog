@@ -952,3 +952,48 @@ describe("exponentiation operator **", () => {
     });
   });
 });
+
+describe("head argument names", () => {
+  const headArgs = (src: string) => {
+    const program = parse(src);
+    const rule = program.statements[0] as unknown as { head: { args: { $type: string }[] } };
+    return rule.head.args;
+  };
+
+  test("substitutes the name away, leaving an ordinary expression", () => {
+    // No stage after parsing should see a name, so the second argument is a
+    // BinaryExpr over a copy of the first, not a reference to it.
+    const args = headArgs("p(1 as N, N + 1) :- q(_).");
+    expect(args[0]!.$type).toBe("NumberLiteral");
+    expect(args[1]!.$type).toBe("BinaryExpr");
+    const right = args[1] as unknown as { left: { $type: string } };
+    expect(right.left.$type).toBe("NumberLiteral");
+  });
+
+  test("each use gets its own copy rather than a shared node", () => {
+    const args = headArgs("p(1 as N, N, N) :- q(_).");
+    expect(args[1]).not.toBe(args[2]);
+  });
+
+  test("rejects a name that collides with a body variable", () => {
+    expect(() => parse("p(1 as N) :- q(N).")).toThrow(/also a body variable/);
+  });
+
+  test("rejects a self-referential name", () => {
+    expect(() => parse("p(N + 1 as N) :- q(_).")).toThrow(/refers to itself/);
+  });
+
+  test("rejects a cycle between two names", () => {
+    expect(() => parse("p(Y + 1 as X, X + 1 as Y) :- q(_).")).toThrow(/refers to itself/);
+  });
+
+  test("rejects a duplicate name", () => {
+    expect(() => parse("p(1 as N, 2 as N) :- q(_).")).toThrow(/Duplicate head argument name/);
+  });
+
+  test("a name composes with a type annotation", () => {
+    const args = headArgs("p(1 as N: integer, N + 1) :- q(_).");
+    expect(args[0]!.$type).toBe("NumberLiteral");
+    expect(args[1]!.$type).toBe("BinaryExpr");
+  });
+});

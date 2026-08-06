@@ -347,8 +347,10 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ```
 Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
-HeadTerm    ::= (AggregateCall | Expression) (':' PrimitiveType '?'?)?
+HeadTerm    ::= Expression ('as' Identifier)? (':' PrimitiveType '?'?)?
 ```
+
+An `Expression` in head position may contain aggregate calls (§2.7).
 
 A **rule** defines a derived predicate (IDB) in terms of other predicates.
 The head names the predicate being defined; the body is a conjunction of
@@ -369,6 +371,28 @@ A rule with a body derives tuples when all body elements are satisfied:
 ancestor(X, Y) :- parent(X, Y).
 ancestor(X, Y) :- parent(X, Z), ancestor(Z, Y).
 ```
+
+**Naming a head argument.** A head argument may be given a name with `as`, and
+the head's other arguments may then refer to it. This is what lets one value be
+used twice without writing the expression twice:
+
+```
+p(count(*) as N, N + 1) :- q(_).
+```
+
+A name is a **fresh binder scoped to the head**. It denotes the argument at that
+position, is invisible below the `:-`, and is substituted away before any later
+stage sees the rule, so naming never changes what a rule means. Three things
+follow:
+
+- Order does not matter: `p(N + 1, count(*) as N)` derives the same tuples.
+- A name must not collide with a variable the body binds, since it introduces a
+  binder rather than referring to one. Write the equality in the body instead.
+- Names must not refer to one another in a cycle, and each name must be
+  distinct within a head.
+
+`as` binds tighter than a type annotation, so a named argument is typed
+`p(count(*) as N: integer, N + 1)`.
 
 A rule prefixed with `output predicate` defines its predicate exactly as an
 ordinary rule does, and additionally exposes the predicate as a **named
