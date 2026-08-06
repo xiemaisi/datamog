@@ -1,14 +1,14 @@
 # Design notes: aggregates and names in head arguments
 
 Status: implemented. §1 and §2 shipped together, with the spec changes in
-§2.3 and §2.7. Stage 3 of §6 is the only part outstanding, and it waits on a
-feature that does not exist yet.
+§2.3 and §2.7. The only open question is whether an unused head name deserves a
+warning (§7).
 
 Two changes to what a rule head's argument may hold. They arrived together and
 are worth keeping apart, because only one of them has a case of its own:
 
 - **Aggregates inside expressions.** `var_index(Name, count(Other) - 1)`, where
-  today an aggregate must be the entire argument.
+  an aggregate previously had to be the entire argument.
 - **Naming a position.** `span(NT, I, I + 1 as K)`, so something other than the
   expression itself can refer to that column.
 
@@ -28,8 +28,9 @@ given rule happens to put there.
 
 ### 1.1 The workaround, four times over
 
-The corpus writes the same helper predicate four times, in four files, each used
-exactly once, each existing only to subtract one from a 1-based rank:
+Before §1 shipped, the corpus wrote the same helper predicate four times, in four
+files, each used exactly once and existing only to subtract one from a 1-based
+rank:
 
 | File | The pair |
 |---|---|
@@ -61,28 +62,27 @@ consumer, arithmetic on the result.
 
 ### 1.2 The restriction is mechanical, not principled
 
-`post-process.ts` rewrites an aggregate `FunctionCall` into an `AggregateCall`
-only over `rule.head.args[i]` directly, never descending into an expression. The
-analyzer's "Aggregate must be a top-level head argument" is that rewrite's
-shadow: it reports where the rewrite did not reach. No rationale is recorded
-beside either, and the grammar parses the nested form perfectly well, since an
-aggregate call is syntactically an ordinary `FunctionCall` until post-processing
-says otherwise.
+Before §1 shipped, `post-process.ts` rewrote an aggregate `FunctionCall` into an
+`AggregateCall` only at `rule.head.args[i]`, never inside an expression. The
+analyzer's "Aggregate must be a top-level head argument" was that rewrite's
+shadow. No rationale sat beside either, and the grammar already parsed the nested
+form because an aggregate call is syntactically an ordinary `FunctionCall` until
+post-processing says otherwise.
 
 So this is a restriction nobody argued for, which is the best kind to lift.
 
-### 1.3 What has to change
+### 1.3 What changed
 
 - **Post-processing** walks head-argument expressions rather than only their
   roots, rewriting every aggregate `FunctionCall` it finds.
-- **The analyzer's grouping rule** generalises from "this argument *is* an
-  aggregate" to "this argument *contains* one" (§3.1), and gains one new
+- **The analyzer's grouping rule** generalised from "this argument *is* an
+  aggregate" to "this argument *contains* one" (§3.1), and gained one new
   well-formedness check (§3.2).
 - **The translator** emits arithmetic over an aggregate. SQL already permits
   `COUNT(*) - 1` in a select list, so this is expression compilation over a new
   kind of leaf rather than new SQL shape.
 - **The interpreters'** aggregate reducer computes the aggregate and then
-  evaluates the enclosing expression, where today the aggregate is the result.
+  evaluates the enclosing expression, where the aggregate had been the result.
 
 ## 2 Naming a position
 
@@ -100,11 +100,9 @@ which uses one aggregate value twice rather than writing `count(*)` twice and
 relying on the reader to see they must agree.
 
 **Giving a refinement annotation something to mention.**
-[refinement-annotations.md](./refinement-annotations.md) §2.3 records a
-restriction it accepts reluctantly: an annotation may only mention a position
-whose head argument is a variable, so `span(NT, I, I + 1)` must first be
-rewritten to bind `I + 1` to a body variable. Naming removes the restriction
-outright:
+[refinement-annotations.md](./refinement-annotations.md) §2.3 requires every
+position mentioned by a contract to have a name. A computed expression has no
+name of its own, so `as` supplies one without introducing a body variable:
 
 ```prolog
 span(NT, I, I + 1 as K, _: I < K) :- token(I, W), lexicon(NT, W).
@@ -119,8 +117,8 @@ occurs in the head, so the arity is unchanged.
 
 ### 2.2 A head-scoped binder, not a variable
 
-The name should be **fresh and scoped to the head**, not an ordinary variable
-shared with the body. This is the choice that makes everything else simple.
+A name is **fresh and scoped to the head**, not an ordinary variable shared with
+the body. This is the choice that makes everything else simple.
 
 If a name were an ordinary variable, `p(I + 1 as K) :- q(K)` would be a join
 constraint, `p(I + 1 as I)` would assert `I = I + 1` and be quietly always
@@ -134,10 +132,9 @@ Nothing is lost. The join above is already writable as
 
 ### 2.3 What it does not fix
 
-Naming reduces the cost that refinement-annotations.md §2.3 records; it does not
-touch the larger one in §9.3. Under that document's disjunction rule, `jugs`
-still needs its invariant on all nine rules. It just stops needing four body
-rewrites first.
+Naming avoids body rewrites, but it does not touch the larger cost in
+refinement-annotations.md §9.3. Under that document's disjunction rule, `jugs`
+still needs its invariant on all nine rules.
 
 ## 3 Semantics
 
@@ -154,7 +151,7 @@ p(count(*) as N, N + 1)             # no grouping column: N + 1 mentions N
 p(K, count(*) as N, N + 1)          # groups by K
 ```
 
-### 3.2 The new well-formedness check
+### 3.2 The well-formedness check
 
 Once an aggregate can sit inside an expression, the expression can also mention
 a variable that is neither grouped nor aggregated, which today has nowhere to
@@ -186,17 +183,17 @@ Each falls out, but each is worth checking rather than assuming.
 
 Both features are source-level. §1 changes what the translator emits inside a
 `GROUP BY` query and what the interpreters' reducer evaluates, but adds no
-construct either has to learn. §2 reaches neither: a name is resolved during
-analysis and nothing downstream sees it.
+construct either has to learn. §2 reaches neither: a name is substituted during
+parsing and nothing downstream sees it.
 
 ## 4 Surface syntax
 
-The head-term production already carries one optional component and would carry
-two:
+The head-term production carries optional naming and type components:
 
 ```
-// datamog.langium:112, today
-Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType (nullable?='?')?)?;
+Expression ({infer AnnotatedHeadTerm.expr=current}
+    ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
+    | ':' type=PrimitiveType (nullable?='?')?))?;
 ```
 
 `as` binds tighter than `:`, since you name a thing and then say what it is:
@@ -205,9 +202,10 @@ Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType (nulla
 p(count(*) as N: integer, N + 1) :- q(_).
 ```
 
-`as` is already a contextual keyword (`core/src/keywords.ts`, used by the
-data-file binding `:= "f" as fmt`), so this needs no new reserved word, no lexer
-change, and nothing in the highlighter or the TextMate grammar.
+`as` was already a contextual keyword (`core/src/keywords.ts`, used by the
+data-file binding `:= "f" as fmt`), so this needed no new reserved word or lexer
+change. The playground already read the shared keyword set; the VS Code TextMate
+grammar needed its hard-coded alternation updated and now has a drift test.
 
 ## 5 Rejected alternatives
 
@@ -223,8 +221,8 @@ it: every corpus case computes from an aggregate in a head.
 join spelling that already exists and costs the shadowing and witness questions.
 
 **Positional reference instead of names**, so an annotation could say `$2` where
-today it needs a variable. It reads badly, and it silently retargets when a
-column is inserted, which a name does not.
+it otherwise needs a named position. It reads badly, and it silently retargets
+when a column is inserted, which a name does not.
 
 **A `let` binding in the head**, `p(let N = count(*), N + 1)`. Same meaning as
 `as`, more punctuation, and `let` would be a new reserved word where `as` is not.
@@ -252,8 +250,9 @@ grouping clause needed no code at all: the substituted argument simply contains
 the aggregate. Copies share a `$cstNode` deliberately, so an error inside a
 substituted expression points at the text the user wrote.
 
-**Stage 3: retire refinement-annotations.md §2.3.** Outstanding, and still
-waiting only on that proposal existing.
+**Stage 3: update refinement-annotations.md §2.3.** Complete. The proposal uses
+head-position names and records that refinement extraction must run before the
+parser substitutes them away.
 
 ## 7 Open questions
 

@@ -1,7 +1,7 @@
 # Design notes: tracking nullness in the type system
 
-Status: implemented through stage 2 (§6); stage 3 declined (§7). Two grouping
-divergences found after stage 0 shipped are fixed and recorded there, along with
+Status: implemented through stage 2 (§6); stage 3 declined (§7). The grouping
+corrections found after stage 0 shipped are fixed and recorded below, along with
 the reading of "grouping column" they settled. The normative rules are spec §5.4
 (tracking and refinement), §5.10 (annotations) and §9.3 (boundaries). This note is
 the rationale and the alternatives rejected.
@@ -44,10 +44,8 @@ prevent is already impossible.
    the analysis was specified in the first place.
 2. **Diagnostics for the corner that actually surprises people.** Two of them.
    A filter that evaluates to NULL drops its row silently, and `X < 2` together
-   with `X >= 2` does not cover a nullable `X` (null.md §5, §8). Both are
-   currently discovered by reading the output and counting. With nullness in the
-   environment, both are warnable at analysis time, and the warning can name the
-   guard that fixes it.
+   with `X >= 2` does not cover a nullable `X` (null.md §5, §8). Stage 2 warns
+   about both at analysis time and names the guard that fixes them.
 3. **A contract at module boundaries.** `checkModuleBoundaries` already holds
    `:=` wiring to a predicate's published type
    ([type-lattice.md](./type-lattice.md)). Nullness rides along for free: wiring
@@ -57,8 +55,7 @@ prevent is already impossible.
    [refinement-annotations.md](./refinement-annotations.md) §4.4 establishes that
    its tier 1 does not *need* this analysis, getting non-nullness from declared
    types, strict comparisons, and explicit guards instead. Those are exactly §4.2
-   below, done ad hoc. If this ships, that section becomes a reference rather
-   than a workaround.
+   below. That proposal now queries this analysis rather than rebuilding them.
 
 **What it must never do: change which tuples a program derives.** Nullness is a
 diagnostic and lowering fact, never a semantic one. Every rule below either
@@ -119,24 +116,21 @@ maybenull like anything else that can yield SQL NULL.
 ### 3.1 EDB columns: `?` already exists
 
 `ColumnDecl` already carries it (`datamog.langium:46`), and the loader and the
-DDL already honour it (`loader.ts:70`, `translator.ts:217`). What changes is only
-that the analyzer starts *reading* the bit it currently ignores. No syntax
-change, and no existing program's typing changes: an unannotated EDB column is
-non-null today (`NOT NULL`, coercion failures raise at load time) and stays
-non-null, a `?` column is nullable today and becomes maybenull in the
-environment.
+DDL already honour it (`loader.ts:70`, `translator.ts:217`). Stage 0 made the
+analyzer read the same bit. An unannotated EDB column remains non-null (`NOT
+NULL`, coercion failures raise at load time), while a `?` column enters the
+environment as maybenull.
 
 ### 3.2 IDB heads: widen the annotation slot
 
-Head type annotations already exist, already per rule and per argument, and the
-grammar slot is already there:
+Head type annotations were already per rule and per argument. Stage 1 added the
+`?` suffix to the existing grammar slot:
 
 ```
-// datamog.langium:111
-Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType)?;
+Expression ({infer AnnotatedHeadTerm.expr=current}
+    ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
+    | ':' type=PrimitiveType (nullable?='?')?))?;
 ```
-
-Admitting a `?` suffix is a one-production change, matching `ColumnDecl`:
 
 ```prolog
 reachable(X: string, Y: string) :- edge(X, Y).
@@ -144,10 +138,9 @@ fee(Id, Total: float?)  :- charge(Id, A, B), Total = A / B.
 totals(Dept, sum(Fee): float?) :- fee(Dept, Fee).
 ```
 
-`liftHeadAnnotations` currently records the declared type on
-`HeadAtom.argTypes: (string | undefined)[]` (`ast.ts:95`). That becomes an array
-of `{ type, nullable }` rather than a second parallel array, since two arrays
-indexed by argument position would be free to drift.
+`liftHeadAnnotations` records `{ type, nullable }` together in
+`HeadAtom.argTypes`, rather than using parallel arrays that could drift by
+argument position.
 
 ### 3.3 Annotations stay optional and stay checked
 
@@ -157,8 +150,8 @@ nullness as one more component:
 - **Guarantee**: the declared nullness must equal or widen the inferred one.
   `?` on a provably non-null column is legal and documents looseness. Omitting
   `?` on a column some rule can fill with NULL is an error.
-- **Assume**: `publishedTypes` gains a nullness component, consumers and module
-  boundaries are checked against it, and a predicate's own body is checked
+- **Assume**: `publishedNullness` accompanies `publishedTypes`; consumers and
+  module boundaries are checked against it, and a predicate's own body is checked
   against its inferred nullness. The trap type-lattice.md documents has an exact
   nullness analogue: a recursive predicate published as `?` whose own recursive
   step compares itself with `<` would fail to check its own definition if the
@@ -291,13 +284,12 @@ guess.
 
 ### 4.4 Where it is checked
 
-Nothing new: the sites that already exist for base types.
-`columnTypesCompatible` gains a nullness component (declared must equal or widen
-inferred), `checkHeadAnnotations` checks the head bit against the rule's own
-contribution, `checkModuleBoundaries` checks the published bit across `:=`
-wiring, and the comparison and atom-argument compatibility checks ignore the bit
-entirely, because a nullable value is admissible everywhere a non-null one is.
-That last point is what keeps the feature from rejecting existing programs.
+The checks sit beside the existing base-type checks. `checkHeadAnnotations`
+compares the head bit with the rule's own contribution, and
+`checkModuleBoundaries` reads `publishedNullness` beside `publishedTypes` across
+`:=` wiring. `columnTypesCompatible`, comparison compatibility and atom-argument
+compatibility remain base-type-only because a nullable value is admissible
+everywhere a non-null one is. That separation keeps existing programs valid.
 
 ## 5. The objection from null.md §6, answered
 
@@ -509,12 +501,12 @@ Four reasons the pair is the better representation:
    separately obvious. Flattened, one representation wears four hats, and `⊥?` and
    `⊤?` are junk: a nullness bit on an uninhabited type denotes nothing.
 4. **`PrimitiveType` is relied on far more widely than a lattice diagram shows.**
-   It is a five-member string union with 227 occurrences across 17 source files,
-   spanning the grammar, the builtin registry, DDL emission, result coercion and
-   the loaders. Doubling its members makes every exhaustive switch newly wrong,
+   It is a five-member string union used throughout the grammar, builtin registry,
+   DDL emission, result coercion and loaders. Doubling its members makes every
+   exhaustive switch newly wrong,
    and TypeScript reports the switches but not the string comparisons:
    `decl.columns.filter((c) => c.type === "value")` in `loader.ts` would quietly
-   stop seeing nullable `value` columns. A second field leaves all 227 sites
+   stop seeing nullable `value` columns. A second field leaves existing sites
    meaning what they already mean, which is what makes Stage 0 a non-breaking
    change rather than a sweep.
 
@@ -546,9 +538,8 @@ null.md §8 refuses and spec §2.9 already collapses.
 ## 8. Loose ends
 
 - **Proof columns are non-null by construction.** `post-process.ts` fills the
-  implicit proof column with an object literal, so the injected column can be
-  seeded non-null without an expression walk. Worth doing, since proof-carrying
-  predicates are exactly the ones with wide joins on the proof column.
+  implicit proof column with an object literal, and the ordinary expression walk
+  already classifies object construction as non-null.
 - **Parity-stratified predicates need no special case.** The `^` sigil changes
   what an SCC may contain, not how a head expression's nullness is computed, and
   ⊤ is never materialised, so the fixed point in §4.3 is unaffected.
@@ -559,6 +550,3 @@ null.md §8 refuses and spec §2.9 already collapses.
   (`values.ts:121`), and two safe integers cannot sum to a non-finite one. Where
   Postgres would raise instead is an existing cross-backend question, not one
   this proposal creates. See [postgres-alignment.md](./postgres-alignment.md).
-- **The `?` bit on an EDB column is currently untested as a typing input.**
-  Stage 0 should confirm that no example in `examples/` changes result on any
-  backend, since the whole invariant in §1 is that none can.

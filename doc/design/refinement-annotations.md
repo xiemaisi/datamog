@@ -1,8 +1,8 @@
 # Design notes: refinement annotations on rule heads
 
 Status: proposal, review blockers remain. Nothing implemented, nothing in the
-spec. The aggregate soundness findings are addressed in the body, but witness
-multiplicity, portable integer overflow, and the first implementation slice remain
+spec. The aggregate soundness findings and witness multiplicity are addressed in
+the body, but portable integer overflow and the first implementation slice remain
 unsettled.
 
 A head position may be annotated with a *proposition* over the predicate's
@@ -42,13 +42,13 @@ reading alongside this one.
 Decisions taken (see §2.1, §4, §5 for what each entails):
 
 - Sibling rules **disjoin**, exactly as §5.10's type annotations join.
-- **Tier 1 now**: propositions over head variables and arithmetic, decidable and
-  discharged automatically. **Tier 2** (propositions mentioning predicates)
-  designed in §7, not built.
-- The payoff is that **consumers may assume a contract**. No codegen changes, so
-  no backend is touched.
-- **Discharge is deferred** (§4.5). The first cut generates and prints
-  obligations, takes no solver dependency, and therefore does not yet deliver the
+- **Tier 1**: propositions over head variables and arithmetic, decidable and
+  eventually discharged automatically. **Tier 2** (propositions mentioning
+  predicates) is designed in §7, not built.
+- Once discharged, **consumers may assume a contract**. No codegen changes, so no
+  backend is touched.
+- The staged plan currently defers discharge (§4.5), but follow-up review leaves
+  that first-slice decision open. A generator-only slice would not deliver the
   payoff above.
 
 ## Review findings
@@ -59,8 +59,8 @@ have answers in the body; the unresolved parts are collected below.
 - **The erased witness does not fit `argTypes`.** That array aligns with runtime
   head arguments; a witness is a syntactic position that erases entirely, so
   another argument record would break the alignment. Answered in §10 phase 0:
-  rule-level storage. The attached decision, whether one rule may spell more than
-  one witness, is §11.6.
+  rule-level storage. Several witnesses on one rule are kept separately for
+  diagnostics and conjoined semantically (§2.1 and §11.6).
 - **Head aliases are lowered too early.** Head-name processing substitutes `K`
   with its expression during parsing and records no per-position name, so a later
   checker would see `I < I + 1` and lose the reference to the published position.
@@ -87,22 +87,19 @@ have answers in the body; the unresolved parts are collected below.
   Division and modulo are answered in §4.1; overflow is not.
 - **A generator-only increment has no consumer.** Until obligations are
   discharged, no analysis or module boundary may rely on a contract, so phases 0
-  to 2 land only if printed obligations are useful on their own. §4.5 accepts that
-  consequence, while §10 still asks whether discharge belongs in the first slice.
+  to 2 land only if printed obligations are useful on their own. §4.5 and §10
+  leave open whether discharge belongs in the first slice.
 
 ### Follow-up review
 
-The proposal is not closed yet. Three decisions remain explicit in its own plan:
+The proposal is not closed yet. Two decisions remain explicit in its own plan:
 
-- §11.6 leaves several witnesses on one rule unanswered. Conjoining them is the
-  likely rule, but it is not yet the rule.
 - §4.1 encodes division and modulo but does not choose a portable integer-overflow
   model for solver discharge.
-- §4.5 accepts a generator-only first cut, while phase 3 says to decide again
-  whether printed obligations have an independent user.
+- §4.5 and phase 3 leave open whether printed obligations have an independent
+  user or solver-backed discharge belongs in the first slice.
 
-Until those are settled, §9.6 and §11 are correct to call the implementation plan
-blocked.
+Until those are settled, the implementation plan remains blocked.
 
 ## 1 What the annotation is
 
@@ -160,9 +157,19 @@ two mechanisms share nothing and §4's fragment excludes the combination for now
 
 ### 2.1 Disjunction across sibling rules
 
-A rule's annotation constrains the tuples *that rule* derives. A predicate's
-tuples come from any of its rules, so the sound contract is the disjunction,
-with an unannotated rule contributing `True`:
+A rule may have several witness positions. Their propositions constrain the same
+derived tuple and therefore conjoin:
+
+```prolog
+bounded(X, _: X >= 0, _: X <= 10) :- source(X).
+```
+
+For this rule, `φ_R = X >= 0 ∧ X <= 10`. The implementation retains the source
+claims separately for diagnostics, while their meaning is the conjunction. A
+rule with no witness contributes `True`.
+
+A predicate's tuples come from any of its rules, so sibling-rule contracts
+disjoin:
 
 ```
 Φ_p  =  φ_R₁ ∨ φ_R₂ ∨ … ∨ φ_Rₖ
@@ -207,75 +214,26 @@ state and, the feature being new, costs no sweep. Rejected for the reason
 `nullness-tracking.md` §7 gives for declining required `?`: for a teaching
 implementation, stopping is the worse default.
 
-### 2.3 An annotation may only mention a variable position
+### 2.3 An annotation may only mention a named head position
 
-A contract is stated over *positions*, since a consumer sees columns and not the
-deriving rule's variable names. Abstracting an annotation to positions is a
-renaming when the positions it mentions hold variables, and ill defined when one
-of them does not. Consider `cyk-parser`:
-
-```prolog
-span(NT, I, I + 1) :- token(I, W), lexicon(NT, W).
-```
-
-Position 3 holds `I + 1`, so an annotation mentioning that position has no name
-to use. Rather than desugar, require the rewrite, which is legal today and
-arguably clearer:
+A contract is stated over *positions*, since a consumer sees columns rather than
+the deriving rule's body variables. A bare head variable names its own position;
+a literal or computed head argument needs an `as` name when the annotation refers
+to it:
 
 ```prolog
-span(NT, I, K) :- token(I, W), lexicon(NT, W), K = I + 1.
+span(NT, I, I + 1 as K, _: I < K) :- token(I, W), lexicon(NT, W).
 ```
 
-(Verified: the rewritten `cyk-parser` produces byte-identical output.) So the
-rule is: **an annotation may only mention a position whose head argument is a
-variable**, with an error naming the rewrite otherwise.
+Positions the annotation does not mention may hold anything:
+`state(4, B, _: 0 <= B && B <= 3)` is valid because the literal position is not
+part of the formula. A body-only variable remains invalid because publishing it
+would require existential quantification, which is outside tier 1.
 
-Note how narrow that is. Positions the annotation does not mention may hold
-anything: `state(4, B, _: 0 <= B && B <= 3)` in `examples/jugs` is fine, since
-the literal `4` in position 1 goes unmentioned. Abstracting the annotation to
-position terms is then a renaming, and the rule's own knowledge that position 1
-is `4` simply does not enter the contract. What forces a rewrite is wanting to
-constrain a position that holds a literal or a compound expression. An
-annotation also may not mention a body variable, which would need existential
-quantification in the contract and is outside tier 1.
-
-**The rewrite is not always free**, which is the part to weigh before accepting
-this restriction. On a proof-carrying predicate it changes the proof term.
-§8.2 derives a constructor's arguments from the body variables that do *not*
-appear in the head, so binding a head expression to a fresh variable turns the
-old variable existential and gives the constructor an extra witness:
-
-```prolog
-nat(n + 1) :: Succ      :- nat(n), n <= 2.               # Succ/1
-nat(K)     :: Succ      :- nat(n), n <= 2, K = n + 1.    # Succ/2, breaks
-nat(K)     :: Succ(T)   :- T : nat(n), n <= 2, K = n + 1. # Succ/1, identical
-```
-
-The middle line fails `examples/peano` with "Constructor pattern 'nat::Succ' has
-1 argument(s) but takes 2", because `plus` and `leq` match `Succ(A)`. Pinning the
-constructor's arguments explicitly restores byte-identical output (both verified).
-So the restriction is safe but not cost-free, and the error message should
-mention the explicit-argument form when the predicate is proof-carrying.
-
-**The restriction above is superseded, but not yet retired.**
-[head-arguments.md](./head-arguments.md) §2 shipped, so a head argument may carry
-a name and `span(NT, I, I + 1 as K, _: I < K)` needs no rewrite: neither the
-rewrite nor the proof-term trap arises. An implementation should require only
-that an annotation mention a *name or a variable* in head position, and point at
-`as` when it does not.
-
-One thing stands between that and working, and §10's phase 0 is where it is
-handled. The shipped lowering substitutes `K` with `I + 1` during parsing and
-records no per-position name (`HeadAnnotation` is `{type, nullable}`), so by the
-time any later stage runs, the link from the annotation to position 3 is gone and
-abstracting `I < K` would yield `x2 < x2 + 1`, i.e. `True`. Refinement extraction
-must therefore run before that substitution, or preserve the alias-to-position
-mapping explicitly.
-
-Until it does, the worked examples and costs below are written against the
-rewrite, because that is what works today. They are the pessimistic figures: with
-names extracted properly, every "needs the rewrite" below becomes "needs an
-`as`", which costs a token rather than a restructured rule.
+The existing head-name lowering substitutes `K` with `I + 1` during parsing and
+does not preserve the position name. Phase 0 must therefore extract the contract
+and its alias-to-position mapping before that substitution. No body rewrite is
+needed, which also keeps auto-derived proof-term arguments unchanged.
 
 ## 3 Obligations
 
@@ -295,9 +253,9 @@ goal.
 
 **A rule with no grouping columns owes a second obligation**, because the rule
 above rests on a premise that such a rule breaks: that a tuple is derived only
-when the body is satisfied. An aggregate rule whose head arguments all contain
-an aggregate or are literals emits one row whatever the body does, filled with
-the empty-group values. Verified on both back ends:
+when the body is satisfied. An aggregate rule with no grouping columns emits one
+row whatever the body does, filled with the empty-group values. Verified on both
+back ends:
 
 ```prolog
 impossible(count(*)) :- q(X), X > 5, X < 0.     # emits 0, body or no body
@@ -320,9 +278,9 @@ Both obligations must discharge. Note what this rules out: an annotation on a
 comparison is total and `null >= 0` is false (`null.md` §5). That is the right
 answer, and it is the same guard §4.1 puts on the derived contracts.
 
-The condition is exactly the interpreters' `hasGroupingColumns` test
-(`backend/native/src/base-evaluator.ts`), which is where the emitted row comes
-from, so the two cannot drift.
+The condition is exactly `hasGroupingColumns` in `core/src/analyzer.ts`, the
+shared definition used by the translator, interpreters and nullness analysis.
+Obligation generation must call it too rather than restating the rule.
 
 ### 3.2 Why the induction is already there
 
@@ -454,12 +412,10 @@ axioms, which is tier 2 in all but name. Its `data` declarations do not change
 
 ### 4.2 Worked example: cyk-parser
 
-With §2.3's rewrite applied, which is the form that works ahead of phase 0
-extracting names (the `as` spelling is `span(NT, I, I + 1 as K, _: I < K)` and
-yields the same two obligations):
+Using §2.3's head-position name:
 
 ```prolog
-span(NT, I, K, _: I < K) :- token(I, W), lexicon(NT, W), K = I + 1.
+span(NT, I, I + 1 as K, _: I < K) :- token(I, W), lexicon(NT, W).
 span(NT, I, K, _: I < K) :- grammar(NT, L, R), span(L, I, J), span(R, J, K).
 ```
 
@@ -556,10 +512,10 @@ still no `null` type and base-type inference still does not see nullability.
 
 ### 4.5 Discharging, deferred
 
-**Decided: the first cut generates obligations and does not discharge them.**
-`--obligations` prints the goals; nothing consumes them yet. This takes no
-dependency at all and lets the goal format settle against real output before
-anything is committed to reading it.
+The staged plan has `--obligations` print goals before anything discharges them.
+That takes no dependency and lets the goal format settle against real output,
+but follow-up review leaves this delivery choice open: it is worthwhile only if
+the printed goals have an independent user.
 
 The obligations are quantifier-free linear integer arithmetic, which is the
 easiest thing an SMT solver does, so the eventual choice is between running one
@@ -754,12 +710,12 @@ invariant worth stating and expressible in tier 1.
 
 | Predicate (example) | Invariant | Rules | Verdict |
 |---|---|---|---|
-| `span` (cyk-parser) | `I < K` | 2 | Discharges; one rule needs §2.3's rewrite |
-| `fib_step` (fibonacci) | `I >= 1 && 0 <= Prev && Prev <= Curr` | 2 | Discharges; needs the rewrite. A genuine inductive invariant: the goal needs both conjuncts of the IH |
-| `chain` (collatz) | `1 <= N && N <= 27 && M >= 1 && K >= 0` | 3 | Discharges, no rewrite, but needs `/` and `%` in the theory (§9.5) |
-| `state` (jugs) | `0 <= A && A <= 4 && 0 <= B && B <= 3` | 9 | Discharges; four rules need the rewrite (verified identical), and the invariant is restated nine times (§9.3) |
-| `state` (bridge-crossing) | `0 <= T && T < 19` | 7 | Discharges, no rewrite; restated seven times |
-| `pow2`, `task`, `move` (hanoi) | `N >= 0 && P >= 1`, `N >= 1 && Off >= 0` | 2, 3, 1 | Discharge, no rewrite |
+| `span` (cyk-parser) | `I < K` | 2 | Discharges; one computed position needs an `as` name |
+| `fib_step` (fibonacci) | `I >= 1 && 0 <= Prev && Prev <= Curr` | 2 | Discharges; one computed position needs an `as` name. A genuine inductive invariant: the goal needs both conjuncts of the IH |
+| `chain` (collatz) | `1 <= N && N <= 27 && M >= 1 && K >= 0` | 3 | Discharges, but needs `/` and `%` in the theory (§9.5) |
+| `state` (jugs) | `0 <= A && A <= 4 && 0 <= B && B <= 3` | 9 | Discharges; four rules need head-position names, and the invariant is restated nine times (§9.3) |
+| `state` (bridge-crossing) | `0 <= T && T < 19` | 7 | Discharges; restated seven times |
+| `pow2`, `task`, `move` (hanoi) | `N >= 0 && P >= 1`, `N >= 1 && Off >= 0` | 2, 3, 1 | Discharge |
 | `num`, `divides` (primes) | `2 <= I && I <= 30`, `1 < D && D < X` | 1, 1 | Discharge from a range atom and from body comparisons |
 | `n`, `d`, `attacks`, `safe`, `q1`…`q6` (n-queens) | domain bounds | 1 each | Discharge. The `q1`→`q6` chain is the §5 showcase: each obligation follows from the previous predicate's contract |
 | `density`, `close_pair` (population-query) | `D >= 0`, `D1 > D2` | 1, 1 | `close_pair` discharges; **`density` fails, correctly** (§9.2) |
@@ -811,9 +767,9 @@ The corpus's strongest invariants sit on predicates with many rules, and this is
 where the per-rule disjunctive contract hurts. `jugs`'s `state` has nine rules;
 the invariant `0 <= A && A <= 4 && 0 <= B && B <= 3` must be written on all nine,
 because one unannotated sibling collapses the contract to `True` (§2.1), and
-written differently on each, because each rule names its head arguments
-differently and four of them need §2.3's rewrite first. `bridge-crossing` is
-seven rules for `0 <= T && T < 19`.
+written differently on each because the rules name their head arguments
+differently. Four also need `as` names for computed positions. `bridge-crossing`
+has seven rules for `0 <= T && T < 19`.
 
 Nothing about that is unsound. It is recorded here because the survey is the
 first place the cost is visible: a predicate-level annotation, written once in
@@ -825,15 +781,13 @@ priced it, so the two costs below are accepted rather than overlooked, and this
 should not be reopened without new evidence.
 
 1. *Restatement.* Nine annotations on `jugs`, seven on `bridge-crossing`, each
-   written in that rule's own variable names. Four of `jugs`'s also need §2.3's
-   rewrite until phase 0 extracts names, after which they need an `as` instead;
-   that half of the cost is temporary, the restatement is not.
+   written in that rule's own position names. Four of `jugs`'s also need an `as`
+   name for a computed position; the restatement is the substantial cost.
 2. *Silent degradation.* Adding a rule to an annotated predicate can never fail
    an existing annotation; it weakens `Φ_p` toward `True`. So a contract can
    quietly become worthless as a program evolves, where a predicate-level
    reading would have failed loudly. §2.2's warning is the whole mitigation,
-   which is what makes §11.4 (warning or error) the live question rather than a
-   detail.
+   with `--strict-contracts` providing the opt-in error (§2.2).
 
 ### 9.4 Functionality, injectivity, totality, surjectivity
 
@@ -952,9 +906,9 @@ conjuncts. A refinement checker is the same shape with a richer claim, and can
 reuse all five.
 
 So: still worth designing, but as an extension of a pattern that now exists three
-times over rather than as a feature carrying its own weight. The representation,
-aggregate, and discharge questions in the review findings must be settled before
-the implementation plan is actionable.
+times over rather than as a feature carrying its own weight. Two follow-up
+decisions remain: portable integer overflow and whether solver-backed discharge
+belongs in the first implementation slice.
 
 ## 10 Implementation plan
 
@@ -964,10 +918,11 @@ Widen the `AnnotatedHeadTerm` slot to admit a condition and extract it in
 `liftHeadAnnotations` (`parser/src/post-process.ts`) before head-name substitution
 erases positional aliases. Store it as rule-level contract metadata, not in
 `argTypes`: that array has one record per runtime argument, while the witness is a
-syntactic position that disappears. Decide whether several witnesses on one rule
-are rejected or combined. Validate that the formula mentions only named head
-positions and is inside §4.1's fragment. No solver yet. A `--obligations` flag
-prints the generated goals.
+syntactic position that disappears. Keep several witnesses as a source-ordered
+list, conjoin them as the rule's contract, and generate one obligation per source
+formula so a failure points at the exact annotation. Validate that each formula
+mentions only named head positions and is inside §4.1's fragment. No solver yet.
+A `--obligations` flag prints the generated goals.
 
 Test: goldens for the obligation text, plus one rejection test per §4.1
 exclusion.
@@ -1004,9 +959,9 @@ Spec §5.10 gains the refinement form; walkthrough coverage; one example under
 
 ## 11 Decisions and residuals
 
-These earlier decisions still apply, with the corrections recorded above. The
-surface representation, alias preservation, portable solver arithmetic, aggregate
-emptiness, and delivery slice remain blocking decisions.
+These earlier decisions still apply, with the corrections recorded above. Two
+decisions remain blocking: portable integer overflow and the first useful
+delivery slice.
 
 1. **Should `not` around a comparison be warned about?** Was deferred as "help or
    noise"; the project has since answered it. Because trichotomy fails (§4.4),
@@ -1019,10 +974,10 @@ emptiness, and delivery slice remain blocking decisions.
    what nullness would be *without* the conjunct being warned about, since a
    strict comparison proves its own operands non-null and the naive version never
    fires.
-2. **Solver dependency.** Decided: deferred entirely, see §4.5. A built-in
-   procedure is ruled out on the corpus's fragment; the live choice, when it
-   becomes live, is CLI-only versus `z3-solver`'s WASM build, and it wants the
-   bundle cost measured rather than argued.
+2. **Solver dependency.** This follows the delivery-slice decision in §4.5. A
+   built-in procedure is ruled out on the corpus's fragment. If discharge joins
+   the first slice, choose between CLI-only and `z3-solver`'s WASM build by
+   measuring the bundle cost.
 3. **Floats.** Decided: tier 1 covers integer positions only; a refinement on a
    float position is rejected. Two of the three worries turned out not to exist.
    Every partial float operation returns NULL rather than a special value, and
@@ -1044,9 +999,11 @@ emptiness, and delivery slice remain blocking decisions.
    checker therefore has the complete predicate when it accepts a chunk and can
    emit the inert-annotation warning once. Revisit only if the REPL later permits
    rule-by-rule extension of a predicate.
-6. **Are several witnesses on one rule rejected or combined?** Raised by §10's
-   phase 0 and unanswered. Conjoining them is the obvious reading, and matches
-   what a single annotation with `&&` would mean, but nothing yet says so.
+6. **Are several witnesses on one rule rejected or combined?** Decided: combine
+   them by conjunction. This matches a single annotation using `&&` and preserves
+   proof irrelevance. Keep the source claims as a list and discharge them
+   separately so diagnostics identify the failing witness. Across sibling rules,
+   the resulting rule contracts still disjoin (§2.1).
 7. **How far do derived aggregate contracts go?** `count` has the universal
    contract `>= 0`. It strengthens to `>= 1`, and `min`/`max` inherit their
    argument's contract, only for groups known to contain a row; the latter also
