@@ -1,9 +1,10 @@
 # Design notes: refinement annotations on rule heads
 
-Status: proposal, scope settled. Nothing implemented, nothing in the spec.
-Every question raised during review is decided or explicitly deferred (§11).
-The first cut is phases 0 to 2 of §10: a generator that prints obligations
-without discharging them, taking no solver dependency.
+Status: proposal, reviewed. Nothing implemented, nothing in the spec. The seven
+review findings are answered in the body rather than outstanding; the trail is
+the section below. What remains is not a blocker but a consequence: phases 0 to 2
+of §10 describe a generator that prints obligations without discharging them, so
+that increment does not yet deliver the proposal's stated payoff (§4.5).
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -32,12 +33,12 @@ Expression ({infer AnnotatedHeadTerm.expr=current}
     | ':' type=PrimitiveType (nullable?='?')?))?;
 ```
 
-Widening that slot to admit a condition is a one-production change, and it has
-already been widened twice: `nullness-tracking.md` added the `?` suffix and
-`head-arguments.md` added `as`. So this would be the third component on a
-production whose shape is well proven, and the second of those also removes
-§2.3's restriction. `nullness-tracking.md` additionally supersedes most of §4.4
-below; both are worth reading alongside this one.
+Widening that slot to admit a condition is a one-production grammar change, and it
+has already been widened twice: `nullness-tracking.md` added the `?` suffix and
+`head-arguments.md` added `as`. The downstream representation is not equally
+small, because this position disappears rather than annotating a runtime argument.
+`nullness-tracking.md` additionally supersedes most of §4.4 below; both are worth
+reading alongside this one.
 
 Decisions taken (see §2.1, §4, §5 for what each entails):
 
@@ -50,6 +51,46 @@ Decisions taken (see §2.1, §4, §5 for what each entails):
 - **Discharge is deferred** (§4.5). The first cut generates and prints
   obligations, takes no solver dependency, and therefore does not yet deliver the
   payoff above.
+
+## Review findings
+
+The contract idea survives review. Seven issues came out of it, each now answered
+in the body rather than left here, so this section is the trail rather than a
+list of blockers.
+
+- **The erased witness does not fit `argTypes`.** That array aligns with runtime
+  head arguments; a witness is a syntactic position that erases entirely, so
+  another argument record would break the alignment. Answered in §10 phase 0:
+  rule-level storage. The attached decision, whether one rule may spell more than
+  one witness, is §11.6.
+- **Head aliases are lowered too early.** Head-name processing substitutes `K`
+  with its expression during parsing and records no per-position name, so a later
+  checker would see `I < I + 1` and lose the reference to the published position.
+  Answered in §2.3 and §10 phase 0: extract before substitution, or keep a
+  name-to-position map.
+- **The aggregate contracts need group-emptiness rules.** An ungrouped aggregate
+  over empty input still emits one row, `count(*)` being `0` and `min`/`max` NULL,
+  so a contract may strengthen only for a group known to contain an input row.
+  Answered in §4.1.
+- **The obligation rule inherits the same hole, and there it is unsound.** §3.1
+  assumed a tuple is derived only when the body is satisfied, which an ungrouped
+  aggregate rule breaks: it emits its row whatever the body does, so an
+  unsatisfiable body discharges every annotation on it while the runtime violates
+  them. Answered in §3.1 with a second obligation under the empty-group
+  valuation, and in §3.2, whose induction never covered that row.
+- **Aggregate terms need a scope rule.** A body comparison holds of one row while
+  an aggregate is a per-group value, and connecting the two would discharge
+  `_: S <= 100` from a body `X <= 100`. Answered in §3.3: an aggregate term is an
+  opaque per-group constant, constrained only by §4.1's derived facts.
+- **Solver arithmetic must match Datamog.** Integer division truncates toward zero
+  and modulo follows the dividend's sign, where a solver's native integer
+  operations may not. Integer overflow also differs across back ends, so the
+  portable arithmetic domain has to be fixed before discharge can be sound.
+  Answered in §4.1.
+- **A generator-only increment has no consumer.** Until obligations are
+  discharged, no analysis or module boundary may rely on a contract, so phases 0
+  to 2 land only if printed obligations are useful on their own. Answered in §4.5,
+  which states it as the accepted consequence of deferring the solver.
 
 ## 1 What the annotation is
 
@@ -204,14 +245,25 @@ constructor's arguments explicitly restores byte-identical output (both verified
 So the restriction is safe but not cost-free, and the error message should
 mention the explicit-argument form when the predicate is proof-carrying.
 
-**This whole subsection is now obsolete, and it is only kept for its reasoning.**
-[head-arguments.md](./head-arguments.md) §2 shipped: a head argument may carry a
-name, so `span(NT, I, I + 1 as K, _: I < K)` needs no rewrite and neither the
-rewrite nor the proof-term trap above arises. An implementation of this proposal
-should require only that an annotation mention a *name or a variable* in head
-position, and point at `as` when it does not. What survives above is the record
-of why the naive answer, rewriting the head expression into a body equality, is
-not one.
+**The restriction above is superseded, but not yet retired.**
+[head-arguments.md](./head-arguments.md) §2 shipped, so a head argument may carry
+a name and `span(NT, I, I + 1 as K, _: I < K)` needs no rewrite: neither the
+rewrite nor the proof-term trap arises. An implementation should require only
+that an annotation mention a *name or a variable* in head position, and point at
+`as` when it does not.
+
+One thing stands between that and working, and §10's phase 0 is where it is
+handled. The shipped lowering substitutes `K` with `I + 1` during parsing and
+records no per-position name (`HeadAnnotation` is `{type, nullable}`), so by the
+time any later stage runs, the link from the annotation to position 3 is gone and
+abstracting `I < K` would yield `x2 < x2 + 1`, i.e. `True`. Refinement extraction
+must therefore run before that substitution, or preserve the alias-to-position
+mapping explicitly.
+
+Until it does, the worked examples and costs below are written against the
+rewrite, because that is what works today. They are the pessimistic figures: with
+names extracted properly, every "needs the rewrite" below becomes "needs an
+`as`", which costs a token rather than a restructured rule.
 
 ## 3 Obligations
 
@@ -228,6 +280,37 @@ For each rule `R` of `p`, with `Φ_q` the contract of predicate `q`:
 Free variables are implicitly universally quantified, so the query handed to a
 solver is the unsatisfiability of the hypotheses conjoined with the negated
 goal.
+
+**A rule with no grouping columns owes a second obligation**, because the rule
+above rests on a premise that such a rule breaks: that a tuple is derived only
+when the body is satisfied. An aggregate rule whose head arguments all contain
+an aggregate or are literals emits one row whatever the body does, filled with
+the empty-group values. Verified on both back ends:
+
+```prolog
+impossible(count(*)) :- q(X), X > 5, X < 0.     # emits 0, body or no body
+```
+
+Annotate that `_: N > 0` and §3.1's first obligation *discharges*: §3.3 admits
+`X > 5` and `X < 0` as hypotheses, they are unsatisfiable together, so the query
+is UNSAT. The runtime emits `0`. So for a rule with no grouping columns, emit a
+second goal with **no body hypotheses at all** and every aggregate term at its
+empty-group value:
+
+```
+count(*), count(X)                        →  0
+sum, avg, min, max, concat, list          →  null
+⊢  φ_R
+```
+
+Both obligations must discharge. Note what this rules out: an annotation on a
+`min`/`max` position of an ungrouped rule can essentially never hold, since
+comparison is total and `null >= 0` is false (`null.md` §5). That is the right
+answer, and it is the same guard §4.1 puts on the derived contracts.
+
+The condition is exactly the interpreters' `hasGroupingColumns` test
+(`backend/native/src/base-evaluator.ts`), which is where the emitted row comes
+from, so the two cannot drift.
 
 ### 3.2 Why the induction is already there
 
@@ -247,6 +330,12 @@ simultaneously within an SCC. The analyzer already computes the SCCs.
 This is what makes recursion work rather than being the hard case, and it is
 where a hand-rolled check would go wrong.
 
+One case the induction does *not* cover, which is why §3.1 needs its second
+obligation: the row an ungrouped aggregate rule emits over an empty group is not
+produced by a derivation at all. The aggregation machinery emits it, so "one
+case per rule" misses it and the induction has to be supplemented rather than
+trusted.
+
 ### 3.3 What contributes a hypothesis
 
 | Body element | Contributes |
@@ -261,6 +350,19 @@ The atoms themselves contribute no relation symbol to the query. Only their
 contracts matter, which is what keeps tier 1 inside a decidable theory (§4.1) and
 what makes the check **modular**: no predicate definition is ever unfolded.
 
+**In an aggregate rule the table needs a scope caveat.** A body comparison holds
+of one row. A grouping variable is constant across the group, so a hypothesis
+about it is a group-level fact; any other body variable varies within the group,
+so a hypothesis about it is not. An annotation cannot mention such a variable
+anyway (§2.3 restricts it to head positions), so admitting the hypothesis is
+harmless in itself. What must not happen is connecting it to the aggregate:
+
+**An aggregate term is an opaque per-group constant.** The only facts about it
+are §4.1's derived contracts. Modelling `sum(X)` in terms of the row variable
+`X` is the error to avoid, and it is the one an implementer would reach for: it
+would discharge `_: S <= 100` from a body `X <= 100`, though a sum over many
+rows exceeds any per-row bound.
+
 ## 4 Tier 1: the decidable fragment
 
 ### 4.1 The formula language
@@ -274,29 +376,49 @@ Integer `/` and `%` are in, by *constant* divisors, which stays decidable and is
 what `collatz`'s `M = P / 2` and `primes`'s `R = X % D` need (§9.5). A
 variable-divisor result is left unconstrained rather than rejected.
 
+Their solver encoding must reproduce the runtime rules: division truncates toward
+zero and modulo has the dividend's sign. Using a solver's native mathematical
+integer division and modulo without this encoding is unsound for negative values.
+
 Excluded, each with a reason rather than by omission: predicate references and
 quantifiers (tier 2, §7), `value`-typed positions and JSON operations (no
 theory), §8 proof columns, `^` predicates (§7), and non-linear arithmetic
 otherwise.
 
-**Aggregate head positions are in, with derived contracts** rather than the
-exclusion an earlier draft had (§9.5, §11.6). Three rules, no annotation
-required:
+**Aggregate head positions are in, with conservative derived contracts** rather
+than the exclusion an earlier draft had (§9.5, §11.7). The checker must first know
+whether an emitted group is guaranteed to contain an input row:
 
-| Position | Derived contract |
+| Aggregate term | Derived contract |
 |---|---|
-| `count(*)` | `>= 1`. A group exists only because a row does |
-| `count(X)` | `>= 1` if `X`'s column is non-null, else `>= 0`, since `count(X)` counts non-null `X` |
-| `min(X)`, `max(X)` | `X`'s own contract, **only if `X`'s column is non-null** |
+| `count(*)` | `>= 0` always; `>= 1` only for a group known to contain an input row |
+| `count(X)` | `>= 0` always; `>= 1` only when the group is known non-empty and `X` is non-null |
+| `min(X)`, `max(X)` | `X`'s own contract only when the group is known non-empty and `X` is non-null |
 
-The guard on the last row is not decoration. `min`/`max` skip NULLs (`null.md`
-§8), so an all-NULL group yields NULL, and a contract like `max(X) >= 0` is then
-*false* rather than vacuous, comparison being total. When `X` is non-null the
-group is non-empty and has no NULLs to skip, so `min`/`max` is a real element of
-it and inherits both the contract and the non-nullness. When `X` is maybenull,
-derive nothing: the true statement is `φ ∨ isnull`, which tier 1's two-valued
-formula language cannot express. Both rules lean on the nullness bit, which is
-the same dependency §4.4 already takes.
+The table is keyed by **term**, not by position, which matters now that an
+aggregate may sit inside an expression (`head-arguments.md` §1). No propagation
+calculus is needed and none should be written: the derived fact enters the
+obligation as a hypothesis about the opaque term (§3.3), and the solver does the
+surrounding arithmetic itself. `count(Other) - 1 >= 0` follows from
+`count(Other) >= 1` by linear arithmetic, with nothing in this document having to
+know that `- 1` shifts a lower bound.
+
+**A derived fact is published in conjunction with the annotation disjunction.**
+This is worth stating because it looks like it reopens §2.1 and does not. §2.1
+governs how *claims* compose, and its answer is disjunction because an
+unannotated rule claims nothing. A derived fact is proved rather than claimed, so
+it may be conjoined. The soundness condition is that it must hold of every rule's
+tuples: publish a fact at a position only when it is derived for **every** rule
+of the predicate there. A predicate with one grouped and one ungrouped rule
+therefore publishes only the weaker `>= 0`.
+
+The non-empty guard matters even when the argument column is non-null. An
+ungrouped aggregate over empty input emits one row: `count(*)` is `0`, while
+`min(X)` and `max(X)` are NULL. A grouped result normally exists because an input
+row established its group, but the implementation must derive that fact from the
+actual grouping shape rather than from the presence of a literal head expression.
+Within a known non-empty group, `min`/`max` still need `X` to be non-null because
+they skip NULLs (`null.md` §8). When either condition is missing, derive nothing.
 
 `sum` and `avg` derive nothing. Both are derivable in principle, `sum` from its
 argument's sign and `avg` from the min/max bracket, but no corpus case wants
@@ -320,7 +442,9 @@ axioms, which is tier 2 in all but name. Its `data` declarations do not change
 
 ### 4.2 Worked example: cyk-parser
 
-With §2.3's rewrite applied:
+With §2.3's rewrite applied, which is the form that works ahead of phase 0
+extracting names (the `as` spelling is `span(NT, I, I + 1 as K, _: I < K)` and
+yields the same two obligations):
 
 ```prolog
 span(NT, I, K, _: I < K) :- token(I, W), lexicon(NT, W), K = I + 1.
@@ -689,8 +813,9 @@ priced it, so the two costs below are accepted rather than overlooked, and this
 should not be reopened without new evidence.
 
 1. *Restatement.* Nine annotations on `jugs`, seven on `bridge-crossing`, each
-   written in that rule's own variable names, four of `jugs`'s needing §2.3's
-   rewrite first.
+   written in that rule's own variable names. Four of `jugs`'s also need §2.3's
+   rewrite until phase 0 extracts names, after which they need an `as` instead;
+   that half of the cost is temporary, the restatement is not.
 2. *Silent degradation.* Adding a rule to an annotated predicate can never fail
    an existing annotation; it weakens `Φ_p` toward `True`. So a contract can
    quietly become worthless as a program evolves, where a predicate-level
@@ -771,24 +896,25 @@ obligation there does not need it (the invariant `1 < D && D < X` follows from
 the body comparisons alone), so a first cut can treat a variable-divisor result
 as unconstrained.
 
-**Aggregate positions want built-in contracts, not exclusion.** §4.1 excludes
-aggregate head positions, which is what blocks `cnf-tseitin`'s index-in-range
-invariant: it is blocked only because `rank(Name, count(Other))` publishes an
-aggregate position with no contract. Some contracts there are free and need no
-annotation. `count(*) >= 1` always holds, since a group exists only because a row
-does. `count(X) >= 1` holds when `X`'s column is non-null, which the nullness bit
-now answers, and `count(X) >= 0` otherwise. `min`/`max` inherit their argument's
-contract. Deriving those beats excluding the positions.
+**Aggregate positions want built-in contracts, not exclusion.** This is what
+§4.1 now does; an earlier draft of it excluded them, which is what blocked
+`cnf-tseitin`'s index-in-range invariant. Some contracts are free and need no
+annotation. `count(*) >= 0` and `count(X) >= 0` always hold. Either strengthens to
+`>= 1` only when the emitted group is known to contain a row, with `count(X)` also
+requiring `X` to be non-null. Under the same two guards, `min`/`max` inherit their
+argument's contract. An ungrouped empty aggregate is the counterexample to the
+stronger unconditional rules: it emits `count(*) = 0` and `min(X) = null`.
 
 But it unblocks less than it first appears, and the difference is worth stating
-because it bounds how much this is worth. `var_index(Name, J) :- rank(Name, K),
-J = K - 1` gets `J >= 0` from `count(X) >= 1`, so the *lower* bound falls out. The
-upper bound does not. `tvar`'s internal branch needs `P + R - 1 < P + I`, i.e.
-`irank(N) <= ninternal`, and the var branch needs `rank(Name) <= nprop`: both are
-"the count of a subset does not exceed the count of the set", a relation *between
-two aggregates over the same base* rather than a property of one. No per-aggregate
-contract delivers that at any of the settings below. So aggregate contracts buy
-`cnf-tseitin` half its invariant, not all of it.
+because it bounds how much this is worth. `var_index(Name, count(Other) - 1)`,
+which is what the corpus says since the collapse in `head-arguments.md` §1.1,
+gets `>= 0` only if its grouping shape proves a non-empty group.
+The upper bound still does not follow. `tvar`'s internal branch needs
+`P + R - 1 < P + I`, i.e. `irank(N) <= ninternal`, and the var branch needs
+`rank(Name) <= nprop`: both are "the count of a subset does not exceed the count of
+the set", a relation *between two aggregates over the same base* rather than a
+property of one. No per-aggregate contract delivers that at any of the settings
+below.
 
 ### 9.6 Verdict
 
@@ -813,24 +939,23 @@ discipline in `checkHeadAnnotations`, the boundary check in
 conjuncts. A refinement checker is the same shape with a richer claim, and can
 reuse all five.
 
-So: still worth building, but as an extension of a pattern that now exists three
-times over rather than as a feature carrying its own weight. §9.3 and §9.5 are
-settled, and with discharge deferred (§4.5) the first increment is small enough
-that the weakened case and the reduced cost roughly cancel.
+So: still worth designing, but as an extension of a pattern that now exists three
+times over rather than as a feature carrying its own weight. The representation,
+aggregate, and discharge questions in the review findings must be settled before
+the implementation plan is actionable.
 
 ## 10 Implementation plan
 
 ### Phase 0: surface and validation
 
-Widen the `AnnotatedHeadTerm` slot to admit a condition and record it in
-`liftHeadAnnotations` (`parser/src/post-process.ts`). Add a third field to
-`argTypes`'s per-position record, not a fourth parallel array:
-`nullness-tracking.md` §3.2 already moved that array from
-`(string | undefined)[]` to `{ type, nullable }` records for exactly this
-reason, since arrays indexed by argument position are free to drift. Validate:
-annotated position holds a variable (§2.3), formula mentions only head
-variables, formula is inside §4.1's fragment. No solver yet. A `--obligations`
-flag prints the generated goals.
+Widen the `AnnotatedHeadTerm` slot to admit a condition and extract it in
+`liftHeadAnnotations` (`parser/src/post-process.ts`) before head-name substitution
+erases positional aliases. Store it as rule-level contract metadata, not in
+`argTypes`: that array has one record per runtime argument, while the witness is a
+syntactic position that disappears. Decide whether several witnesses on one rule
+are rejected or combined. Validate that the formula mentions only named head
+positions and is inside §4.1's fragment. No solver yet. A `--obligations` flag
+prints the generated goals.
 
 Test: goldens for the obligation text, plus one rejection test per §4.1
 exclusion.
@@ -838,8 +963,9 @@ exclusion.
 ### Phase 1: contracts
 
 Compute `Φ_p` per predicate by disjunction over rules with position abstraction
-(§2.1), alongside `publishedTypes` in `core/src/types.ts`. Emit the inert
-annotation warning (§2.2).
+(§2.1), using the alias-to-position mapping captured before head-name lowering.
+Keep it alongside, rather than inside, `publishedTypes` in `core/src/types.ts`.
+Emit the inert annotation warning (§2.2).
 
 Test: a predicate with mixed annotated and unannotated rules yields `True` and
 one warning.
@@ -851,11 +977,13 @@ pipeline is testable against expected goal text.
 
 ### Phase 3: discharge, deferred
 
-Not in the first cut (§4.5). When taken up: wire a solver behind
-`--check-refinements`, at which point `cyk-parser` (§4.2) discharges and §4.3's
-variant fails with a message naming the rule and the unprovable formula. Only at
-this point may a consumer rely on a contract, so §5's payoff and the
-`--strict-contracts` flag of §2.2 both land here rather than earlier.
+The current proposal leaves this out of the first cut (§4.5). Before implementation,
+decide whether printed obligations have an independent user. If not, this phase
+belongs in the first slice. Wire a solver behind `--check-refinements`, at which
+point `cyk-parser` (§4.2) discharges and §4.3's variant fails with a message naming
+the rule and the unprovable formula. Only at this point may a consumer rely on a
+contract, so §5's payoff and the `--strict-contracts` flag of §2.2 land here rather
+than earlier.
 
 ### Phase 4: documentation
 
@@ -864,8 +992,9 @@ Spec §5.10 gains the refinement form; walkthrough coverage; one example under
 
 ## 11 Decisions and residuals
 
-Every question this proposal raised during review is settled below, each with
-whatever residual survives the decision. None is blocking.
+These earlier decisions still apply, with the corrections recorded above. The
+surface representation, alias preservation, portable solver arithmetic, aggregate
+emptiness, and delivery slice remain blocking decisions.
 
 1. **Should `not` around a comparison be warned about?** Was deferred as "help or
    noise"; the project has since answered it. Because trichotomy fails (§4.4),
@@ -898,22 +1027,21 @@ whatever residual survives the decision. None is blocking.
    whether the flag should also promote any *other* advisory the checker grows,
    which is a question about the flag's scope rather than about this diagnostic,
    and can wait until there is a second one.
-5. **What does the REPL do?** Mostly answered by §9.3's decision. Silent
-   weakening when a rule is added is now accepted behaviour in the batch case, so
-   the REPL is not a special problem: check each obligation once when its rule is
-   entered, as `IncrementalSession` already does for constraints (spec §4.7). The
-   residual is narrower. In batch, §2.2's warning still fires on the finished
-   program, because every rule is present when the check runs; in a session the
-   rules arrive one at a time, so the warning has no complete predicate to judge.
-   Either re-evaluate it as each rule lands, or accept that a session gives no
-   inert-annotation diagnostic at all.
-6. **How far do derived aggregate contracts go?** Decided: `count` plus
-   `min`/`max` inheritance, both guarded by the nullness bit; `sum` and `avg`
-   derive nothing. Specified in §4.1. The residual is that no per-aggregate
-   contract reaches `cnf-tseitin`'s upper bound, which needs "the count of a
-   subset does not exceed the count of the set" (§9.5). That is a relation
-   between two aggregates over one base, so it would be a different feature, and
-   nothing else in the corpus asks for it.
+5. **What does the REPL do?** `IncrementalSession` currently rejects extending an
+   existing predicate across chunks, so sibling rules must arrive together. The
+   checker therefore has the complete predicate when it accepts a chunk and can
+   emit the inert-annotation warning once. Revisit only if the REPL later permits
+   rule-by-rule extension of a predicate.
+6. **Are several witnesses on one rule rejected or combined?** Raised by §10's
+   phase 0 and unanswered. Conjoining them is the obvious reading, and matches
+   what a single annotation with `&&` would mean, but nothing yet says so.
+7. **How far do derived aggregate contracts go?** `count` has the universal
+   contract `>= 0`. It strengthens to `>= 1`, and `min`/`max` inherit their
+   argument's contract, only for groups known to contain a row; the latter also
+   require a non-null argument. `sum` and `avg` derive nothing. No per-aggregate
+   contract reaches `cnf-tseitin`'s upper bound, which needs "the count of a subset
+   does not exceed the count of the set" (§9.5). That relation between aggregates
+   would be a different feature.
 
 ## Appendix: adjacent findings, all fixed
 
