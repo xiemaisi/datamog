@@ -889,8 +889,21 @@ where `IDENT` is one of: `count`, `sum`, `avg`, `min`, `max`,
 
 Aggregates may appear only in **rule heads**, never in a rule body. Within a
 head an aggregate may sit anywhere inside an argument's expression, so a head
-argument is a **grouping column** exactly when it contains no aggregate.
-Grouping columns become the GROUP BY columns of the generated SQL.
+argument is a **grouping column** when it contains no aggregate *and* is not
+constant. Grouping columns become the GROUP BY columns of the generated SQL.
+
+An argument is **constant** when it is a string, number or boolean literal, a
+negated numeric literal, or a variable the body binds to one of those with an
+equality. A constant does not vary per group, so it is not grouped by, and the
+two spellings mean the same thing:
+
+```
+totals("all", sum(V)) :- s(V).
+totals(G, sum(V)) :- s(V), G = "all".     # the same predicate
+```
+
+An expression that merely happens to be constant, such as `G = 2 + 3`, is not
+constant in this sense and is a grouping column.
 
 ```
 student_avg(Student, avg(Score)) :- scores(Student, _, Score).
@@ -915,6 +928,18 @@ group, so there is nothing for the expression to denote:
 ```
 # rejected: grouping is {X}, so Y has no one value per group
 bad(X, sum(S) + Y) :- scores(X, S, Y).
+```
+
+**Over input that yields nothing**, a rule with no grouping columns still derives
+exactly one tuple, matching SQL's `SELECT agg(...) FROM <empty>`: every `count`
+is `0`, every other aggregate is NULL, and constants take their own values. A
+rule with at least one grouping column derives nothing, there being no group to
+reduce.
+
+```
+totals(count(*)) :- s(_).            # s empty: derives (0)
+totals("all", count(*)) :- s(_).     # s empty: derives ("all", 0)
+totals(G, count(*)) :- s(G).         # s empty: derives nothing
 ```
 
 The argument `*` is a wildcard accepted only by `count`: `count(*)` counts

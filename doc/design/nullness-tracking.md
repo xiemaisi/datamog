@@ -411,6 +411,18 @@ The regex survives under its other job, deciding that a binding cannot be NULL a
 so may take the plain equality. That question is not this one, and conflating them
 is what put a grouping rule in a SQL-text matcher to begin with.
 
+**One wart the decision leaves, deliberately.** "Constant" means a literal, a
+negated numeric literal, or a variable bound to one, so `G = 5` makes an argument
+constant while `G = 2 + 3` does not: the first derives a row over empty input and
+the second derives nothing. Two spellings of the same number behave differently.
+This is sound rather than merely tolerable, because `isGroupingArg` is shared, so
+both runtimes are imprecise in the same direction and cannot disagree, and the
+imprecision is the conservative one: an unrecognised constant is treated as a
+grouping column, which suppresses a row rather than inventing one. Folding
+constant arithmetic in `isConstantLiteral` would close it, and nothing in the
+corpus asks for that, so it stays open with the upgrade path named. Spec §2.7
+documents the boundary rather than hiding it.
+
 **Stage 1, annotations.** §3.2 and §3.3. One grammar production, plus
 `liftHeadAnnotations`, the `argTypes` shape, `publishedNullness`,
 `checkHeadAnnotations` and `checkModuleBoundaries`. The interpreters needed
