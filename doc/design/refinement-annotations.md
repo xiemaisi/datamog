@@ -201,6 +201,14 @@ constructor's arguments explicitly restores byte-identical output (both verified
 So the restriction is safe but not cost-free, and the error message should
 mention the explicit-argument form when the predicate is proof-carrying.
 
+**This whole subsection has a way out**, described in
+[head-arguments.md](./head-arguments.md) §2: let a head argument carry a name,
+and `span(NT, I, I + 1 as K, _: I < K)` needs no rewrite, so neither the
+rewrite nor the proof-term trap above arises. That note is independent of this
+one and justified without it, so this is a dependency worth having rather than
+a reason to wait. If it lands first, delete this subsection down to the
+sentence about annotations mentioning only head variables.
+
 ## 3 Obligations
 
 ### 3.1 The rule
