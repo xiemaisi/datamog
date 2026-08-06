@@ -434,12 +434,29 @@ describe("analyzer", () => {
     expect(() => analyze(program)).toThrow(/both aggregate and non-aggregate/);
   });
 
-  test("rejects aggregate embedded in expression", () => {
+  test("accepts an aggregate embedded in a head expression", () => {
     const program = parse(`
       input predicate scores(name: string, score: integer).
-      bad(X, sum(S) + 1) :- scores(X, S).
+      ok(X, sum(S) + 1) :- scores(X, S).
     `);
-    expect(() => analyze(program)).toThrow(/top-level head argument/);
+    expect(() => analyze(program)).not.toThrow();
+  });
+
+  test("rejects a non-grouping variable beside an aggregate", () => {
+    // Grouping is {X}, so Y has no single value within the group.
+    const program = parse(`
+      input predicate scores(name: string, score: integer, year: integer).
+      bad(X, sum(S) + Y) :- scores(X, S, Y).
+    `);
+    expect(() => analyze(program)).toThrow(/neither a grouping column nor inside an aggregate/);
+  });
+
+  test("still rejects a wrong-arity aggregate nested in an expression", () => {
+    const program = parse(`
+      input predicate scores(name: string, score: integer).
+      bad(X, sum(S, S) + 1) :- scores(X, S).
+    `);
+    expect(() => analyze(program)).toThrow(/takes exactly 1 argument/);
   });
 
   test("rejects nested aggregates", () => {

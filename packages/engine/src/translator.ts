@@ -24,6 +24,7 @@ import {
   type Rule,
   type TypedProgram,
   type Variable,
+  containsAggregate,
 } from "datamog-core";
 import {
   AnalyzerError,
@@ -684,7 +685,7 @@ function translateRule(
   }
 
   // SELECT clause (with GROUP BY support for aggregate rules)
-  const isAggregateRule = rule.head.args.some((a) => a.$type === "AggregateCall");
+  const isAggregateRule = rule.head.args.some(containsAggregate);
   const selectParts: string[] = [];
   const groupByExprs: string[] = [];
 
@@ -696,15 +697,10 @@ function translateRule(
     // promotion), this rule's primitive head term must be lifted so
     // every UNION branch produces matching SQL types.
     const headColType = columnTypes.get(rule.head.predicate)?.[i];
-    if (term.$type === "AggregateCall") {
-      const aggSql = translateAggregate(
-        term,
-        bindings,
-        varTypes,
-        columnTypes,
-        functionOverloads,
-        dialect,
-      );
+    if (containsAggregate(term)) {
+      // No GROUP BY entry: an argument containing an aggregate is reduced
+      // over the group rather than grouped by.
+      const aggSql = termToSql(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
       selectParts.push(`${aggSql} AS ${targetCol}`);
     } else if (term.$type === "Variable") {
       const refs = bindings.get(term.name);
@@ -1150,7 +1146,7 @@ function resolveColumnRef(predicate: string, argIndex: number, analyzed: TypedPr
  * @param dialect     - Dialect for dialect-specific constructs (group-concat, range sources, etc.)
  */
 function termToSql(
-  term: Expression,
+  term: HeadTerm,
   bindings: Map<string, Binding[]>,
   varTypes: Map<string, PrimitiveType>,
   columnTypes: ReadonlyMap<string, readonly PrimitiveType[]>,
@@ -1463,6 +1459,11 @@ function termToSql(
       // `count(*)` short-circuits in translateAggregate, so a Wildcard never
       // reaches expression codegen.
       throw new Error("'*' may only appear as the argument of count(*)");
+    case "AggregateCall":
+      // An aggregate may sit inside a head expression (`count(*) - 1`), so it
+      // is an ordinary leaf here. SQL allows arithmetic over an aggregate in
+      // a select list, so nothing else about the emitted query changes.
+      return translateAggregate(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
   }
   assertNever(term, "term type");
 }

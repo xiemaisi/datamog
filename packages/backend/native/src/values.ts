@@ -15,7 +15,14 @@
 // translator: both operands integer → truncating division; otherwise
 // floating-point division.
 
-import type { Expression, FunctionCall, HeadTerm, Overload, PrimitiveType } from "datamog-core";
+import type {
+  AggregateCall,
+  Expression,
+  FunctionCall,
+  HeadTerm,
+  Overload,
+  PrimitiveType,
+} from "datamog-core";
 import { BUILTINS, BUILTIN_KEYS, assertNever, inferTermType } from "datamog-core";
 import { type JsonValue, canonicalizeJson, isJsonValue } from "datamog-engine";
 
@@ -132,7 +139,22 @@ export function scrubNonFiniteForJson(v: Value): JsonValue {
   return v as JsonValue;
 }
 
-export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value {
+/**
+ * Evaluate a head term or body expression under a substitution.
+ *
+ * `aggregates` resolves an AggregateCall leaf. An aggregate may sit inside a
+ * head expression (`count(*) - 1`), so the group-by machinery passes a
+ * resolver that reduces it over the group; everywhere else there is no group
+ * and reaching one is a planner bug. Ordinary variables in such an expression
+ * are grouping variables, which the analyzer guarantees, so they hold the
+ * same value for every substitution in the group and any one of them will do.
+ */
+export function evalTerm(
+  term: HeadTerm,
+  sub: Substitution,
+  env: TypeEnv,
+  aggregates?: (agg: AggregateCall) => Value,
+): Value {
   switch (term.$type) {
     case "StringLiteral":
       return term.value;
@@ -147,7 +169,7 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
       return v === undefined ? null : v;
     }
     case "UnaryExpr": {
-      const v = evalTerm(term.operand, sub, env);
+      const v = evalTerm(term.operand, sub, env, aggregates);
       if (term.op === "!") {
         // 3VL: !null = null; !true = false; !false = true.
         return v === null ? null : !asBoolean(v);
@@ -156,8 +178,8 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
       return finiteOrNull(-asNumber(v));
     }
     case "BinaryExpr": {
-      const l = evalTerm(term.left, sub, env);
-      const r = evalTerm(term.right, sub, env);
+      const l = evalTerm(term.left, sub, env, aggregates);
+      const r = evalTerm(term.right, sub, env, aggregates);
       if (term.op === "&&") {
         // 3VL: false dominates, then NULL, then both-true.
         if (l === false || r === false) return false;
@@ -192,16 +214,16 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
     case "FunctionCall":
       return evalCall(
         term,
-        term.args.map((a) => evalTerm(a, sub, env)),
+        term.args.map((a) => evalTerm(a, sub, env, aggregates)),
         env,
       );
-    case "AggregateCall":
-      // Aggregates are handled by the rule-level group-by machinery, not
-      // by term evaluation. Reaching here indicates a planner bug.
+    case "AggregateCall": {
+      if (aggregates) return aggregates(term);
       throw new Error(`Aggregate '${term.func}' evaluated outside aggregate context`);
+    }
     case "Subscript": {
-      const obj = evalTerm(term.object, sub, env);
-      const idx = evalTerm(term.index, sub, env);
+      const obj = evalTerm(term.object, sub, env, aggregates);
+      const idx = evalTerm(term.index, sub, env, aggregates);
       if (obj === null || idx === null) return null;
       const objType = inferTermType(term.object, env.vars, typesFor(env));
       if (objType === "value") {
@@ -229,7 +251,7 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
       return cp[i]!;
     }
     case "Slice": {
-      const obj = evalTerm(term.object, sub, env);
+      const obj = evalTerm(term.object, sub, env, aggregates);
       if (obj === null) return null;
       const objType = inferTermType(term.object, env.vars, typesFor(env));
       if (objType === "value") {
@@ -237,8 +259,8 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
         // sub-array. Empty / reversed ranges return [], matching the SQL
         // backends' `COALESCE(...)` shape.
         if (!Array.isArray(obj)) return null;
-        const start = term.start ? evalTerm(term.start, sub, env) : 0;
-        const end = term.end ? evalTerm(term.end, sub, env) : obj.length;
+        const start = term.start ? evalTerm(term.start, sub, env, aggregates) : 0;
+        const end = term.end ? evalTerm(term.end, sub, env, aggregates) : obj.length;
         if (start === null || end === null) return null;
         const si = asNumber(start);
         const ei = asNumber(end);
@@ -247,8 +269,8 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
         return obj.slice(si, ei) as JsonValue[];
       }
       const cp = [...asString(obj)];
-      const start = term.start ? evalTerm(term.start, sub, env) : 0;
-      const end = term.end ? evalTerm(term.end, sub, env) : cp.length;
+      const start = term.start ? evalTerm(term.start, sub, env, aggregates) : 0;
+      const end = term.end ? evalTerm(term.end, sub, env, aggregates) : cp.length;
       if (start === null || end === null) return null;
       const si = asNumber(start);
       const ei = asNumber(end);
@@ -264,13 +286,15 @@ export function evalTerm(term: HeadTerm, sub: Substitution, env: TypeEnv): Value
       // literal-construction output matches what the canonicalisation
       // path already does silently via JSON.stringify, and to keep the
       // SQL backends' element-finiteness guard from diverging.
-      const arr = term.elements.map((e) => scrubNonFiniteForJson(evalTerm(e, sub, env)));
+      const arr = term.elements.map((e) =>
+        scrubNonFiniteForJson(evalTerm(e, sub, env, aggregates)),
+      );
       return JSON.parse(canonicalizeJson(arr)) as Value;
     }
     case "ObjectLiteral": {
       const obj: Record<string, JsonValue> = {};
       for (const entry of term.entries) {
-        obj[entry.key] = scrubNonFiniteForJson(evalTerm(entry.value, sub, env));
+        obj[entry.key] = scrubNonFiniteForJson(evalTerm(entry.value, sub, env, aggregates));
       }
       return JSON.parse(canonicalizeJson(obj)) as Value;
     }

@@ -1,8 +1,10 @@
 import type {
+  AggregateCall,
   BodyElement,
   Equality,
   Expression,
   ExtDecl,
+  FunctionCall,
   HeadTerm,
   Literal,
   PrimitiveType,
@@ -560,39 +562,47 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
           ...(pos ?? []),
         );
       }
+      // An aggregate may sit anywhere inside a head argument, so the
+      // grouping columns are the arguments that contain none. Two things
+      // still have to hold of the rest.
+      const groupingVars = new Set<string>();
       for (const arg of rule.head.args) {
-        if (arg.$type === "AggregateCall") {
-          // No nested aggregates
-          if (containsAggregate(arg.arg)) {
-            const pos = nodePos(arg);
+        if (!containsAggregate(arg)) collectVars(arg, groupingVars);
+      }
+      for (const arg of rule.head.args) {
+        for (const agg of collectAggregates(arg)) {
+          // An aggregate's own argument may not contain another: there is
+          // one group to reduce over, not two.
+          if (containsAggregate(agg.arg)) {
+            const pos = nodePos(agg);
             throw new AnalyzerError(
               `Nested aggregate in head of rule for '${predicate}'`,
               ...(pos ?? []),
             );
           }
-        } else if (containsAggregate(arg)) {
-          // A top-level FunctionCall whose name matches an aggregate but
-          // whose arity isn't 1 survives post-processing as a FunctionCall
-          // (the rewrite-to-AggregateCall only fires for the single-argument
-          // form). Surface that as an arity error rather than the generic
-          // "aggregate must be a top-level head argument" message — that
-          // misleading text suggests the aggregate is nested when it's
-          // actually right where the user put it.
-          if (
-            arg.$type === "FunctionCall" &&
-            AGGREGATE_NAMES.has(arg.name) &&
-            arg.args.length !== 1
-          ) {
-            const pos = nodePos(arg);
-            throw new AnalyzerError(
-              `Aggregate '${arg.name}' takes exactly 1 argument, but got ${arg.args.length}`,
-              ...(pos ?? []),
-            );
-          }
-          // Aggregate must be top-level, not embedded in an expression
+        }
+        if (!containsAggregate(arg)) continue;
+        // A wrong-arity call survives post-processing as a FunctionCall,
+        // since the rewrite only fires for the single-argument form. Report
+        // the arity rather than letting it read as an unknown function.
+        for (const call of collectAggregateArityErrors(arg)) {
+          const pos = nodePos(call);
+          throw new AnalyzerError(
+            `Aggregate '${call.name}' takes exactly 1 argument, but got ${call.args.length}`,
+            ...(pos ?? []),
+          );
+        }
+        // Outside the aggregates, an argument that contains one may mention
+        // only grouping variables: anything else has no single value within
+        // the group. This is SQL's rule, and before aggregates could nest
+        // there was nowhere for such a variable to appear.
+        const outside = new Set<string>();
+        collectVarsOutsideAggregates(arg, outside);
+        for (const name of outside) {
+          if (groupingVars.has(name) || isAnonymousVar(name)) continue;
           const pos = nodePos(arg);
           throw new AnalyzerError(
-            `Aggregate must be a top-level head argument in rule for '${predicate}'`,
+            `Variable '${name}' in an aggregate expression in the head of '${predicate}' is neither a grouping column nor inside an aggregate`,
             ...(pos ?? []),
           );
         }
@@ -860,8 +870,62 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
   };
 }
 
+/**
+ * The AST children of `term`. Generic over properties rather than a case per
+ * expression shape, so the walkers below cannot silently miss a form that a
+ * later grammar change introduces.
+ */
+function* childTerms(term: object): Generator<HeadTerm> {
+  for (const [key, value] of Object.entries(term)) {
+    if (key.startsWith("$")) continue;
+    const children: unknown[] = Array.isArray(value) ? value : [value];
+    for (const child of children) {
+      if (typeof child === "object" && child !== null && "$type" in child) {
+        yield child as HeadTerm;
+      }
+    }
+  }
+}
+
+/** Every AggregateCall at or below `term`. */
+function collectAggregates(term: HeadTerm): AggregateCall[] {
+  const out: AggregateCall[] = [];
+  const visit = (t: HeadTerm) => {
+    if (t.$type === "AggregateCall") out.push(t);
+    for (const child of childTerms(t)) visit(child);
+  };
+  visit(term);
+  return out;
+}
+
+/**
+ * Calls at or below `term` that name an aggregate but survived the rewrite in
+ * `post-process.ts`, which fires only for the single-argument form. So any
+ * such call has the wrong arity.
+ */
+function collectAggregateArityErrors(term: HeadTerm): FunctionCall[] {
+  const out: FunctionCall[] = [];
+  const visit = (t: HeadTerm) => {
+    if (t.$type === "FunctionCall" && AGGREGATE_NAMES.has(t.name)) out.push(t);
+    for (const child of childTerms(t)) visit(child);
+  };
+  visit(term);
+  return out;
+}
+
+/**
+ * Variables mentioned by `term` outside any aggregate's argument. These are
+ * the ones that must be grouping columns, since an aggregate reduces its own
+ * argument over the group while everything around it must hold one value.
+ */
+function collectVarsOutsideAggregates(term: HeadTerm, into: Set<string>): void {
+  if (term.$type === "AggregateCall") return;
+  if (term.$type === "Variable") into.add(term.name);
+  for (const child of childTerms(term)) collectVarsOutsideAggregates(child, into);
+}
+
 /** Check whether a term contains any aggregate call. */
-function containsAggregate(term: HeadTerm): boolean {
+export function containsAggregate(term: HeadTerm): boolean {
   switch (term.$type) {
     case "AggregateCall":
       return true;

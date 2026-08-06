@@ -72,6 +72,72 @@ type MutableBracketAccess = Omit<BracketAccess, "$type" | "sliceColon"> & {
 
 const AGGREGATE_NAMES = new Set(["count", "sum", "avg", "min", "max", "concat", "list"]);
 
+/** Is this an AST node rather than a string, number, or plain array? */
+function isAstNodeValue(value: unknown): value is AstNode {
+  return typeof value === "object" && value !== null && "$type" in value;
+}
+
+/**
+ * Turn a single-argument FunctionCall whose name is an aggregate into an
+ * AggregateCall, reparenting its argument. Returns undefined for anything
+ * else, including the wrong-arity form, which the analyzer reports with a
+ * better message than a silent non-rewrite would produce.
+ */
+function toAggregateCall(
+  node: AstNode,
+  container: AstNode,
+  property: string,
+  index: number | undefined,
+): AggregateCall | undefined {
+  if (!isFunctionCall(node) || !AGGREGATE_NAMES.has(node.name) || node.args.length !== 1) {
+    return undefined;
+  }
+  const aggArg = node.args[0]!;
+  const aggregate: AggregateCall = {
+    $type: "AggregateCall",
+    $container: container,
+    $containerProperty: property,
+    $containerIndex: index,
+    $cstNode: node.$cstNode,
+    func: node.name,
+    arg: aggArg,
+  };
+  (aggArg as { $container: AstNode }).$container = aggregate;
+  return aggregate;
+}
+
+/**
+ * Rewrite every aggregate FunctionCall reachable from `node` into an
+ * AggregateCall. The walk is generic over AST properties rather than a
+ * hand-written case per expression shape, so a new expression form does not
+ * silently escape it. Children are rewritten before their parent, so an
+ * aggregate nested inside another aggregate's argument becomes an
+ * AggregateCall too and the analyzer can report it as nested rather than as
+ * an unknown function.
+ *
+ * The grammar types head args as Expression[]; after this rewrite the array
+ * can contain AggregateCall nodes, which `datamog-core` widens HeadAtom.args
+ * back to include.
+ */
+function rewriteAggregateCalls(node: AstNode): void {
+  for (const [key, value] of Object.entries(node)) {
+    if (key.startsWith("$")) continue;
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const child: unknown = value[i];
+        if (!isAstNodeValue(child)) continue;
+        rewriteAggregateCalls(child);
+        const agg = toAggregateCall(child, node, key, i);
+        if (agg) value[i] = agg;
+      }
+    } else if (isAstNodeValue(value)) {
+      rewriteAggregateCalls(value);
+      const agg = toAggregateCall(value, node, key, undefined);
+      if (agg) (node as unknown as Record<string, unknown>)[key] = agg;
+    }
+  }
+}
+
 function isQuotedIdentifier(value: string): boolean {
   return value.length >= 2 && value.startsWith("`") && value.endsWith("`");
 }
@@ -437,29 +503,12 @@ export function postProcess(program: Program): void {
     }
   }
 
-  // Rewrite aggregate FunctionCalls in rule heads into AggregateCall nodes.
+  // Rewrite aggregate FunctionCalls in rule heads into AggregateCall nodes,
+  // at any depth: `p(count(*) - 1)` is as much an aggregate head as
+  // `p(count(*))`. Only heads are walked, since an aggregate has no meaning
+  // in a body.
   for (const rule of program.statements) {
-    if (!isRule(rule)) continue;
-    for (let i = 0; i < rule.head.args.length; i++) {
-      const arg = rule.head.args[i]!;
-      if (isFunctionCall(arg) && AGGREGATE_NAMES.has(arg.name) && arg.args.length === 1) {
-        const aggArg = arg.args[0]!;
-        const aggregate: AggregateCall = {
-          $type: "AggregateCall",
-          $container: rule.head,
-          $containerProperty: "args",
-          $containerIndex: i,
-          $cstNode: arg.$cstNode,
-          func: arg.name,
-          arg: aggArg,
-        };
-        (aggArg as { $container: AstNode }).$container = aggregate;
-        // The grammar types head args as Expression[]; after this rewrite
-        // the array can contain AggregateCall nodes. Downstream callers
-        // (datamog-core) widen HeadAtom.args back to include them.
-        (rule.head.args as unknown as (typeof aggregate | typeof arg)[])[i] = aggregate;
-      }
-    }
+    if (isRule(rule)) rewriteAggregateCalls(rule.head);
   }
 
   // 6. Proof-term desugar. A rule whose head carries `:: Ctor` is a named rule:

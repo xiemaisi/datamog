@@ -6,7 +6,7 @@
 // drift in result semantics or trace output.
 
 import type { HeadAtom, Query, Rule, TypedProgram } from "datamog-core";
-import { queryProjection, rebuildVarTypes } from "datamog-core";
+import { containsAggregate, queryProjection, rebuildVarTypes } from "datamog-core";
 import type { QueryResult } from "datamog-engine";
 import {
   type Relation,
@@ -311,7 +311,7 @@ export abstract class BaseDatalogEvaluator {
   }
 
   protected isAggregateRule(rule: Rule): boolean {
-    return rule.head.args.some((a) => a.$type === "AggregateCall");
+    return rule.head.args.some(containsAggregate);
   }
 
   /** Enumerate body bindings and project the head, no aggregation. */
@@ -332,7 +332,7 @@ export abstract class BaseDatalogEvaluator {
     for (const sub of enumerate(plan.steps, 0, new Map(), plan.env, this.relations)) {
       const key: Value[] = [];
       for (const arg of rule.head.args) {
-        if (arg.$type !== "AggregateCall") {
+        if (!containsAggregate(arg)) {
           key.push(evalTerm(arg, sub, plan.env));
         }
       }
@@ -356,7 +356,7 @@ export abstract class BaseDatalogEvaluator {
     // ungrouped and emits its default row on empty input.
     const hasGroupingColumns = rule.head.args.some(
       (arg) =>
-        arg.$type !== "AggregateCall" &&
+        !containsAggregate(arg) &&
         arg.$type !== "NumberLiteral" &&
         arg.$type !== "StringLiteral" &&
         arg.$type !== "BooleanLiteral",
@@ -364,7 +364,9 @@ export abstract class BaseDatalogEvaluator {
     if (groups.size === 0 && !hasGroupingColumns) {
       const env = plan.env;
       const tuple = rule.head.args.map((arg) =>
-        arg.$type === "AggregateCall" ? evalAggregate(arg, [], env) : evalTerm(arg, new Map(), env),
+        containsAggregate(arg)
+          ? evalTerm(arg, new Map(), env, (agg) => evalAggregate(agg, [], env))
+          : evalTerm(arg, new Map(), env),
       );
       return [tuple];
     }
@@ -374,8 +376,15 @@ export abstract class BaseDatalogEvaluator {
       const tuple: Value[] = [];
       let keyIdx = 0;
       for (const arg of rule.head.args) {
-        if (arg.$type === "AggregateCall") {
-          tuple.push(evalAggregate(arg, subs, plan.env));
+        if (containsAggregate(arg)) {
+          // Ordinary variables inside an aggregate expression are grouping
+          // variables (the analyzer enforces it), so they hold one value
+          // across the group and `subs[0]` speaks for all of them.
+          tuple.push(
+            evalTerm(arg, subs[0] ?? new Map(), plan.env, (agg) =>
+              evalAggregate(agg, subs, plan.env),
+            ),
+          );
         } else {
           tuple.push(key[keyIdx++]!);
         }

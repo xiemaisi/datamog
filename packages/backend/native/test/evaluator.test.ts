@@ -1628,6 +1628,31 @@ describe("native backend — conjunctive queries", () => {
     expect(sortRows(results[0]!)).toEqual([{ C: "bob" }]);
   });
 
+  test("an aggregate may sit inside a head expression", async () => {
+    // The 1-based rank minus one, which the corpus otherwise writes as two
+    // predicates. Grouping is by Name, since only the second argument
+    // contains an aggregate.
+    const results = await run(`
+      name("bea"). name("ann"). name("cid").
+      index(N, count(Other) - 1) :- name(N), name(Other), Other <= N.
+      ?- index(N, I).
+    `);
+    expect(sortRows(results[0]!)).toEqual([
+      { N: "ann", I: 0 },
+      { N: "bea", I: 1 },
+      { N: "cid", I: 2 },
+    ]);
+  });
+
+  test("an ungrouped aggregate expression still yields its one row", async () => {
+    const results = await run(`
+      q(1). q(2). q(3).
+      total(count(*) * 10 - 1) :- q(_).
+      ?- total(T).
+    `);
+    expect(results[0]).toEqual([{ T: 29 }]);
+  });
+
   test("negating a proof-carrying predicate ignores the proof column (spec 8.3)", async () => {
     // `p(1)` has two derivations, `p(2)` one, `p(3)` none. Writing `not p(X)`
     // at the declared arity would be an arity error if the implicit proof

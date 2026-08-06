@@ -655,6 +655,29 @@ describe("translator", () => {
     expect(sql).not.toContain("GROUP BY");
   });
 
+  test("emits arithmetic over an aggregate, and does not group by it", () => {
+    const result = translateSource(`
+      input predicate parent(name: string, child: string).
+      rank(P, count(C) - 1) :- parent(P, C).
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain("COUNT(");
+    expect(sql).toContain("- 1");
+    // P groups; the aggregate expression must not appear in GROUP BY.
+    expect(sql).toContain("GROUP BY");
+    expect(sql.slice(sql.indexOf("GROUP BY"))).not.toContain("COUNT(");
+  });
+
+  test("an ungrouped aggregate expression emits no GROUP BY", () => {
+    const result = translateSource(`
+      input predicate parent(name: string, child: string).
+      total(count(*) - 1) :- parent(_, _).
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain("COUNT(*)");
+    expect(sql).not.toContain("GROUP BY");
+  });
+
   test("treats count(_0) as a normal user variable aggregate", () => {
     const result = translateSource(`
       input predicate parent(name: string, child: string).

@@ -863,9 +863,10 @@ The `*` wildcard is accepted only by `count` (see below).
 where `IDENT` is one of: `count`, `sum`, `avg`, `min`, `max`,
 `concat`, `list`.
 
-Aggregates may only appear as **top-level arguments** in rule heads (not
-nested in expressions, not in rule bodies). Non-aggregate head arguments
-become GROUP BY columns in the generated SQL.
+Aggregates may appear only in **rule heads**, never in a rule body. Within a
+head an aggregate may sit anywhere inside an argument's expression, so a head
+argument is a **grouping column** exactly when it contains no aggregate.
+Grouping columns become the GROUP BY columns of the generated SQL.
 
 ```
 student_avg(Student, avg(Score)) :- scores(Student, _, Score).
@@ -873,6 +874,23 @@ student_avg(Student, avg(Score)) :- scores(Student, _, Score).
 
 record_count(count(*)) :- scores(_, _, _).
 #            ^^^^^^^^^ count with no grouping columns
+
+var_index(Name, count(Other) - 1) :- varname(Name), varname(Other), Other <= Name.
+#         ^^^^ grouping   ^^^^^^^^^^^^^^^^ an aggregate inside an expression
+```
+
+Two rules constrain what may sit beside an aggregate.
+
+An aggregate's own argument may not contain another aggregate: there is one
+group to reduce over, not two.
+
+Outside the aggregates, an argument that contains one may mention only
+**grouping variables**. Every other variable has no single value within the
+group, so there is nothing for the expression to denote:
+
+```
+# rejected: grouping is {X}, so Y has no one value per group
+bad(X, sum(S) + Y) :- scores(X, S, Y).
 ```
 
 The argument `*` is a wildcard accepted only by `count`: `count(*)` counts
@@ -2374,8 +2392,19 @@ applied to, in order:
 2. the *sub-proofs* of the positive proof-carrying body atoms, in body order.
 
 Extensional atoms, comparisons, negations, and range/filter elements contribute
-nothing, and a don't-care `_` is never a witness. A proof term is a `value`
-(§2.9), specifically the object
+nothing, and a don't-care `_` is never a witness.
+
+That list is a consequence rather than a rule of its own. Every premise has a
+witness; the ones above are **proof-irrelevant**, meaning any two derivations of
+them are the same derivation, so their witness is trivial and would be `true` if
+it were ever written down. A trivial witness is drawn from a one-element type and
+is always defined (§5.4), so carrying it in the proof term would record nothing
+that reading the rule does not already say. It is therefore erased, and what is
+left is the enumeration above: the premises whose derivation is worth naming.
+Erasure is also why a capture binder on such a premise is rejected rather than
+bound to its trivial witness (§8.3).
+
+A proof term is a `value` (§2.9), specifically the object
 
 ```
 { "$proof": "<predicate>::<Ctor>", "args": [ <arg>, ... ] }

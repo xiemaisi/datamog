@@ -51,6 +51,7 @@ export {
   allVarsBound,
   BUILTIN_BODY_ATOMS,
   chooseEqualityBinding,
+  containsAggregate,
   equalityBindingCandidates,
   isAnonymousVar,
   isBuiltinBodyAtom,
