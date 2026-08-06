@@ -90,12 +90,11 @@ clause_lit_named(["m", C, D], V, P) :- merge(C, D), clause_lit_named(D, V, P).
 #
 # The engine enumerates assignments as bit patterns, so it needs variables
 # numbered 0 .. nvars-1. Rank each name by how many names are <= it (every
-# name counts itself, so the smallest gets rank 1); the 0-based index is
-# that rank minus one.
+# name counts itself, so the smallest gets rank 1) and subtract one for a
+# 0-based index.
 
 varname(Name) :- node(_, "var"), node_var(_, Name).
-rank(Name, count(Other)) :- varname(Name), varname(Other), Other <= Name.
-var_index(Name, J) :- rank(Name, K), J = K - 1.
+var_index(Name, count(Other) - 1) :- varname(Name), varname(Other), Other <= Name.
 nvars(count(Name)) :- varname(Name).
 
 # --- Bridge to the step-1 engine interface: clause_lit(C, Index, Pol) ---

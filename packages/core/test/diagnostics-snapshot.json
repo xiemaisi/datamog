@@ -1000,10 +1000,6 @@
         "integer",
         "value"
       ],
-      "rank": [
-        "string",
-        "integer"
-      ],
       "root": [
         "integer"
       ],
@@ -1089,10 +1085,6 @@
         "integer"
       ],
       "nvars": [
-        "integer"
-      ],
-      "rank": [
-        "string",
         "integer"
       ],
       "root": [
@@ -1521,10 +1513,6 @@
         "integer"
       ],
       "oprank": [
-        "integer",
-        "integer"
-      ],
-      "oprank_raw": [
         "integer",
         "integer"
       ],
@@ -2319,10 +2307,6 @@
       "pos": [
         "value",
         "value"
-      ],
-      "rank": [
-        "string",
-        "integer"
       ],
       "reachable": [
         "value"

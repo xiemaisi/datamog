@@ -119,8 +119,7 @@ clause_lit_named(["m", C, D], V, P) :- merge(C, D), clause_lit_named(C, V, P).
 clause_lit_named(["m", C, D], V, P) :- merge(C, D), clause_lit_named(D, V, P).
 
 varname(Name) :- node(_, "var"), node_var(_, Name).
-rank(Name, count(Other)) :- varname(Name), varname(Other), Other <= Name.
-var_index(Name, J) :- rank(Name, K), J = K - 1.
+var_index(Name, count(Other) - 1) :- varname(Name), varname(Other), Other <= Name.
 nvars(count(Name)) :- varname(Name).
 
 root_clause(C) :- root(N), pos(N, C).

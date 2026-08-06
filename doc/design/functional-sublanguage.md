@@ -230,35 +230,116 @@ unknown because comparison is total, so control takes the else branch and calls
 
 Proving the function returns without recursing at a leaf means reading the
 condition, which is the ranking-function analysis
-[`finiteness-checking.md`](./finiteness-checking.md) rejects as too heavy. The cheap
-sound answer is a **depth budget** instead:
+[`finiteness-checking.md`](./finiteness-checking.md) rejects as too heavy.
 
-- **Static rule.** Each recursive function designates one parameter, and every
-  recursive call within an SCC of the call graph must pass a subscript / slice /
-  element chain rooted at that parameter. `rev(L[1], ...)` qualifies; `rev(L, ...)`
-  and `rev(g(L), ...)` do not.
-- **Runtime rule.** Recursion is bounded by the JSON depth of that parameter's
-  value at the outermost call. Exceeding it yields NULL.
+An earlier draft answered with a **depth budget**: designate one parameter, require
+every recursive call inside an SCC to pass a subscript chain rooted at it, and bound
+recursion at runtime by that value's JSON depth. That is sound, since subscripting
+never grows a value. It is also too tight, and the aggregates section below is what
+exposed it. The natural fold over an array recurses on an *index*:
 
-That is sound without reading any condition, because subscripting never grows a
-value, so a chain of subscript steps rooted at `L` has length at most `depth(L)`.
-It needs no cap constant, unlike the per-stratum iteration cap, and it degrades the
-way every other out-of-domain operation does: `f(null)` has budget zero, so the
-inner call is NULL and the function returns whatever its body makes of that.
+```prolog
+fun sum_from(L, I, Acc) = Acc if I >= length(L) else sum_from(L, I + 1, Acc + as_integer(L[I])).
+```
 
-`reverse` calling `rev` is unconstrained, because that edge does not come back;
-only calls inside an SCC need the decreasing argument.
+`I + 1` is not a subscript chain, so the static rule rejects it outright, and the
+runtime bound is worse: a flat array has JSON depth 2 however long it is, so a
+hundred-element fold would be cut off after two calls. The rule forbids the shape
+that makes the feature useful.
+
+So the budget is on **size**, not depth:
+
+- Recursion is bounded by the total node count of the arguments at the outermost
+  call. Exceeding the bound yields NULL.
+- No static decrease rule. The subscript-chain check survives at most as a warning.
+
+Size subsumes depth, admits index recursion over an n-element array, and costs
+nothing more to compute. It needs no cap constant, unlike the per-stratum iteration
+cap, and it degrades the way every other out-of-domain operation does: `f(null)`
+has budget zero, so the inner call is NULL and the function returns whatever its
+body makes of that.
+
+Be clear about what changed with it. Under the depth budget the runtime bound was a
+backstop for a class the static rule had already proven terminating. Under the size
+budget there is no such class: the bound *is* the termination mechanism, and a
+function that would otherwise loop is cut off rather than rejected. That is one
+fewer analysis to build, and one fewer property to promise.
 
 **What this does not buy.** Each *call* terminates. Programs do not: feeding a
 function's output into a recursive predicate diverges exactly as `parse_json` does
 today, and `finiteness.ts` already flags it via the `FunctionCall → PLUS` rule,
-unchanged. Cost is not bounded either, since a function may be exponential in its
-argument's size while linear in its depth. Termination here is a code-generation
-property, not a safety property.
+unchanged. Cost is not bounded usefully either, since the bound is the argument's
+size and a function may do exponential work within it. Termination here is a
+code-generation property, not a safety property.
 
-Note the pedagogy shifts with the design: the lesson becomes "your recursion is
-bounded by the data's depth" rather than "your recursion is structural". The
-datatype half is what would give the second lesson.
+The pedagogy shifts with the design: the lesson becomes "your recursion is bounded
+by the size of the data" rather than "your recursion is structural". The datatype
+half is what would give the second lesson.
+
+## Aggregates: generalise them, but not with a fold
+
+The tempting move is to notice that `count`, `sum`, `avg`, `min`, `max`, `concat`
+and `list` are all folds, and replace the fixed seven with a user-supplied
+combining function. It is the wrong trade, for five reasons that are worth
+recording because the shape of the argument is the opposite of the one that made
+recursive functions cheap.
+
+**The SQL argument runs the other way.** Recursive `fun` costs nothing on the SQL
+backends because all eleven term-manipulating examples are already `native-only`.
+Aggregates are the reverse: 17 of the 25 aggregate-using example files run on SQL
+backends today, compiling to `SUM`, `COUNT`, `STRING_AGG` and `JSONB_AGG`. A
+user-defined fold compiles to none of those, so this trades a working feature for
+a broken one.
+
+**A fold needs an order that a relation does not have.** Only five of the seven
+are commutative monoids. `concat` and `list` are order-dependent and buy
+determinism with a hardcoded `ORDER BY` on the argument (spec §2.7). Commutativity
+of a user-supplied combiner is not checkable, so a generic fold hands the user a
+way to write an order-dependent aggregate over an unordered bag and get a
+different answer per backend.
+
+**A bare fold cannot express `avg`.** The reducer accumulates `(total, n)` and
+divides at the end. What that needs is the initial/combine/finalise triple of
+`CREATE AGGREGATE`, not a fold, so the proposal understates its own interface.
+
+**The monoid unit disagrees with SQL's empty group.** Measured on an empty
+relation, `count(*)` yields a row containing `0` while `sum` yields a row
+containing `null`. `fold (+) 0` would give `0`. The existing aggregates are folds
+with a *partial* unit, so re-presenting them as monoid folds would quietly change
+`sum` on empty groups. NULL-skipping is baked into every arm of the reducer for
+the same reason.
+
+**What would be deleted is the small part.** `evalAggregate` is 104 lines.
+`analyzer.ts` alone carries 59 aggregate references: the top-level-head-position
+rule, the all-rules-must-agree check, the no-recursion rule, and the GROUP BY
+synthesis in the translator. None of that concerns *which* seven functions exist.
+The machinery is grouping, not the function table, so the simplification is a
+user-extensible 104-line table bought with everything above.
+
+### What does generalise, for free
+
+`list(X)` already collects a group into a `value` array, so with a recursive `fun`
+any user-defined aggregate is two rules:
+
+```prolog
+collected(G, list(X)) :- data(G, X).
+result(G, median(L)) :- collected(G, L).
+```
+
+No fold combinator, no higher-order functions, no change to the aggregate
+machinery, and the `list` half still compiles on every backend, with only the
+outer `fun` interpreter-bound. That covers `product`, `argmax`, `stddev`,
+`any` / `all`, `median`, and joining with a separator other than the `,` the
+dialects hardcode.
+
+The limits are real: it materialises the group as JSON, so it is for user-defined
+aggregates rather than a replacement for `SUM` over a million rows; it inherits
+`list`'s NULL-skipping and its NULL for an empty group; and `list` sorts by value,
+so an order-sensitive fold also wants the `order by` from
+[`value-construction.md`](./value-construction.md).
+
+This is also the route that broke the depth budget, since folding an array means
+recursing on an index. See Termination above.
 
 ## Where it does not help
 
@@ -281,7 +362,7 @@ as: NULL propagates through *operations* and is absorbed by *comparisons*.
 
 **The operations inside a function propagate, so out-of-shape input needs no
 special rule.** Subscripting a leaf yields NULL, arithmetic on NULL yields NULL,
-and the depth budget yields NULL. That is the answer `3 / 0` and `sqrt(-1)`
+and the size budget yields NULL. That is the answer `3 / 0` and `sqrt(-1)`
 already give, so a function applied to garbage returns NULL rather than raising.
 Note this is a statement about the body, not about the function: a function as a
 whole need not propagate, which is the subject of the nullness decision below.
@@ -318,7 +399,7 @@ than defaulted because inheriting `total` by omission would claim non-nullness
 the analysis cannot prove. A `fun` is a call in expression position, so it needs
 the same two bits, and neither comes for free:
 
-- **Never `total`.** The depth budget yields NULL from non-null arguments, so no
+- **Never `total`.** The size budget yields NULL from non-null arguments, so no
   recursive function can claim it. `{strict, total: false}` is the ceiling, which
   puts `fun` in the same class as the parsing and domain-error families.
 - **Usually not `strict` either.** Every builtin is strict. A function with a
@@ -343,9 +424,9 @@ Runtime stays first-order, no closures in data, everything still inlines.
 
 The second finding is the case for it, and the sketch above shows what its absence
 costs: dispatch on `E["kind"]` against untyped JSON, no arity check, no
-exhaustiveness check, and a structural termination argument replaced by a depth
-budget. A `data` declaration with constructors usable as builders would fix all
-four.
+exhaustiveness check, and a structural termination argument replaced by a runtime
+size budget. A `data` declaration with constructors usable as builders would fix
+all four.
 
 It is deferred because it is unsatisfying as currently conceived, and the specific
 problem is that it collides with proof terms. `Cons(H, T)` from a `data`
@@ -381,9 +462,9 @@ currently sidesteps:
    five backends, and nothing downstream learns the feature exists. It does not give
    you `double` in body-atom position, since this is an expression and not a
    relation.
-3. **Recursive `fun`**, interpreter-only, with the static subscript-chain rule,
-   the runtime depth budget, and a `NullBehaviour` per function. Removes the
-   universe enumeration and the subterm closures.
+3. **Recursive `fun`**, interpreter-only, with the runtime size budget and a
+   `NullBehaviour` per function. Removes the universe enumeration and the subterm
+   closures, and makes user-defined aggregates writable as `fun` over `list`.
 4. **Compile-time higher-order**, so `map` and `fold` exist. Only if 3 earns it.
 
 Steps 1 and 2 are worth doing regardless of what happens to the rest, and step 1 is
@@ -397,7 +478,7 @@ here and costs less than any step above.
 
 1. Does "functions cannot read relations" stay, knowing it rules out the
    id-keyed-tree half of the corpus? Relaxing it takes stratification with it.
-2. Is a depth budget an acceptable termination story for a teaching language, or
+2. Is a size budget an acceptable termination story for a teaching language, or
    does the lesson have to be structural recursion? If the latter, the datatype half
    stops being optional.
 3. Can the datatype half be spelled so that a builder is visibly not a proof

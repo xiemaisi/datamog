@@ -51,8 +51,7 @@ input predicate root(id: integer).
 
 # Propositional variables: distinct names, densely indexed 0 .. nprop-1.
 varname(Name) :- node(_, "var"), node_var(_, Name).
-rank(Name, count(Other)) :- varname(Name), varname(Other), Other <= Name.
-var_index(Name, J) :- rank(Name, K), J = K - 1.
+var_index(Name, count(Other) - 1) :- varname(Name), varname(Other), Other <= Name.
 nprop(count(Name)) :- varname(Name).
 
 # Internal nodes: everything that is not a leaf, ranked by id and given a

@@ -69,8 +69,7 @@ original(V) :- root(Id), eval(Id, V).
 # (0..k-1) via a count, so the sparse position ids do not matter for the search.
 
 opnode(Id) :- binop(Id, _, _, _).
-oprank_raw(Id, count(Other)) :- opnode(Id), opnode(Other), Other <= Id.
-oprank(Id, K - 1) :- oprank_raw(Id, K).
+oprank(Id, count(Other) - 1) :- opnode(Id), opnode(Other), Other <= Id.
 nops(count(Id)) :- opnode(Id).
 
 pow3(0, 1).
