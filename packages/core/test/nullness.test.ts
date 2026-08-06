@@ -227,17 +227,29 @@ describe("aggregates", () => {
     expect(cols(source, "q")).toEqual([false]);
   });
 
-  test("sum propagates its argument's nullness", () => {
-    const nullable = `
-      input predicate p(a: integer?).
-      q(sum(X)) :- p(X).
-    `;
-    const nonNull = `
+  // An ungrouped aggregate emits one row per predicate, including over an empty
+  // relation, where `sum` is NULL however non-null its argument. Believing it
+  // non-null lowered a join against it to a plain `=`, dropping the NULL-NULL
+  // match null.md §4 specifies. See nullness-tracking.md §8.
+  test("an ungrouped sum is nullable even over a non-null column", () => {
+    const source = `
       input predicate p(a: integer).
       q(sum(X)) :- p(X).
     `;
-    expect(cols(nullable, "q")).toEqual([true]);
-    expect(cols(nonNull, "q")).toEqual([false]);
+    expect(cols(source, "q")).toEqual([true]);
+  });
+
+  test("a grouped sum propagates its argument's nullness", () => {
+    const nullable = `
+      input predicate p(g: string, a: integer?).
+      q(G, sum(X)) :- p(G, X).
+    `;
+    const nonNull = `
+      input predicate p(g: string, a: integer).
+      q(G, sum(X)) :- p(G, X).
+    `;
+    expect(cols(nullable, "q")).toEqual([false, true]);
+    expect(cols(nonNull, "q")).toEqual([false, false]);
   });
 });
 

@@ -12,7 +12,7 @@
 // imprecise, since a column wrongly believed non-null lowers a join to a plain
 // `=` and drops the NULL-NULL match that null.md §4 specifies.
 
-import { BUILTIN_BODY_ATOMS } from "./analyzer.ts";
+import { BUILTIN_BODY_ATOMS, containsAggregate } from "./analyzer.ts";
 import type { AnalyzedProgram } from "./analyzer.ts";
 import type {
   BinaryExpr,
@@ -411,6 +411,16 @@ function isStrictOp(op: string): boolean {
 }
 
 /**
+ * Does `owner` aggregate with no grouping columns? Grouping columns are the head
+ * arguments containing no aggregate (`analyzer.ts`'s rule), so a head where every
+ * argument contains one emits exactly one row per predicate, including over empty
+ * input. Queries never carry an aggregate, so they are never ungrouped here.
+ */
+function isUngroupedAggregate(owner: BodyOwner): boolean {
+  return owner.$type === "Rule" && !owner.head.args.some((a) => !containsAggregate(a));
+}
+
+/**
  * Can `expr` evaluate to SQL NULL? The forward direction, used for head
  * arguments and for the equality refinement's premise.
  */
@@ -437,10 +447,15 @@ export function mayBeNull(
     case "UnaryExpr":
       return rec(expr.operand);
     case "AggregateCall":
-      // A group exists only because a row does, so `count` is never NULL (an
-      // empty count is 0). The rest are NULL exactly when every row in some
-      // group has a NULL argument, so they propagate rather than originate.
-      return expr.func === "count" ? false : rec(expr.arg);
+      // `count` never originates a NULL: an empty input counts 0, and a group
+      // counts at least one.
+      if (expr.func === "count") return false;
+      // "A group exists only because a row does" holds for a *grouped*
+      // aggregate, where the argument's nullness is the whole story. An
+      // ungrouped one emits a single row even over an empty relation, and
+      // there `sum` and friends are NULL however non-null the argument is.
+      if (isUngroupedAggregate(owner)) return true;
+      return rec(expr.arg);
     case "FunctionCall": {
       const overload = ctx.overloads.get(expr);
       // Unresolved: assume the worst, which keeps the analysis sound when

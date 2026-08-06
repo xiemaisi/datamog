@@ -120,6 +120,20 @@ describe("translator", () => {
     expect(sql).not.toContain("IS NOT DISTINCT FROM");
   });
 
+  test("a join against an ungrouped aggregate stays null-aware", () => {
+    // `sum` over an empty relation is NULL even though `v` is non-null, because
+    // an ungrouped aggregate emits a row regardless. Taking the plain `=` here
+    // dropped the NULL-NULL match. See doc/design/nullness-tracking.md §8.
+    const result = translateSource(`
+      input predicate s(v: integer).
+      input predicate other(k: string, w: integer?).
+      tot(sum(V)) :- s(V).
+      j(K) :- tot(X), other(K, X).
+    `);
+    const sql = norm(result.createViews.find((v) => v.includes('VIEW "j"'))!);
+    expect(sql).toContain('__b0."col1" IS NOT DISTINCT FROM __b1."w"');
+  });
+
   test("generates WHERE for constants in rule body", () => {
     const result = translateSource(`
       input predicate parent(name: string, child: string).
