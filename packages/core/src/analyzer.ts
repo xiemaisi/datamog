@@ -924,27 +924,74 @@ function collectVarsOutsideAggregates(term: HeadTerm, into: Set<string>): void {
   for (const child of childTerms(term)) collectVarsOutsideAggregates(child, into);
 }
 
+/** A literal, or a negated numeric literal: constant, so it cannot vary per group. */
+function isConstantLiteral(term: HeadTerm): boolean {
+  switch (term.$type) {
+    case "NumberLiteral":
+    case "StringLiteral":
+    case "BooleanLiteral":
+      return true;
+    case "UnaryExpr":
+      return term.op === "-" && isConstantLiteral(term.operand);
+    default:
+      return false;
+  }
+}
+
 /**
- * Does `rule` have any grouping column? A head argument is a grouping column
- * when it contains no aggregate and is not a direct literal: both runtime paths
- * omit direct number, string and boolean literals, the translator because a bare
- * integer in `GROUP BY` is read positionally by Postgres, and the interpreters
- * to match it.
+ * The variables `rule`'s body binds to a constant, mapped to that constant.
+ * Built on `equalityBindingCandidates`, so this agrees with safety and type
+ * inference about which side of an equality does the binding.
+ *
+ * The expression, not just the name, because a caller that treats such a
+ * variable as ungrouped still has to produce its value: the interpreters' empty
+ * group has no row to read it from, so they evaluate it from here instead.
+ */
+export function literalBindings(rule: Rule): ReadonlyMap<string, Expression> {
+  const bound = new Map<string, Expression>();
+  for (const elem of rule.body) {
+    if (elem.$type !== "Equality") continue;
+    for (const candidate of equalityBindingCandidates(elem)) {
+      if (isConstantLiteral(candidate.expr) && !bound.has(candidate.variable)) {
+        bound.set(candidate.variable, candidate.expr);
+      }
+    }
+  }
+  return bound;
+}
+
+/**
+ * Is `arg` a grouping column? No, if it contains an aggregate (it is reduced
+ * over the group instead), or if it is constant: a constant does not vary per
+ * group, and a bare integer in `GROUP BY` is read positionally by Postgres.
+ * A variable the body binds to a literal is constant too, which is what makes
+ * `q(G, sum(V)) :- s(V), G = "all".` mean the same as `q("all", sum(V))`, per
+ * null.md §4 on a shared variable and a spelled-out `=` being interchangeable.
+ *
+ * Pass `literalBound` from `literalBindings` for the enclosing rule.
+ */
+export function isGroupingArg(
+  arg: HeadTerm,
+  literalBound: ReadonlyMap<string, Expression>,
+): boolean {
+  if (containsAggregate(arg)) return false;
+  if (isConstantLiteral(arg)) return false;
+  if (arg.$type === "Variable") return !literalBound.has(arg.name);
+  return true;
+}
+
+/**
+ * Does `rule` have any grouping column?
  *
  * This is the one definition of the question. A rule with no grouping column
  * emits a single row even over empty input, filled with the empty-group
- * aggregate values, so the answer decides both what the evaluator emits and
- * whether a non-`count` aggregate column can be NULL (`nullness.ts`). Two
- * copies of it drifted apart once already.
+ * aggregate values, so the answer decides what the evaluator emits, what the
+ * translator puts in `GROUP BY`, and whether a non-`count` aggregate column can
+ * be NULL (`nullness.ts`). Copies of it have drifted apart twice.
  */
 export function hasGroupingColumns(rule: Rule): boolean {
-  return rule.head.args.some(
-    (arg) =>
-      !containsAggregate(arg) &&
-      arg.$type !== "NumberLiteral" &&
-      arg.$type !== "StringLiteral" &&
-      arg.$type !== "BooleanLiteral",
-  );
+  const literalBound = literalBindings(rule);
+  return rule.head.args.some((arg) => isGroupingArg(arg, literalBound));
 }
 
 /** Check whether a term contains any aggregate call. */

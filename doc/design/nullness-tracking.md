@@ -1,9 +1,10 @@
 # Design notes: tracking nullness in the type system
 
-Status: implemented through stage 2 (§6). One cross-backend grouping divergence
-is noted there, in the runtimes rather than in this analysis; stage 3 declined
-(§7). The normative rules are spec §5.4 (tracking and
-refinement), §5.10 (annotations) and §9.3 (boundaries). This note is the rationale
+Status: implemented through stage 2 (§6); stage 3 declined (§7). Two grouping
+divergences found after stage 0 shipped are fixed and recorded there, along with
+the reading of "grouping column" they settled. The normative rules are spec §5.4
+(tracking and refinement), §5.10 (annotations) and §9.3 (boundaries). This note is
+the rationale
 and the alternatives rejected.
 
 [null.md](./null.md) §7 records that nullness stays out of the type system, and
@@ -372,25 +373,43 @@ one exported definition, `hasGroupingColumns` in `analyzer.ts`, which the
 interpreters and this analysis now both call rather than restate. The regression
 test uses a literal head argument, which is what the first attempt lacked.
 
-**One divergence remains, and it is not a nullness bug.** A *literal-bound*
-variable is omitted from `GROUP BY` by the translator, because its binding emits a
-bare integer that Postgres would read positionally, while the interpreters treat
-it as an ordinary grouping column. So the two disagree on results, not just on
-precision:
+**A second divergence followed from the same root, and it was not a nullness bug.**
+A *literal-bound* variable was omitted from `GROUP BY` by the translator, because
+its binding emits a bare literal that Postgres would read positionally, while the
+interpreters treated it as an ordinary grouping column. The two disagreed on
+results, not just on precision:
 
 ```prolog
-# over empty q: sqlite gives {(5, 0)}, the interpreters give {}
+# over empty q: sqlite gave {(5, 0)}, the interpreters gave {}
 r(Y, count(*)) :- q(_), Y = 5.
 ```
 
-That is a "backends must agree" violation (§2) rather than something this
-analysis can paper over, and fixing it means choosing which reading is right. The
-principled one is that a non-aggregate head argument is a grouping column, making
-the interpreters correct and the translator's omission a codegen workaround that
-leaked into semantics; the counter-argument is that the workaround is unavoidable,
-since `GROUP BY 5` is positional in Postgres. Nothing in the spec settles it, and
-`hasGroupingColumns` deliberately encodes the *current* runtime rule so the two
-callers agree with each other until it is settled.
+Settling it meant choosing a reading, and the spec does not say. Two candidates:
+
+- **A non-aggregate head argument is a grouping column**, making the interpreters
+  right and the translator's omission a codegen workaround that leaked into
+  semantics. Rejected, because it does not stop at literal-bound variables: a
+  *direct* literal is already uniformly not a grouping column on every backend, so
+  this reading would have to change that too, and then `q("all", sum(X))` over
+  empty input would derive nothing while `q(sum(X))` derives one row. The
+  ungrouped-emits-a-row convention is what makes `count(*)` over an empty relation
+  `0`, and it should not depend on whether a constant label sits beside it.
+- **A constant head argument is not a grouping column**, whether written as a
+  literal or bound to one. Chosen. It keeps the two spellings interchangeable,
+  which null.md §4 already commits to for exactly this reason, and it leaves the
+  direct-literal case alone.
+
+So `isGroupingArg` in `analyzer.ts` is the shared per-argument definition, and
+`hasGroupingColumns` is `some` over it. The translator's `GROUP BY` decision, the
+interpreters' empty-group emission and this analysis all call it, replacing a
+regex over emitted SQL that recognised numbers and strings but not `TRUE`/`FALSE`.
+`literalBindings` carries the bound *expression* rather than just the name, because
+the interpreters' empty group has no row to read the variable from and has to
+evaluate its constant instead.
+
+The regex survives under its other job, deciding that a binding cannot be NULL and
+so may take the plain equality. That question is not this one, and conflating them
+is what put a grouping rule in a SQL-text matcher to begin with.
 
 **Stage 1, annotations.** §3.2 and §3.3. One grammar production, plus
 `liftHeadAnnotations`, the `argTypes` shape, `publishedNullness`,

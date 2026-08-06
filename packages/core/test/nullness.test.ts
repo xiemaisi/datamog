@@ -264,6 +264,30 @@ describe("aggregates", () => {
     `;
     expect(cols(source, "q")).toEqual([false, true]);
   });
+
+  // A variable the body binds to a literal is constant too, so it groups no more
+  // than the literal does. null.md §4 makes the two spellings interchangeable, so
+  // they have to agree here as well.
+  test("a literal-bound grouping variable does not make an aggregate grouped", () => {
+    const spelledOut = `
+      input predicate p(a: integer).
+      q(G, sum(X)) :- p(X), G = "all".
+    `;
+    const literal = `
+      input predicate p(a: integer).
+      q("all", sum(X)) :- p(X).
+    `;
+    expect(cols(spelledOut, "q")).toEqual(cols(literal, "q"));
+    expect(cols(spelledOut, "q")).toEqual([false, true]);
+  });
+
+  test("a genuine grouping variable still groups", () => {
+    const source = `
+      input predicate p(g: string, a: integer).
+      q(G, sum(X)) :- p(G, X), G <> "skip".
+    `;
+    expect(cols(source, "q")).toEqual([false, false]);
+  });
 });
 
 describe("recursion", () => {

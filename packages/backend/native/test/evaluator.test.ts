@@ -1006,6 +1006,24 @@ describe("native backend — aggregate edges", () => {
     expect(results[0]).toEqual([{ T: null }]);
   });
 
+  test("a literal-bound head variable keeps its value in the empty-group row", async () => {
+    // `G = "all"` is the spelled-out form of the literal head argument below, so
+    // both must derive the same tuple (null.md §4). The empty group has no
+    // substitution to read `G` from, so its value comes from the binding.
+    const spelledOut = await run(`
+      p(X) :- X in [1 .. 0].
+      total(G, sum(X)) :- p(X), G = "all".
+      ?- total(G, T).
+    `);
+    const literal = await run(`
+      p(X) :- X in [1 .. 0].
+      total("all", sum(X)) :- p(X).
+      ?- total(G, T).
+    `);
+    expect(spelledOut[0]).toEqual([{ G: "all", T: null }]);
+    expect(spelledOut[0]).toEqual(literal[0]);
+  });
+
   test("aggregate with grouping columns over empty body still yields no rows", async () => {
     // With at least one non-aggregate head position, an empty body produces
     // no groups and therefore no output rows — same as `GROUP BY ...` in SQL.

@@ -105,9 +105,12 @@ from the backends. The whole rule:
   The formal `PrimitiveType` set also includes `value`, so "primitive" alone does
   not state this restriction. `value` keys would need a canonical-text comparison,
   which is what made the index-pair workaround above give the wrong answer.
-- String keys use Datamog's portable Unicode code-point order through
-  `dialect.stringOrder`. A raw Postgres `ORDER BY` uses the database's collation and
-  can disagree with SQLite and the native evaluator.
+- String keys go through `dialect.stringOrder`, which already exists and is already
+  applied to the aggregate ordering key when the argument is a string
+  (`translator.ts`), emitting `COLLATE "C"` on Postgres and `COLLATE BINARY` on
+  SQLite. This is a reuse rather than new work: a raw Postgres `ORDER BY` would use
+  the database's collation and disagree with SQLite and the interpreters, which is
+  the bug that wrapper already prevents for `list` and `concat`.
 - **NULLs last**, emitted explicitly. Null is an isolated point in the order rather
   than a bottom (`null.md` §5, which rejects bottom because `min` skips NULLs), so the
   order does not place it, and the backends disagree left to themselves: SQLite sorts

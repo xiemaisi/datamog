@@ -9,6 +9,7 @@ import type { HeadAtom, Query, Rule, TypedProgram } from "datamog-core";
 import {
   containsAggregate,
   hasGroupingColumns,
+  literalBindings,
   queryProjection,
   rebuildVarTypes,
 } from "datamog-core";
@@ -355,16 +356,23 @@ export abstract class BaseDatalogEvaluator {
     // rule with no grouping columns whose body produces nothing still yields
     // a single tuple of default aggregate values, matching every SQL backend.
     //
-    // The translator omits literal head args (NumberLiteral/StringLiteral)
-    // from GROUP BY because they don't vary per group; mirror that exclusion
-    // here so a rule like `total("hello", count(*))` is still treated as
-    // ungrouped and emits its default row on empty input.
+    // What counts as a grouping column is `hasGroupingColumns`, shared with the
+    // translator and the nullness analysis, so a rule like
+    // `total("hello", count(*))` is ungrouped and emits its default row.
     if (groups.size === 0 && !hasGroupingColumns(rule)) {
       const env = plan.env;
+      // A literal-bound grouping variable still has a value, and it comes from
+      // the body's equality rather than from any row, so seed it: with no rows
+      // there is no substitution to read `G` out of in
+      // `total(G, count(*)) :- p(_), G = "hello".`
+      const sub: Substitution = new Map();
+      for (const [name, expr] of literalBindings(rule)) {
+        sub.set(name, evalTerm(expr, new Map(), env));
+      }
       const tuple = rule.head.args.map((arg) =>
         containsAggregate(arg)
-          ? evalTerm(arg, new Map(), env, (agg) => evalAggregate(agg, [], env))
-          : evalTerm(arg, new Map(), env),
+          ? evalTerm(arg, sub, env, (agg) => evalAggregate(agg, [], env))
+          : evalTerm(arg, sub, env),
       );
       return [tuple];
     }

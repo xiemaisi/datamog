@@ -54,6 +54,8 @@ export {
   containsAggregate,
   equalityBindingCandidates,
   hasGroupingColumns,
+  isGroupingArg,
+  literalBindings,
   isAnonymousVar,
   isBuiltinBodyAtom,
   queryProjection,

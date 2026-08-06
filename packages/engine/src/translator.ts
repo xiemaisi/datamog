@@ -25,6 +25,8 @@ import {
   type TypedProgram,
   type Variable,
   containsAggregate,
+  isGroupingArg,
+  literalBindings,
 } from "datamog-core";
 import {
   AnalyzerError,
@@ -684,8 +686,10 @@ function translateRule(
     if (idx > 0) refs.unshift(refs.splice(idx, 1)[0]!);
   }
 
-  // SELECT clause (with GROUP BY support for aggregate rules)
+  // SELECT clause (with GROUP BY support for aggregate rules). `isGroupingArg`
+  // is the shared definition of what groups; see `analyzer.ts`.
   const isAggregateRule = rule.head.args.some(containsAggregate);
+  const literalBound = literalBindings(rule);
   const selectParts: string[] = [];
   const groupByExprs: string[] = [];
 
@@ -717,10 +721,7 @@ function translateRule(
       const varType = varTypes.get(term.name);
       const expr = liftToJsonIfNeeded(rawExpr, varType, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
-      // Skip literal-valued bindings (e.g. `Y = 5` then `r(Y, count(X))`)
-      // for the same reason we skip literal head terms below: a bare integer
-      // in GROUP BY is interpreted positionally by Postgres.
-      if (isAggregateRule && !isLiteralBinding(first)) {
+      if (isAggregateRule && isGroupingArg(term, literalBound)) {
         groupByExprs.push(expr);
       }
     } else {
@@ -728,17 +729,7 @@ function translateRule(
       const termType = inferTermType(term, varTypes, columnTypes);
       const expr = liftToJsonIfNeeded(rawExpr, termType, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
-      // Skip literal constants in GROUP BY: an integer literal like `GROUP BY 2`
-      // is interpreted positionally by Postgres and would either alias
-      // an aggregate column (error) or point out of range. Constants don't
-      // vary per group and are permitted in the SELECT list without appearing
-      // in GROUP BY.
-      if (
-        isAggregateRule &&
-        term.$type !== "NumberLiteral" &&
-        term.$type !== "StringLiteral" &&
-        term.$type !== "BooleanLiteral"
-      ) {
+      if (isAggregateRule && isGroupingArg(term, literalBound)) {
         groupByExprs.push(expr);
       }
     }
@@ -1501,11 +1492,17 @@ function cannotBeNull(term: Expression): boolean {
   }
 }
 
+/**
+ * Is this binding's SQL a literal, and so certainly not NULL? Used only to pick
+ * the plain equality over the null-aware one. The grouping question is answered
+ * by `isGroupingArg` against the AST instead, which is why this does not need to
+ * recognise `TRUE` / `FALSE`: a boolean binding is non-null either way, and
+ * whether it groups is no longer decided here.
+ */
 function isLiteralBinding(b: Binding): boolean {
   if (b.kind === "col") return false;
-  // Accept the parenthesised `(-N)` / `(-N.M)` form that termToSql emits
-  // for UnaryExpr(NumberLiteral) so a variable bound to a negative literal
-  // is still recognised as a constant and omitted from GROUP BY.
+  // Accept the parenthesised `(-N)` / `(-N.M)` form that termToSql emits for
+  // UnaryExpr(NumberLiteral), so a negative literal counts as a constant.
   return /^\s*(-?\d+(?:\.\d+)?|\(-\d+(?:\.\d+)?\)|'(?:[^']|'')*')\s*$/.test(b.sql);
 }
 

@@ -120,6 +120,19 @@ describe("translator", () => {
     expect(sql).not.toContain("IS NOT DISTINCT FROM");
   });
 
+  test("a literal-bound head variable is omitted from GROUP BY", () => {
+    // Constant, so it does not vary per group, and `GROUP BY 'all'` on a bare
+    // integer literal would be read positionally by Postgres. `isGroupingArg` is
+    // the shared definition of this, so the interpreters agree; see
+    // doc/design/nullness-tracking.md §6.
+    const result = translateSource(`
+      input predicate p(a: integer).
+      total(G, sum(X)) :- p(X), G = "all".
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).not.toContain("GROUP BY");
+  });
+
   test("a join against an ungrouped aggregate stays null-aware", () => {
     // `sum` over an empty relation is NULL even though `v` is non-null, because
     // an ungrouped aggregate emits a row regardless. Taking the plain `=` here
