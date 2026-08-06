@@ -1,9 +1,11 @@
 # Design proposal: a functional sub-language
 
-Status: **proposal, nothing implemented.** Datamog already has an implicit
-functional sub-language: the inline arithmetic, string and `value` expressions of
-spec §2.6 and §2.9, plus the built-in registry in `core/src/builtins.ts`. This doc
-asks whether to spin that out into a language proper.
+Status: **proposal, nothing implemented.** The four boundary decisions a review
+raised are answered below; the datatype half stays deferred. Datamog already
+has an implicit functional sub-language: the inline arithmetic, string and `value`
+expressions of spec §2.6 and §2.9, plus the built-in registry in
+`core/src/builtins.ts`. This doc asks whether to spin that out into a language
+proper.
 
 The recommendation is narrower than the question. Build user-defined recursive
 functions over `value`, with a conditional expression and no pattern matching. The
@@ -15,6 +17,70 @@ The motivating problem is real and is *not* the one you reach for first. It is n
 ergonomics and it is not termination. It is that Datalog safety forces every
 relation to be enumerable from below, and a function's parameters are inputs by
 construction.
+
+## The boundary decisions
+
+Four questions affect the language boundary rather than a local lowering, so they
+have to be answered before any of this is implementable. Three are settled here and
+the fourth in [Termination](#termination). Settled on paper: none is validated by an
+implementation.
+
+### Signatures: declared for recursive functions, inferred for the rest
+
+"Functions recurse over `value`" does not cover the array fold below, which needs
+`value`, `integer` and a numeric accumulator in one signature. Rather than build
+inference across recursive calls, split along a line that already exists:
+
+```prolog
+fun double(X) = X * 2.                                        # inlines, inferred
+fun sum_from(L: value, I: integer, Acc: integer): integer? =  # recursive, declared
+  Acc if I >= length(L) else sum_from(L, I + 1, Acc + as_integer(L[I])).
+```
+
+A non-recursive function is a macro, so the call site types it exactly as it types
+the expression it expands into and no signature is needed. A recursive one must
+declare its parameter and result types, which removes the fixed point over the call
+graph entirely. The annotation syntax is the one stage 1 of
+[`nullness-tracking.md`](./nullness-tracking.md) shipped: a `PrimitiveType` with an
+optional `?`.
+
+A `fun` is monomorphic, so a call whose argument does not fit its declared type is a
+type error exactly as a builtin overload mismatch is. Polymorphism, if it is ever
+wanted, is the monomorphising higher-order step at the end of the ladder rather than
+an inference problem here.
+
+A recursive function's result annotation **must** be nullable. The size budget can
+yield NULL from non-null arguments, so a non-null result would be a contract the
+evaluator cannot keep. Requiring `?` is "never `total`" made syntactic and checkable
+at the declaration, which is also what settles the `{strict, total}` question: `total`
+comes from the annotation, and `strict` is `false` for every user function, since
+that direction only licenses refinement and giving it up is sound.
+
+### Names: one flat uniqueness rule, no precedence
+
+A raw `FunctionCall` already means one of three things: a builtin, an aggregate, or a
+proof-constructor tag that `resolveCtor` maps to the predicate declaring it. User
+functions would be a fourth. Rather than order four namespaces, forbid the overlap: a
+`fun` name may not equal a builtin name, an aggregate name, or any constructor tag
+declared in the program, checked where the function is declared. No precedence rule,
+so there is nothing to remember and nothing to get subtly wrong.
+
+### Modules: functions are file-private
+
+`expandModule` freshens private predicate names with a `$` prefix and deliberately
+does *not* rename constructors, because a constructor is qualified by its predicate
+and so rides along when the predicate is renamed. A function has no such carrier, so
+two imports that each define `helper` would collide. Hence:
+
+- `expandModule` must freshen function names itself, with the same prefix.
+- Functions are **not exportable**. A module exposing a computation exposes a
+  predicate; there is no `fun` in an export list. That removes the selection and
+  visibility design altogether.
+
+One ordering constraint sits underneath this. `prepareElaborated` runs
+`parseRaw → elaborate → postProcess`, so the elaborator sees the *raw* AST. Function
+declarations must therefore survive `parseRaw` as their own node rather than being
+lowered during post-processing, or the elaborator has nothing to freshen.
 
 ## The finding: safety is the constraint
 
@@ -106,8 +172,10 @@ example is *already* interpreter-only: `list-ops`, `symbolic-differentiation`,
 of the set already restricted to the interpreters, so restricting recursive
 functions to them costs nothing that is not already paid.
 
-A **non-recursive** function is a macro: it inlines at the call site and works on
-all five backends.
+A **non-recursive** function is a macro: it inlines at the call site and works on all
+five backends. A recursive one is rejected at translation time under a SQL backend,
+with the same shape of message non-linear recursion already produces, so the
+unsupported case is a diagnostic rather than a silent difference in answers.
 
 ## Sketch
 
@@ -202,8 +270,14 @@ nullable operand, which is a warning a clause-guard checker would have had to
 duplicate. With a single clause there is nothing to partition.
 
 Worth having on its own, which is why it leads the ladder: one grammar production,
-one `CASE`, one branch in `values.ts`, and the inferred type is the join of the two
-branches.
+one `CASE`, one branch in `values.ts`. Three typing rules complete it. The condition
+must type `boolean`. The result's base type is the join of the branches, and where
+they join to `value` the primitive branch takes the translator's existing
+`liftToJsonIfNeeded` lift, the same one `=` uses across the type-tag boundary, rather
+than a `CASE` between incompatible SQL types. Its nullness is the join of the two
+branches' nullness (`nonnull ⊔ maybenull = maybenull`); the condition's own nullness
+does not enter, since a NULL condition selects the else branch rather than
+propagating.
 
 One caution for a teaching language. It is not a way to merge rules.
 `pretty-print-expression`'s six guard-differing `wrap_left` / `wrap_right` rules
@@ -247,17 +321,35 @@ runtime bound is worse: a flat array has JSON depth 2 however long it is, so a
 hundred-element fold would be cut off after two calls. The rule forbids the shape
 that makes the feature useful.
 
-So the budget is on **size**, not depth:
+So the budget is on **size**, not depth. Being the termination mechanism rather than
+a backstop, it needs stating exactly:
 
-- Recursion is bounded by the total node count of the arguments at the outermost
-  call. Exceeding the bound yields NULL.
-- No static decrease rule. The subscript-chain check survives at most as a warning.
+- **Metric.** A leaf counts 1, including `null`. An array counts 1 plus its
+  elements. An object counts 1 plus its values; keys are not counted. The budget is
+  the sum over the arguments at the outermost call.
+- **Depth, not calls.** The budget bounds nesting depth of `fun` application, not
+  the total number of calls. Sibling and mutually recursive calls each see the
+  remaining depth, so a function that recurses twice is not charged exponentially
+  for branching.
+- **Off-by-one.** The budget decrements on entry. At zero the call yields NULL
+  without evaluating its body, so `f(null)` has budget 1 and its inner call is NULL.
+- **No static decrease rule.** The subscript-chain check survives at most as a
+  warning.
 
 Size subsumes depth, admits index recursion over an n-element array, and costs
-nothing more to compute. It needs no cap constant, unlike the per-stratum iteration
-cap, and it degrades the way every other out-of-domain operation does: `f(null)`
-has budget zero, so the inner call is NULL and the function returns whatever its
-body makes of that.
+nothing more to compute. It degrades the way every other out-of-domain operation
+does: an exhausted budget is NULL, not an error.
+
+**The host stack is the real limit, so the budget needs a cap.** A large document
+gives a budget in the hundreds of thousands, and a recursive evaluator in TypeScript
+would exhaust the host stack long before reaching it, turning a bounded computation
+into a crash. The interpreters therefore bound recursion by `min(size, cap)`, with
+`cap` a constructor option and a reported stop reason, exactly as
+[`finiteness-checking.md`](./finiteness-checking.md)'s per-stratum iteration cap
+already does: partial result plus a banner beats a stack trace. That makes an
+explicit stack or trampoline an optimisation rather than a prerequisite, and it means
+the one place this proposal needs a cap constant is the one place the language
+already has the pattern for it.
 
 Be clear about what that gives up. A depth budget with its static rule would make
 the runtime bound a backstop for a class already proven terminating. The size
@@ -387,10 +479,9 @@ evaluation mutually recursive with stratification, polarity and the finiteness
 graph.
 
 **Do not touch the base lattice.** A non-recursive function inlines, so the
-existing inference types it with no new machinery. A recursive one destructures
-its argument by subscript, so that parameter is `value` and so is the result
-unless every branch agrees on a primitive. There is still no `null` type and no
-new base element ([`null.md`](./null.md) §7).
+existing inference types it with no new machinery. A recursive one declares its
+types, drawn from the five that already exist. Either way there is no new base
+element and still no `null` type ([`null.md`](./null.md) §7).
 
 **Nullness is a separate obligation, and it is not free.** Since
 [`nullness-tracking.md`](./nullness-tracking.md) shipped through stage 2, every
@@ -409,10 +500,12 @@ the same two bits, and neither comes for free:
   the language. `builtins.ts` calls this out as exactly the case that would
   otherwise inherit refinement it does not license.
 
-So the two bits have to be inferred from the body, which for recursive functions
-is a fixed point over the call graph, or else declared. Either way it is analysis
-work, and it is the part of this proposal that the nullness work has made more
-expensive rather than less.
+Both facts are why a recursive function declares its result type rather than having
+one inferred. The mandatory `?` states `total: false` where the checker can enforce
+it, and `strict` is simply `false` for every user function: it licenses only
+backward refinement, so declining it costs precision and never soundness. That turns
+what would have been a fixed point over the call graph into two lines in the
+declaration checker.
 
 **First-order kills the payoff.** Without higher-order functions there is no `map`
 and no `fold`, and each traversal is hand-written, which is what a recursive
@@ -453,26 +546,33 @@ currently sidesteps:
 
 1. **The conditional expression.** One grammar production, `CASE WHEN c THEN a ELSE
    b END` in the translator, one branch in `values.ts`, inferred type is the join of
-   the branches. Independent of everything else here, and it is what lets a function
-   be single-clause.
-2. **Non-recursive `fun`.** A grammar rule plus one substitution pass in
+   the branches with the required primitive-to-JSON lift. Independent of everything
+   else here, and it is what lets a function be single-clause.
+2. **The declaration form**: the `fun` node surviving `parseRaw`, the signature
+   grammar, the flat name-uniqueness check, and freshening in `expandModule`. Small
+   individually, but it is what the parser and elaborator must agree on before
+   either kind of function works, so it comes before both.
+3. **Non-recursive `fun`.** A grammar rule plus one substitution pass in
    `post-process.ts`. Closes the unsafe-helper gap by inlining: `fun double(X) = X *
    2.` used as `Y = double(V)` expands to `Y = V * 2`, so the argument is bound by
    whatever the call site already binds and no relation is created. Works on all
    five backends, and nothing downstream learns the feature exists. It does not give
    you `double` in body-atom position, since this is an expression and not a
    relation.
-3. **Recursive `fun`**, interpreter-only, with the runtime size budget and a
-   `NullBehaviour` per function. Removes the universe enumeration and the subterm
-   closures, and makes user-defined aggregates writable as `fun` over `list`.
-4. **Compile-time higher-order**, so `map` and `fold` exist. Only if 3 earns it.
+4. **Recursive `fun`**, interpreter-only, with the size budget and its cap. Removes
+   the universe enumeration and the subterm closures, and makes user-defined
+   aggregates writable as `fun` over `list`.
+5. **Compile-time higher-order**, so `map` and `fold` exist. Only if 4 earns it.
 
-Steps 1 and 2 are worth doing regardless of what happens to the rest, and step 1 is
-unrelated to this proposal.
+Step 1 is worth doing regardless of what happens to the rest and is unrelated to
+this proposal. Steps 2 to 4 are one feature split three ways; the split is worth
+keeping because step 3 is the whole payoff for the unsafe-helper gap and needs
+neither the budget nor the interpreters.
 
-The other cheap win, an ordered `list` and computed object keys, has its own note in
-[`value-construction.md`](./value-construction.md). It is independent of everything
-here and costs less than any step above.
+The independent ordered-aggregate proposal is in
+[`value-construction.md`](./value-construction.md). Its computed-object-key half has
+separate unresolved semantics and should not be treated as part of the same small
+change.
 
 ## Open questions
 

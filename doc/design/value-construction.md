@@ -1,8 +1,9 @@
 # Design proposal: constructing values
 
-Status: **proposal, nothing implemented.** Two small gaps that together make the
-`value` type read-mostly. Independent of everything else in this directory, and
-cheaper than any of it.
+Status: **proposal, nothing implemented.** Two gaps that arrived together and should
+not ship together: the ordered aggregate (gap 2) is implementation-ready, while
+computed object keys (gap 1) need runtime object canonicalisation on SQLite and belong
+in their own proposal. See [the recommendation](#recommendation-ship-gap-2-split-gap-1-out).
 
 The shape of the hole: a program can destructure a `value` arbitrarily deeply
 (subscript, slice, `array_element`, `object_entry`, the coercion builtins) but can
@@ -19,7 +20,9 @@ renamed(O) :- pair(K, V), O = {"x_" + K: V}.
 # Expecting token of type ':' but found `+`
 ```
 
-No rename, no key derived from data, no object whose key set comes from the input.
+No fixed-shape rename and no key derived from data. A computed key would let a
+fixed number of object entries take data-dependent labels. It would not collect
+rows into one object whose key set grows with the input.
 
 ## Gap 2: `list` sorts by its argument
 
@@ -39,9 +42,10 @@ tagged(list([I, W])) :- doubled(I, W).
 
 `map`, `filter`, `reverse`, `zip` and `sort_by` over a JSON array are all
 inexpressible, since each needs to emit elements in an order the values themselves
-do not determine. Deep JSON transformation (redact every value under a key,
-increment every number, rename keys throughout) needs both halves and is therefore
-flatly impossible.
+do not determine. Fixed-arity object renames also need computed keys. Rebuilding an
+object with an arbitrary number of entries needs another operation, such as an
+object aggregate or object merge, so these two changes alone do not provide general
+deep JSON transformation.
 
 The one escape hatch is to abandon arrays for nested two-element arrays as cons
 cells:
@@ -56,9 +60,34 @@ That reverses correctly but leaves the result in a representation that
 `array_element`, `length` and integer subscript no longer understand, and there is
 no way back to a flat array without the ordered aggregate that does not exist.
 
-## The fix
+## Implementation cost: the two halves are not comparable
 
-Both halves are small, and the backends already support what is needed.
+**Gap 2 is nearly free.** Aggregate `ORDER BY` is already in use: `list` and `concat`
+emit `JSON_GROUP_ARRAY(... ORDER BY ...)` and `GROUP_CONCAT(... ORDER BY ...)` today,
+sqljs runs on the same `SqliteSqlDialect`, and the examples suite passes there. So the
+capability is proven on every backend and the change is to stop hardcoding the
+argument as the key.
+
+**Gap 1 is not a grammar relaxation.** Two costs, one of them structural.
+
+Changing `ObjectEntry.key` from a string to an expression reaches every walker that
+enumerates expressions: analysis, type and nullness inference, finiteness, navigation,
+completion, SQL translation and native evaluation.
+
+The harder one is SQLite's object semantics. Its dialect builds an object literal by
+deduplicating keys **last-write-wins into a `Map`** and then **sorting them with
+`compareJsonbObjectKeys`**, both at translation time. It has to: `json_object` emits
+entries in argument order into TEXT, so without sorting, two literals differing only
+in source key order would fail dedup, joins and `=` on SQLite while unifying
+everywhere else, since Postgres gets the canonical form for free from `jsonb`. Both
+operations need the keys statically. With computed keys neither can happen at
+translation time, so SQLite has to dedupe and sort at *runtime*, which means a scalar
+subquery per object literal carrying each entry's key, value and source position.
+Handing expressions to `json_object` does not preserve Datamog's object semantics.
+
+That is why the recommendation below is to ship gap 2 and split gap 1 out.
+
+## The proposed fixes
 
 **An explicit ordering key on `list` and `concat`.** `list(V) order by K`. SQLite
 and Postgres both take an ordering expression inside the aggregate already; the
@@ -69,57 +98,65 @@ SELECT json_group_array(json(x) ORDER BY k) FROM (SELECT 1 AS x, 2 AS k UNION SE
 -- [2,1]
 ```
 
+The surface needs a portable ordering contract, since none of it can be inherited
+from the backends. The whole rule:
+
+- Ascending, with the key restricted to a primitive type (`value` keys would need a
+  canonical-text comparison, which is what made the index-pair workaround above give
+  the wrong answer).
+- **NULLs last**, emitted explicitly. Null is an isolated point in the order rather
+  than a bottom (`null.md` §5, which rejects bottom because `min` skips NULLs), so the
+  order does not place it, and the backends disagree left to themselves: SQLite sorts
+  NULLs first, Postgres last for `ASC`.
+
+  ```sql
+  SELECT json_group_array(json(x) ORDER BY k) FROM (SELECT 1 AS x, NULL AS k UNION SELECT 2, 1)
+  -- [1,2]   SQLite, nulls first
+  ```
+
+  A row whose key is NULL is **kept**, not skipped. That is not the same case as
+  `list` skipping a NULL argument: here the value may be perfectly good and only its
+  ordering key is missing.
+- The existing aggregate-argument ordering as a secondary key, so ties are
+  deterministic across backends rather than left to the engine.
+
 **Computed object keys.** Relax `ObjectEntry` to accept an expression, require the
-key expression to type as `string`, and pass it through to the existing
-`jsonb_build_object` / `json_object` call, both of which already take expressions.
+key expression to type as `string`, and evaluate it before object assembly. This
+only provides fixed-cardinality dynamic labels. A variable-sized object needs a
+separate aggregate or merge operation and should not be implied by this change.
 
 Duplicate keys become a runtime condition rather than a parse-time one. Spec §2.9
 says the last occurrence wins before canonicalisation; with computed keys that rule
 has to be enforced by the backend's object builder rather than by the parser, so
 its cross-backend behaviour needs pinning by a test.
 
-## Two NULL decisions
+### A NULL object key yields a NULL object
 
-Neither can be defaulted, because the backends disagree.
-
-**A NULL ordering key has no inherited position.** Null is an isolated point in the
-order rather than a bottom (`null.md` §5, which rejects bottom because `min` skips
-NULLs), so the order itself does not say where a NULL key sorts. The backends
-answer differently on their own: SQLite puts NULLs first, Postgres puts them last
-for `ASC`.
-
-```sql
-SELECT json_group_array(json(x) ORDER BY k) FROM (SELECT 1 AS x, NULL AS k UNION SELECT 2, 1)
--- [1,2]   SQLite, nulls first
-```
-
-So the rule has to be written down and emitted explicitly. Skipping those elements
-matches what the rest of the aggregate family does with NULLs and what `list`
-already does with a NULL argument; parking them at a fixed end with an explicit
-`NULLS FIRST` / `NULLS LAST` is the alternative.
-
-**A NULL key is an error, not a NULL object.** SQLite refuses it outright rather
-than propagating:
+One rule is needed, because SQLite refuses a NULL key outright rather than
+propagating:
 
 ```
 SELECT json_object(NULL, 1)   -- ERROR: json_object() labels must be TEXT
 ```
 
 So a guard is required wherever the key may be NULL, and the nullness analysis
-([`nullness-tracking.md`](./nullness-tracking.md)) can now say where that is: the
-same reasoning that lets the translator emit a plain `=` against a provably
-non-null side would let the object builder skip its guard. Yielding NULL for the
-whole object matches "NULL
-propagates through operations" (`null.md` §5); skipping the entry is the
-alternative and is harder to justify, since it silently produces an object of a
-different shape.
+([`nullness-tracking.md`](./nullness-tracking.md)) says where that is, the same
+reasoning that lets the translator emit a plain `=` against a provably non-null side.
+The rule is that a NULL key yields NULL for the whole object. That matches "NULL
+propagates through operations" (`null.md` §5), it is the same answer `3 / 0` gives,
+and it is portable. The alternative, skipping the entry, silently changes the
+object's shape and is the worse failure.
 
-## Where this leaves the bigger proposals
+## Recommendation: ship gap 2, split gap 1 out
 
-Closing both gaps makes one-level `map`, `filter` and `reverse` expressible on
-every backend, with no new language concepts. It does *not* make deep
-transformation pleasant: rebuilding a nested document bottom-up relationally needs
-node identity, and JSON has none, so the traversal has to be keyed by path. That
-part is what [`functional-sublanguage.md`](./functional-sublanguage.md) is about,
-and the cons-cell workaround above is the hint that the answer there is a
-constructor rather than more JSON builtins.
+They are not one change. Gap 2 is a surface addition over a capability every backend
+already has, and it is what makes one-level `map`, `filter` and `reverse` expressible.
+Gap 1 needs runtime object canonicalisation on SQLite and touches every expression
+walker, and what it buys is narrower than it first looks: fixed-arity labels from
+data, not an object assembled from rows.
+
+Neither change assembles an arbitrary object from rows. Deep transformation needs
+path-keyed traversal *and* an object aggregate or merge, so it stays out of reach of
+both. The traversal question belongs with
+[`functional-sublanguage.md`](./functional-sublanguage.md); object assembly is its own
+proposal if a corpus case ever justifies one, and no example in the corpus does today.
