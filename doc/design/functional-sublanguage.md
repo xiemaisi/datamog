@@ -232,11 +232,11 @@ Proving the function returns without recursing at a leaf means reading the
 condition, which is the ranking-function analysis
 [`finiteness-checking.md`](./finiteness-checking.md) rejects as too heavy.
 
-An earlier draft answered with a **depth budget**: designate one parameter, require
-every recursive call inside an SCC to pass a subscript chain rooted at it, and bound
-recursion at runtime by that value's JSON depth. That is sound, since subscripting
+The obvious answer is a **depth budget**: designate one parameter, require every
+recursive call inside an SCC to pass a subscript chain rooted at it, and bound
+recursion at runtime by that value's JSON depth. It is sound, since subscripting
 never grows a value. It is also too tight, and the aggregates section below is what
-exposed it. The natural fold over an array recurses on an *index*:
+shows why. The natural fold over an array recurses on an *index*:
 
 ```prolog
 fun sum_from(L, I, Acc) = Acc if I >= length(L) else sum_from(L, I + 1, Acc + as_integer(L[I])).
@@ -259,11 +259,11 @@ cap, and it degrades the way every other out-of-domain operation does: `f(null)`
 has budget zero, so the inner call is NULL and the function returns whatever its
 body makes of that.
 
-Be clear about what changed with it. Under the depth budget the runtime bound was a
-backstop for a class the static rule had already proven terminating. Under the size
-budget there is no such class: the bound *is* the termination mechanism, and a
-function that would otherwise loop is cut off rather than rejected. That is one
-fewer analysis to build, and one fewer property to promise.
+Be clear about what that gives up. A depth budget with its static rule would make
+the runtime bound a backstop for a class already proven terminating. The size
+budget has no such class: the bound *is* the termination mechanism, and a function
+that would otherwise loop is cut off rather than rejected. One fewer analysis to
+build, one fewer property to promise.
 
 **What this does not buy.** Each *call* terminates. Programs do not: feeding a
 function's output into a recursive predicate diverges exactly as `parse_json` does
@@ -338,7 +338,7 @@ aggregates rather than a replacement for `SUM` over a million rows; it inherits
 so an order-sensitive fold also wants the `order by` from
 [`value-construction.md`](./value-construction.md).
 
-This is also the route that broke the depth budget, since folding an array means
+This is also the route that rules out a depth budget, since folding an array means
 recursing on an index. See Termination above.
 
 ## Where it does not help
