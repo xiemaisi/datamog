@@ -12,7 +12,7 @@
 // imprecise, since a column wrongly believed non-null lowers a join to a plain
 // `=` and drops the NULL-NULL match that null.md §4 specifies.
 
-import { BUILTIN_BODY_ATOMS, containsAggregate } from "./analyzer.ts";
+import { BUILTIN_BODY_ATOMS, hasGroupingColumns } from "./analyzer.ts";
 import type { AnalyzedProgram } from "./analyzer.ts";
 import type {
   BinaryExpr,
@@ -411,13 +411,15 @@ function isStrictOp(op: string): boolean {
 }
 
 /**
- * Does `owner` aggregate with no grouping columns? Grouping columns are the head
- * arguments containing no aggregate (`analyzer.ts`'s rule), so a head where every
- * argument contains one emits exactly one row per predicate, including over empty
- * input. Queries never carry an aggregate, so they are never ungrouped here.
+ * Does `owner` aggregate with no grouping columns, and so emit a row even over
+ * empty input? Defers to `hasGroupingColumns`, the shared definition, rather
+ * than restating the test: an earlier copy here counted a direct literal head
+ * argument as a grouping column where both runtime paths do not, which left
+ * `tot("all", sum(V))` marked non-null. Queries never carry an aggregate, so
+ * they are never ungrouped here.
  */
 function isUngroupedAggregate(owner: BodyOwner): boolean {
-  return owner.$type === "Rule" && !owner.head.args.some((a) => !containsAggregate(a));
+  return owner.$type === "Rule" && !hasGroupingColumns(owner);
 }
 
 /**

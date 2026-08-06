@@ -6,7 +6,12 @@
 // drift in result semantics or trace output.
 
 import type { HeadAtom, Query, Rule, TypedProgram } from "datamog-core";
-import { containsAggregate, queryProjection, rebuildVarTypes } from "datamog-core";
+import {
+  containsAggregate,
+  hasGroupingColumns,
+  queryProjection,
+  rebuildVarTypes,
+} from "datamog-core";
 import type { QueryResult } from "datamog-engine";
 import {
   type Relation,
@@ -354,14 +359,7 @@ export abstract class BaseDatalogEvaluator {
     // from GROUP BY because they don't vary per group; mirror that exclusion
     // here so a rule like `total("hello", count(*))` is still treated as
     // ungrouped and emits its default row on empty input.
-    const hasGroupingColumns = rule.head.args.some(
-      (arg) =>
-        !containsAggregate(arg) &&
-        arg.$type !== "NumberLiteral" &&
-        arg.$type !== "StringLiteral" &&
-        arg.$type !== "BooleanLiteral",
-    );
-    if (groups.size === 0 && !hasGroupingColumns) {
+    if (groups.size === 0 && !hasGroupingColumns(rule)) {
       const env = plan.env;
       const tuple = rule.head.args.map((arg) =>
         containsAggregate(arg)

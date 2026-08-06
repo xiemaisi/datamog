@@ -53,6 +53,7 @@ export {
   chooseEqualityBinding,
   containsAggregate,
   equalityBindingCandidates,
+  hasGroupingColumns,
   isAnonymousVar,
   isBuiltinBodyAtom,
   queryProjection,

@@ -924,6 +924,29 @@ function collectVarsOutsideAggregates(term: HeadTerm, into: Set<string>): void {
   for (const child of childTerms(term)) collectVarsOutsideAggregates(child, into);
 }
 
+/**
+ * Does `rule` have any grouping column? A head argument is a grouping column
+ * when it contains no aggregate and is not a direct literal: both runtime paths
+ * omit direct number, string and boolean literals, the translator because a bare
+ * integer in `GROUP BY` is read positionally by Postgres, and the interpreters
+ * to match it.
+ *
+ * This is the one definition of the question. A rule with no grouping column
+ * emits a single row even over empty input, filled with the empty-group
+ * aggregate values, so the answer decides both what the evaluator emits and
+ * whether a non-`count` aggregate column can be NULL (`nullness.ts`). Two
+ * copies of it drifted apart once already.
+ */
+export function hasGroupingColumns(rule: Rule): boolean {
+  return rule.head.args.some(
+    (arg) =>
+      !containsAggregate(arg) &&
+      arg.$type !== "NumberLiteral" &&
+      arg.$type !== "StringLiteral" &&
+      arg.$type !== "BooleanLiteral",
+  );
+}
+
 /** Check whether a term contains any aggregate call. */
 export function containsAggregate(term: HeadTerm): boolean {
   switch (term.$type) {

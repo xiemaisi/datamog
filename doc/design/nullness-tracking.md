@@ -1,7 +1,8 @@
 # Design notes: tracking nullness in the type system
 
-Status: implemented through stage 2 (§6), with one aggregate grouping gap noted
-there; stage 3 declined (§7). The normative rules are spec §5.4 (tracking and
+Status: implemented through stage 2 (§6). One cross-backend grouping divergence
+is noted there, in the runtimes rather than in this analysis; stage 3 declined
+(§7). The normative rules are spec §5.4 (tracking and
 refinement), §5.10 (annotations) and §9.3 (boundaries). This note is the rationale
 and the alternatives rejected.
 
@@ -362,14 +363,34 @@ stage 0. The fix is to treat a non-`count` aggregate as nullable exactly when it
 rule has no grouping columns, which keeps the optimisation everywhere the original
 reasoning does hold.
 
-A follow-up review found that the fix's grouping test does not match the evaluator
-and translator. `isUngroupedAggregate` treats every non-aggregate head argument as
-a grouping column, while both runtime paths omit direct number, string, and boolean
-literals from `GROUP BY`. Therefore `tot("all", sum(V)) :- s(V).` over empty `s`
-still marks the `sum` column non-null and can still lower a later nullable join to
-plain `=`. The grouping decision needs one shared definition, and the regression
-test needs a literal head argument. Literal-bound variables also need reconciling:
-the translator omits them from `GROUP BY`, while the evaluator currently does not.
+A follow-up review found the first fix's grouping test did not match the runtime.
+It counted every non-aggregate head argument as a grouping column, where both
+runtime paths omit a *direct* number, string or boolean literal, so
+`tot("all", sum(V)) :- s(V).` over empty `s` was still marked non-null and still
+lowered a later nullable join to plain `=`. Fixed by making the grouping decision
+one exported definition, `hasGroupingColumns` in `analyzer.ts`, which the
+interpreters and this analysis now both call rather than restate. The regression
+test uses a literal head argument, which is what the first attempt lacked.
+
+**One divergence remains, and it is not a nullness bug.** A *literal-bound*
+variable is omitted from `GROUP BY` by the translator, because its binding emits a
+bare integer that Postgres would read positionally, while the interpreters treat
+it as an ordinary grouping column. So the two disagree on results, not just on
+precision:
+
+```prolog
+# over empty q: sqlite gives {(5, 0)}, the interpreters give {}
+r(Y, count(*)) :- q(_), Y = 5.
+```
+
+That is a "backends must agree" violation (§2) rather than something this
+analysis can paper over, and fixing it means choosing which reading is right. The
+principled one is that a non-aggregate head argument is a grouping column, making
+the interpreters correct and the translator's omission a codegen workaround that
+leaked into semantics; the counter-argument is that the workaround is unavoidable,
+since `GROUP BY 5` is positional in Postgres. Nothing in the spec settles it, and
+`hasGroupingColumns` deliberately encodes the *current* runtime rule so the two
+callers agree with each other until it is settled.
 
 **Stage 1, annotations.** §3.2 and §3.3. One grammar production, plus
 `liftHeadAnnotations`, the `argTypes` shape, `publishedNullness`,

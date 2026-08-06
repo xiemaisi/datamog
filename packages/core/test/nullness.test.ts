@@ -251,6 +251,19 @@ describe("aggregates", () => {
     expect(cols(nullable, "q")).toEqual([false, true]);
     expect(cols(nonNull, "q")).toEqual([false, false]);
   });
+
+  // A direct literal head argument is not a grouping column: both runtime paths
+  // omit one from GROUP BY, so the rule still emits its row over empty input and
+  // the sum is still NULL. The first fix here restated the grouping test instead
+  // of sharing it and counted the literal as grouping, so this shape stayed
+  // wrong. See nullness-tracking.md §8.
+  test("a literal head argument does not make an aggregate grouped", () => {
+    const source = `
+      input predicate p(a: integer).
+      q("all", sum(X)) :- p(X).
+    `;
+    expect(cols(source, "q")).toEqual([false, true]);
+  });
 });
 
 describe("recursion", () => {
