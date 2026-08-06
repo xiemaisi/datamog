@@ -133,6 +133,18 @@ describe("translator", () => {
     expect(sql).not.toContain("GROUP BY");
   });
 
+  test("a transitively literal head variable is omitted from GROUP BY", () => {
+    // `B = A` with `A = 3` folds to a bare `3`, and `GROUP BY 3` is positional on
+    // Postgres: with three select columns it names the `COUNT(*)`, which is an
+    // error there. Both are constants, so the rule is ungrouped and emits none.
+    const result = translateSource(`
+      input predicate p(x: integer).
+      q(A, B, count(*)) :- p(_), A = 3, B = A.
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).not.toContain("GROUP BY");
+  });
+
   test("a literal filter on an atom-bound head variable keeps GROUP BY", () => {
     const result = translateSource(`
       input predicate p(g: string).

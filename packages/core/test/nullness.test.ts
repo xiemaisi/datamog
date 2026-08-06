@@ -281,6 +281,19 @@ describe("aggregates", () => {
     expect(cols(spelledOut, "q")).toEqual([false, true]);
   });
 
+  test("a chain of literal bindings is constant all the way down", () => {
+    const chained = `
+      input predicate p(a: integer).
+      q(A, B, sum(X)) :- p(X), A = 1, B = A.
+    `;
+    const direct = `
+      input predicate p(a: integer).
+      q(1, 1, sum(X)) :- p(X).
+    `;
+    expect(cols(chained, "q")).toEqual(cols(direct, "q"));
+    expect(cols(chained, "q")).toEqual([false, false, true]);
+  });
+
   test("a genuine grouping variable still groups", () => {
     const source = `
       input predicate p(g: string, a: integer).

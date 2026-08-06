@@ -4,8 +4,7 @@ Status: implemented through stage 2 (§6); stage 3 declined (§7). Two grouping
 divergences found after stage 0 shipped are fixed and recorded there, along with
 the reading of "grouping column" they settled. The normative rules are spec §5.4
 (tracking and refinement), §5.10 (annotations) and §9.3 (boundaries). This note is
-the rationale
-and the alternatives rejected.
+the rationale and the alternatives rejected.
 
 [null.md](./null.md) §7 records that nullness stays out of the type system, and
 §6 records the one analysis that would have needed it as designed but
@@ -410,6 +409,30 @@ evaluate its constant instead.
 The regex survives under its other job, deciding that a binding cannot be NULL and
 so may take the plain equality. That question is not this one, and conflating them
 is what put a grouping rule in a SQL-text matcher to begin with.
+
+Two refinements followed, both from moving the test off the emitted SQL and onto
+the AST, and both worth recording because the regex had covered them by accident.
+
+**A literal equality on an already-bound variable is a filter, not a binding.** In
+`q(G, count(*)) :- p(G), G = "all".` the atom binds `G` and the equality constrains
+it, so `G` is a genuine grouping column ranging over `p`. Reading it as a literal
+binding dropped it from `GROUP BY` while leaving it in the `SELECT` list, which is
+an error on Postgres and an arbitrary row's value on SQLite: worse than the bug
+that prompted the change. `nonLiteralBindings` therefore asks what the body can
+ground *without* a literal equality, mirroring the safety analysis over atoms,
+ranges and the builtin body atoms, and a literal equality counts as a binding only
+for a variable nothing else grounds.
+
+**A chain of literal bindings is constant too.** `A = 1, B = A` makes `B` constant,
+and the translator folds it to a bare `1`. Reading only one level left `GROUP BY 1`
+in the SQL, which Postgres reads *positionally*: it names whichever select column
+that index points at, so a three-column head with `A = 3` grouped by its own
+`COUNT(*)` and `A = 9` pointed off the end, both errors. `literalBindings` is
+therefore a fixed point, and it records the constant rather than the variable
+naming it, so a caller never has to walk the chain and the map does not depend on
+its own insertion order. The boundary is unchanged: only bare literals are
+dangerous, since `B = A + 1` folds to `(3 + 1)`, which Postgres reads as the
+expression it is.
 
 **One wart the decision leaves, deliberately.** "Constant" means a literal, a
 negated numeric literal, or a variable bound to one, so `G = 5` makes an argument

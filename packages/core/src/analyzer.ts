@@ -1011,15 +1011,29 @@ function nonLiteralBindings(rule: Rule): ReadonlySet<string> {
 export function literalBindings(rule: Rule): ReadonlyMap<string, Expression> {
   const otherwiseBound = nonLiteralBindings(rule);
   const bound = new Map<string, Expression>();
-  for (const elem of rule.body) {
-    if (elem.$type !== "Equality") continue;
-    for (const candidate of equalityBindingCandidates(elem)) {
-      if (
-        isConstantLiteral(candidate.expr) &&
-        !otherwiseBound.has(candidate.variable) &&
-        !bound.has(candidate.variable)
-      ) {
-        bound.set(candidate.variable, candidate.expr);
+  // A fixed point, because the chain `A = 1, B = A` makes B constant too, and
+  // the translator folds it to a bare `1`. Missing that put `GROUP BY 1` in the
+  // emitted SQL, which Postgres reads *positionally*: it lands on whichever
+  // select column that index names, so `A = 3` in a three-column head grouped by
+  // the aggregate and `A = 9` pointed off the end. Both are errors there.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const elem of rule.body) {
+      if (elem.$type !== "Equality") continue;
+      for (const candidate of equalityBindingCandidates(elem)) {
+        if (otherwiseBound.has(candidate.variable) || bound.has(candidate.variable)) continue;
+        // Record the constant itself rather than the variable naming it, so a
+        // caller can evaluate the value without walking the chain, and so the
+        // map does not depend on its own insertion order.
+        const constant = isConstantLiteral(candidate.expr)
+          ? candidate.expr
+          : candidate.expr.$type === "Variable"
+            ? bound.get(candidate.expr.name)
+            : undefined;
+        if (constant === undefined) continue;
+        bound.set(candidate.variable, constant);
+        changed = true;
       }
     }
   }
