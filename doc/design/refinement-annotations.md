@@ -26,15 +26,18 @@ rather than used, already absent from codegen, and the grammar slot already
 exists:
 
 ```
-// datamog.langium:112
-Expression ({infer AnnotatedHeadTerm.expr=current} ':' type=PrimitiveType (nullable?='?')?)?;
+// datamog.langium
+Expression ({infer AnnotatedHeadTerm.expr=current}
+    ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
+    | ':' type=PrimitiveType (nullable?='?')?))?;
 ```
 
 Widening that slot to admit a condition is a one-production change, and it has
-already been widened once: `nullness-tracking.md` added the `?` suffix there,
-which makes this the second annotation component rather than the first, on a
-production whose shape is now proven. That doc supersedes most of §4.4 below and
-is worth reading alongside this one.
+already been widened twice: `nullness-tracking.md` added the `?` suffix and
+`head-arguments.md` added `as`. So this would be the third component on a
+production whose shape is well proven, and the second of those also removes
+§2.3's restriction. `nullness-tracking.md` additionally supersedes most of §4.4
+below; both are worth reading alongside this one.
 
 Decisions taken (see §2.1, §4, §5 for what each entails):
 
@@ -201,13 +204,14 @@ constructor's arguments explicitly restores byte-identical output (both verified
 So the restriction is safe but not cost-free, and the error message should
 mention the explicit-argument form when the predicate is proof-carrying.
 
-**This whole subsection has a way out**, described in
-[head-arguments.md](./head-arguments.md) §2: let a head argument carry a name,
-and `span(NT, I, I + 1 as K, _: I < K)` needs no rewrite, so neither the
-rewrite nor the proof-term trap above arises. That note is independent of this
-one and justified without it, so this is a dependency worth having rather than
-a reason to wait. If it lands first, delete this subsection down to the
-sentence about annotations mentioning only head variables.
+**This whole subsection is now obsolete, and it is only kept for its reasoning.**
+[head-arguments.md](./head-arguments.md) §2 shipped: a head argument may carry a
+name, so `span(NT, I, I + 1 as K, _: I < K)` needs no rewrite and neither the
+rewrite nor the proof-term trap above arises. An implementation of this proposal
+should require only that an annotation mention a *name or a variable* in head
+position, and point at `as` when it does not. What survives above is the record
+of why the naive answer, rewriting the head expression into a body equality, is
+not one.
 
 ## 3 Obligations
 

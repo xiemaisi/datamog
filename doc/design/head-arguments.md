@@ -1,6 +1,8 @@
 # Design notes: aggregates and names in head arguments
 
-Status: proposal, nothing implemented.
+Status: implemented. §1 and §2 shipped together, with the spec changes in
+§2.3 and §2.7. Stage 3 of §6 is the only part outstanding, and it waits on a
+feature that does not exist yet.
 
 Two changes to what a rule head's argument may hold. They arrived together and
 are worth keeping apart, because only one of them has a case of its own:
@@ -227,38 +229,51 @@ column is inserted, which a name does not.
 **A `let` binding in the head**, `p(let N = count(*), N + 1)`. Same meaning as
 `as`, more punctuation, and `let` would be a new reserved word where `as` is not.
 
-## 6 Staging
+## 6 Staging, as built
 
-Each stage is useful alone and the order puts the evidenced one first.
+**Stage 1: aggregates inside expressions.** §1.3's four touch points plus
+§3.2's check, landed by collapsing the four corpus workarounds, all four
+byte-identical with one fewer predicate each.
 
-**Stage 1: aggregates inside expressions.** §1.3's four touch points plus §3.2's
-check. Land it by collapsing the four corpus workarounds, which is the test: the
-programs must produce byte-identical output with one fewer predicate each.
+Two notes from building it. The post-processing rewrite is now a generic walk
+over AST properties rather than a case per expression shape, so a later grammar
+addition cannot escape it silently, and the same shape serves the analyzer's
+three new walkers. And the interpreter needed less than expected: `evalTerm`
+took an optional resolver for the AggregateCall leaf rather than growing a
+parallel walker, because §3.2's check guarantees every ordinary variable in
+such an expression is a grouping variable, so any one substitution in the group
+speaks for all of them.
 
-**Stage 2: naming.** The grammar component, resolution during analysis, §3.1's
-second grouping clause. Testable on its own with `p(count(*) as N, N + 1)`.
+**Stage 2: naming.** Implemented as a **substitution during parsing** rather
+than resolution during analysis, which is what §2.2's head-scoped choice buys.
+`parser/src/head-names.ts` replaces each name with a copy of its argument's
+expression, so nothing after parsing knows a name existed, and §3.1's second
+grouping clause needed no code at all: the substituted argument simply contains
+the aggregate. Copies share a `$cstNode` deliberately, so an error inside a
+substituted expression points at the text the user wrote.
 
-**Stage 3: retire refinement-annotations.md §2.3.** Only once refinements exist.
-Nothing here depends on that proposal, and it should not wait for it.
+**Stage 3: retire refinement-annotations.md §2.3.** Outstanding, and still
+waiting only on that proposal existing.
 
 ## 7 Open questions
 
-1. **May a named position be referenced by an earlier argument?**
-   `p(N + 1, count(*) as N)` reads oddly but Datalog is order-independent
-   elsewhere, and the translator's pass 2 already iterates body bindings to a
-   fixed point. Allowing it means detecting cycles: `p(X + 1 as Y, Y + 1 as X)`
-   must be rejected rather than looped on.
-2. **Should a name be allowed where nothing reads it?** `p(count(*) as N)` with
-   no other mention of `N` is inert. The `findInertPolarity` precedent suggests
-   a warning, though this one is harmless rather than misleading.
-3. **Does an aggregate-containing expression belong in an `output predicate`
-   head, a constraint, or a query?** §1 is written for rules. Queries have their
-   own projection rules (spec §2.4) and a constraint is a rule, so the answer is
-   probably yes and yes, but it wants confirming rather than assuming.
-4. **Does collapsing the four helpers disturb the prose that discusses them?**
-   Checked for the largest consumer and the answer looks like no:
-   doc/case-studies chapter 8 covers `cnf-from-ast` and `parse-to-cnf` but
-   describes the ranking at one remove, "a `count` aggregate does the ranking",
-   never as two steps, so it should survive unedited. The examples suite
-   regenerates nothing here either, since `expected.json` holds results and not
-   rules. Worth re-checking against the walkthrough before landing stage 1.
+Three of the four are answered; what is left is one judgement call.
+
+1. **May a named position be referenced by an earlier argument?** Yes.
+   `p(N + 1, count(*) as N)` derives the same tuples as the other order, which
+   is what order-independence everywhere else in the language leads a reader to
+   expect. Cycles and duplicate names are rejected.
+2. **Should a name be allowed where nothing reads it?** Still open.
+   `p(count(*) as N)` with no other mention of `N` is inert, and
+   `findInertPolarity` is the precedent for warning about that shape. Not done,
+   because unlike an inert `^` sigil this one is merely redundant rather than
+   misleading: it cannot make a program mean something other than it reads.
+3. **Does an aggregate expression belong in an `output predicate` head, a
+   constraint, or a query?** In the first two, confirmed by running them: an
+   `output predicate` head takes one, and `error predicate bad(count(*) - 5)`
+   fires and reports its witness. Not in a query, which has no head for a name
+   or an aggregate to attach to.
+4. **Did collapsing the four helpers disturb the prose?** No. doc/case-studies
+   chapter 8 describes the ranking at one remove, "a `count` aggregate does the
+   ranking", never as two steps. The only test artefact that moved was the
+   diagnostics snapshot, which lost the four helper predicates and nothing else.
