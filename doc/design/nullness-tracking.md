@@ -1,8 +1,9 @@
 # Design notes: tracking nullness in the type system
 
-Status: implemented through stage 2 (§6); stage 3 declined (§7). The normative
-rules are spec §5.4 (tracking and refinement), §5.10 (annotations) and §9.3
-(boundaries). This note is the rationale and the alternatives rejected.
+Status: implemented through stage 2 (§6), with one aggregate grouping gap noted
+there; stage 3 declined (§7). The normative rules are spec §5.4 (tracking and
+refinement), §5.10 (annotations) and §9.3 (boundaries). This note is the rationale
+and the alternatives rejected.
 
 [null.md](./null.md) §7 records that nullness stays out of the type system, and
 §6 records the one analysis that would have needed it as designed but
@@ -360,6 +361,15 @@ it on SQL. An existing test had pinned the wrong answer, which is why it survive
 stage 0. The fix is to treat a non-`count` aggregate as nullable exactly when its
 rule has no grouping columns, which keeps the optimisation everywhere the original
 reasoning does hold.
+
+A follow-up review found that the fix's grouping test does not match the evaluator
+and translator. `isUngroupedAggregate` treats every non-aggregate head argument as
+a grouping column, while both runtime paths omit direct number, string, and boolean
+literals from `GROUP BY`. Therefore `tot("all", sum(V)) :- s(V).` over empty `s`
+still marks the `sum` column non-null and can still lower a later nullable join to
+plain `=`. The grouping decision needs one shared definition, and the regression
+test needs a literal head argument. Literal-bound variables also need reconciling:
+the translator omits them from `GROUP BY`, while the evaluator currently does not.
 
 **Stage 1, annotations.** §3.2 and §3.3. One grammar production, plus
 `liftHeadAnnotations`, the `argTypes` shape, `publishedNullness`,

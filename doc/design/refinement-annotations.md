@@ -1,10 +1,9 @@
 # Design notes: refinement annotations on rule heads
 
-Status: proposal, reviewed. Nothing implemented, nothing in the spec. The seven
-review findings are answered in the body rather than outstanding; the trail is
-the section below. What remains is not a blocker but a consequence: phases 0 to 2
-of §10 describe a generator that prints obligations without discharging them, so
-that increment does not yet deliver the proposal's stated payoff (§4.5).
+Status: proposal, review blockers remain. Nothing implemented, nothing in the
+spec. The aggregate soundness findings are addressed in the body, but witness
+multiplicity, portable integer overflow, and the first implementation slice remain
+unsettled.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -54,9 +53,8 @@ Decisions taken (see §2.1, §4, §5 for what each entails):
 
 ## Review findings
 
-The contract idea survives review. Seven issues came out of it, each now answered
-in the body rather than left here, so this section is the trail rather than a
-list of blockers.
+The contract idea survives review. Seven issues came out of the first pass. Most
+have answers in the body; the unresolved parts are collected below.
 
 - **The erased witness does not fit `argTypes`.** That array aligns with runtime
   head arguments; a witness is a syntactic position that erases entirely, so
@@ -86,11 +84,25 @@ list of blockers.
   and modulo follows the dividend's sign, where a solver's native integer
   operations may not. Integer overflow also differs across back ends, so the
   portable arithmetic domain has to be fixed before discharge can be sound.
-  Answered in §4.1.
+  Division and modulo are answered in §4.1; overflow is not.
 - **A generator-only increment has no consumer.** Until obligations are
   discharged, no analysis or module boundary may rely on a contract, so phases 0
-  to 2 land only if printed obligations are useful on their own. Answered in §4.5,
-  which states it as the accepted consequence of deferring the solver.
+  to 2 land only if printed obligations are useful on their own. §4.5 accepts that
+  consequence, while §10 still asks whether discharge belongs in the first slice.
+
+### Follow-up review
+
+The proposal is not closed yet. Three decisions remain explicit in its own plan:
+
+- §11.6 leaves several witnesses on one rule unanswered. Conjoining them is the
+  likely rule, but it is not yet the rule.
+- §4.1 encodes division and modulo but does not choose a portable integer-overflow
+  model for solver discharge.
+- §4.5 accepts a generator-only first cut, while phase 3 says to decide again
+  whether printed obligations have an independent user.
+
+Until those are settled, §9.6 and §11 are correct to call the implementation plan
+blocked.
 
 ## 1 What the annotation is
 

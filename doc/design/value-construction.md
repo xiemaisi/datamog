@@ -101,9 +101,13 @@ SELECT json_group_array(json(x) ORDER BY k) FROM (SELECT 1 AS x, 2 AS k UNION SE
 The surface needs a portable ordering contract, since none of it can be inherited
 from the backends. The whole rule:
 
-- Ascending, with the key restricted to a primitive type (`value` keys would need a
-  canonical-text comparison, which is what made the index-pair workaround above give
-  the wrong answer).
+- Ascending, with the key restricted to `string`, `integer`, `float`, or `boolean`.
+  The formal `PrimitiveType` set also includes `value`, so "primitive" alone does
+  not state this restriction. `value` keys would need a canonical-text comparison,
+  which is what made the index-pair workaround above give the wrong answer.
+- String keys use Datamog's portable Unicode code-point order through
+  `dialect.stringOrder`. A raw Postgres `ORDER BY` uses the database's collation and
+  can disagree with SQLite and the native evaluator.
 - **NULLs last**, emitted explicitly. Null is an isolated point in the order rather
   than a bottom (`null.md` §5, which rejects bottom because `min` skips NULLs), so the
   order does not place it, and the backends disagree left to themselves: SQLite sorts
