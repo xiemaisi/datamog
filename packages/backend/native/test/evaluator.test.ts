@@ -1024,6 +1024,15 @@ describe("native backend — aggregate edges", () => {
     expect(spelledOut[0]).toEqual(literal[0]);
   });
 
+  test("a literal filter on an atom-bound group emits no empty-group row", async () => {
+    const results = await run(`
+      input predicate p(g: string).
+      q(G, count(*)) :- p(G), G = "all".
+      ?- q(G, N).
+    `);
+    expect(results[0]).toEqual([]);
+  });
+
   test("aggregate with grouping columns over empty body still yields no rows", async () => {
     // With at least one non-aggregate head position, an empty body produces
     // no groups and therefore no output rows — same as `GROUP BY ...` in SQL.

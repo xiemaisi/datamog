@@ -938,21 +938,87 @@ function isConstantLiteral(term: HeadTerm): boolean {
   }
 }
 
+/** Variables the body can ground without a literal equality. */
+function nonLiteralBindings(rule: Rule): ReadonlySet<string> {
+  const bound = new Set<string>();
+
+  for (const elem of rule.body) {
+    if (elem.$type !== "Literal" || elem.negated || BUILTIN_BODY_ATOMS.has(elem.predicate)) {
+      continue;
+    }
+    for (const arg of elem.args) {
+      if (arg.$type === "Variable") bound.add(arg.name);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const elem of rule.body) {
+      if (elem.$type === "Equality") {
+        for (const candidate of equalityBindingCandidates(elem)) {
+          if (
+            bound.has(candidate.variable) ||
+            isConstantLiteral(candidate.expr) ||
+            !allVarsBound(candidate.expr, (name) => bound.has(name))
+          ) {
+            continue;
+          }
+          bound.add(candidate.variable);
+          changed = true;
+        }
+      } else if (elem.$type === "RangeAtom" && elem.expr.$type === "Variable") {
+        if (
+          !bound.has(elem.expr.name) &&
+          allVarsBound(elem.low, (name) => bound.has(name)) &&
+          allVarsBound(elem.high, (name) => bound.has(name))
+        ) {
+          bound.add(elem.expr.name);
+          changed = true;
+        }
+      } else if (
+        elem.$type === "Literal" &&
+        !elem.negated &&
+        BUILTIN_BODY_ATOMS.has(elem.predicate)
+      ) {
+        const spec = BUILTIN_BODY_ATOMS.get(elem.predicate)!;
+        if (!allVarsBound(elem.args[spec.sourceArg]!, (name) => bound.has(name))) continue;
+        for (const { index } of spec.boundArgs) {
+          const arg = elem.args[index]!;
+          if (arg.$type === "Variable" && !bound.has(arg.name)) {
+            bound.add(arg.name);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  return bound;
+}
+
 /**
  * The variables `rule`'s body binds to a constant, mapped to that constant.
  * Built on `equalityBindingCandidates`, so this agrees with safety and type
  * inference about which side of an equality does the binding.
+ * If another body source can ground the variable, the literal equality is a
+ * filter instead and the variable remains a grouping column.
  *
  * The expression, not just the name, because a caller that treats such a
  * variable as ungrouped still has to produce its value: the interpreters' empty
  * group has no row to read it from, so they evaluate it from here instead.
  */
 export function literalBindings(rule: Rule): ReadonlyMap<string, Expression> {
+  const otherwiseBound = nonLiteralBindings(rule);
   const bound = new Map<string, Expression>();
   for (const elem of rule.body) {
     if (elem.$type !== "Equality") continue;
     for (const candidate of equalityBindingCandidates(elem)) {
-      if (isConstantLiteral(candidate.expr) && !bound.has(candidate.variable)) {
+      if (
+        isConstantLiteral(candidate.expr) &&
+        !otherwiseBound.has(candidate.variable) &&
+        !bound.has(candidate.variable)
+      ) {
         bound.set(candidate.variable, candidate.expr);
       }
     }

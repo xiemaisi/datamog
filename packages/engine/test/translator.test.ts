@@ -133,6 +133,15 @@ describe("translator", () => {
     expect(sql).not.toContain("GROUP BY");
   });
 
+  test("a literal filter on an atom-bound head variable keeps GROUP BY", () => {
+    const result = translateSource(`
+      input predicate p(g: string).
+      q(G, count(*)) :- p(G), G = "all".
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain('GROUP BY __b0."g"');
+  });
+
   test("a join against an ungrouped aggregate stays null-aware", () => {
     // `sum` over an empty relation is NULL even though `v` is non-null, because
     // an ungrouped aggregate emits a row regardless. Taking the plain `=` here
