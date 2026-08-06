@@ -1,8 +1,9 @@
 # Design notes: tracking nullness in the type system
 
-Status: implemented through stage 2 (§6); stage 3 declined (§7). The normative
-rules are spec §5.4 (tracking and refinement), §5.10 (annotations) and §9.3
-(boundaries). This note is the rationale and the alternatives rejected.
+Status: implemented through stage 2 (§6), with one aggregate gap noted in §8;
+stage 3 declined (§7). The normative rules are spec §5.4 (tracking and refinement),
+§5.10 (annotations) and §9.3 (boundaries). This note is the rationale and the
+alternatives rejected.
 
 [null.md](./null.md) §7 records that nullness stays out of the type system, and
 §6 records the one analysis that would have needed it as designed but
@@ -446,6 +447,34 @@ null.md §8 refuses and spec §2.9 already collapses.
 
 ## 8. Loose ends
 
+- **Ungrouped aggregates over empty input break §1's invariant today.** This is a
+  live wrong answer rather than a missing refinement, so it is first on the list.
+  `mayBeNull`'s aggregate case reasons that "a group exists only because a row
+  does", which holds for a grouped aggregate and fails for an ungrouped one: SQL
+  emits one row for the whole relation even when it is empty, so `min`, `max`,
+  `sum`, `avg`, `concat` and `list` can be NULL with a non-null argument column.
+  `count` is genuinely exempt, being `0`.
+
+  The analysis therefore marks such a column non-null, stage 0 lowers a join
+  against it to a plain `=`, and the two lowerings disagree, which is exactly what
+  §1 says must never happen:
+
+  ```prolog
+  input predicate s(v: integer).
+  input predicate other(k: string, w: integer?).
+  tot(sum(V)) :- s(V).             # s is empty, so tot = {null}
+  j(K) :- tot(X), other(K, X).     # other = {("a", null)}
+  ```
+
+  With an empty `s.csv` and `other.csv` holding `a,`, the interpreters give
+  `{"a"}` and sqlite gives `{}`. The emitted join is
+  `WHERE __b0."col1" = __b1."w"`, where null.md §4 specifies a null-aware match.
+
+  The minimal sound fix is to treat a non-`count` aggregate as nullable when its
+  rule has no grouping columns, which preserves the optimisation for grouped
+  aggregates, where the argument-propagation reasoning is correct. This
+  distinction also gates the derived contracts proposed in
+  [refinement-annotations.md](./refinement-annotations.md) §4.1.
 - **Proof columns are non-null by construction.** `post-process.ts` fills the
   implicit proof column with an object literal, so the injected column can be
   seeded non-null without an expression walk. Worth doing, since proof-carrying

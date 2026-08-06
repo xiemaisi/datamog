@@ -259,9 +259,8 @@ State these plainly; they are the cost of expansion.
   rules — a change to the parser layer the module system otherwise never touches,
   and one that would affect hand-written pass-through rules too.
 - **One unnamed query per file, enforced always.** A file with two `?-` queries
-  is an error. Programs in `packages/cli/examples` that use several queries (27
-  of 50 today) must move their extra queries to `output predicate`s. That
-  migration is future work, not part of this proposal.
+  is an error. The example corpus has already been migrated, and no further corpus
+  work remains for this rule.
 - **Diagnostics carry an instantiation path.** As in the conservative doc, each
   merged statement needs to trace back to its source module and position. Here it
   also needs the instantiation it came from, so an error in a module used twice
@@ -384,4 +383,3 @@ diagnostics, per-module EDB directories):
   supplies and edits several files), not just wiring. `prepareElaborated` already
   takes a `ModuleResolver`, so an in-memory resolver would slot in once that UX
   exists.
-- REPL, playground, and VS Code wiring, as in the conservative doc.
