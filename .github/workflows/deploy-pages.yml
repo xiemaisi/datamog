@@ -47,7 +47,7 @@ jobs:
           mkdir -p packages/playground/dist/slides
           cp -r doc/courses/flolac-26/slides/dist/. packages/playground/dist/slides/
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: packages/playground/dist
 
@@ -59,4 +59,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
