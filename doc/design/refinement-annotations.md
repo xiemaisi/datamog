@@ -1009,10 +1009,12 @@ decision remains blocking: the first useful delivery slice.
    Z3 supports it, but it is far more expensive and no corpus invariant is a
    float one, every case in §9.1 being integer.
 4. **Is the inert-annotation diagnostic a warning or an error?** Decided: warning
-   by default, error under `--strict-contracts`. See §2.2. What remains is
-   whether the flag should also promote any *other* advisory the checker grows,
-   which is a question about the flag's scope rather than about this diagnostic,
-   and can wait until there is a second one.
+   by default, error under `--strict-contracts`. See §2.2. Also decided: the flag
+   is about the checker's advisories as a class, not this one diagnostic, so any
+   later advisory it grows is promoted by the same flag rather than gaining its
+   own. That keeps one switch between the teaching default and the strict
+   reading, and means a new advisory has to be written knowing CI may turn it
+   into an error.
 5. **What does the REPL do?** `IncrementalSession` currently rejects extending an
    existing predicate across chunks, so sibling rules must arrive together. The
    checker therefore has the complete predicate when it accepts a chunk and can
@@ -1028,8 +1030,24 @@ decision remains blocking: the first useful delivery slice.
    argument's contract, only for groups known to contain a row; the latter also
    require a non-null argument. `sum` and `avg` derive nothing. No per-aggregate
    contract reaches `cnf-tseitin`'s upper bound, which needs "the count of a subset
-   does not exceed the count of the set" (§9.5). That relation between aggregates
-   would be a different feature.
+   does not exceed the count of the set" (§9.5).
+
+   What that would take, since the shape recurs: it is a **relation between two
+   predicates**, not a property of one predicate's tuples, so it needs a second
+   obligation form the way §5's boundary check does. It also needs definitions
+   unfolded, since the subset fact lives in how the two bodies differ rather than
+   in either contract, which puts it in tier 2 (§7) and gives up §3.3's
+   modularity. Concretely, three parts: detect that one aggregate's generating
+   body entails another's over the same counted term, check the groupings are
+   compatible (a per-group subset against an ungrouped total), then apply
+   monotonicity of `count`. The corpus writes exactly this shape at least four
+   times, `rank` against `nprop`, `irank` against `ninternal`, and `oprank`
+   against `nops`, so the demand is real.
+
+   The cheap alternative, and the one to reach for first, is not to prove it:
+   `!- irank(N, R), ninternal(I), R > I.` states the same fact as an integrity
+   constraint, costs nothing, and checks it against the data at hand. That is
+   what §9.4 already concluded for `cnf-tseitin`'s other invariants.
 8. **What integer domain does solver discharge use?** Decided: the JavaScript
    safe-integer range. Operations are exact inside it and return NULL on overflow.
    The solver uses mathematical integers with a range guard and §4.4's null bit,
