@@ -389,8 +389,22 @@ contract model.
 
 Excluded, each with a reason rather than by omission: predicate references and
 quantifiers (tier 2, §7), `value`-typed positions and JSON operations (no
-theory), §8 proof columns, `^` predicates (§7), and non-linear arithmetic
-otherwise.
+theory), `^` predicates (§7), and non-linear arithmetic otherwise.
+
+**Proof-carrying predicates are excluded outright**, not merely their proof
+column. The column itself is unwritable, being injected by the desugar rather
+than named in the head, so there is nowhere to attach a claim to it and it is
+`value`-typed besides. What forces the wider exclusion is that the two
+lowerings collide: §8's desugar pads a body atom of a proof-carrying predicate
+with the implicit proof column, including the atom inside a synthesised
+contract check, and the arity error that follows names neither feature. So a
+refinement on such a rule is rejected where the user can see why.
+
+That also settles a related question. A datatype whose values live in a proof
+term, a sorted list or a search tree, cannot be refined even in principle here:
+the data is a `value`, tier 1 has no theory for one, and a property like
+"sorted" is recursive and so needs tier 2's quantification rather than tier 1's
+arithmetic.
 
 **Aggregate head positions are in, with conservative derived contracts** rather
 than the exclusion an earlier draft had (§9.5, §11.7). The checker must first know

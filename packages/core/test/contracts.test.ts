@@ -36,6 +36,15 @@ describe("the refinement position is not a column", () => {
     expect(() => parse("tok(1).\nsp(I, I + 1 as K, _: I < K) :- tok(I).")).not.toThrow();
   });
 
+  test("a proof-carrying predicate cannot take one", () => {
+    // §4.1 excludes proof columns. Allowed through, the proof desugar pads the
+    // synthesised check's atom with the implicit proof column and the arity
+    // error that follows names neither feature.
+    expect(() => parse("num(1).\nnat(N, _: N > 0) :: Mk :- num(N).")).toThrow(
+      /proof-carrying, so it cannot take a refinement/,
+    );
+  });
+
   test("an unnamed position the formula does not mention is fine", () => {
     expect(() => parse("p(1).\nr(X, X + 1, _: X > 0) :- p(X).")).not.toThrow();
   });

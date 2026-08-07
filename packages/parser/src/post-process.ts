@@ -368,6 +368,19 @@ export function liftHeadAnnotations(program: Program): void {
         named.set(arg.name, inner);
       }
     }
+    // §4.1 excludes proof columns, and the two lowerings collide if allowed
+    // through: the proof desugar pads the synthesised contract check's atom
+    // with the implicit proof column, and the arity error that follows names
+    // neither feature. Reject it where the user can see why.
+    if (stmt.ruleName !== undefined) {
+      const refined = annotations.find((a) => a?.refinement !== undefined);
+      if (refined) {
+        throw parseErrorAtNode(
+          `Predicate '${stmt.head.predicate}' is proof-carrying, so it cannot take a refinement: a proof column is outside the checkable fragment`,
+          refined.refinement!,
+        );
+      }
+    }
     // Before substitution, which erases the name-to-position link.
     extractRefinements(stmt.head, annotations, parseErrorAtNode);
     if (named.size > 0) substituteHeadNames(stmt, named, parseErrorAtNode);
