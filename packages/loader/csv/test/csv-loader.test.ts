@@ -252,18 +252,13 @@ describe("CsvLoader", () => {
     expect(loader.readRows(decl)).rejects.toThrow(/Invalid integer/);
   });
 
-  test("Regression: rejects non-canonical numeric cells", async () => {
-    // `coerceValue` is shared by CSV and Google Sheets. It accepted
-    // syntactically numeric strings such as `01`, `-0`, and `1e3`,
-    // even though Datamog's string-to-number parsers reject those as
-    // non-canonical. For integer columns it also accepted 10-digit values
-    // such as `1000000000`, which SQLite/native can hold but Postgres's
-    // INTEGER column cannot. Reject these at the loader boundary so the
-    // same source file behaves consistently across backends.
+  test("rejects non-canonical numeric cells", async () => {
+    // CSV and Google Sheets use the same canonical spellings as the source
+    // language and conversion builtins.
     const loader = new CsvLoader({ directory: tempDir });
 
     const intDecl = getExtDecl("input predicate i(val: integer).");
-    for (const value of ["01", "-0", "1000000000"]) {
+    for (const value of ["01", "-0"]) {
       await Bun.write(join(tempDir, "i.csv"), `val\n${value}\n`);
       expect(loader.readRows(intDecl)).rejects.toThrow(/Invalid integer/);
     }
@@ -273,6 +268,16 @@ describe("CsvLoader", () => {
       await Bun.write(join(tempDir, "f.csv"), `val\n${value}\n`);
       expect(loader.readRows(floatDecl)).rejects.toThrow(/Invalid float/);
     }
+  });
+
+  test("accepts integers across the safe-integer range", async () => {
+    await Bun.write(join(tempDir, "i.csv"), "val\n1000000000\n9007199254740991\n");
+    const loader = new CsvLoader({ directory: tempDir });
+    const decl = getExtDecl("input predicate i(val: integer).");
+    expect(await loader.readRows(decl)).toEqual([
+      { val: 1_000_000_000 },
+      { val: Number.MAX_SAFE_INTEGER },
+    ]);
   });
 
   test("rejects '3.5' as an integer instead of silently truncating", async () => {

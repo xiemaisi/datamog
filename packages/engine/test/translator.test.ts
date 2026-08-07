@@ -34,7 +34,7 @@ describe("translator", () => {
       'input predicate `http-event`(`content-type`: string, `quote"col`: integer).',
     );
     expect(norm(result.createTables[0]!)).toBe(
-      'CREATE TABLE IF NOT EXISTS "http-event" ( "content-type" TEXT NOT NULL, "quote""col" INTEGER NOT NULL );',
+      'CREATE TABLE IF NOT EXISTS "http-event" ( "content-type" TEXT NOT NULL, "quote""col" BIGINT NOT NULL );',
     );
   });
 
@@ -44,7 +44,7 @@ describe("translator", () => {
     );
     const sql = norm(result.createTables[0]!);
     expect(sql).toContain('"a" TEXT NOT NULL');
-    expect(sql).toContain('"b" INTEGER NOT NULL');
+    expect(sql).toContain('"b" BIGINT NOT NULL');
     // Float columns are float8 on Postgres: `REAL` is single-precision
     // float4, which would truncate the 64-bit doubles the other backends
     // store and break cross-backend equality/join on full-precision values.
@@ -56,9 +56,9 @@ describe("translator", () => {
     const result = translateSource("input predicate t(a: string, b: integer?, c: value?).");
     const sql = norm(result.createTables[0]!);
     expect(sql).toContain('"a" TEXT NOT NULL');
-    expect(sql).toContain('"b" INTEGER,');
+    expect(sql).toContain('"b" BIGINT,');
     expect(sql).toContain('"c" JSONB');
-    expect(sql).not.toContain('"b" INTEGER NOT NULL');
+    expect(sql).not.toContain('"b" BIGINT NOT NULL');
     expect(sql).not.toContain('"c" JSONB NOT NULL');
   });
 
@@ -199,6 +199,16 @@ describe("translator", () => {
     expect(sql).toContain("UNION");
   });
 
+  test("Postgres recursive integer branches use BIGINT consistently", () => {
+    const result = translateSource(`
+      n(0).
+      n(X + 1) :- n(X), X < 1.
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain("CAST(0 AS BIGINT) AS col1");
+    expect(sql).toContain("AS BIGINT) AS col1");
+  });
+
   test("folds two recursive rules into one LATERAL term (postgres)", () => {
     const result = translateSource(`
       input predicate edge(a: integer, b: integer).
@@ -324,7 +334,8 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("AS col2");
-    expect(sql).toContain("* 2");
+    expect(sql).toContain("* CAST(2 AS DECIMAL)");
+    expect(sql).toContain("BETWEEN -9007199254740991 AND 9007199254740991");
   });
 
   test("generates SQL for expression in atom argument", () => {
@@ -443,7 +454,8 @@ describe("translator", () => {
       match(X, Y) :- pairs(X, Y), X + 1 = Y.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("+ 1) IS NOT DISTINCT FROM");
+    expect(sql).toContain("BETWEEN -9007199254740991 AND 9007199254740991");
+    expect(sql).toContain('FROM __datamog_safe_integer) IS NOT DISTINCT FROM __b0."b"');
   });
 
   test("generates SQL for equality binding used in head", () => {
@@ -504,7 +516,11 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("SUBSTR(");
-    expect(sql).toContain("+ 1, 1)");
+    // Postgres stores `integer` as BIGINT but SUBSTR takes int4 positions, so
+    // the offset is clamped and narrowed rather than passed straight through.
+    expect(sql).toMatch(
+      /SUBSTR\([^,]+, CAST\(LEAST\(GREATEST\(\(0\) \+ 1, .+?\) AS INTEGER\), 1\)/,
+    );
   });
 
   test("generates SUBSTR for slice", () => {
@@ -522,8 +538,9 @@ describe("translator", () => {
       tail(W, S) :- words(W), S = W[2:].
     `);
     const sql = norm(result.createViews[0]!);
-    // Two-argument SUBSTR (no length), offset by +1 for 1-based indexing.
-    expect(sql).toMatch(/SUBSTR\([^,]+, \(2\) \+ 1\)/);
+    // Two-argument SUBSTR (no length), offset by +1 for 1-based indexing and
+    // narrowed to int4 for Postgres (see the subscript test).
+    expect(sql).toMatch(/SUBSTR\([^,]+, CAST\(LEAST\(GREATEST\(\(2\) \+ 1, .+?\) AS INTEGER\)\)/);
   });
 
   test("generates SUBSTR with length for open-start slice W[:e]", () => {
@@ -532,8 +549,8 @@ describe("translator", () => {
       head(W, S) :- words(W), S = W[:3].
     `);
     const sql = norm(result.createViews[0]!);
-    // Three-argument SUBSTR starting at 1 with length e.
-    expect(sql).toMatch(/SUBSTR\([^,]+, 1, \(3\)\)/);
+    // Three-argument SUBSTR starting at 1 with length e, narrowed to int4.
+    expect(sql).toMatch(/SUBSTR\([^,]+, 1, CAST\(LEAST\(GREATEST\(\(3\), .+?\) AS INTEGER\)\)/);
   });
 
   test("omits SUBSTR entirely for full slice W[:]", () => {
@@ -556,7 +573,7 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("COUNT(*)");
-    expect(sql).toMatch(/GROUP BY [^ ]*__b0[^ ]*\."a" \+ 1/);
+    expect(sql).toContain('GROUP BY (WITH __datamog_safe_integer("value")');
   });
 
   test("generates NOT EXISTS for negated atoms", () => {
@@ -580,7 +597,7 @@ describe("translator", () => {
   test("generates a tagged combined CTE for mutual recursion (postgres)", () => {
     // Use the typed translation path because the synthesised empty anchor
     // for `odd` (whose rules are purely recursive) needs `columnTypes` to
-    // emit the `CAST(NULL AS INTEGER)` projection.
+    // emit the `CAST(NULL AS BIGINT)` projection.
     const result = translateTyped(`
       input predicate base(x: integer).
       even(X) :- base(X).
@@ -619,7 +636,7 @@ describe("translator", () => {
     // the SCC reference and so leaves the branch with a WHERE but no FROM. The
     // NULL padding still belongs in the select list: appending it at the end of
     // the branch would put it after the WHERE and not parse.
-    expect(view).toContain(`CAST(NULL AS INTEGER) WHERE __rec."__tag" = 'q'`);
+    expect(view).toContain(`CAST(NULL AS BIGINT) WHERE __rec."__tag" = 'q'`);
     // The broken form: padding trailing a completed WHERE condition.
     expect(view).not.toMatch(/= '\w+', CAST\(NULL/);
   });
@@ -909,7 +926,7 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain('to_jsonb(__b0."x") = __b1."x"');
-    expect(sql).toContain('__b0."x" AS col1');
+    expect(sql).toContain('CAST(__b0."x" AS BIGINT) AS col1');
     expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
 
@@ -922,7 +939,7 @@ describe("translator", () => {
       r(X) :- j(X), i(X).
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain('__b1."x" AS col1');
+    expect(sql).toContain('CAST(__b1."x" AS BIGINT) AS col1');
     expect(sql).toContain('to_jsonb(__b1."x") = __b0."x"');
     expect(sql).not.toContain('to_jsonb(__b0."x") AS col1');
   });
@@ -1069,7 +1086,7 @@ describe("translator", () => {
       r(2, count(X)) :- t(X).
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("2 AS col1");
+    expect(sql).toContain("CAST(2 AS BIGINT) AS col1");
     expect(sql).toContain("COUNT(");
     // A bare integer in GROUP BY would be positional; the literal head arg
     // must not appear there at all.
@@ -1093,7 +1110,8 @@ describe("translator", () => {
       r(Z) :- t(X), Z = Y * 2, Y = X + 1.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain('(__b0."x" + 1) * 2');
+    expect(sql).toContain("* CAST(2 AS DECIMAL)");
+    expect(sql).toContain('(__b0."x" + 1)');
   });
 
   test("equality can bind a bare variable on the right", () => {
@@ -1104,8 +1122,12 @@ describe("translator", () => {
     `);
     // Single-rule views emit `SELECT DISTINCT` so the view is a set even when
     // the rule projects away a body variable.
-    expect(norm(result.createViews[0]!)).toContain('SELECT DISTINCT __b0."x" AS col1');
-    expect(norm(result.createViews[1]!)).toContain('SELECT DISTINCT (__b0."x" + 1) AS col1');
+    expect(norm(result.createViews[0]!)).toContain(
+      'SELECT DISTINCT CAST(__b0."x" AS BIGINT) AS col1',
+    );
+    expect(norm(result.createViews[1]!)).toContain(
+      'SELECT DISTINCT (WITH __datamog_safe_integer("value")',
+    );
   });
 
   test("equality-bound value variable keeps value type for subscript", () => {
@@ -1126,8 +1148,8 @@ describe("translator", () => {
       r(Z) :- t(X), Y = X + 1, Z in [1 .. Y].
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain('generate_series(1, (__b0."x" + 1))');
-    expect(sql).not.toContain("BETWEEN");
+    expect(sql).toContain('generate_series(1, (WITH __datamog_safe_integer("value")');
+    expect(sql).not.toContain('__range_0."value" BETWEEN');
   });
 
   test("range bound referencing a range-bound integer variable binds the range", () => {
@@ -1161,7 +1183,7 @@ describe("translator", () => {
       r(Y, count(X)) :- t(X), Y = 5.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("5 AS col1");
+    expect(sql).toContain("CAST(5 AS BIGINT) AS col1");
     // A bare integer in GROUP BY is interpreted positionally; Y binds to
     // the literal 5 via equality, so it must be omitted from GROUP BY.
     expect(sql).not.toContain("GROUP BY 5");
@@ -1170,14 +1192,13 @@ describe("translator", () => {
 
   test("variable bound to a negative integer literal is also omitted from GROUP BY", () => {
     // A negative literal reaches termToSql via UnaryExpr and comes out as
-    // `(-5)`; the old `isLiteralBinding` regex didn't accept the parens
-    // and let the binding slip into GROUP BY.
+    // `(-5)`, which still counts as a literal for grouping.
     const result = translateSource(`
       input predicate t(x: integer).
       r(Y, count(X)) :- t(X), Y = -5.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("(-5) AS col1");
+    expect(sql).toContain("CAST((-5) AS BIGINT) AS col1");
     expect(sql).not.toContain("GROUP BY");
   });
 
@@ -1267,6 +1288,17 @@ describe("translator", () => {
     expect(sql).toContain('CASE WHEN ABS((__b0."x" / NULLIF(__b0."y", 0)))');
     expect(sql).toContain("THEN NULL");
     expect(sql).toContain("<>"); // NaN guard for SQLite/sql.js.
+  });
+
+  test("integer arithmetic results are safe-integer guarded", () => {
+    const result = translateSource(`
+      input predicate t(x: integer, y: integer).
+      r(P, Q, R) :- t(X, Y), P = X + Y, Q = X - Y, R = X * Y.
+    `);
+    const sql = norm(result.createViews[0]!);
+    expect(sql).toContain("BETWEEN -9007199254740991 AND 9007199254740991");
+    expect(sql).toContain("DECIMAL");
+    expect(sql).toContain("AS BIGINT");
   });
 
   test("sqrt of a negative argument returns NULL (not an error)", () => {
@@ -1407,7 +1439,7 @@ path(X, Y) :- path(X, Z), path(Z, Y).
     // Postgres uses a regex pre-check before the INTEGER cast.
     expect(sql).toContain("~");
     expect(sql).toContain("CAST((CASE WHEN");
-    expect(sql).toContain("INTEGER");
+    expect(sql).toContain("BIGINT");
   });
 
   test("to_float on SQLite uses the GLOB validation chain", () => {
@@ -1753,9 +1785,9 @@ describe("translator (sqlite dialect)", () => {
     // CTE rather than a fixed fallback cap that silently truncates large
     // dynamic ranges.
     expect(sql).toContain("json_each((WITH RECURSIVE");
-    expect(sql).toContain('"value" < (__b0."n" - 1)');
+    expect(sql).toContain('"value" < (WITH __datamog_safe_integer("value")');
     expect(sql).not.toContain("1000000");
-    expect(sql).toContain('<= (__b0."n" - 1)');
+    expect(sql).toContain('<= (WITH __datamog_safe_integer("value")');
   });
 
   test("sqlite range with a negative integer literal lower bound", () => {
@@ -2140,41 +2172,54 @@ describe("bitwise / shift operators", () => {
   };
 
   test("Postgres: &, | pass through; XOR is spelled #", () => {
-    expect(expr("&", postgres)).toContain('((__b0."x") & (__b0."y"))');
-    expect(expr("|", postgres)).toContain('((__b0."x") | (__b0."y"))');
+    expect(expr("&", postgres)).toContain(" & ");
+    expect(expr("|", postgres)).toContain(" | ");
     // Postgres `^` is exponentiation; bitwise XOR is `#`.
-    expect(expr("^", postgres)).toContain('((__b0."x") # (__b0."y"))');
+    expect(expr("^", postgres)).toContain(" # ");
+    for (const op of ["&", "|", "^"]) {
+      expect(expr(op, postgres)).toContain("4294967295");
+      expect(expr(op, postgres)).toContain("2147483648");
+    }
   });
 
   test("Postgres: shift count is masked mod 32; >> is the native shift", () => {
-    expect(expr("<<", postgres)).toContain('((__b0."x") << ((__b0."y") & 31))');
-    expect(expr(">>", postgres)).toContain('((__b0."x") >> ((__b0."y") & 31))');
+    expect(expr("<<", postgres)).toContain(" << ");
+    expect(expr(">>", postgres)).toContain(" >> ");
+    expect(expr("<<", postgres)).toContain("::bigint & 31");
+    expect(expr(">>", postgres)).toContain("::bigint & 31");
   });
 
   test("Postgres: >>> masks to unsigned 32-bit in bigint and reinterprets as int", () => {
     const sql = expr(">>>", postgres);
-    expect(sql).toContain('(__b0."x")::bigint & 4294967295');
-    expect(sql).toContain(")::int");
+    expect(sql).toContain("::bigint & 4294967295");
+    expect(sql).toContain(" >> ");
+    expect(sql).toContain("2147483648");
   });
 
   test("SQLite: XOR is emulated since SQLite has no ^ operator", () => {
     const sql = expr("^", sqlite);
     expect(sql).not.toContain("#");
-    expect(sql).toContain('(((__b0."x") | (__b0."y")) & ~((__b0."x") & (__b0."y")))');
+    expect(sql).toContain("~");
+    expect(sql).toContain("4294967295");
+    expect(sql).toContain("2147483648");
   });
 
   test("SQLite: << masks the count and wraps the 64-bit result to int32", () => {
     const sql = expr("<<", sqlite);
-    expect(sql).toContain('(__b0."x") << ((__b0."y") & 31)');
+    expect(sql).toContain(" << ");
+    expect(sql).toContain(" & 31");
     // int32 reinterpret wrap (no XOR operator needed — pure arithmetic).
     expect(sql).toContain("& 4294967295) + 2147483648) & 4294967295) - 2147483648");
   });
 
   test("SQLite: >> is the native arithmetic shift with a masked count", () => {
-    expect(expr(">>", sqlite)).toContain('((__b0."x") >> ((__b0."y") & 31))');
+    expect(expr(">>", sqlite)).toContain(" >> ");
+    expect(expr(">>", sqlite)).toContain(" & 31");
   });
 
   test("SQLite: >>> masks the operand to unsigned 32-bit then wraps", () => {
-    expect(expr(">>>", sqlite)).toContain('((__b0."x") & 4294967295) >> ((__b0."y") & 31)');
+    expect(expr(">>>", sqlite)).toContain("& 4294967295");
+    expect(expr(">>>", sqlite)).toContain(" >> ");
+    expect(expr(">>>", sqlite)).toContain(" & 31");
   });
 });

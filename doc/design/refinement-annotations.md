@@ -1,9 +1,9 @@
 # Design notes: refinement annotations on rule heads
 
-Status: proposal, review blockers remain. Nothing implemented, nothing in the
-spec. The aggregate soundness findings and witness multiplicity are addressed in
-the body, but portable integer overflow and the first implementation slice remain
-unsettled.
+Status: proposal, one review blocker remains. Refinement annotations are not
+implemented or in the spec. The soundness findings, witness multiplicity, and
+portable integer domain are addressed in the body, and the runtime implements
+that integer domain. The first refinement implementation slice remains unsettled.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -45,8 +45,8 @@ Decisions taken (see §2.1, §4, §5 for what each entails):
 - **Tier 1**: propositions over head variables and arithmetic, decidable and
   eventually discharged automatically. **Tier 2** (propositions mentioning
   predicates) is designed in §7, not built.
-- Once discharged, **consumers may assume a contract**. No codegen changes, so no
-  backend is touched.
+- Once discharged, **consumers may assume a contract**. Contracts add no codegen;
+  §4.1's safe-integer runtime prerequisite is implemented.
 - The staged plan currently defers discharge (§4.5), but follow-up review leaves
   that first-slice decision open. A generator-only slice would not deliver the
   payoff above.
@@ -84,7 +84,8 @@ have answers in the body; the unresolved parts are collected below.
   and modulo follows the dividend's sign, where a solver's native integer
   operations may not. Integer overflow also differs across back ends, so the
   portable arithmetic domain has to be fixed before discharge can be sound.
-  Division and modulo are answered in §4.1; overflow is not.
+  Answered in §4.1: safe-integer results are exact and overflow produces NULL.
+  The runtimes and normative spec now enforce that domain.
 - **A generator-only increment has no consumer.** Until obligations are
   discharged, no analysis or module boundary may rely on a contract, so phases 0
   to 2 land only if printed obligations are useful on their own. §4.5 and §10
@@ -92,14 +93,12 @@ have answers in the body; the unresolved parts are collected below.
 
 ### Follow-up review
 
-The proposal is not closed yet. Two decisions remain explicit in its own plan:
+The proposal is not closed yet. One decision remains explicit in its own plan:
 
-- §4.1 encodes division and modulo but does not choose a portable integer-overflow
-  model for solver discharge.
 - §4.5 and phase 3 leave open whether printed obligations have an independent
   user or solver-backed discharge belongs in the first slice.
 
-Until those are settled, the implementation plan remains blocked.
+Until that is settled, the implementation plan remains blocked.
 
 ## 1 What the annotation is
 
@@ -349,6 +348,25 @@ variable-divisor result is left unconstrained rather than rejected.
 Their solver encoding must reproduce the runtime rules: division truncates toward
 zero and modulo has the dividend's sign. Using a solver's native mathematical
 integer division and modulo without this encoding is unsound for negative values.
+
+**The portable integer domain is the JavaScript safe-integer range:**
+`-(2^53 - 1)` through `2^53 - 1`. Every tier-1 integer arithmetic operation is
+exact when its mathematical result is inside that range and produces NULL outside
+it. Integer literals, loaders, conversions, range enumeration, and every backend
+enforce the same range.
+
+The solver may use unbounded mathematical integers internally, but each runtime
+integer term carries the same null bit as §4.4. For an operation with mathematical
+result `r`, the result is null when an operand is null, another partial case
+applies, or `r` lies outside the safe-integer range; its value equals `r` only in
+the non-null case. This preserves linear arithmetic because multiplication and
+division remain restricted as above.
+
+Runtime evaluation and the spec enforce this rule. Loaders and conversions reject
+unsafe integer inputs, arithmetic and integer-returning builtins guard their
+results, and PostgreSQL stores integer columns as `BIGINT` while guarding
+intermediate arithmetic. These are implementation choices, not part of the
+contract model.
 
 Excluded, each with a reason rather than by omission: predicate references and
 quantifiers (tier 2, §7), `value`-typed positions and JSON operations (no
@@ -600,10 +618,12 @@ express.
 There is no erasure step. §5.10 already establishes that head annotations never
 reach codegen ("Codegen uses `columnTypes` only"), and §1.1 establishes that a
 witness is unique, so a column holding one would be constant-valued and is simply
-never built. So the feature is analysis-only:
+never built. With §4.1's runtime prerequisite in place, the refinement feature
+itself is analysis-only:
 
 - no grammar change beyond the one production,
-- no change to the translator, to any SQL dialect, or to either interpreter,
+- no contract-specific change to the translator, any SQL dialect, or either
+  interpreter,
 - no change to `expected.json` for any example.
 
 Guard elimination (using a discharged proposition to drop a `NULLIF` divisor
@@ -906,9 +926,9 @@ conjuncts. A refinement checker is the same shape with a richer claim, and can
 reuse all five.
 
 So: still worth designing, but as an extension of a pattern that now exists three
-times over rather than as a feature carrying its own weight. Two follow-up
-decisions remain: portable integer overflow and whether solver-backed discharge
-belongs in the first implementation slice.
+times over rather than as a feature carrying its own weight. One follow-up
+decision remains: whether solver-backed discharge belongs in the first
+implementation slice.
 
 ## 10 Implementation plan
 
@@ -949,8 +969,8 @@ decide whether printed obligations have an independent user. If not, this phase
 belongs in the first slice. Wire a solver behind `--check-refinements`, at which
 point `cyk-parser` (§4.2) discharges and §4.3's variant fails with a message naming
 the rule and the unprovable formula. Only at this point may a consumer rely on a
-contract, so §5's payoff and the `--strict-contracts` flag of §2.2 land here rather
-than earlier.
+contract, so §5's payoff and the `--strict-contracts` flag of §2.2 land here
+rather than earlier.
 
 ### Phase 4: documentation
 
@@ -959,9 +979,8 @@ Spec §5.10 gains the refinement form; walkthrough coverage; one example under
 
 ## 11 Decisions and residuals
 
-These earlier decisions still apply, with the corrections recorded above. Two
-decisions remain blocking: portable integer overflow and the first useful
-delivery slice.
+These earlier decisions still apply, with the corrections recorded above. One
+decision remains blocking: the first useful delivery slice.
 
 1. **Should `not` around a comparison be warned about?** Was deferred as "help or
    noise"; the project has since answered it. Because trichotomy fails (§4.4),
@@ -1011,6 +1030,11 @@ delivery slice.
    contract reaches `cnf-tseitin`'s upper bound, which needs "the count of a subset
    does not exceed the count of the set" (§9.5). That relation between aggregates
    would be a different feature.
+8. **What integer domain does solver discharge use?** Decided: the JavaScript
+   safe-integer range. Operations are exact inside it and return NULL on overflow.
+   The solver uses mathematical integers with a range guard and §4.4's null bit,
+   rather than bit-vectors or backend storage widths. Runtime alignment is in
+   place (§4.1).
 
 ## Appendix: adjacent findings, all fixed
 

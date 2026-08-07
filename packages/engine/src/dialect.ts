@@ -80,6 +80,9 @@ export interface SqlDialect {
   /** Generate SQL for the concat aggregate function. */
   concat(argSql: string): string;
 
+  /** Generate a portable safe-integer sum. */
+  integerSum(argSql: string): string;
+
   /**
    * Generate SQL for the `list` aggregate: collect values into a json
    * array. `valueSql` is the JSON-form value to insert (already lifted
@@ -143,7 +146,7 @@ export interface SqlDialect {
    * mod 32, and the result wraps to int32. Backends diverge enough that
    * each owns the emission: SQLite has no `^` or `>>>` and computes in
    * 64-bit (results need wrapping); Postgres spells XOR `#`, lacks `>>>`,
-   * and its INTEGER is already 32-bit. NULL operands propagate to NULL
+   * and also needs explicit int32 coercion. NULL operands propagate to NULL
    * natively on every backend. See spec §5.9.
    */
   bitwise(op: BitwiseOp, leftSql: string, rightSql: string): string;
@@ -307,7 +310,7 @@ export interface SqlDialect {
    * `to_integer(string)` — parse a string expression as a canonical
    * decimal integer (optional leading `-`, ASCII digits, no leading
    * zeros, no whitespace, base 10). Returns SQL NULL on any malformed
-   * input or on values outside the dialect's integer range. Each
+   * input or on values outside Datamog's safe-integer range. Each
    * dialect picks its own validation strategy: Postgres uses a regex
    * pre-check (its `CAST` raises on failure), SQLite uses a
    * roundtrip-via-TEXT comparison (its `CAST` is silent and lossy).

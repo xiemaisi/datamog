@@ -705,7 +705,8 @@ function translateRule(
       // No GROUP BY entry: an argument containing an aggregate is reduced
       // over the group rather than grouped by.
       const aggSql = termToSql(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
-      selectParts.push(`${aggSql} AS ${targetCol}`);
+      const expr = castIntegerForDialect(aggSql, headColType, dialect);
+      selectParts.push(`${expr} AS ${targetCol}`);
     } else if (term.$type === "Variable") {
       const refs = bindings.get(term.name);
       if (!refs || refs.length === 0) {
@@ -719,7 +720,8 @@ function translateRule(
       const first = refs[0]!;
       const rawExpr = bindingToSql(first);
       const varType = varTypes.get(term.name);
-      const expr = liftToJsonIfNeeded(rawExpr, varType, headColType, dialect);
+      const lifted = liftToJsonIfNeeded(rawExpr, varType, headColType, dialect);
+      const expr = castIntegerForDialect(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
       if (isAggregateRule && isGroupingArg(term, literalBound)) {
         groupByExprs.push(expr);
@@ -727,7 +729,8 @@ function translateRule(
     } else {
       const rawExpr = termToSql(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
       const termType = inferTermType(term, varTypes, columnTypes);
-      const expr = liftToJsonIfNeeded(rawExpr, termType, headColType, dialect);
+      const lifted = liftToJsonIfNeeded(rawExpr, termType, headColType, dialect);
+      const expr = castIntegerForDialect(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
       if (isAggregateRule && isGroupingArg(term, literalBound)) {
         groupByExprs.push(expr);
@@ -1003,7 +1006,7 @@ function translateFact(rule: Rule, analyzed: TypedProgram, dialect: SqlDialect):
     const headColType = analyzed.columnTypes.get(rule.head.predicate)?.[i];
     const termType = inferTermType(term, emptyVarTypes, analyzed.columnTypes);
     const lifted = liftToJsonIfNeeded(rawSql, termType, headColType, dialect);
-    return `${lifted} AS col${i + 1}`;
+    return `${castIntegerForDialect(lifted, headColType, dialect)} AS col${i + 1}`;
   });
   // A nullary fact (empty head) becomes the constant marker column; see translateRule.
   const selectList = selectParts.length > 0 ? selectParts.join(", ") : "1 AS col1";
@@ -1143,7 +1146,7 @@ function termToSql(
   columnTypes: ReadonlyMap<string, readonly PrimitiveType[]>,
   functionOverloads: ReadonlyMap<FunctionCall, Overload>,
   dialect: SqlDialect,
-  guardFloat = true,
+  guardResult = true,
 ): string {
   switch (term.$type) {
     case "StringLiteral":
@@ -1183,7 +1186,7 @@ function termToSql(
         columnTypes,
         functionOverloads,
         dialect,
-        !isNumericArithmetic,
+        !isNumericArithmetic || inferTermType(term.left, varTypes, columnTypes) === "integer",
       );
       let rightSql = termToSql(
         term.right,
@@ -1192,7 +1195,7 @@ function termToSql(
         columnTypes,
         functionOverloads,
         dialect,
-        !isNumericArithmetic,
+        !isNumericArithmetic || inferTermType(term.right, varTypes, columnTypes) === "integer",
       );
       // Logical and/or: map the source's `&&`/`||` to SQL's `AND`/`OR`.
       // Three-valued logic (NULL handling) is identical across every SQL
@@ -1243,8 +1246,14 @@ function termToSql(
         op = "||";
       }
       const resultType = inferTermType(term, varTypes, columnTypes);
-      const guardFloatResult = (sql: string): string =>
-        guardFloat && resultType === "float" ? finiteFloatOrNullSql(sql) : sql;
+      const guardNumericResult = (sql: string): string => {
+        if (!guardResult) return sql;
+        if (resultType === "float") return finiteFloatOrNullSql(sql);
+        if (resultType === "integer") {
+          return safeIntegerOrNullSql(sql, dialect, containsAggregate(term));
+        }
+        return sql;
+      };
       // Division and modulo by zero: wrap the divisor with NULLIF so every
       // backend returns NULL. Postgres would otherwise raise `division by
       // zero`; SQLite already returns NULL. NULL ÷ anything and anything ÷
@@ -1258,7 +1267,7 @@ function termToSql(
           (!isIntegerTerm(term.left, varTypes, columnTypes) ||
             !isIntegerTerm(term.right, varTypes, columnTypes))
         ) {
-          return guardFloatResult(floatModuloSql(leftSql, safeRhs));
+          return guardNumericResult(floatModuloSql(leftSql, safeRhs));
         }
         if (
           op === "/" &&
@@ -1266,11 +1275,13 @@ function termToSql(
           isIntegerTerm(term.left, varTypes, columnTypes) &&
           isIntegerTerm(term.right, varTypes, columnTypes)
         ) {
-          return dialect.divideIntegers(leftSql, safeRhs);
+          return guardNumericResult(dialect.divideIntegers(leftSql, safeRhs));
         }
-        return guardFloatResult(`(${leftSql} ${op} ${safeRhs})`);
+        return guardNumericResult(`(${leftSql} ${op} ${safeRhs})`);
       }
-      return guardFloatResult(`(${leftSql} ${op} ${rightSql})`);
+      const leftOperand = resultType === "integer" && op === "*" ? asDecimal(leftSql) : leftSql;
+      const rightOperand = resultType === "integer" && op === "*" ? asDecimal(rightSql) : rightSql;
+      return guardNumericResult(`(${leftOperand} ${op} ${rightOperand})`);
     }
     case "UnaryExpr": {
       const operandSql = termToSql(
@@ -1284,7 +1295,8 @@ function termToSql(
       );
       if (term.op === "!") return `(NOT ${operandSql})`;
       const sql = `(-${operandSql})`;
-      return guardFloat && inferTermType(term, varTypes, columnTypes) === "float"
+      if (!guardResult) return sql;
+      return inferTermType(term, varTypes, columnTypes) === "float"
         ? finiteFloatOrNullSql(sql)
         : sql;
     }
@@ -1334,7 +1346,7 @@ function termToSql(
       // The leading IS NULL branch keeps NULL propagating through to NULL
       // (per §5.4) — without it, `NULL >= 0` is NULL and SQL's CASE falls
       // through to ELSE '', diverging from the native evaluator.
-      return `CASE WHEN (${obj}) IS NULL OR (${idx}) IS NULL THEN NULL WHEN (${idx}) >= 0 THEN SUBSTR(${obj}, (${idx}) + 1, 1) ELSE '' END`;
+      return `CASE WHEN (${obj}) IS NULL OR (${idx}) IS NULL THEN NULL WHEN (${idx}) >= 0 THEN SUBSTR(${obj}, ${castPositionForDialect(`(${idx}) + 1`, dialect)}, 1) ELSE '' END`;
     }
     case "Slice": {
       const obj = termToSql(
@@ -1401,7 +1413,7 @@ function termToSql(
           dialect,
         );
         const e = termToSql(term.end, bindings, varTypes, columnTypes, functionOverloads, dialect);
-        return `CASE WHEN (${obj}) IS NULL OR (${s}) IS NULL OR (${e}) IS NULL THEN NULL WHEN (${s}) >= 0 AND (${e}) > (${s}) THEN SUBSTR(${obj}, (${s}) + 1, (${e}) - (${s})) ELSE '' END`;
+        return `CASE WHEN (${obj}) IS NULL OR (${s}) IS NULL OR (${e}) IS NULL THEN NULL WHEN (${s}) >= 0 AND (${e}) > (${s}) THEN SUBSTR(${obj}, ${castPositionForDialect(`(${s}) + 1`, dialect)}, ${castPositionForDialect(`(${e}) - (${s})`, dialect)}) ELSE '' END`;
       }
       if (term.start) {
         const s = termToSql(
@@ -1412,11 +1424,11 @@ function termToSql(
           functionOverloads,
           dialect,
         );
-        return `CASE WHEN (${obj}) IS NULL OR (${s}) IS NULL THEN NULL WHEN (${s}) >= 0 THEN SUBSTR(${obj}, (${s}) + 1) ELSE '' END`;
+        return `CASE WHEN (${obj}) IS NULL OR (${s}) IS NULL THEN NULL WHEN (${s}) >= 0 THEN SUBSTR(${obj}, ${castPositionForDialect(`(${s}) + 1`, dialect)}) ELSE '' END`;
       }
       if (term.end) {
         const e = termToSql(term.end, bindings, varTypes, columnTypes, functionOverloads, dialect);
-        return `CASE WHEN (${obj}) IS NULL OR (${e}) IS NULL THEN NULL WHEN (${e}) > 0 THEN SUBSTR(${obj}, 1, (${e})) ELSE '' END`;
+        return `CASE WHEN (${obj}) IS NULL OR (${e}) IS NULL THEN NULL WHEN (${e}) > 0 THEN SUBSTR(${obj}, 1, ${castPositionForDialect(`(${e})`, dialect)}) ELSE '' END`;
       }
       return obj;
     }
@@ -1550,6 +1562,36 @@ function floatModuloSql(leftSql: string, rightSql: string): string {
   return `(${leftSql} - ${rightSql} * ${truncated})`;
 }
 
+function asDecimal(sql: string): string {
+  return `CAST(${sql} AS DECIMAL)`;
+}
+
+/**
+ * Narrow an integer expression to the 32-bit type a *positional* argument
+ * needs. Postgres stores `integer` as BIGINT, the domain being 2^53, but its
+ * `SUBSTR` is defined only for int4 positions and a bare cast raises
+ * "integer out of range" on a larger value, where SQLite and the interpreters
+ * return `''`. Clamping first keeps them agreeing: a position past int4 is
+ * past the end of any string, so clamping to the int4 bound gives the same
+ * empty result. A dialect whose `integer` is already INTEGER needs nothing.
+ */
+function castPositionForDialect(sql: string, dialect: SqlDialect): string {
+  if (sqlTypeFor(dialect, "integer") === "INTEGER") return sql;
+  return `CAST(LEAST(GREATEST(${sql}, -2147483648), 2147483647) AS INTEGER)`;
+}
+
+function castIntegerForDialect(
+  sql: string,
+  type: PrimitiveType | undefined,
+  dialect: SqlDialect,
+): string {
+  const storageType = sqlTypeFor(dialect, "integer");
+  if (type !== "integer" || storageType === "INTEGER") return sql;
+  if (sql.startsWith('(WITH __datamog_safe_integer("value")')) return sql;
+  if (sql.startsWith("CAST(") && sql.endsWith(` AS ${storageType})`)) return sql;
+  return `CAST(${sql} AS ${storageType})`;
+}
+
 function asciiFoldSql(sql: string, from: string, to: string): string {
   let out = sql;
   for (let i = 0; i < from.length; i++) {
@@ -1661,7 +1703,7 @@ function translateAggregate(
 ): string {
   // count(*) → COUNT(*): counts rows, not values.
   if (agg.func === "count" && agg.arg.$type === "Wildcard") {
-    return "COUNT(*)";
+    return safeIntegerOrNullSql("COUNT(*)", dialect, true);
   }
 
   const argSql = termToSql(agg.arg, bindings, varTypes, columnTypes, functionOverloads, dialect);
@@ -1670,9 +1712,9 @@ function translateAggregate(
 
   switch (agg.func) {
     case "count":
-      return `COUNT(${argSql})`;
+      return safeIntegerOrNullSql(`COUNT(${argSql})`, dialect, true);
     case "sum":
-      return `SUM(${argSql})`;
+      return argType === "integer" ? dialect.integerSum(argSql) : `SUM(${argSql})`;
     case "avg":
       return `AVG(${argSql})`;
     case "min":
@@ -1748,9 +1790,20 @@ type SqlEmit = (sqlArgs: string[], dialect: SqlDialect) => string;
 
 const MAX_FLOAT_SQL = "1.7976931348623157e308";
 const LOG_MAX_FLOAT_SQL = `LN(${MAX_FLOAT_SQL})`;
+const MAX_SAFE_INTEGER_SQL = "9007199254740991";
 
 function finiteFloatOrNullSql(floatSql: string): string {
   return `(CASE WHEN ABS(${floatSql}) > ${MAX_FLOAT_SQL} OR ${floatSql} <> ${floatSql} THEN NULL ELSE ${floatSql} END)`;
+}
+
+function safeIntegerOrNullSql(integerSql: string, dialect: SqlDialect, aggregate = false): string {
+  const type = sqlTypeFor(dialect, "integer");
+  if (aggregate) {
+    return `CAST((CASE WHEN ${integerSql} BETWEEN -${MAX_SAFE_INTEGER_SQL} AND ${MAX_SAFE_INTEGER_SQL} THEN ${integerSql} ELSE NULL END) AS ${type})`;
+  }
+  return `(WITH __datamog_safe_integer("value") AS (SELECT ${integerSql})
+    SELECT CAST((CASE WHEN "value" BETWEEN -${MAX_SAFE_INTEGER_SQL} AND ${MAX_SAFE_INTEGER_SQL} THEN "value" ELSE NULL END) AS ${type})
+    FROM __datamog_safe_integer)`;
 }
 
 /**
@@ -1854,6 +1907,13 @@ const SQL_EMIT: ReadonlyMap<string, SqlEmit> = new Map<string, SqlEmit>([
   ["parse_json.string", (a, d) => d.parseJson(a[0]!)],
 ]);
 
+const INTEGER_RESULT_GUARDS = new Set([
+  "round.float",
+  "round.integer_integer",
+  "floor.float",
+  "ceil.float",
+]);
+
 // Module-load coverage check: every overload key in the core registry
 // must have a SQL emitter, and every emitter must correspond to a
 // registered overload. Mismatches fail loudly at startup rather than
@@ -1903,5 +1963,8 @@ function translateCall(
   if (!emit) {
     throw new Error(`Internal error: SQL emit missing for built-in '${overload.key}'`);
   }
-  return emit(sqlArgs, dialect);
+  const result = emit(sqlArgs, dialect);
+  return INTEGER_RESULT_GUARDS.has(overload.key)
+    ? safeIntegerOrNullSql(result, dialect, containsAggregate(call))
+    : result;
 }

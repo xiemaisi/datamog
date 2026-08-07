@@ -128,6 +128,10 @@ function finiteOrNull(v: number): number | null {
   return Number.isFinite(v) ? v : null;
 }
 
+function safeIntegerOrNull(v: number): number | null {
+  return Number.isSafeInteger(v) ? v : null;
+}
+
 /**
  * Replace IEEE Infinity / NaN with `null` for JSON-construction paths.
  * This is still needed at value-construction boundaries because a caller
@@ -175,7 +179,10 @@ export function evalTerm(
         return v === null ? null : !asBoolean(v);
       }
       if (v === null) return null;
-      return finiteOrNull(-asNumber(v));
+      const negated = -asNumber(v);
+      return inferTermType(term, env.vars, typesFor(env)) === "integer"
+        ? safeIntegerOrNull(negated)
+        : finiteOrNull(negated);
     }
     case "BinaryExpr": {
       const l = evalTerm(term.left, sub, env, aggregates);
@@ -335,10 +342,19 @@ function evalBinary(
     if (leftType === "string" || rightType === "string") {
       return `${l}${r}`;
     }
-    return finiteOrNull(asNumber(l) + asNumber(r));
+    const result = asNumber(l) + asNumber(r);
+    return leftType === "integer" && rightType === "integer"
+      ? safeIntegerOrNull(result)
+      : finiteOrNull(result);
   }
-  if (op === "-") return finiteOrNull(asNumber(l) - asNumber(r));
-  if (op === "*") return finiteOrNull(asNumber(l) * asNumber(r));
+  if (op === "-" || op === "*") {
+    const result = op === "-" ? asNumber(l) - asNumber(r) : asNumber(l) * asNumber(r);
+    const leftType = inferTermType(left, env.vars, typesFor(env));
+    const rightType = inferTermType(right, env.vars, typesFor(env));
+    return leftType === "integer" && rightType === "integer"
+      ? safeIntegerOrNull(result)
+      : finiteOrNull(result);
+  }
   if (op === "/") {
     const rn = asNumber(r);
     if (rn === 0) return null;
@@ -346,14 +362,19 @@ function evalBinary(
     const leftType = inferTermType(left, env.vars, typesFor(env));
     const rightType = inferTermType(right, env.vars, typesFor(env));
     if (leftType === "integer" && rightType === "integer") {
-      return finiteOrNull(Math.trunc(ln / rn));
+      return safeIntegerOrNull(Math.trunc(ln / rn));
     }
     return finiteOrNull(ln / rn);
   }
   if (op === "%") {
     const rn = asNumber(r);
     if (rn === 0) return null;
-    return finiteOrNull(asNumber(l) % rn);
+    const result = asNumber(l) % rn;
+    const leftType = inferTermType(left, env.vars, typesFor(env));
+    const rightType = inferTermType(right, env.vars, typesFor(env));
+    return leftType === "integer" && rightType === "integer"
+      ? safeIntegerOrNull(result)
+      : finiteOrNull(result);
   }
   // Bitwise / shift ops on 32-bit signed integers. JS bit operators already
   // coerce operands to int32 and mask the shift count mod 32 (Java/JS
@@ -605,11 +626,11 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
     "to_integer.string",
     (args) => {
       const s = asString(args[0]);
-      // Canonical form: `0`, or `-?[1-9][0-9]*` with at most 9 digits.
-      // The 9-digit cap matches the SQL backends' INT32 ceiling so
-      // every backend agrees on which inputs are accepted.
-      if (!/^(0|-?[1-9][0-9]{0,8})$/.test(s)) return null;
-      return Number.parseInt(s, 10);
+      // Canonical form: `0`, or `-?[1-9][0-9]*`, inside the JS
+      // safe-integer range.
+      if (!/^(0|-?[1-9][0-9]*)$/.test(s)) return null;
+      const value = Number(s);
+      return Number.isSafeInteger(value) ? value : null;
     },
   ],
   [
@@ -665,6 +686,13 @@ for (const key of NATIVE_IMPLS.keys()) {
     throw new Error(`Native impl registered for unknown built-in '${key}'`);
 }
 
+const INTEGER_RESULT_GUARDS = new Set([
+  "round.float",
+  "round.integer_integer",
+  "floor.float",
+  "ceil.float",
+]);
+
 function evalCall(call: FunctionCall, args: Value[], env: TypeEnv): Value {
   // Most calls are pre-resolved by type inference; the fallback covers
   // explicit `null`-literal arguments where overloads disagreed on
@@ -692,7 +720,10 @@ function evalCall(call: FunctionCall, args: Value[], env: TypeEnv): Value {
   // value slot collapse the same way they do on SQL backends.
   if (liftedArgs.some((a) => a === null)) return null;
 
-  return impl(liftedArgs);
+  const result = impl(liftedArgs);
+  return INTEGER_RESULT_GUARDS.has(overload.key) && typeof result === "number"
+    ? safeIntegerOrNull(result)
+    : result;
 }
 
 /**

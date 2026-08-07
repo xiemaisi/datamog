@@ -35,12 +35,7 @@ function isNativeOnly(name: string): boolean {
  * They are `test.failing` rather than skipped, so the gap is recorded and
  * whoever fixes the dialect is told to delete the entry.
  *
- * None of these is a property of the example -- each runs on sqlite. One
- * Postgres restriction the translator does not respect, analysed in
- * doc/design/postgres-alignment.md: a recursive CTE's column types must agree
- * between anchor and recursive term, and `sum` widens `integer` to `bigint`.
- *
- * shannon-entropy is the one entry that is not a defect and will not be fixed:
+ * shannon-entropy is not a defect and will not be fixed:
  * its answer is right to 15 significant figures and differs from SQLite's in
  * the last bit, floating-point addition not being associative and `LN` not
  * being specified to the ulp. It is listed so that the divergence is recorded
@@ -48,7 +43,6 @@ function isNativeOnly(name: string): boolean {
  * comparison.
  */
 const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
-  ["proof-term-fold", "integer anchor column against a bigint sum"],
   ["shannon-entropy", "last-bit float difference, not a defect"],
 ]);
 

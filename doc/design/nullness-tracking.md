@@ -191,12 +191,13 @@ way to get this wrong:
 They are genuinely independent. `/` is strict but partial (`1 / 0`). `=` is total
 but not strict (`null = null` is true). `&&` is total but not strict
 (`null && false` is false). `as_integer` is strict and partial. `upper` is strict
-and total.
+and total. Integer `+`, `-`, and `*` are strict and partial because a result
+outside the safe-integer range becomes NULL.
 
 Both bits belong on `Overload` in `builtins.ts`, not on `Builtin`, because
-totality is per signature: `+` on `integer` never yields NULL, while `+` on
-`float` can overflow to non-finite and does (spec §5.4, `values.ts:121`). The
-registry is already keyed per signature, so this fits its existing shape.
+totality is per signature: `length` on `string` is total while `length` on
+`value` is partial for non-collection shapes. The registry is already keyed per
+signature, so this fits its existing shape.
 
 ### 4.2 Variable nullness within a rule: refinement
 
@@ -250,7 +251,7 @@ Worked, with the last one being the case refinement-annotations.md §4.4 needs:
 ```prolog
 q(X) :- p(X), X <> null.                    % X non-null, so q's column is too
 q(X) :- p(X), X < 100.                      % same, via the strict comparison
-q(X) :- p(Y), Y <> null, X = Y + 1.         % Y non-null, `+` total on integer, so X
+q(X) :- p(Y), Y <> null, X = Y & 1.         % Y non-null, wrapping bitwise op total, so X
 q(X) :- p(Y), X = Y / 2.                    % nothing: `/` is partial, X maybenull
 q(X) :- p(X), X <= 100.                     % nothing: `<=` admits the NULL row
 ```
@@ -545,8 +546,7 @@ null.md §8 refuses and spec §2.9 already collapses.
   ⊤ is never materialised, so the fixed point in §4.3 is unaffected.
 - **`?` on a query or constraint** has nowhere to go and should stay
   unparseable. Both are checked, neither publishes a contract.
-- **Integer overflow is out of frame.** §4.1 calls `+` on `integer` total
-  because the interpreters only NULL out non-finite results
-  (`values.ts:121`), and two safe integers cannot sum to a non-finite one. Where
-  Postgres would raise instead is an existing cross-backend question, not one
-  this proposal creates. See [postgres-alignment.md](./postgres-alignment.md).
+- **Integer overflow follows the ordinary partial-operation path.** Arithmetic,
+  integer-returning math builtins, and integer `sum` can originate NULL at the
+  safe-integer boundary. The fixed-point design needs no special case beyond
+  their totality metadata and `mayBeNull` branches.

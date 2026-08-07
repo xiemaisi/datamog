@@ -99,11 +99,9 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
     ov("replace.string_string_string", ["string", "string", "string"], "string", TOTAL),
   ]),
 
-  // Math. The domain-error family (`sqrt`, `ln`, `exp`) is partial by spec
-  // §5.4; the rest are total because rounding or negating a finite number
-  // stays finite, so their `finiteOrNull` guards are unreachable. The
-  // exception is two-argument `round`, where scaling by `10 ** n` can
-  // overflow before the rounding happens (`values.ts` `roundToScale`).
+  // Math. Domain errors, non-finite float results and integer results outside
+  // the safe-integer range are partial by spec §5.4. Two-argument `round` is
+  // also partial because scaling by `10 ** n` can overflow before rounding.
   builtin("abs", [
     ov("abs.integer", ["integer"], "integer", TOTAL),
     ov("abs.float", ["float"], "float", TOTAL),
@@ -112,13 +110,13 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
     // arity-1: result is always integer (rounding to nearest whole). Single
     // (float) → integer overload covers integer inputs via promotion — the
     // result type doesn't depend on the input domain.
-    ov("round.float", ["float"], "integer", TOTAL),
+    ov("round.float", ["float"], "integer", PARTIAL),
     // arity-2: result follows the first arg's domain.
     ov("round.integer_integer", ["integer", "integer"], "integer", PARTIAL),
     ov("round.float_integer", ["float", "integer"], "float", PARTIAL),
   ]),
-  builtin("floor", [ov("floor.float", ["float"], "integer", TOTAL)]),
-  builtin("ceil", [ov("ceil.float", ["float"], "integer", TOTAL)]),
+  builtin("floor", [ov("floor.float", ["float"], "integer", PARTIAL)]),
+  builtin("ceil", [ov("ceil.float", ["float"], "integer", PARTIAL)]),
   builtin("sqrt", [ov("sqrt.float", ["float"], "float", PARTIAL)]),
   builtin("ln", [ov("ln.float", ["float"], "float", PARTIAL)]),
   builtin("exp", [ov("exp.float", ["float"], "float", PARTIAL)]),

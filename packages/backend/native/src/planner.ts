@@ -492,6 +492,21 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
     case "count":
       return values.filter((v) => v !== null).length;
     case "sum": {
+      if (inferTermType(agg.arg, env.vars, env.columns) === "integer") {
+        let positive = 0n;
+        let negative = 0n;
+        let hasAny = false;
+        for (const v of values) {
+          if (v === null) continue;
+          const n = BigInt(v as number);
+          if (n > 0n) positive += n;
+          else negative -= n;
+          hasAny = true;
+        }
+        if (!hasAny) return null;
+        if (positive > 9007199254740991n || negative > 9007199254740991n) return null;
+        return Number(positive - negative);
+      }
       let total = 0;
       let hasAny = false;
       for (const v of values) {

@@ -177,6 +177,15 @@ export class SqliteSqlDialect implements SqlDialect {
     return `GROUP_CONCAT(${argSql}, ',' ORDER BY ${argSql})`;
   }
 
+  integerSum(argSql: string): string {
+    const positive = `TOTAL(CASE WHEN ${argSql} > 0 THEN ${argSql} ELSE 0 END)`;
+    const negative = `TOTAL(CASE WHEN ${argSql} < 0 THEN -(${argSql}) ELSE 0 END)`;
+    return `(CASE WHEN COUNT(${argSql}) > 0
+      AND ${positive} <= 9007199254740991
+      AND ${negative} <= 9007199254740991
+      THEN CAST(${positive} - ${negative} AS INTEGER) ELSE NULL END)`;
+  }
+
   jsonAgg(valueSql: string, argSql: string, argIsJson: boolean): string {
     // SQLite stores `value`s as canonical TEXT, so ordering by the
     // raw `argSql` works for both shapes: value columns sort by their
@@ -222,24 +231,22 @@ export class SqliteSqlDialect implements SqlDialect {
   }
 
   bitwise(op: BitwiseOp, leftSql: string, rightSql: string): string {
-    const l = `(${leftSql})`;
-    const r = `(${rightSql})`;
+    const l = i32(leftSql);
+    const r = i32(rightSql);
     // Shift count mod 32 (Java/JS semantics), matching the native backend.
-    const count = `(${r} & 31)`;
+    const count = `((${rightSql}) & 31)`;
     switch (op) {
       case "&":
-        return `(${l} & ${r})`;
+        return i32(`(${l} & ${r})`);
       case "|":
-        return `(${l} | ${r})`;
+        return i32(`(${l} | ${r})`);
       // SQLite has no XOR operator: a ^ b = (a | b) & ~(a & b).
       case "^":
-        return `((${l} | ${r}) & ~(${l} & ${r}))`;
-      // 64-bit `<<` can set bits above bit 31; wrap the result to int32.
+        return i32(`((${l} | ${r}) & ~(${l} & ${r}))`);
       case "<<":
         return i32(`(${l} << ${count})`);
-      // SQLite `>>` is an arithmetic (sign-extending) shift, matching Java `>>`.
       case ">>":
-        return `(${l} >> ${count})`;
+        return i32(`(${l} >> ${count})`);
       // Logical shift: mask the operand to unsigned 32-bit, shift, then
       // reinterpret the result as signed int32.
       case ">>>":
@@ -370,7 +377,7 @@ export class SqliteSqlDialect implements SqlDialect {
     // canonicalisation. Gating on 'integer' alone dropped these to NULL,
     // diverging from native / seminaive / Postgres. The
     // `CAST(... AS REAL) = ${cast}` guard rejects fractional reals (1.5),
-    // and the `ABS(...) <= 2^53 - 1` (Number.MAX_SAFE_INTEGER) post-check
+    // and the safe-integer range post-check
     // rejects values within INT64 but outside JS safe range — reachable
     // via `parse_json`, which preserves the source text without
     // canonicalisation.
@@ -600,13 +607,10 @@ export class SqliteSqlDialect implements SqlDialect {
     // junk (`'1.5'` → 1 → `'1'` ≠ `'1.5'`), `'-0'` (→ 0 → `'0'`),
     // empty / whitespace-padded strings, overflow, and so on.
     //
-    // The `length(replace(…, '-', '')) <= 9` check caps the absolute
-    // value at 9 digits, matching the Postgres path's INTEGER cast
-    // range. Without it the SQLite roundtrip would happily accept
-    // up-to-INT64 values that the Postgres backend rejects.
-    return `(CASE WHEN ${textSql} = CAST(CAST(${textSql} AS INTEGER) AS TEXT)
-      AND length(replace(${textSql}, '-', '')) <= 9
-      THEN CAST(${textSql} AS INTEGER) ELSE NULL END)`;
+    const cast = `CAST(${textSql} AS INTEGER)`;
+    return `(CASE WHEN ${textSql} = CAST(${cast} AS TEXT)
+      AND ${cast} BETWEEN -9007199254740991 AND 9007199254740991
+      THEN ${cast} ELSE NULL END)`;
   }
 
   parseStringAsFloat(textSql: string): string {

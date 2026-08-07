@@ -115,8 +115,8 @@ Pattern: `/0[bB][01]+|[0-9]+(\.[0-9]+)?/`
 A literal written with a decimal point (e.g. `1.0`) is treated as `float`
 even if its mathematical value is integral. This distinction is preserved
 through parsing and used during type inference. Numeric literals must parse
-to finite JavaScript `Number` values; integer literals must also fit in the
-safe-integer range.
+to finite JavaScript `Number` values; integer literals must also fit in
+`[-(2^53 - 1), 2^53 - 1]`.
 
 A literal prefixed with `0b` (e.g. `0b1010`) is a **binary integer**; it is
 converted to its decimal value during parsing (so `0b1010` and `10` are
@@ -841,10 +841,9 @@ contribution(C, X) :- prob(C, P), X = -1.0 * P * ln(P) / ln(2).
 
 The string → number parsers accept only canonical decimal form: optional
 `-`, no leading zeros (except plain `0`), no leading `+`, no whitespace.
-`to_integer` additionally caps at ±999,999,999 (9 digits absolute value)
-to fit within every backend's natural 32-bit integer range. `to_float`
-accepts an optional `.<digits>` fraction; exponent forms (`1e10`) are
-rejected.
+`to_integer` additionally requires the result to be in
+`[-(2^53 - 1), 2^53 - 1]`. `to_float` accepts an optional `.<digits>`
+fraction; exponent forms (`1e10`) are rejected.
 
 ```
 parsed_int(R, N)   :- raw(R), N = to_integer(R).
@@ -1637,6 +1636,12 @@ When both operands are `integer`, `/` performs truncated division
 returns the sign of the dividend: `-7 % 2 = -1`. When either
 operand is `float`, `/` is true floating-point division.
 
+The `integer` domain is `[-(2^53 - 1), 2^53 - 1]`. Integer arithmetic is
+exact when its mathematical result is in that range and yields `NULL`
+otherwise. Integer inputs from literals, loaders, conversions and direct
+insertion obey the same bound. Bitwise operators are the exception described
+in Section 5.9: they deliberately coerce to and wrap within signed 32 bits.
+
 A handful of these operations are *runtime-partial* — arithmetic
 overflow, `/`, `%`, `sqrt`, `ln`, `exp`, and `**` evaluate to
 `NULL` for inputs outside their mathematical / finite-number domain
@@ -1673,8 +1678,10 @@ runtime-partial operations, builtins, and accessors:
    raising a database error or producing an IEEE special value, so
    semantics are identical on every backend:
 
-   - `+`, `-`, `*`, `/`, `%`, unary `-`, and math builtins when the
-     result would be non-finite (`Infinity`, `-Infinity`, or `NaN`).
+   - Integer arithmetic and integer-returning math builtins when the result
+     lies outside `[-(2^53 - 1), 2^53 - 1]`.
+   - Float arithmetic and math builtins when the result would be non-finite
+     (`Infinity`, `-Infinity`, or `NaN`).
    - `a / b` and `a % b` when `b = 0`.
    - `sqrt(x)` for `x < 0`.
    - `ln(x)` for `x <= 0`.
@@ -1826,6 +1833,13 @@ Aggregates inherit standard SQL semantics:
 - A group whose `expr` is NULL for every row yields NULL for
   `sum`/`avg`/`min`/`max`/`concat` and `0` for
   `count(expr)`.
+
+Integer `sum` is exact while both the sum of its positive inputs and the
+absolute sum of its negative inputs fit the integer domain. It yields `NULL`
+when either subtotal exceeds the bound. This makes the result independent of
+row order and prevents a backend's wider accumulator from defining the
+language; a group with cancellation beyond either subtotal bound therefore
+also yields `NULL`.
 
 The aggregate's result *type* (Section 5.5) is unaffected by this:
 Datamog has no nullable types, so an all-NULL group simply emits a
@@ -2023,15 +2037,14 @@ count `n` shifts by `n & 31`). Left shifts wrap within 32 bits, so
 `1 << 31` is `-2147483648`. These rules make every result fit the
 `integer` column type and be identical on every backend.
 
-The 32-bit width is not incidental: it is the width of the `integer`
-column type on the most constrained backend (Postgres `INTEGER`) and of
-JavaScript's native bitwise operators (used by the in-memory evaluators).
-The translator reconciles the backends that differ: SQLite has no XOR or
+The 32-bit width matches JavaScript's native bitwise operators, used by the
+in-memory evaluators, and is part of the language independently of the wider
+safe-integer domain. The translator reconciles the SQL backends: SQLite has no XOR or
 `>>>` operator and computes in 64-bit, so XOR is emulated as
 `(a | b) & ~(a & b)`, `>>>` masks the operand to unsigned 32-bit before
 shifting, and both `<<` and `>>>` wrap their 64-bit result back to signed
-32-bit; Postgres spells XOR `#`, masks shift counts mod 32, and emulates
-`>>>` via a `bigint` mask. See §6.8.
+32-bit; Postgres spells XOR `#`, masks and reinterprets operands and results,
+and emulates `>>>` via a `bigint` mask. See §6.8.
 
 ### 5.10 Head type annotations
 
@@ -2292,7 +2305,7 @@ Loads data from a file named `{predicate}.csv` in a configured directory.
 - Fields are delimiter-separated (default `,`).
 - String values are coerced to the declared column types. Coercion is
   **strict**: `integer` requires canonical decimal `0` or
-  `-?[1-9]\d{0,8}` (nine digits maximum); `float` requires canonical
+  `-?[1-9]\d*` within `[-(2^53 - 1), 2^53 - 1]`; `float` requires canonical
   decimal `((0|-?[1-9]\d*)(\.\d+)?|-0\.\d+)` (no exponent, no leading
   `+`, no leading zeros except plain `0`, no surface `-0`); `boolean`
   accepts `true`/`1`/`yes` and `false`/`0`/`no` (case-insensitive,

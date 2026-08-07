@@ -214,8 +214,8 @@ Filter:
 // two's-complement integers (Java/JS `int` semantics): operands and
 // result are `integer`, `>>` is arithmetic (sign-extending), `>>>` is
 // logical (zero-fill), and the shift count is taken mod 32. NULL
-// propagates. The 32-bit width matches the integer column type so the
-// result is identical on every backend (see spec §5.9).
+// propagates. Each backend explicitly applies the 32-bit coercion so the
+// result is identical despite wider integer storage (see spec §5.9).
 //
 // One equality: `=`/`<>`, null-aware (`null = null` is true,
 // `null = X` is false). Body-level Equality (`X = expr`) reuses the same

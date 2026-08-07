@@ -1,19 +1,18 @@
 # Postgres backend alignment
 
-Status: one open cause (an anchor/recursive column-type mismatch), one won't-fix
-(a last-bit float difference).
+Status: example-suite defects fixed. One last-bit float difference is documented
+as inherent, and one untested mixed-type SCC limitation remains.
 
 Every backend is meant to compute the same answer for the same program. Running
 the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
 `DATABASE_URL`) showed that it does not. This note records what diverges, why,
 and what a fix would take. Findings were checked against PostgreSQL 16.13.
 
-Of the 21 examples that failed when the block was first added, 20 are fixed
-and 1 remains. One of the 20 then reappeared under a different cause, a
-last-bit float difference that will not be fixed, so the list holds two
-entries. The remaining ones are listed in
+All backend defects exposed by the example suite are fixed. A last-bit float
+difference remains because floating-point addition and library math functions
+do not promise bit-identical results. It is listed in
 `POSTGRES_KNOWN_FAILURES` and marked `test.failing`, so the suite stays green
-and a fix forces the entry's removal.
+while keeping that difference visible.
 
 ## Only one recursive term, referenced once (fixed)
 
@@ -141,21 +140,16 @@ in one SCC disagreeing at the same position (say `integer` against `string`)
 would make the union ill-typed and Postgres would reject it. SQLite would not
 care. No example does this and nothing checks for it.
 
-## Anchor and recursive column types must agree
+## Anchor and recursive column types must agree (fixed)
 
 1 example: proof-term-fold.
 
-`recursive query "list_sum" column 2 has type integer in non-recursive term but
-type bigint overall`. The base case projects an `integer` literal; the recursive
-term sums, and Postgres types `sum(integer)` as `bigint`. SQLite is untyped
-enough not to care.
-
-Fixable by casting the anchor's columns to the type the recursion settles on.
-`analyzed.columnTypes` gives Datamog's own type, but not the SQL type Postgres
-will infer for an aggregate, so the cast has to be driven from the emitted
-expression rather than from the Datalog type. Casting every `integer` anchor
-column to `BIGINT` would work and is blunt; it also interacts with the numeric
-coercion below, which is what keeps that from being visible to users.
+Postgres requires the anchor and recursive term to expose identical column
+types. Datamog integer head positions are therefore cast to `BIGINT` on every
+Postgres rule branch, including facts. Safe-integer guards cast arithmetic and
+integer aggregates to the same storage type. This fixes `proof-term-fold` and
+also gives input tables, non-recursive views, and recursive views one integer
+representation.
 
 ## Numeric result columns (fixed)
 
@@ -170,9 +164,9 @@ so the worst of the four classes.
 `coerceNumericColumns` in `engine/src/result-coerce.ts` now converts at columns
 whose declared type is `integer` or `float`, alongside the existing boolean and
 `value` coercions, and is applied to constraint rows as well as query rows.
-Magnitudes above `Number.MAX_SAFE_INTEGER` lose precision in the conversion,
-which is inherent in having one result shape: the interpreters compute in JS
-numbers, so no backend was exact up there.
+Integer values outside the safe-integer range become NULL rather than being
+rounded during conversion. Runtime guards normally prevent such a value from
+reaching this final boundary.
 
 ## Last-bit float differences (inherent)
 

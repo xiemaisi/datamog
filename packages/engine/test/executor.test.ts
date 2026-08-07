@@ -63,6 +63,19 @@ describe("DatamogExecutor", () => {
     }
   });
 
+  test("direct insertRows rejects unsafe integers", async () => {
+    const backend = await createSqlite();
+    const decl = (await import("datamog-parser")).parse("input predicate data(n: integer).")
+      .statements[0] as ExtDecl;
+    try {
+      expect(insertRows(backend, decl, [{ n: Number.MAX_SAFE_INTEGER + 1 }])).rejects.toThrow(
+        /Expected integer/,
+      );
+    } finally {
+      await backend.close();
+    }
+  });
+
   test("Regression: direct value inserts preserve string leaves", async () => {
     // Direct/programmatic rows are already typed JS values. The value
     // canonicalisation path used to JSON.parse every string cell, so a
@@ -836,6 +849,83 @@ describe("DatamogExecutor", () => {
 
     for (const rows of await executeOnSqliteAndNative(program)) {
       expect(rows[0]).toEqual([{ V: null }]);
+    }
+  });
+
+  test("integer arithmetic and conversion stay inside the safe-integer range", async () => {
+    const arithmetic = `
+      arithmetic(Safe, Add, Sub, Mul) :-
+        Safe = 9007199254740990 + 1,
+        Add = 9007199254740991 + 1,
+        Sub = -9007199254740991 - 1,
+        Mul = 94906266 * 94906266.
+      ?- arithmetic(Safe, Add, Sub, Mul).
+    `;
+    for (const rows of await executeOnSqliteAndNative(arithmetic)) {
+      expect(rows[0]).toEqual([{ Safe: Number.MAX_SAFE_INTEGER, Add: null, Sub: null, Mul: null }]);
+    }
+
+    const intermediate = `
+      result(X) :- X = (9007199254740991 + 1) - 1.
+      ?- result(X).
+    `;
+    for (const rows of await executeOnSqliteAndNative(intermediate)) {
+      expect(rows[0]).toEqual([{ X: null }]);
+    }
+
+    const conversion = `
+      converted(Safe, Overflow) :-
+        Safe = to_integer("9007199254740991"),
+        Overflow = to_integer("9007199254740992").
+      ?- converted(Safe, Overflow).
+    `;
+    for (const rows of await executeOnSqliteAndNative(conversion)) {
+      expect(rows[0]).toEqual([{ Safe: Number.MAX_SAFE_INTEGER, Overflow: null }]);
+    }
+  });
+
+  test("integer sum overflow returns NULL", async () => {
+    for (const program of [
+      `
+        n(9007199254740991).
+        n(1).
+        total(sum(X)) :- n(X).
+        ?- total(Sum).
+      `,
+      `
+        n(I, 9007199254740991) :- I in [1 .. 1025].
+        total(sum(X)) :- n(_, X).
+        ?- total(Sum).
+      `,
+    ]) {
+      for (const rows of await executeOnSqliteAndNative(program)) {
+        expect(rows[0]).toEqual([{ Sum: null }]);
+      }
+    }
+
+    const cancellation = `
+      n(1, 9007199254740991).
+      n(2, -9007199254740991).
+      total(sum(X)) :- n(_, X).
+      ?- total(Sum).
+    `;
+    for (const rows of await executeOnSqliteAndNative(cancellation)) {
+      expect(rows[0]).toEqual([{ Sum: 0 }]);
+    }
+  });
+
+  test("integer-returning builtins reject unsafe results", async () => {
+    const program = `
+      result(R, F, C, S) :-
+        R = round(9007199254740992.0),
+        F = floor(9007199254740992.0),
+        C = ceil(9007199254740992.0),
+        S = round(9007199254740991, -2).
+      ?- result(R, F, C, S).
+    `;
+
+    for (const rows of await executeOnSqliteAndNative(program)) {
+      expect(rows[0]).toEqual([{ R: null, F: null, C: null, S: null }]);
     }
   });
 

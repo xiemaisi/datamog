@@ -452,6 +452,7 @@ export function mayBeNull(
       // `count` never originates a NULL: an empty input counts 0, and a group
       // counts at least one.
       if (expr.func === "count") return false;
+      if (expr.func === "sum" && ctx.typeOf(owner, expr) === "integer") return true;
       // "A group exists only because a row does" holds for a *grouped*
       // aggregate, where the argument's nullness is the whole story. An
       // ungrouped one emits a single row even over an empty relation, and
@@ -489,13 +490,12 @@ export function mayBeNull(
       // Division and exponentiation are partial whatever their operands:
       // a zero divisor, a negative base with a fractional exponent, overflow.
       if (op === "/" || op === "%" || op === "**") return true;
-      // What is left is `+`, `-`, `*` and string concatenation. Integer
-      // arithmetic and concatenation are total; float arithmetic is not, a
-      // non-finite result being NULL (spec §5.4). An unknown type takes the
-      // conservative branch.
+      // What is left is `+`, `-`, `*` and string concatenation. Numeric
+      // arithmetic can overflow its runtime domain; concatenation is total.
+      // An unknown type takes the conservative branch.
       const resultType = ctx.typeOf(owner, expr);
-      if (resultType === undefined || resultType === "float") return true;
-      return rec(left) || rec(right);
+      if (resultType === "string") return rec(left) || rec(right);
+      return true;
     }
     default:
       return true;

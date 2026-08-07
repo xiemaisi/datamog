@@ -76,12 +76,12 @@ describe("operations", () => {
     expect(cols(source, "q")).toEqual([true]);
   });
 
-  test("integer arithmetic is total", () => {
+  test("integer arithmetic can overflow the safe-integer range", () => {
     const source = `
       input predicate p(a: integer).
       q(X) :- p(A), X = A + 1.
     `;
-    expect(cols(source, "q")).toEqual([false]);
+    expect(cols(source, "q")).toEqual([true]);
   });
 
   test("float arithmetic can overflow to non-finite", () => {
@@ -166,7 +166,7 @@ describe("refinement from body constraints", () => {
   });
 
   test("a guard reaches through a strict operation", () => {
-    const source = `${decl}q(X) :- p(Y), Y <> null, X = Y + 1.`;
+    const source = `${decl}q(X) :- p(Y), Y <> null, X = Y & 1.`;
     expect(cols(source, "q")).toEqual([false]);
   });
 
@@ -239,7 +239,7 @@ describe("aggregates", () => {
     expect(cols(source, "q")).toEqual([true]);
   });
 
-  test("a grouped sum propagates its argument's nullness", () => {
+  test("a grouped integer sum can overflow", () => {
     const nullable = `
       input predicate p(g: string, a: integer?).
       q(G, sum(X)) :- p(G, X).
@@ -249,7 +249,7 @@ describe("aggregates", () => {
       q(G, sum(X)) :- p(G, X).
     `;
     expect(cols(nullable, "q")).toEqual([false, true]);
-    expect(cols(nonNull, "q")).toEqual([false, false]);
+    expect(cols(nonNull, "q")).toEqual([false, true]);
   });
 
   // A direct literal head argument is not a grouping column: both runtime paths
@@ -299,7 +299,7 @@ describe("aggregates", () => {
       input predicate p(g: string, a: integer).
       q(G, sum(X)) :- p(G, X), G <> "skip".
     `;
-    expect(cols(source, "q")).toEqual([false, false]);
+    expect(cols(source, "q")).toEqual([false, true]);
   });
 });
 

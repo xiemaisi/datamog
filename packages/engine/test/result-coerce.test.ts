@@ -42,13 +42,8 @@ describe("coerceNumericColumns", () => {
     expect(coerceNumericColumns(rows, { s: "string" })).toBe(rows);
   });
 
-  test("converts a negative value and one beyond the safe integer range", () => {
+  test("converts safe values and maps unsafe integers to NULL", () => {
     const rows = [{ n: "-3" }, { n: "9007199254740993" }];
-    // The large one rounds: one result shape across backends costs exactness
-    // above Number.MAX_SAFE_INTEGER, which is documented on the function.
-    expect(coerceNumericColumns(rows, { n: "integer" })).toEqual([
-      { n: -3 },
-      { n: 9007199254740992 },
-    ]);
+    expect(coerceNumericColumns(rows, { n: "integer" })).toEqual([{ n: -3 }, { n: null }]);
   });
 });

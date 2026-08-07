@@ -213,6 +213,17 @@ describe("evalTerm — boolean operators (3VL)", () => {
   });
 });
 
+describe("evalTerm — safe integer arithmetic", () => {
+  test("keeps safe results and maps overflow to NULL", () => {
+    expect(evalTerm(binary("+", num(Number.MAX_SAFE_INTEGER), num(0)), new Map(), env)).toBe(
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect(evalTerm(binary("+", num(Number.MAX_SAFE_INTEGER), num(1)), new Map(), env)).toBe(null);
+    expect(evalTerm(binary("-", num(Number.MIN_SAFE_INTEGER), num(1)), new Map(), env)).toBe(null);
+    expect(evalTerm(binary("*", num(94_906_266), num(94_906_266)), new Map(), env)).toBe(null);
+  });
+});
+
 describe("evalTerm — NULL propagation through non-boolean expressions", () => {
   // Spec §5.4 propagation rule: any NULL operand makes the whole
   // expression NULL, except for &&/|| short-circuit (covered above).

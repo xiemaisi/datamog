@@ -270,6 +270,21 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(results[0]!.rows).toEqual([{ E: null, P: null }]);
   });
 
+  test("integer arithmetic overflow returns NULL", async () => {
+    const executor = new DatamogExecutor(backend);
+    const results = await executor.execute(`
+      r(Safe, Add, Sub, Mul) :-
+        Safe = 9007199254740990 + 1,
+        Add = 9007199254740991 + 1,
+        Sub = -9007199254740991 - 1,
+        Mul = 94906266 * 94906266.
+      ?- r(Safe, Add, Sub, Mul).
+    `);
+    expect(results[0]!.rows).toEqual([
+      { Safe: Number.MAX_SAFE_INTEGER, Add: null, Sub: null, Mul: null },
+    ]);
+  });
+
   test("primitive auto-lift round-trips through as_* on Postgres", async () => {
     // Primitive arguments to a `value`-typed slot lift via to_jsonb
     // (formerly the explicit `to_json` builtin). Round-tripping back

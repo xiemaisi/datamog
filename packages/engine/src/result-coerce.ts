@@ -39,32 +39,28 @@ export function coerceBooleanColumns(
  * sql.js, and the interpreters all give `4`. Convert at columns whose declared
  * type is numeric, so every backend exposes the same shape.
  *
- * A magnitude above `Number.MAX_SAFE_INTEGER` does lose precision in the
- * conversion. That is inherent in having one result shape: the interpreters
- * compute in JS numbers and SQLite returns them, so no backend was ever exact
- * up there, and a `"9007199254740993"` string from Postgres alone would be a
- * difference in type rather than a gain in accuracy.
+ * Integer columns are also the final enforcement boundary for the safe-integer
+ * domain. A backend value outside it becomes NULL rather than a rounded number.
  */
 export function coerceNumericColumns(
   rows: Record<string, unknown>[],
   columnTypes: Record<string, PrimitiveType>,
 ): Record<string, unknown>[] {
-  const numericCols = Object.entries(columnTypes)
-    .filter(([, t]) => t === "integer" || t === "float")
-    .map(([k]) => k);
+  const numericCols = Object.entries(columnTypes).filter(
+    ([, t]) => t === "integer" || t === "float",
+  );
   if (numericCols.length === 0) return rows;
   return rows.map((row) => {
     let copy: Record<string, unknown> | null = null;
-    for (const col of numericCols) {
+    for (const [col, type] of numericCols) {
       const v = row[col];
-      // Only strings need converting; every other backend already returns a
-      // number here. An unparseable string is left alone rather than turned
-      // into NaN, so a surprise from some future backend stays visible.
-      if (typeof v !== "string") continue;
-      const n = Number(v);
-      if (v.trim() === "" || !Number.isFinite(n)) continue;
+      const n = typeof v === "string" ? Number(v) : v;
+      if (typeof n !== "number" || !Number.isFinite(n)) continue;
+      if (typeof v === "string" && v.trim() === "") continue;
+      const next = type === "integer" && !Number.isSafeInteger(n) ? null : n;
+      if (next === v) continue;
       if (!copy) copy = { ...row };
-      copy[col] = n;
+      copy[col] = next;
     }
     return copy ?? row;
   });

@@ -24,6 +24,11 @@ function jsonNullToSqlNull(jsonSql: string): string {
   return `NULLIF(${jsonSql}, 'null'::jsonb)`;
 }
 
+/** Reinterpret the low 32 bits of an integer expression as signed int32. */
+function i32(expr: string): string {
+  return `(((((${expr})::bigint & 4294967295) + 2147483648) & 4294967295) - 2147483648)`;
+}
+
 export class PostgresSqlDialect implements SqlDialect {
   readonly name = "postgres";
   readonly supportsNonLinearRecursion = false;
@@ -34,6 +39,7 @@ export class PostgresSqlDialect implements SqlDialect {
     // structural equality under `=`, `DISTINCT`, and `UNION`. The text
     // `json` type would compare textually and silently break joins.
     if (type === "value") return "JSONB";
+    if (type === "integer") return "BIGINT";
     // Postgres `REAL` is single-precision float4 (~7 digits), but Datamog
     // floats are 64-bit doubles everywhere else (sqlite `REAL` is 8-byte,
     // native is a JS number) and every Postgres runtime float op already
@@ -322,53 +328,47 @@ export class PostgresSqlDialect implements SqlDialect {
   }
 
   bitwise(op: BitwiseOp, leftSql: string, rightSql: string): string {
-    const l = `(${leftSql})`;
-    const r = `(${rightSql})`;
+    const l = i32(leftSql);
+    const r = i32(rightSql);
     // Shift count mod 32 (Java/JS semantics), matching the native backend.
-    const count = `(${r} & 31)`;
+    // Cast to `int`: Postgres defines its shift operators as `<type> << int4`
+    // only, so a bigint count finds no operator now that `integer` is BIGINT.
+    // The mask makes 0..31, so narrowing cannot overflow.
+    const count = `(((${rightSql})::bigint & 31)::int)`;
     switch (op) {
       case "&":
-        return `(${l} & ${r})`;
+        return i32(`(${l} & ${r})`);
       case "|":
-        return `(${l} | ${r})`;
+        return i32(`(${l} | ${r})`);
       // Postgres spells bitwise XOR `#` (`^` is exponentiation).
       case "^":
-        return `(${l} # ${r})`;
-      // int4 `<<` / `>>` are 32-bit and wrap; `>>` is arithmetic. Masking
-      // the count mod 32 matches Java/JS and avoids undefined wide shifts.
+        return i32(`(${l} # ${r})`);
       case "<<":
-        return `(${l} << ${count})`;
+        return i32(`(${l} << ${count})`);
       case ">>":
-        return `(${l} >> ${count})`;
+        return i32(`(${l} >> ${count})`);
       // No `>>>` in Postgres: mask the operand to unsigned 32-bit in
       // bigint, shift, then reinterpret the result as signed int32.
       case ">>>":
-        return `(((((${l}::bigint & 4294967295) >> ${count}) + 2147483648) & 4294967295) - 2147483648)::int`;
+        return i32(`((${l} & 4294967295) >> ${count})`);
     }
   }
 
   roundToScale(valueSql: string, scaleSql: string, resultType: "integer" | "float"): string {
     const rounded = `ROUND((${valueSql})::numeric, ${scaleSql})`;
-    return resultType === "integer"
-      ? `CAST(${rounded} AS INTEGER)`
-      : `CAST(${rounded} AS DOUBLE PRECISION)`;
+    return resultType === "integer" ? rounded : `CAST(${rounded} AS DOUBLE PRECISION)`;
   }
 
   parseStringAsInteger(textSql: string): string {
-    // Cap the digit run at 9 so the value always fits in `INTEGER`
-    // (Postgres int4: ±2,147,483,647). Bun's pg driver returns
-    // `BIGINT` columns as JS strings to preserve precision, which
-    // would surface as a string-typed result rather than a number;
-    // sticking to int4 avoids that gotcha and keeps the result type
-    // consistent with the SQLite path. Cross-backend integer parsing
-    // is limited to ±999,999,999 (inputs in 1B+ territory return NULL).
-    //
     // Canonical form: `0`, or non-zero leading digit with optional
     // minus. Rejects leading zeros (`'01'`), the surface form `'-0'`
     // (which round-trips through `to_string` to `'0'`), and explicit
-    // `+` signs.
-    return `CAST((CASE WHEN ${textSql} ~ '^(0|-?[1-9][0-9]{0,8})$'
-      THEN ${textSql} ELSE NULL END) AS INTEGER)`;
+    // `+` signs. A 16-digit candidate always fits BIGINT, so the first
+    // cast is safe; the outer check narrows it to the JS safe range.
+    const candidate = `CAST((CASE WHEN ${textSql} ~ '^(0|-?[1-9][0-9]*)$'
+      AND length(replace(${textSql}, '-', '')) <= 16
+      THEN ${textSql} ELSE NULL END) AS BIGINT)`;
+    return `(CASE WHEN ABS(${candidate}) <= 9007199254740991 THEN ${candidate} ELSE NULL END)`;
   }
 
   toJson(valueSql: string, _valueType: PrimitiveType): string {
@@ -480,6 +480,16 @@ export class PostgresSqlDialect implements SqlDialect {
     // before the `::TEXT` cast so numeric values keep their natural
     // (numeric, not lexicographic) order.
     return `STRING_AGG(${argSql}::TEXT, ',' ORDER BY ${argSql})`;
+  }
+
+  integerSum(argSql: string): string {
+    const value = `(${argSql})::numeric`;
+    const positive = `SUM(CASE WHEN ${value} > 0 THEN ${value} ELSE 0 END)`;
+    const negative = `SUM(CASE WHEN ${value} < 0 THEN -${value} ELSE 0 END)`;
+    return `(CASE WHEN COUNT(${argSql}) > 0
+      AND ${positive} <= 9007199254740991
+      AND ${negative} <= 9007199254740991
+      THEN ${positive} - ${negative} ELSE NULL END)`;
   }
 
   jsonAgg(valueSql: string, argSql: string, argIsJson: boolean): string {
