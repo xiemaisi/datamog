@@ -1,7 +1,7 @@
 // Warnings about NULL reaching a place where it is easy not to expect it.
 //
-// Both of these are the residual oddities null.md §5 and §8 name, and neither
-// is an error: the behaviour is specified and sometimes wanted. What makes them
+// All three are the residual oddities null.md §5 and §8 name, and none is an
+// error: the behaviour is specified and sometimes wanted. What makes them
 // worth reporting is that the symptom is a missing row, so the cost of not
 // noticing is paid by reading output and counting.
 //
@@ -18,7 +18,7 @@ import { inferTermType, rebuildVarTypes } from "./types.ts";
 
 export interface NullnessDiagnostic {
   severity: "warning";
-  code: "nullable-filter" | "nullable-ordering-gap";
+  code: "nullable-filter" | "nullable-ordering-gap" | "nullable-negated-ordering";
   message: string;
   offset?: number;
   end?: number;
@@ -64,6 +64,11 @@ export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
           end: elem.$cstNode?.end,
         });
       }
+      // Unlike the pairing warning below, this one reads the *fully* refined
+      // set. A negated ordering proves nothing about its own operands (§4.2),
+      // so there is no self-refinement to skip, and any other conjunct that
+      // does prove the operand non-null closes the gap and should silence it.
+      collectNegatedOrderings(elem.expr, owner, nonNull, ctx, false, diagnostics);
       // Refine again without this conjunct: a strict comparison proves its own
       // operands non-null, so asking the fully-refined set whether the operand
       // can be NULL would always answer no and the gap would never be found.
@@ -126,6 +131,55 @@ function collectOrderings(
     key: JSON.stringify([left, right]),
     owner,
     text: expr.$cstNode?.text ?? `${left} ${expr.op} ${right}`,
+    offset: expr.$cstNode?.offset,
+    end: expr.$cstNode?.end,
+  });
+}
+
+/**
+ * Ordering comparisons under a `!`, on an operand that can be NULL.
+ *
+ * Negating an ordering keeps the NULL row rather than excluding it: every
+ * ordering is false at NULL (null.md §5), so its negation is true there. A
+ * reader who writes `not (X < 2)` for "at least 2" gets the NULL row too, where
+ * `X >= 2` would not have it.
+ *
+ * This is the case `collectOrderings` deliberately leaves alone, on the grounds
+ * that writing `!` is a deliberate act. Reported anyway, because the two
+ * spellings differing is exactly the trap null.md §8 tells readers to guard
+ * against, and a warning is cheap to silence with `<> null`. Revisit if it
+ * proves noisy in practice.
+ *
+ * `negated` tracks parity, so a double negation is not reported: it is the
+ * original comparison again and has no gap.
+ */
+function collectNegatedOrderings(
+  expr: Expression,
+  owner: BodyOwner,
+  nonNull: ReadonlySet<string>,
+  ctx: Parameters<typeof mayBeNull>[3],
+  negated: boolean,
+  into: NullnessDiagnostic[],
+): void {
+  if (expr.$type === "UnaryExpr" && expr.op === "!") {
+    collectNegatedOrderings(expr.operand, owner, nonNull, ctx, !negated, into);
+    return;
+  }
+  if (expr.$type !== "BinaryExpr") return;
+  if (expr.op === "&&" || expr.op === "||") {
+    collectNegatedOrderings(expr.left, owner, nonNull, ctx, negated, into);
+    collectNegatedOrderings(expr.right, owner, nonNull, ctx, negated, into);
+    return;
+  }
+  if (!negated || !ORDERING_OPS.has(expr.op)) return;
+  if (!mayBeNull(expr.left, nonNull, owner, ctx) && !mayBeNull(expr.right, nonNull, owner, ctx)) {
+    return;
+  }
+  const text = expr.$cstNode?.text ?? expr.op;
+  into.push({
+    severity: "warning",
+    code: "nullable-negated-ordering",
+    message: `Negating \`${text}\` keeps the NULL row: every ordering is false at NULL, so its negation is true there. Add a \`<> null\` guard, or write the ordering you mean.`,
     offset: expr.$cstNode?.offset,
     end: expr.$cstNode?.end,
   });

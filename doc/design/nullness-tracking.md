@@ -42,10 +42,16 @@ prevent is already impossible.
    joins against extensional data, not just the ones where both sides are proven.
    This is the one payoff that is worth money rather than tidiness, and it is why
    the analysis was specified in the first place.
-2. **Diagnostics for the corner that actually surprises people.** Two of them.
-   A filter that evaluates to NULL drops its row silently, and `X < 2` together
-   with `X >= 2` does not cover a nullable `X` (null.md §5, §8). Stage 2 warns
-   about both at analysis time and names the guard that fixes them.
+2. **Diagnostics for the corner that actually surprises people.** Three of them.
+   A filter that evaluates to NULL drops its row silently; `X < 2` together with
+   `X >= 2` does not cover a nullable `X`; and negating an ordering keeps the
+   NULL row rather than excluding it, so `not (X < 2)` is not `X >= 2`
+   (null.md §5, §8). Each is warned about at analysis time, naming the guard
+   that fixes it. The third was added after the first two and is provisional:
+   the pairing warning deliberately left `!` alone, on the grounds that writing
+   it is a deliberate act, and the counter-argument is only that the two
+   spellings differing is exactly the trap §8 tells readers to guard against.
+   It fires nowhere in the corpus, so its cost if wrong is low.
 3. **A contract at module boundaries.** `checkModuleBoundaries` already holds
    `:=` wiring to a predicate's published type
    ([type-lattice.md](./type-lattice.md)). Nullness rides along for free: wiring

@@ -4,8 +4,9 @@ import { analyze } from "../src/analyzer.ts";
 import { findNullnessRisks } from "../src/nullness-diagnostics.ts";
 import { inferTypes } from "../src/types.ts";
 
-// Warnings for the two shapes where a NULL goes unnoticed: a filter that
-// evaluates to one, and two comparisons that look like a partition but are not.
+// Warnings for the shapes where a NULL goes unnoticed: a filter that evaluates
+// to one, two comparisons that look like a partition but are not, and a negated
+// ordering, which keeps the NULL row rather than excluding it.
 // See doc/design/nullness-tracking.md §1, payoff 2.
 
 function risks(source: string) {
@@ -145,5 +146,51 @@ describe("ordering gap", () => {
       ?- p(X), X >= 2.
     `;
     expect(codes(source)).toEqual(["nullable-ordering-gap"]);
+  });
+});
+
+describe("negated ordering", () => {
+  const decl = "input predicate p(a: integer?).\n";
+
+  test("negating an ordering on a nullable operand warns", () => {
+    // `X < 2` is false at NULL, so `not (X < 2)` is true there, where the
+    // arithmetic complement `X >= 2` is false.
+    expect(codes(`${decl}q(X) :- p(X), not (X < 2).`)).toEqual(["nullable-negated-ordering"]);
+  });
+
+  test("every ordering operator is covered", () => {
+    for (const op of ["<", "<=", ">", ">="]) {
+      expect(codes(`${decl}q(X) :- p(X), not (X ${op} 2).`)).toEqual(["nullable-negated-ordering"]);
+    }
+  });
+
+  test("a guard that proves the operand non-null silences it", () => {
+    expect(codes(`${decl}q(X) :- p(X), X <> null, not (X < 2).`)).toEqual([]);
+  });
+
+  test("a non-null operand never warns", () => {
+    const nonNull = "input predicate p(a: integer).\n";
+    expect(codes(`${nonNull}q(X) :- p(X), not (X < 2).`)).toEqual([]);
+  });
+
+  test("a plain ordering is not this warning", () => {
+    expect(codes(`${decl}q(X) :- p(X), X < 2.`)).toEqual([]);
+  });
+
+  test("double negation is the original comparison, so no gap", () => {
+    // `not` is a body-element prefix and does not nest; `!` is the expression
+    // operator, so this is the spelling that parses.
+    expect(codes(`${decl}q(X) :- p(X), !(!(X < 2)).`)).toEqual([]);
+  });
+
+  test("the expression operator is caught as well as the body prefix", () => {
+    expect(codes(`${decl}q(X) :- p(X), !(X < 2).`)).toEqual(["nullable-negated-ordering"]);
+  });
+
+  test("it reaches an ordering nested under a connective", () => {
+    expect(codes(`${decl}q(X) :- p(X), not ((X < 2) && (X > 0)).`)).toEqual([
+      "nullable-negated-ordering",
+      "nullable-negated-ordering",
+    ]);
   });
 });

@@ -982,17 +982,24 @@ Spec §5.10 gains the refinement form; walkthrough coverage; one example under
 These earlier decisions still apply, with the corrections recorded above. One
 decision remains blocking: the first useful delivery slice.
 
-1. **Should `not` around a comparison be warned about?** Was deferred as "help or
-   noise"; the project has since answered it. Because trichotomy fails (§4.4),
-   `_: not (X < 2)` is strictly weaker than `_: X >= 2`, since it admits a null
-   `X`. `nullness-tracking.md` stage 2 shipped a warning for exactly this shape
-   in body position, with the message "`X < 2` and `X >= 2` look like a partition
-   but leave out NULL, which satisfies neither" (`nullness-diagnostics.ts`). So
-   the warning is wanted, and an annotation-position version should reuse that
-   wording. One trap is recorded there and applies here too: the check must ask
-   what nullness would be *without* the conjunct being warned about, since a
-   strict comparison proves its own operands non-null and the naive version never
-   fires.
+1. **Should `not` around a comparison be warned about?** Decided: yes, and the
+   body-position version now warns (`nullable-negated-ordering` in
+   `nullness-diagnostics.ts`). Because trichotomy fails (§4.4),
+   `_: not (X < 2)` is strictly weaker than `_: X >= 2`, admitting a null `X`.
+
+   This reversed a considered choice rather than filling a gap: the pairing
+   warning deliberately did not walk through `!`, "where the complement is the
+   point rather than an oversight". Settling it before annotations exist avoids
+   the language warning in an annotation while staying silent about the same
+   shape three lines below it. Taken provisionally, on the basis that it fires
+   nowhere in the corpus today, so its cost if wrong is a warning nobody sees;
+   revisit if it turns out noisy.
+
+   The annotation-position version reuses the same predicate, and unlike the
+   pairing warning it reads the fully refined nullness set: a negated ordering
+   proves nothing about its own operands, so there is no self-refinement to skip,
+   and any other conjunct that does prove the operand non-null should silence
+   it.
 2. **Solver dependency.** This follows the delivery-slice decision in §4.5. A
    built-in procedure is ruled out on the corpus's fragment. If discharge joins
    the first slice, choose between CLI-only and `z3-solver`'s WASM build by
@@ -1015,11 +1022,19 @@ decision remains blocking: the first useful delivery slice.
    own. That keeps one switch between the teaching default and the strict
    reading, and means a new advisory has to be written knowing CI may turn it
    into an error.
-5. **What does the REPL do?** `IncrementalSession` currently rejects extending an
-   existing predicate across chunks, so sibling rules must arrive together. The
-   checker therefore has the complete predicate when it accepts a chunk and can
-   emit the inert-annotation warning once. Revisit only if the REPL later permits
-   rule-by-rule extension of a predicate.
+5. **What does the REPL do?** Check each obligation once, when the rule owing it
+   is entered, and let §2.2's inert-annotation warning fire normally.
+
+   **That answer holds only because of a restriction, and stops holding if the
+   restriction is dropped.** `IncrementalSession` rejects extending an existing
+   predicate across chunks, "Predicate 'p' was defined in an earlier chunk and
+   cannot be extended", so every sibling rule of a predicate arrives together and
+   the checker sees the predicate complete. Both §2.1's disjunctive contract and
+   §2.2's warning need that: a contract assembled from some of a predicate's
+   rules is not the contract, and "some annotated, some not" cannot be judged
+   from a fragment. If the REPL ever permits rule-by-rule extension, a later
+   chunk could silently weaken a contract an earlier one published, and this
+   answer has to be redesigned rather than adjusted.
 6. **Are several witnesses on one rule rejected or combined?** Decided: combine
    them by conjunction. This matches a single annotation using `&&` and preserves
    proof irrelevance. Keep the source claims as a list and discharge them
