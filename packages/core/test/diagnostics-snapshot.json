@@ -772,6 +772,29 @@
       ]
     }
   },
+  "example/binary-search/binary-search.dl": {
+    "ok": true,
+    "types": {
+      "found": [
+        "integer"
+      ],
+      "probe": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "size": [
+        "integer"
+      ],
+      "sorted": [
+        "integer",
+        "integer"
+      ],
+      "target": [
+        "integer"
+      ]
+    }
+  },
   "example/birds/birds.dl": {
     "ok": true,
     "types": {

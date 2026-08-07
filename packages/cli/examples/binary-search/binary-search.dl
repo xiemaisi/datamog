@@ -1,0 +1,53 @@
+# Binary search, and the invariant that makes it correct
+#
+# The search is a relation rather than a loop: `probe(Lo, Hi, Mid)` is one
+# state of it, and the recursive rules narrow the window. Written this way the
+# textbook loop invariant becomes a contract on a predicate, which is what the
+# refinement annotations below say.
+#
+# `Lo <= Mid <= Hi` is the whole of it. It is what makes `sorted(Mid, V)` a
+# legal probe: an index outside the window would read outside the array, and
+# in a language with arrays that is the bug the invariant exists to exclude.
+# Here it is checked against the states actually reached.
+#
+# A computed position needs an `as` name before a claim can mention it, since
+# `(Lo + Hi) / 2` names nothing a contract could refer to. That is why the
+# midpoint is named `M` and the upper bound `H`.
+
+sorted(0, 10). sorted(1, 20). sorted(2, 30).
+sorted(3, 40). sorted(4, 50). sorted(5, 60). sorted(6, 70).
+size(7).
+target(20).
+
+# The initial window is the whole array.
+probe(0, N - 1 as H, (N - 1) / 2 as M, _: 0 <= M, _: M <= H) :- size(N).
+
+# Too high: search the left half. The new window is [Lo, Mid-1], and the guard
+# `Lo <= Mid - 1` is what keeps it non-empty, which is what keeps the new
+# midpoint inside it.
+probe(L, M - 1 as H2, (L + M - 1) / 2 as M2, _: L <= M2, _: M2 <= H2) :-
+  probe(L, _, M), sorted(M, V), target(T), V > T, L <= M - 1.
+
+# Too low: search the right half.
+probe(M + 1 as L2, H, (M + 1 + H) / 2 as M2, _: L2 <= M2, _: M2 <= H) :-
+  probe(L, H, M), sorted(M, V), target(T), V < T, M + 1 <= H.
+
+# Found it.
+output predicate found(M) :- probe(_, _, M), sorted(M, V), target(T), V = T.
+
+?- probe(L, H, M).
+
+# Try breaking it. Drop the `L <= M - 1` guard from the second rule and search
+# for something the array does not hold, `target(5)`. The window goes empty and
+# the midpoint falls outside it:
+#
+#     Constraint `0 <= M` is violated by 1 row:
+#       Col1 = 0, Col2 = -1, Col3 = 0
+#
+# Lo is 0, Hi is -1, Mid is 0. The guard is not decoration, and the contract is
+# what says so.
+#
+# Note which claim the message names. `probe` has three rules, so its contract
+# is their disjunction, which cannot be split into one check per claim the way
+# a single rule's conjunction can. The label is the first claim rather than the
+# one that failed, and the row is what tells you what went wrong.

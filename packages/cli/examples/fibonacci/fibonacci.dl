@@ -19,8 +19,20 @@
 
 # fib_step(I, Prev, Curr): the I-th Fibonacci number is Curr,
 # and the (I-1)-th is Prev.
-fib_step(1, 0, 1).
-fib_step(I + 1, Curr, Prev + Curr) :- fib_step(I, Prev, Curr), I < 10.
+# Refinements: an invariant that has to be strengthened before it holds.
+#
+# The claim worth making is `Prev <= Curr`, the sequence being non-decreasing.
+# It is not provable on its own: the step derives `Prev + Curr` in the third
+# position, and `Curr <= Prev + Curr` needs `Prev >= 0`, which the weaker
+# invariant never says. Carrying both conjuncts is what makes each rule able to
+# re-establish them, and strengthening an invariant so that it becomes provable
+# is the oldest move in the subject.
+#
+# A computed position needs an `as` name before a claim can mention it, since
+# `Prev + Curr` names nothing a contract could refer to.
+fib_step(1, 0, 1, _: 0 <= 0, _: 0 <= 1).
+fib_step(I + 1, Curr, Prev + Curr as Next, _: 0 <= Curr, _: Curr <= Next) :-
+  fib_step(I, Prev, Curr), I < 10.
 
 # Extract the sequence: the I-th Fibonacci number is V.
 fibonacci(I, V) :- fib_step(I, _, V).
