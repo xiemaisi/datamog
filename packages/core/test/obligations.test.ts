@@ -37,10 +37,35 @@ describe("the script", () => {
 describe("the encoding does not delegate to the solver", () => {
   test("an ordering is false at NULL rather than SMT-LIB's", () => {
     // `<` requires both sides non-null; the pair encoding is what makes that
-    // expressible at all.
+    // expressible at all. `Y` is nullable because integer arithmetic can leave
+    // the domain.
+    const out = script("p(1).\nr(X, Y, _: Y > X) :- p(X), Y = X + 1.");
+    expect(out).toContain("Y$null");
+    expect(out).toContain("(not Y$null)");
+  });
+
+  test("a variable the body proves non-null gets no companion", () => {
+    // Left free, a solver falsifies the ordering by making a column null that
+    // never can be, and every contract over an integer column fails for a
+    // reason the program excludes.
     const out = script("p(1, 2).\nr(X, Y, _: Y > X) :- p(X, Y).");
-    expect(out).toContain("X$null");
-    expect(out).toContain("(not X$null)");
+    expect(out).not.toContain("$null");
+  });
+
+  test("a variable is confined to the integer domain", () => {
+    // Declared `Int` and left unbounded, a solver falsifies an overflow guard
+    // with a value no tuple can hold.
+    const out = script("p(1, 2).\nr(X, Y, _: Y > X) :- p(X, Y).");
+    expect(out).toContain("(assert (and (<= (- 9007199254740991) X) (<= X 9007199254740991)))");
+  });
+
+  test("the logic widens when the program divides by a variable", () => {
+    // QF_LIA rejects a nonlinear script outright rather than answering, so
+    // declaring it would lose every block in the file.
+    expect(script("p(1, 2).\nr(X, Y, _: Y > 0) :- p(X, Y), Y = 100 / X.")).toContain(
+      "(set-logic QF_NIA)",
+    );
+    expect(script("p(1, 2).\nr(X, Y, _: Y > X) :- p(X, Y).")).toContain("(set-logic QF_LIA)");
   });
 
   test("arithmetic carries the integer domain, since leaving it is NULL", () => {
@@ -61,6 +86,50 @@ describe("the encoding does not delegate to the solver", () => {
     // hypothesis connecting K to X + 1.
     const out = script("p(1).\nr(X, X + 1 as K, _: K > X) :- p(X).");
     expect(out).toContain("(= K (+ X 1))");
+  });
+});
+
+describe("a consumer may assume what a producer promised", () => {
+  test("a positive atom contributes its predicate's contract", () => {
+    const out = script(`
+      edge(1, 2).
+      slot(X, Y, _: Y > X) :- edge(X, Y).
+      merged(X, Z, _: Z > X) :- slot(X, Y), slot(Y, Z).
+    `);
+    // Transitivity: the goal needs both atoms' contracts, in the caller's own
+    // variables rather than the producer's.
+    expect(out).toContain("(> Y X)");
+    expect(out).toContain("(> Z Y)");
+  });
+
+  test("a negated atom does not, since absence promises nothing", () => {
+    const out = script(`
+      edge(1, 2). other(3, 4).
+      slot(X, Y, _: Y > X + 1) :- edge(X, Y).
+      gap(A, B, _: B > A) :- other(A, B), not slot(A, B).
+    `);
+    expect(out).not.toContain("(+ A 1)");
+  });
+
+  test("an unannotated sibling makes the contract vacuous, so it contributes nothing", () => {
+    const out = script(`
+      edge(1, 2). skew(9, 3).
+      slot(X, Y, _: Y > X) :- edge(X, Y).
+      slot(X, Y) :- skew(X, Y).
+      merged(X, Z, _: Z > X) :- slot(X, Y), slot(Y, Z).
+    `);
+    expect(out).not.toContain("(> Z Y)");
+  });
+
+  test("a self-reference contributes it too, which is the inductive hypothesis", () => {
+    // The induction is on the derivation, and every rule of the predicate gets
+    // its own obligation, so the step is discharged for all of them or none.
+    const out = script(`
+      seed(0 as Z, _: Z >= 0).
+      tick(N, _: N >= 0) :- seed(N).
+      tick(N + 1 as M, _: M >= 0) :- tick(N), N < 10.
+    `);
+    expect(out).toContain("(>= N 0)");
   });
 });
 

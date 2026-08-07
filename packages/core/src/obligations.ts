@@ -16,11 +16,14 @@
 // NULL is modelled as a pair, per §4.4: each term has a value and a Bool
 // saying whether it is null. An ordering is false at NULL and `=` is
 // null-aware, so the comparisons are written out rather than mapped straight
-// onto SMT-LIB's.
+// onto SMT-LIB's. Where the nullness analysis proves a variable non-null the
+// companion Bool is dropped, and every variable is confined to the integer
+// domain: an SMT `Int` left free is falsified with a null a column cannot hold
+// or a value no tuple can hold, and neither counterexample means anything.
 
 import type { AnalyzedProgram } from "./analyzer.ts";
 import { containsAggregate } from "./analyzer.ts";
-import type { HeadTerm, PrimitiveType, Rule } from "./ast.ts";
+import type { HeadTerm, Literal, PrimitiveType, Rule } from "./ast.ts";
 import type { TypedProgram } from "./types.ts";
 import { inferTermType, rebuildVarTypes } from "./types.ts";
 
@@ -49,15 +52,53 @@ function inDomain(value: string): string {
   return `(and (<= (- ${MAX_SAFE}) ${value}) (<= ${value} ${MAX_SAFE}))`;
 }
 
+/** An SMT-LIB integer literal, which `div` and `*` need to stay linear. */
+function isNumeral(v: string): boolean {
+  return /^\d+$/.test(v) || /^\(- \d+\)$/.test(v);
+}
+
+/**
+ * `abs`, folded on a literal. `(abs 2)` is not a numeral, so dividing by it
+ * puts the term outside QF_LIA even though the divisor is a constant, and z3
+ * rejects the script rather than answering.
+ */
+function abs(v: string): string {
+  if (/^\d+$/.test(v)) return v;
+  const negated = v.match(/^\(- (\d+)\)$/);
+  return negated ? negated[1]! : `(abs ${v})`;
+}
+
 /** Truncating division, where SMT-LIB's `div` floors toward negative infinity. */
 function truncDiv(a: string, b: string): string {
-  return `(ite (>= (* ${a} ${b}) 0) (div (abs ${a}) (abs ${b})) (- (div (abs ${a}) (abs ${b}))))`;
+  const magnitude = `(div ${abs(a)} ${abs(b)})`;
+  // A literal divisor fixes the quotient's sign to the dividend's, or its
+  // opposite when the literal is negative, so the test needs no multiplication
+  // and the term stays linear.
+  const positive = isNumeral(b)
+    ? b.startsWith("(- ")
+      ? `(< ${a} 0)`
+      : `(>= ${a} 0)`
+    : `(>= (* ${a} ${b}) 0)`;
+  return `(ite ${positive} ${magnitude} (- ${magnitude}))`;
 }
 
 export interface ObligationContext {
   types: TypedProgram;
   /** Variable name to its SMT declaration, accumulated per obligation. */
   declared: Map<string, PrimitiveType>;
+  /**
+   * Variables the rule body proves non-null, so their `$null` companion is
+   * `false` rather than a free Bool. Without this a solver is free to falsify
+   * an ordering by making a column null that never can be, and every contract
+   * over an integer column fails for a reason the program excludes.
+   */
+  nonNull: ReadonlySet<string>;
+  /**
+   * Whether a term with two non-literal factors was emitted. QF_LIA rejects
+   * such a script outright rather than answering `unknown`, so the logic has
+   * to widen to match what the program actually needs.
+   */
+  nonlinear: boolean;
 }
 
 /**
@@ -65,7 +106,12 @@ export interface ObligationContext {
  * §4.1's fragment, which the caller reports rather than emitting a goal that
  * quietly means something else.
  */
-function toSmt(expr: HeadTerm, ctx: ObligationContext, vars: Map<string, PrimitiveType>): Term {
+function toSmt(
+  expr: HeadTerm,
+  ctx: ObligationContext,
+  vars: Map<string, PrimitiveType>,
+  subst?: Substitution,
+): Term {
   switch (expr.$type) {
     case "NumberLiteral":
       // Every declared sort is `Int`, so a non-integral literal would make the
@@ -84,23 +130,30 @@ function toSmt(expr: HeadTerm, ctx: ObligationContext, vars: Map<string, Primiti
       // be declared `Int` and could then be discharged for the wrong reason,
       // which is the one direction that must not happen. An unresolved type
       // takes the same route.
+      // Under a substitution the formula is another predicate's, written in
+      // that predicate's position names, so a name resolves to the actual
+      // argument rather than to anything in scope here.
+      if (subst) return subst(expr.name);
       const type = vars.get(expr.name);
       if (type !== "integer") {
         throw new UnsupportedTerm(type ? `a ${type} variable` : "an untyped variable");
       }
       ctx.declared.set(expr.name, type);
-      return { v: expr.name, isNull: `${expr.name}$null` };
+      return {
+        v: expr.name,
+        isNull: ctx.nonNull.has(expr.name) ? NOT_NULL : `${expr.name}$null`,
+      };
     }
     case "UnaryExpr": {
-      const operand = toSmt(expr.operand, ctx, vars);
+      const operand = toSmt(expr.operand, ctx, vars, subst);
       if (expr.op === "!") return { v: `(not ${operand.v})`, isNull: NOT_NULL };
       const value = `(- ${operand.v})`;
       return { v: value, isNull: or(operand.isNull, `(not ${inDomain(value)})`) };
     }
     case "BinaryExpr": {
-      const l = toSmt(expr.left, ctx, vars);
-      const r = toSmt(expr.right, ctx, vars);
-      return binary(expr.op, l, r);
+      const l = toSmt(expr.left, ctx, vars, subst);
+      const r = toSmt(expr.right, ctx, vars, subst);
+      return binary(expr.op, l, r, ctx);
     }
     default:
       throw new UnsupportedTerm(expr.$type);
@@ -113,7 +166,7 @@ export class UnsupportedTerm extends Error {
   }
 }
 
-function binary(op: string, l: Term, r: Term): Term {
+function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
   // Connectives over comparisons stay two-valued (§4.1 excludes a bare
   // boolean term, so neither side can be NULL here).
   if (op === "&&") return { v: `(and ${l.v} ${r.v})`, isNull: NOT_NULL };
@@ -139,16 +192,73 @@ function binary(op: string, l: Term, r: Term): Term {
   // Arithmetic: NULL propagates, and leaving the integer domain originates it.
   const propagated = or(l.isNull, r.isNull);
   if (op === "+" || op === "-" || op === "*") {
+    if (op === "*" && !isNumeral(l.v) && !isNumeral(r.v)) ctx.nonlinear = true;
     const value = `(${op} ${l.v} ${r.v})`;
     return { v: value, isNull: or(propagated, `(not ${inDomain(value)})`) };
   }
   if (op === "/" || op === "%") {
+    if (!isNumeral(r.v)) ctx.nonlinear = true;
     const byZero = `(= ${r.v} 0)`;
     const q = truncDiv(l.v, r.v);
     const value = op === "/" ? q : `(- ${l.v} (* ${r.v} ${q}))`;
     return { v: value, isNull: or(propagated, byZero) };
   }
   throw new UnsupportedTerm(`operator ${op}`);
+}
+
+/**
+ * Resolves a position name of the predicate whose formula is being translated
+ * to the term the caller passed there. A function rather than a map so an
+ * argument the formula never mentions is never translated: a contract over a
+ * predicate's integer columns is usable even when a sibling column is a
+ * string, which no goal in QF_LIA could mention.
+ */
+type Substitution = (name: string) => Term;
+
+/**
+ * The contract of a positive body atom's predicate, about that atom's actual
+ * arguments (§5: a consumer may assume what a producer promised).
+ *
+ * Sound at a self-referential atom too, where it is the inductive hypothesis.
+ * The induction is on the derivation: a tuple of `q` comes from some rule of
+ * `q` applied to tuples derived earlier, which the hypothesis covers, and
+ * every rule of `q` gets its own obligation, so the step is discharged for all
+ * of them together or for none.
+ *
+ * Undefined when the predicate has no contract to offer, which includes the
+ * vacuous case of an unannotated sibling rule.
+ */
+function contractHypothesis(
+  atom: Literal,
+  typed: TypedProgram,
+  ctx: ObligationContext,
+  vars: Map<string, PrimitiveType>,
+): string | undefined {
+  const rules = typed.rules.get(atom.predicate);
+  if (!rules?.length) return undefined;
+  if (!rules.every((r) => (r.head.refinements?.length ?? 0) > 0)) return undefined;
+
+  const disjuncts = rules.map((rule) => {
+    const names = rule.head.positionNames ?? [];
+    const resolved = new Map<string, Term>();
+    const subst: Substitution = (name) => {
+      const cached = resolved.get(name);
+      if (cached) return cached;
+      const index = names.indexOf(name);
+      const actual = index < 0 ? undefined : atom.args[index];
+      // A contract mentioning a position the atom does not supply cannot be
+      // stated here. Dropping the hypothesis only weakens the goal.
+      if (actual === undefined) throw new UnsupportedTerm(`no actual for '${name}'`);
+      const term = toSmt(actual as HeadTerm, ctx, vars);
+      resolved.set(name, term);
+      return term;
+    };
+    const conjuncts = rule.head.refinements!.map(
+      (r) => toSmt(r.formula as HeadTerm, ctx, vars, subst).v,
+    );
+    return conjuncts.length === 1 ? conjuncts[0]! : `(and ${conjuncts.join(" ")})`;
+  });
+  return disjuncts.length === 1 ? disjuncts[0]! : `(or ${disjuncts.join(" ")})`;
 }
 
 /** The hypotheses a rule body contributes (§3.3). */
@@ -161,15 +271,20 @@ function hypotheses(
   // Hypotheses are best effort: one outside the fragment is dropped rather
   // than failing the obligation, since omitting a hypothesis only weakens the
   // goal. A goal outside the fragment is a different matter and is reported.
-  const attempt = (build: () => string) => {
+  const attempt = (build: () => string | undefined) => {
     try {
-      out.push(build());
+      const built = build();
+      if (built !== undefined) out.push(built);
     } catch (e) {
       if (!(e instanceof UnsupportedTerm)) throw e;
     }
   };
   for (const element of rule.body) {
-    if (element.$type === "Filter") {
+    if (element.$type === "Literal") {
+      // A negated atom says the tuple is absent, which promises nothing about
+      // the values, so only a positive one contributes.
+      if (!element.negated) attempt(() => contractHypothesis(element, ctx.types, ctx, vars));
+    } else if (element.$type === "Filter") {
       attempt(() => toSmt(element.expr as HeadTerm, ctx, vars).v);
     } else if (element.$type === "Equality") {
       // The grammar calls the right-hand side `expr`.
@@ -179,14 +294,12 @@ function hypotheses(
             "=",
             toSmt(element.left as HeadTerm, ctx, vars),
             toSmt(element.expr as HeadTerm, ctx, vars),
+            ctx,
           ).v,
       );
     }
-    // A positive atom contributes its contract, which needs the contract of
-    // another predicate and so waits on phase 4's ordering; an unannotated or
-    // input atom contributes nothing either way. Omitting a hypothesis only
-    // weakens a goal, so this is safe: an obligation may fail that a later
-    // pass could discharge.
+    // A range atom bounds its variable and could contribute those bounds; it
+    // does not yet. Omitting a hypothesis only weakens a goal.
   }
 
   // A named head position contributes its definition (§3.3's last row). `as`
@@ -200,7 +313,15 @@ function hypotheses(
     // anything else the goal mentioning it is already being dropped.
     if (vars.get(name) !== "integer") return;
     ctx.declared.set(name, "integer");
-    attempt(() => binary("=", { v: name, isNull: `${name}$null` }, toSmt(arg, ctx, vars)).v);
+    attempt(
+      () =>
+        binary(
+          "=",
+          { v: name, isNull: ctx.nonNull.has(name) ? NOT_NULL : `${name}$null` },
+          toSmt(arg, ctx, vars),
+          ctx,
+        ).v,
+    );
   });
   return out;
 }
@@ -208,8 +329,17 @@ function hypotheses(
 /** One obligation: a named goal with its hypotheses. */
 export interface Obligation {
   predicate: string;
+  /** 1-based, matching the order the rules are written in. */
+  rule: number;
   claim: string;
   script: string;
+  /** Constants the block declares, for asking a solver what falsified it. */
+  declared: string[];
+  /**
+   * The logic this block needs, or null if it was not emitted. Per obligation
+   * rather than per script so a solver can be handed one block at a time.
+   */
+  logic: "QF_LIA" | "QF_NIA" | null;
 }
 
 /**
@@ -223,6 +353,7 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
     if (!rules.every((r) => (r.head.refinements?.length ?? 0) > 0)) continue;
     for (const [index, rule] of rules.entries()) {
       const vars = rebuildVarTypes(rule.body, typed.columnTypes);
+      const nonNull = typed.nullness.nonNullVars.get(rule.body) ?? new Set<string>();
       // An `as` name is head-scoped, so the body knows nothing about it. Its
       // type is that of the expression it names, which the head does know.
       rule.head.positionNames?.forEach((name, i) => {
@@ -232,16 +363,33 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
         if (type) vars.set(name, type);
       });
       for (const refinement of rule.head.refinements!) {
-        const ctx: ObligationContext = { types: typed, declared: new Map() };
+        const ctx: ObligationContext = {
+          types: typed,
+          declared: new Map(),
+          nonNull,
+          nonlinear: false,
+        };
         let block: string;
+        let emitted = true;
         try {
           if (rule.head.args.some(containsAggregate)) {
             throw new UnsupportedTerm("an aggregate in the head");
           }
           const goal = toSmt(refinement.formula as HeadTerm, ctx, vars);
           const asserts = hypotheses(rule, ctx, vars);
+          // Every variable ranges over an `integer` column, so it is inside
+          // the domain: a solver given an unbounded `Int` otherwise falsifies
+          // an overflow guard with a value no tuple can hold.
           const declarations = [...ctx.declared]
-            .map(([name]) => `(declare-const ${name} Int)\n(declare-const ${name}$null Bool)`)
+            .map(([name]) =>
+              [
+                `(declare-const ${name} Int)`,
+                ctx.nonNull.has(name) ? "" : `(declare-const ${name}$null Bool)`,
+                `(assert ${inDomain(name)})`,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+            )
             .join("\n");
           block = [
             `; ${predicate} rule ${index + 1}: ${refinement.text}`,
@@ -256,9 +404,19 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
             .join("\n");
         } catch (e) {
           if (!(e instanceof UnsupportedTerm)) throw e;
+          emitted = false;
           block = `; ${predicate} rule ${index + 1}: ${refinement.text}\n; not emitted, ${e.message}`;
         }
-        out.push({ predicate, claim: refinement.text, script: block });
+        out.push({
+          predicate,
+          rule: index + 1,
+          claim: refinement.text,
+          script: block,
+          declared: [...ctx.declared.keys()].flatMap((n) =>
+            ctx.nonNull.has(n) ? [n] : [n, `${n}$null`],
+          ),
+          logic: emitted ? (ctx.nonlinear ? "QF_NIA" : "QF_LIA") : null,
+        });
       }
     }
   }
@@ -269,10 +427,14 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
 export function obligationScript(typed: TypedProgram & AnalyzedProgram): string {
   const obligations = generateObligations(typed);
   if (obligations.length === 0) return "; no refinement contracts to discharge\n";
+  // The widest logic any block needs. QF_LIA rejects a nonlinear script
+  // outright, so declaring it when the program divides by a variable would
+  // lose every block in the file, not just that one.
+  const logic = obligations.some((o) => o.logic === "QF_NIA") ? "QF_NIA" : "QF_LIA";
   return [
     "; Datamog refinement obligations.",
     "; Each block is unsat exactly when its contract holds for that rule.",
-    "(set-logic QF_LIA)",
+    `(set-logic ${logic})`,
     "",
     ...obligations.map((o) => o.script),
     "",
