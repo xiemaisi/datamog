@@ -182,6 +182,49 @@ Negative subscript index is not supported; indices must be non-negative
 
 ---
 
+# Claiming more than a type
+
+A `_` head position can carry a **proposition** over the other positions instead of a type:
+
+```prolog
+slot(R, S, E, _: S < E) :- booking(R, S, E).
+```
+
+Checked against the tuples the rules derive. The position **is not a column**: what would live there is a witness that the proposition holds, which says nothing beyond "it holds", so it erases. `slot` is ternary.
+
+A contract is the **disjunction over a predicate's rules**, so an unannotated sibling makes it vacuous:
+
+```prolog
+r(X, Y, _: Y > X) :- p(X, Y).
+r(X, Y) :- q(X, Y).             # claims nothing, so `r` claims nothing
+```
+
+Datamog warns; `--strict-contracts` makes it fatal.
+
+---
+
+# Proving it, not just checking it
+
+`--verify` hands each obligation to an SMT solver you install, so the claim holds for *every* input, not just the data at hand:
+
+```bash
+brew install z3
+datamog --verify binary-search.dl     # 14/14 discharged.
+```
+
+A rule may assume the contract of every predicate it calls positively, **its own included** — the induction hypothesis.
+
+What will not discharge usually needs a precondition nobody stated:
+
+```
+FAILED   probe rule 1: M <= H
+         ((M (- 1)) (H (- 2)) (N (- 1)) ...)
+```
+
+An array of size -1. `size(7 as N, _: 1 <= N)` fixes it, itself a refinement.
+
+---
+
 # Mental checklist when you write a rule
 
 1. **Head variables** — each in some positive body atom, range, or equality with a safe other side.
@@ -201,6 +244,8 @@ The type system is a shallow Hindley-Milner-style inference: one type per column
 
 The minimalism is deliberate — a richer type system would express more, but make SQL translation harder. SQL's type system is equally minimal.
 
+Refinements are the escape hatch, and a **refinement type** in the usual sense: the witness is proof-irrelevant, so it erases, which is exactly why the position cannot be a column.
+
 ---
 
 # SQL lens
@@ -218,6 +263,7 @@ A type-rejected rule is one Datamog *can't* compile, not one that compiles badly
 - A rule is **safe** when every head variable (and every variable in a comparison, arithmetic, or negation) is bound by a positive body atom, range, or equality with a safe other side.
 - Safety ↔ domain independence — answer depends only on the data, not on the universe.
 - Datamog has **five types**: `string`, `integer`, `float`, `boolean`, `value`. Two widenings: `integer → float`, and primitive → `value` via auto-lift.
+- A `_` head position can carry a **proposition** instead of a type. It is checked against the derived tuples and erases; `--verify` proves it instead. A contract is the disjunction over a predicate's rules, so one unannotated sibling makes it vacuous.
 - Both checks run **before** SQL is emitted. Bad programs get line-numbered errors, not runtime nonsense.
 
 ---
