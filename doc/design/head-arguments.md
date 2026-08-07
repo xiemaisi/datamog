@@ -77,7 +77,10 @@ So this is a restriction nobody argued for, which is the best kind to lift.
   roots, rewriting every aggregate `FunctionCall` it finds.
 - **The analyzer's grouping rule** generalised from "this argument *is* an
   aggregate" to "this argument *contains* one" (§3.1), and gained one new
-  well-formedness check (§3.2).
+  well-formedness check (§3.2). Sibling-rule agreement asks the same question
+  the same way, of the whole term and not its outermost node, so an embedded
+  aggregate is neither mistaken for a grouping column nor allowed to skip the
+  which-function check.
 - **The translator** emits arithmetic over an aggregate. SQL already permits
   `COUNT(*) - 1` in a select list, so this is expression compilation over a new
   kind of leaf rather than new SQL shape.

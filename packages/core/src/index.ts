@@ -48,6 +48,7 @@ export {
   AnalyzerError,
   type AnalyzedProgram,
   type BuiltinBodyAtomSpec,
+  aggregateFunctions,
   allVarsBound,
   BUILTIN_BODY_ATOMS,
   chooseEqualityBinding,

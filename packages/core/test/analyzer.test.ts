@@ -504,6 +504,28 @@ describe("analyzer", () => {
     expect(() => analyze(program)).toThrow(/aggregate function/);
   });
 
+  test("agreement is judged on the whole head term, not its outermost node", () => {
+    // Both checks used to read `arg.$type === "AggregateCall"`, which an
+    // aggregate embedded in an expression is not. So a position holding
+    // `count(Y) - 1` counted as a grouping column: the pair below was
+    // rejected though both positions aggregate, and the pair after it was
+    // accepted though they aggregate differently, which is exactly what the
+    // function check exists to stop.
+    const embedded = parse(`
+      input predicate t(a: integer, b: integer).
+      foo(X, count(Y)) :- t(X, Y).
+      foo(X, count(Y) - 1) :- t(X, Y).
+    `);
+    expect(() => analyze(embedded)).not.toThrow();
+
+    const differing = parse(`
+      input predicate t(a: integer, b: integer).
+      foo(X, count(Y) - 1) :- t(X, Y).
+      foo(X, sum(Y) - 1) :- t(X, Y).
+    `);
+    expect(() => analyze(differing)).toThrow(/aggregate function at position 2/);
+  });
+
   test("rejects aggregate in a fact (empty body)", () => {
     const program = parse("total(count(*)).");
     expect(() => analyze(program)).toThrow(/cannot contain an aggregate/);

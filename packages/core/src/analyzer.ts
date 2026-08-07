@@ -614,29 +614,30 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     // emission UNIONs a `count` value from one branch with a `sum`
     // value from the other under the same column name, producing a
     // semantically nonsensical result.
+    // Both questions are asked of the whole term, not of its outermost node:
+    // `count(X) - 1` aggregates just as `count(X)` does, and reading only the
+    // outermost node would reject that pair while letting `count(X) - 1`
+    // beside `sum(X) - 1` through.
     const firstRule = predicateRules[0]!;
-    const aggSlots = firstRule.head.args.map((a) =>
-      a.$type === "AggregateCall"
-        ? { isAgg: true as const, func: a.func }
-        : { isAgg: false as const },
-    );
+    const aggSlots = firstRule.head.args.map(aggregateFunctions);
     for (let r = 1; r < predicateRules.length; r++) {
       const rule = predicateRules[r]!;
       for (let i = 0; i < rule.head.args.length; i++) {
-        const arg = rule.head.args[i]!;
+        const funcs = aggregateFunctions(rule.head.args[i]!);
         const slot = aggSlots[i]!;
-        const isAgg = arg.$type === "AggregateCall";
-        if (isAgg !== slot.isAgg) {
+        if (funcs.length > 0 !== slot.length > 0) {
           const pos = nodePos(rule.head);
           throw new AnalyzerError(
             `Rules for '${predicate}' disagree on which head positions are aggregates`,
             ...(pos ?? []),
           );
         }
-        if (isAgg && slot.isAgg && arg.func !== slot.func) {
+        const mismatch = funcs.findIndex((f, j) => f !== slot[j]);
+        if (funcs.length !== slot.length || mismatch !== -1) {
+          const at = mismatch === -1 ? 0 : mismatch;
           const pos = nodePos(rule.head);
           throw new AnalyzerError(
-            `Rules for '${predicate}' disagree on the aggregate function at position ${i + 1}: '${slot.func}' vs '${arg.func}'`,
+            `Rules for '${predicate}' disagree on the aggregate function at position ${i + 1}: '${slot[at] ?? "none"}' vs '${funcs[at] ?? "none"}'`,
             ...(pos ?? []),
           );
         }
@@ -1076,29 +1077,43 @@ export function hasGroupingColumns(rule: Rule): boolean {
 
 /** Check whether a term contains any aggregate call. */
 export function containsAggregate(term: HeadTerm): boolean {
+  return aggregateFunctions(term).length > 0;
+}
+
+/**
+ * The aggregate functions a head term applies, in source order.
+ *
+ * `containsAggregate` is this emptiness test, so the two cannot disagree about
+ * what counts as an aggregate position. Sibling-rule agreement needs the names
+ * and not just the bit, since `count(X) - 1` and `sum(X) - 1` are both
+ * aggregate positions but UNION to nonsense.
+ */
+export function aggregateFunctions(term: HeadTerm): string[] {
   switch (term.$type) {
     case "AggregateCall":
-      return true;
+      return [term.func, ...aggregateFunctions(term.arg)];
     case "BinaryExpr":
-      return containsAggregate(term.left) || containsAggregate(term.right);
+      return [...aggregateFunctions(term.left), ...aggregateFunctions(term.right)];
     case "UnaryExpr":
-      return containsAggregate(term.operand);
-    case "FunctionCall":
-      return AGGREGATE_NAMES.has(term.name) || term.args.some(containsAggregate);
+      return aggregateFunctions(term.operand);
+    case "FunctionCall": {
+      const nested = term.args.flatMap(aggregateFunctions);
+      return AGGREGATE_NAMES.has(term.name) ? [term.name, ...nested] : nested;
+    }
     case "Subscript":
-      return containsAggregate(term.object) || containsAggregate(term.index);
+      return [...aggregateFunctions(term.object), ...aggregateFunctions(term.index)];
     case "Slice":
-      return (
-        containsAggregate(term.object) ||
-        (term.start !== undefined && containsAggregate(term.start)) ||
-        (term.end !== undefined && containsAggregate(term.end))
-      );
+      return [
+        ...aggregateFunctions(term.object),
+        ...(term.start === undefined ? [] : aggregateFunctions(term.start)),
+        ...(term.end === undefined ? [] : aggregateFunctions(term.end)),
+      ];
     case "ArrayLiteral":
-      return term.elements.some(containsAggregate);
+      return term.elements.flatMap(aggregateFunctions);
     case "ObjectLiteral":
-      return term.entries.some((entry) => containsAggregate(entry.value));
+      return term.entries.flatMap((entry) => aggregateFunctions(entry.value));
     default:
-      return false;
+      return [];
   }
 }
 

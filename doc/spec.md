@@ -1518,6 +1518,8 @@ backends reject it and the `native` / `seminaive` evaluators run it.
 4. **No facts:** A rule with an aggregate in its head must have a body.
 5. **Same function:** Sibling rules must agree on which aggregate function
    occupies an aggregate position, not merely that the position aggregates.
+   Both this and rule 2 are judged on the whole head term, so `count(X)` and
+   `count(X) - 1` agree, while `count(X) - 1` and `sum(X) - 1` do not.
 6. **Name conflict:** A predicate name cannot be the same as an aggregate
    function name (`count`, `sum`, `avg`, `min`, `max`, `concat`, `list`).
 
