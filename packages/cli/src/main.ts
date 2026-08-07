@@ -11,6 +11,7 @@ import {
   findInertPolarity,
   findInfiniteRisks,
   findNullnessRisks,
+  generateObligations,
   inferTypes,
   obligationScript,
 } from "datamog-core";
@@ -39,6 +40,7 @@ import {
 import { ParseError, parseRaw, postProcess } from "datamog-parser";
 import { bigintSafeReplacer, formatCellAsString, prettifyProofRows } from "./output.ts";
 import { runRepl } from "./repl-driver.ts";
+import { reportVerdicts, verifyObligations } from "./verify.ts";
 
 function usage(exitCode = 1): never {
   console.error("Usage: datamog [global options] <program.dl> [output] [--<input> <source>]...");
@@ -73,6 +75,8 @@ function usage(exitCode = 1): never {
   console.error("  --all                      Evaluate every output, not just one (table only)");
   console.error("  --dry-run                  Print generated SQL without executing");
   console.error("  --obligations              Print refinement proof obligations as SMT-LIB 2");
+  console.error("  --verify                   Discharge those obligations with an SMT solver");
+  console.error("                             ($DATAMOG_SMT_SOLVER, default `z3 -in`)");
   console.error("  --strict-contracts         Treat refinement-contract advisories as errors");
   console.error("  --warn-finiteness          Print a warning for each predicate column whose");
   console.error("                             values may grow unboundedly across iterations");
@@ -637,6 +641,7 @@ async function main() {
   let warnFiniteness = false;
   let strictContracts = false;
   let obligations = false;
+  let verify = false;
   let allOutputs = false;
   let backendOverride: BackendName | undefined;
   let outputFormat: OutputFormat = "table";
@@ -662,6 +667,7 @@ async function main() {
     else if (arg === "--warn-finiteness") warnFiniteness = true;
     else if (arg === "--strict-contracts") strictContracts = true;
     else if (arg === "--obligations") obligations = true;
+    else if (arg === "--verify") verify = true;
     else if (arg === "--all") allOutputs = true;
     else if (arg === "--repl") replMode = true;
     else if (arg === "--json") jsonMode = true;
@@ -853,6 +859,12 @@ async function main() {
   // The script is the deliverable; nothing here runs a solver.
   if (obligations) {
     process.stdout.write(obligationScript(analyzed));
+    return;
+  }
+  if (verify) {
+    if (!reportVerdicts(await verifyObligations(generateObligations(analyzed)))) {
+      process.exitCode = 1;
+    }
     return;
   }
 

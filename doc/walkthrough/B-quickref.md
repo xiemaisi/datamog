@@ -108,7 +108,10 @@ function args, iteration sources, IDB column unification).
   unannotated sibling makes it vacuous, which is warned about.
   `--strict-contracts` makes that warning an error.
 - Checked at the fixed point, before any query, exactly as an integrity
-  constraint is. `--obligations` writes the obligations out as SMT-LIB 2.
+  constraint is. `--obligations` writes the obligations out as SMT-LIB 2 and
+  `--verify` discharges them with a solver you supply.
+- A rule may assume the contract of any predicate it calls positively, its own
+  included, which is the induction hypothesis.
 
 ## Parity-stratified recursion
 
@@ -214,6 +217,7 @@ A file is a function: its `input predicate`s are parameters, its
 | `--max-iterations <n>` | cap fixed-point passes per stratum and stop with a note (`native`/`seminaive` only) |
 | `--strict-contracts`   | treat refinement-contract advisories as errors |
 | `--obligations`        | print refinement proof obligations as SMT-LIB 2 instead of evaluating |
+| `--verify`             | discharge them with an SMT solver (`$DATAMOG_SMT_SOLVER`, default `z3 -in`) |
 | `--repl` / `--json`    | start the REPL (the default with no program); `--json` makes it emit ndjson events |
 
 The one positional argument after the program selects the output to evaluate:

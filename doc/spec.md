@@ -2194,13 +2194,33 @@ then exits non-zero without evaluating the program.
 
 **Proof obligations.** `--obligations` prints the contracts as an SMT-LIB 2
 script instead of evaluating: one `push` / `assert` / `check-sat` / `pop` block
-per refinement, in the `QF_LIA` logic, where `unsat` discharges the obligation.
-No solver ships with Datamog and nothing is discharged today; the script is the
-deliverable, so that any solver can consume it. The encoding writes out what
-SMT-LIB spells differently: division and modulo truncate toward zero (§5.3)
-rather than being Euclidean, `integer` is bounded (§5.1) so arithmetic carries
-an overflow condition, and NULL is modelled as a value paired with a
-null-condition so the null-aware comparisons of §5.4 hold.
+per refinement, where `unsat` discharges the obligation. The logic is `QF_LIA`,
+widening to `QF_NIA` if the program multiplies or divides by a variable. No
+solver ships with Datamog; the script is the deliverable, so that any solver can
+consume it. The encoding writes out what SMT-LIB spells differently: division
+and modulo truncate toward zero (§5.3) rather than being Euclidean, `integer` is
+bounded (§5.1) so arithmetic carries an overflow condition, and NULL is modelled
+as a value paired with a null-condition so the null-aware comparisons of §5.4
+hold.
+
+A rule may assume the contract of any predicate it calls positively. Where the
+call is to the rule's own predicate that is an induction hypothesis, sound
+because the induction is on the derivation and every rule of a predicate is
+discharged together or not at all. A negated call assumes nothing: the absence
+of a tuple says nothing about values.
+
+**Discharging them.** `--verify` runs each obligation through an SMT solver and
+reports `proved`, `FAILED` with the assignment that falsifies the claim, or
+`skipped` for a claim outside the fragment above. The solver is named by
+`$DATAMOG_SMT_SOLVER` and defaults to `z3 -in`; anything that reads an SMT-LIB 2
+script on standard input will do. The exit status is non-zero unless every
+obligation is discharged.
+
+A contract that cannot be discharged is not thereby false. It may be a property
+of the data rather than a theorem, or it may need a bound the program has not
+stated: `X + 1` is NULL at the top of the integer domain (§5.1), so an ordering
+over a computed column is provable only where the inputs are bounded. Bounding
+them is itself a refinement.
 
 ## 6 SQL Translation
 

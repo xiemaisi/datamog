@@ -378,9 +378,10 @@ with a newer Soufflé/C++ compiled backend, built for SMT-based static analyses
 such as symbolic execution and refinement typing. Datamog has algebraic
 datatypes of its own — proof terms, where a named rule is a constructor — and
 refinement annotations, where a head position carries a proposition rather than
-a type. But it has no solver, so a refinement is *checked* against the tuples a
-predicate derived rather than proved for all inputs; `--obligations` writes the
-proof obligations out as SMT-LIB for a solver you supply. It also has no ML-style
+a type. But it bundles no solver: a refinement is *checked* against the tuples a
+predicate derived, and proving it for all inputs means supplying one.
+`--obligations` writes the proof obligations out as SMT-LIB and `--verify` runs
+them through whatever `$DATAMOG_SMT_SOLVER` names. It also has no ML-style
 functional sublanguage; its datatypes also desugar to the dynamically-shaped
 `value` type rather than Formulog's statically-typed ADTs.
 

@@ -1,12 +1,12 @@
 # Design notes: refinement annotations on rule heads
 
-Status: **phases 0, 1, 2, 3 and 5 implemented**; phase 4, static discharge, is
-the remainder.
+Status: **all six phases implemented**.
 Refinements parse, the position erases, and a contract is checked against the
-derived tuples; spec §5.11 and walkthrough chapter 7 describe it. Static
-discharge (phase 4) is designed and unbuilt. `--obligations` writes the
-obligations out as SMT-LIB 2, so discharge never requires a particular solver,
-and `--strict-contracts` promotes the vacuous-contract advisory to an error.
+derived tuples; spec §5.11 and walkthrough chapter 7 describe it.
+`--obligations` writes the obligations out as SMT-LIB 2 and `--verify` runs
+them through whatever solver `$DATAMOG_SMT_SOLVER` names (default `z3 -in`), so
+discharge never requires a particular solver and no solver is a dependency.
+`--strict-contracts` promotes the vacuous-contract advisory to an error.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -579,12 +579,13 @@ An obligation can be **proved** or it can be **checked**. Both are supported and
 neither ties the language to a prover.
 
 **Static: SMT-LIB out, solver not included.** The obligation set's public form is
-an SMT-LIB 2 script, and nothing in phases 0 to 2 may assume a particular solver.
-That is the whole of the corner-avoidance: the artifact is text, every solver
-reads it, and the choice moves to whoever runs it. It also answers what this
-section previously left open, whether printed obligations have an independent
-user. Prose goals arguably do not; a `.smt2` file does, since it can be piped to
-any solver or checked into CI.
+an SMT-LIB 2 script, and nothing that produces it may assume a particular
+solver. That is the whole of the corner-avoidance: the artifact is text, every
+solver reads it, and the choice moves to whoever runs it. `--verify` runs one,
+but by name: `$DATAMOG_SMT_SOLVER`, defaulting to `z3 -in`, spawned on the
+script. It also answers what this section previously left open, whether printed
+obligations have an independent user. Prose goals arguably do not; a `.smt2`
+file does, since it can be piped to any solver or checked into CI.
 
 Weighing what a bundled solver would cost settles it. `z3-solver` unpacks to
 about 35 MB, orders of magnitude past what the playground budget tolerates, for a
@@ -1027,8 +1028,8 @@ reuse all five.
 
 So: still worth designing, but as an extension of a pattern that now exists three
 times over rather than as a feature carrying its own weight. The slice
-question is settled: phase 3 shipped the check, and solver-backed discharge is
-phase 4 (§4.5).
+question is settled: phase 3 shipped the check and phase 4 the solver-backed
+discharge (§4.5).
 
 ## 10 Implementation plan
 
@@ -1085,25 +1086,44 @@ its limits:
   so an ordering can be false at NULL.
 - A named head position contributes its definition, which §3.3's last row
   requires and §4.2 depends on.
-- **Body-atom contracts are not yet hypotheses.** That is one of the two §3.3
-  rows left, and it is what §4.2's R2 and §5's payoff need, so it is the first
-  thing phase 4 should add.
-- **A range atom contributes nothing either**, the other missing row:
-  `hypotheses()` handles `Filter` and `Equality` only, so `n(X, _: X >= 2) :- X
-  in [2 .. 5].` emits a goal with no assumptions and cannot discharge.
+- A positive body atom contributes its predicate's contract (§5), in the
+  caller's own variables. At a self-reference that is the induction hypothesis;
+  see phase 4. A negated atom contributes nothing: absence of a tuple promises
+  nothing about the values.
+- Every variable is confined to the integer domain and, where the nullness
+  analysis proves a variable non-null, its `$null` companion is dropped rather
+  than left free. Both were found by running a solver: without them every
+  counterexample was an artifact, a column made null that never can be or a
+  value no tuple can hold.
+- **A range atom contributes nothing**, the one §3.3 row still missing:
+  `hypotheses()` handles `Filter`, `Equality` and positive atoms only, so
+  `n(X, _: X >= 2) :- X in [2 .. 5].` emits a goal with no assumptions and
+  cannot discharge.
 - **A goal mentioning a non-`integer` position is not emitted.** QF_LIA has one
   sort, so a `float`, `string` or `value` variable would be declared `Int` and
-  could discharge for the wrong reason. Ordering per §3.2 is not implemented
-  either: the blocks come out in `typed.rules` order, which is moot while
-  body-atom contracts are absent. Omitting a hypothesis only weakens a goal, so this is sound: an
-  obligation may fail that a later pass discharges.
+  could discharge for the wrong reason. A contract over a predicate's integer
+  columns is still usable as a hypothesis when a sibling column is a string:
+  the substitution resolves a position name only when the formula mentions it,
+  so an unmentionable column is never translated.
+- The logic is `QF_LIA` unless a term has two non-literal factors, in which case
+  it widens to `QF_NIA`. Not cosmetic: QF_LIA rejects a nonlinear script
+  outright rather than answering `unknown`, so declaring it when the program
+  divides by a variable would lose every block in the file. For the same reason
+  `abs` is folded on a literal, `(abs 2)` not being a numeral and `div` by it
+  counting as nonlinear.
+- Ordering per §3.2 is not implemented: the blocks come out in `typed.rules`
+  order. It does not matter, because a contract is a hypothesis about the
+  *caller's* variables and needs nothing computed about the callee first.
+  Omitting a hypothesis only weakens a goal, so this is sound: an obligation may
+  fail that a later pass discharges.
 - **A rule with an aggregate in its head is not emitted**, with a note saying
   so. Its contract needs §4.1's derived facts and §3.1's empty-group goal.
 - A hypothesis outside the fragment, a string equality say, is dropped rather
   than failing the obligation, for the same soundness reason.
 
-No solver ran against the output, none being installed here, so the encoding is
-pinned by tests rather than by a verdict.
+The encoding is pinned by tests in `core/test/obligations.test.ts`, which run
+no solver, and exercised against a real one in `cli/test/verify.test.ts`, which
+skips itself where none is installed.
 
 ### Phase 3: dynamic checking — built
 
@@ -1138,18 +1158,78 @@ negates the contract and integer arithmetic makes a computed column nullable
 (`nullness-tracking.md`). Warning about a statement the user cannot edit is
 noise.
 
-### Phase 4: static discharge, deferred
+### Phase 4: static discharge — built
 
-Deferred, and no longer blocking anything: phase 3 gives an annotation an effect
-and phase 2 gives its goals a consumer, so neither waits on this. When taken up,
-run a solver over phase 2's script rather than linking one, keeping §11.2's
-no-required-dependency rule, at which point `cyk-parser` (§4.2) discharges and
-§4.3's variant fails with a message naming the rule and the unprovable formula.
-This is where a contract becomes a theorem rather than a checked fact, so it is
-what §5's module-interface story waits for. `--strict-contracts` (§2.2, §11.4)
-did not wait for it: the warning it promotes exists from phase 1 on, and
-promoting one does not depend on anything being discharged, so it shipped with
-phase 3.
+**As built**, in `cli/src/verify.ts`, behind `--verify`. A solver is run over
+phase 2's script rather than linked, keeping §11.2's no-required-dependency
+rule: the command comes from `$DATAMOG_SMT_SOLVER` and defaults to `z3 -in`, so
+cvc5 or anything else that reads SMT-LIB 2 on stdin is an environment variable
+away. A missing solver fails once, naming the variable, rather than once per
+obligation.
+
+One solver call per obligation rather than one for the file. A single call is
+tempting, the script already being a sequence of `push`/`check-sat`/`pop`
+blocks, but a block the solver complains about emits an extra line and shifts
+every later verdict onto the wrong claim. Per-obligation calls also make the
+counterexample easy: the block is followed by a `get-value` over the constants
+it declares, so a failure prints the assignment that falsifies it.
+
+#### The induction
+
+A positive body atom contributes its predicate's contract. Where the atom is a
+self-reference, that is the induction hypothesis, and it is sound:
+
+> A tuple of `q` is derived by some rule of `q` from tuples derived earlier. By
+> induction on the derivation those satisfy `Φ_q`, so the rule's own obligation,
+> which assumes exactly that, establishes `φ_R` of the head and hence `Φ_q`.
+
+The induction is on the derivation, not on any syntactic measure, which is what
+makes it available for free in a bottom-up language. It works only because every
+rule of `q` gets its own obligation: the step is discharged for all of them
+together or for none, so a rule cannot borrow an assumption no sibling
+establishes.
+
+#### What this buys, measured
+
+`examples/binary-search` discharges all fourteen claims, the two recursive rules
+included, through truncating division and the integer-domain guards. Removing
+the `L <= M - 1` guard fails exactly the two claims that depend on it; removing
+the lower bound on `size` fails exactly the three claims of the first rule.
+
+Two things had to change in the examples before that was true, and both are
+findings rather than fixes:
+
+- `examples/fibonacci`'s base case annotated `_: 0 <= 0, _: 0 <= 1`. Those are
+  closed formulas: true, but not about the tuple. A rule that claims nothing
+  about its positions contributes `True` to the disjunction, so the contract was
+  vacuous and the recursive rule's induction hypothesis said nothing. Naming the
+  positions (`fib_step(1, 0 as P0, 1 as C0, _: 0 <= P0, _: P0 <= C0).`) takes it
+  from 2/4 discharged to 3/4. See §11.8.
+- `examples/binary-search` had no precondition on `size`, so the first window
+  was not provably non-empty, and no upper bound either, so `L + M` could leave
+  the integer domain. Both are real: any proof about machine arithmetic has to
+  bound its inputs somewhere, and the language can say so in a refinement rather
+  than needing a new mechanism.
+
+The remaining failures across the corpus are all honest, and the counterexamples
+say which kind:
+
+| Obligation | Why it does not discharge |
+| --- | --- |
+| `refinements`: `slot`'s `S < E` | A property of the data. The body is one EDB atom, which promises nothing. |
+| `refinements`: `padded`'s `F > 0` | Nothing bounds `E` below; `E = -60` gives `F = 0`. |
+| `refinements`: `padded`'s `S < F` | `E + 60` can leave the integer domain. §4.2. |
+| `fibonacci`: `Curr <= Next` | Same overflow. Bounding it needs the invariant to relate the values to `I`, which that formulation does not. |
+| `population-query`: `D >= 0` | `P * 100` can overflow and `A` can be zero. Stated in the example. |
+
+So the honest summary of what static discharge adds: it proves inductive
+invariants over bounded integer arithmetic, and it declines, with a
+counterexample, whenever the program has not said enough to bound its inputs.
+That second case is the common one, and it is a feature: the counterexample is
+usually the missing precondition.
+
+`--strict-contracts` (§2.2, §11.4) did not wait for this: the warning it
+promotes exists from phase 1 on, so it shipped with phase 3.
 
 ### Phase 5: documentation — built
 
@@ -1160,8 +1240,8 @@ a type would. `examples/refinements` is the worked program.
 
 ## 11 Decisions and residuals
 
-These earlier decisions still apply, with the corrections recorded above. One
-decision remains blocking: the first useful delivery slice.
+These earlier decisions still apply, with the corrections recorded above.
+Nothing here is blocking.
 
 1. **Should `not` around a comparison be warned about?** Decided: yes, and the
    body-position version now warns (`nullable-negated-ordering` in
@@ -1252,6 +1332,24 @@ decision remains blocking: the first useful delivery slice.
    The solver uses mathematical integers with a range guard and §4.4's null bit,
    rather than bit-vectors or backend storage widths. Runtime alignment is in
    place (§4.1).
+
+   Running a solver showed the guard is not a detail. It is the single largest
+   reason a plausible invariant does not discharge, and it applies to the free
+   variables as much as to the computed terms: an unconstrained SMT `Int` is
+   falsified with values no tuple can hold, so each one is confined to the
+   domain too. What makes this workable rather than fatal is that the language
+   can already state the missing bound. Adding
+   `_: 1 <= N, _: N <= 1000000` to `size` is what takes
+   `examples/binary-search` from nothing discharged to everything, and it is
+   the same thing a proof about machine arithmetic needs in any language.
+9. **A refinement mentioning no head position is inert, and nothing says so.**
+   Open. `_: 0 <= 0` is a closed formula: true, but not a claim about the tuple,
+   so the rule contributes `True` to the disjunction and the predicate's whole
+   contract goes vacuous. This bit `examples/fibonacci`, whose base case was
+   written that way, and it is silent: the contract still checks, it just checks
+   nothing, and no consumer can assume anything. It is the same failure mode
+   §2.2's `inert-contract` warns about, arriving by a different route, and it
+   belongs in `contracts.ts` beside it.
 
 ## Appendix: adjacent findings, all fixed
 
