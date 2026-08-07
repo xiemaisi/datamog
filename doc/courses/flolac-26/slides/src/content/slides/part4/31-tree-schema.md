@@ -11,7 +11,7 @@ Standard Datalog has only flat, atomic values.
 Make each node an **object** tagged with its `type`, put its children in an **args** array, and let a variable carry its `name`.
 So `p & q` becomes:
 
-```prolog
+```json
 {"type": "and",
  "args": [{"type": "var", "name": "p"},
           {"type": "var", "name": "q"}]}

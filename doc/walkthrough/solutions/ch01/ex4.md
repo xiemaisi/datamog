@@ -2,7 +2,7 @@
 
 The query
 
-```
+```prolog
 ?- person(Name, "uk", 1934).
 ```
 

@@ -2,9 +2,10 @@
 
 > Adapted from the [CodeQL QL tutorials](https://codeql.github.com/docs/writing-codeql-queries/ql-tutorials/).
 
-Datamog is an educational Datalog-to-SQL translator. You write logic programs
-in Datalog, and Datamog compiles them to SQL, runs the queries against a
-database, and shows you the results.
+Datamog is an educational Datalog implementation. You write logic programs in
+Datalog, and Datamog either compiles them to SQL and runs them against a
+database, or evaluates them directly with an in-memory interpreter, then shows
+you the results.
 
 This tutorial introduces the core building blocks of the language: **facts**,
 **rules**, and **queries**.

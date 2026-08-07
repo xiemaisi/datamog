@@ -30,3 +30,7 @@ new CsvLoader({
 ```
 
 Values are automatically coerced to match the declared column types (`string`, `integer`, `float`, `boolean`, `value`). Numeric coercion is strict (canonical decimal form only, with no exponent syntax); a `value` column parses each cell as JSON.
+
+## Platform-neutral parsing
+
+The root entry reads files, so it imports `node:path` and `Bun.file`. Consumers that already hold the text — the browser playground, the VS Code extension — import `datamog-csv/parse-content` instead, which exports `csvRowsFromKeyed` and `csvRowsFromPositional` and pulls in nothing Bun-specific.

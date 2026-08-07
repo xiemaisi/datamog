@@ -122,12 +122,12 @@ Production-grade engines (Soufflé) close much of the perf gap with indexing and
 
 # Done!
 
-This closes Part IV. If you've worked through here, you know enough Datalog to:
+This closes the sliced chapters. If you've worked through here, you know enough Datalog to:
 
 - tackle production analyses
 - read the academic literature
 - recognise constraint-shaped, fixed-point-shaped, and graph-shaped problems for what they are
 
-Appendices follow: a three-lens cheat sheet, a quick reference, backend notes, and further reading.
+The written chapters carry on: values, proof terms, modules, and recursion through negation, then the appendices.
 
 Thanks for reading.

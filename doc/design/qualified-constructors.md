@@ -12,30 +12,30 @@ holds the qualified name; output renders it bare. Constructors are no longer
 global, so two predicates may share a tag — and the module `<import>_<Ctor>`
 affix was replaced: an imported instance's constructor is just `dist::Cons`.
 
-Constructors are currently a single **global** namespace: a `[Ctor]` annotation
-names a rule, and the name must be unique across the whole program (spec §8.1,
-§1.8). This proposal scopes a constructor to its predicate — `p::Cons` rather
+Constructors *were* a single **global** namespace: a `[Ctor]` annotation named
+a rule, and the name had to be unique across the whole program. This proposal
+scoped a constructor to its predicate — `p::Cons` rather
 than a free-floating `Cons` — declared and referenced with a `::` qualifier. The
 motivation and, more importantly, the full cost/benefit are below; the short
 version is that it is a coherent, more principled model whose benefits are
 mostly cosmetic and whose costs (verbosity, migration) are real, so the
 recommendation is to **defer** unless a concrete trigger appears.
 
-## What we have today
+## What we had before this
 
 - **Declaration:** `head(...)[Ctor]` / `[Ctor(a, b)]` — a bracket annotation on
-  the rule head (spec §8.1).
-- **Reference / match:** bare — `Cons(H, T)`, `P = Some(V)`, `list_sum(Nil(), 0)`
-  (spec §8.4). A constructor term also range-restricts its subject to the
-  owning predicate's proofs.
-- **Namespace:** global; every constructor name is unique across the program.
-- **Proof value:** `{ "$proof": "<Ctor>", "args": [...] }` (spec §8.2).
-- **Imports (already shipped):** an entry import's constructors are named
-  `<import>_<Ctor>` — a writable affix (`int_opt_Some`), distinct per instance,
-  so `int_opt` and `str_opt` can both be matched. See
-  [`imports-as-functors.md`](./imports-as-functors.md).
+  the rule head.
+- **Reference / match:** bare — `Cons(H, T)`, `P = Some(V)`, `list_sum(Nil(), 0)`.
+  A constructor term also range-restricted its subject to the owning
+  predicate's proofs.
+- **Namespace:** global; every constructor name unique across the program.
+- **Proof value:** `{ "$proof": "<Ctor>", "args": [...] }`.
+- **Imports:** an entry import's constructors were to be named
+  `<import>_<Ctor>` — a writable affix (`int_opt_Some`), distinct per instance.
+  See [`imports-as-functors.md`](./imports-as-functors.md).
 
-The affix is the piece this proposal would replace with something more uniform.
+The affix is the piece this proposal replaced with something more uniform.
+For what shipped instead, see spec §8.1-§8.4 and §1.8.
 
 ## The proposal
 
@@ -114,7 +114,8 @@ Independent of source syntax: a proof value carries its predicate, so output
 could print **bare when unambiguous** (`Cons(7, Cons(7, Nil()))`) and qualify
 only a sub-proof of a *different* predicate.
 
-**Not adopted.** `renderProof` strips the qualifier unconditionally, so even a
+**Not adopted.** `formatProofTerm` (`engine/src/json-canonical.ts`) strips the
+qualifier unconditionally, so even a
 genuinely ambiguous `p::Cons` / `q::Cons` prints bare `Cons()`, and a `q::Wrap`
 around a `p::Leaf` prints `Wrap(Leaf())`. Output is therefore unambiguous only
 up to the reader knowing which predicate a row came from.
@@ -124,10 +125,10 @@ up to the reader knowing which predicate a row came from.
 Whatever the variant:
 
 - **Declarations:** `[Ctor]` → `:: Ctor` everywhere — Chapter 15, the proof-term
-  examples (`proof-terms`, `peano`, `list-ops`, `expr-eval`, `parse-to-cnf`),
-  their `expected.json`, and the case-study chapter. The sequent and CNF
-  provers other than `parse-to-cnf` use no constructors and were never
-  affected.
+  examples (`proof-terms`, `peano`, `list-ops`, `expr-eval`, `proof-term-fold`,
+  `recognise-formula`, `sk-proof-terms`), their `expected.json`, and the
+  case-study chapter. The sequent and CNF provers use no constructors and were
+  never affected.
 - **Proof representation:** `$proof` strings become qualified; regenerate every
   `expected.json` and fix any test asserting proof JSON.
 - **References:** under A, every bare match migrates too; under B, only genuinely
@@ -162,8 +163,7 @@ Revisit when a real trigger appears:
 - a program genuinely wants two same-named constructors in one file, or
 - the `<import>_<Ctor>` affix proves confusing in practice.
 
-If we do revisit, adopt **B** (qualified on demand) with **bare-when-unambiguous
-display**, not A — it delivers the scoping and import wins with the least churn
+If we do revisit, adopt **B** (qualified on demand), not A — it delivers the scoping and import wins with the least churn
 and no ongoing verbosity. The `p(...) :: Ctor` declaration syntax comes along
 for the ride and is the right spelling at that point; on its own, ahead of the
 references, it is not worth the migration.

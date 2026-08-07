@@ -2,7 +2,7 @@
 
 Starting rule:
 
-```
+```prolog
 cousin_of_greg(X) :- parent(P, X), parent(P, Y), grandparent(G, Y), Y = "greg".
 ```
 

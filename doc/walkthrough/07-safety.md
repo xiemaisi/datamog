@@ -291,7 +291,10 @@ r(X, Y) :- q(X, Y).             # claims nothing, so `r` claims nothing
 
 Nothing goes wrong, which is exactly the problem, so Datamog warns
 rather than letting the annotation sit there looking like a guarantee.
-Annotate the rest, or drop the annotation.
+Annotate the rest, or drop the annotation. Run with
+`--strict-contracts` to make that warning fatal, and `--obligations`
+to print the contracts as an SMT-LIB script for a solver instead of
+evaluating the program.
 
 You could write the same check by hand as
 `!- slot(_, S, E), S >= E.`, and for a one-off that is fine. What the
@@ -337,10 +340,12 @@ the first place.
 > one type per column, with `integer ⊑ float` and primitive
 > `⊑ value` as the only subtyping edges. That minimalism is
 > deliberate — a richer type
-> system (say, with per-column constraints or refinement types)
-> would let you express more, but it would also make the
-> translation to SQL much harder, since SQL's type system is
-> equally minimal.
+> system, one that folded per-column constraints into the lattice
+> itself, would make the translation to SQL much harder, since
+> SQL's type system is equally minimal. The refinements above are
+> the workaround: a proposition sits *beside* the type rather than
+> inside it, and it lowers to a constraint check rather than to a
+> SQL type, so nothing in codegen has to know about it.
 
 > **SQL lens.** Safety is exactly what guarantees the generated
 > SQL is *finite*. Every body atom becomes a `FROM` alias drawn

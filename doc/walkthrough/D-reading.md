@@ -68,6 +68,11 @@ If the logic lens in this tutorial left you wanting more:
 - **Clark — *Negation as Failure*, in *Logic and Databases*
   (1978).** The original paper on Clark completion — the
   formalisation of what closed-world negation means.
+- **Van Gelder, Ross, Schlipf — *The Well-Founded Semantics for
+  General Logic Programs* (JACM, 1991).** The three-valued
+  semantics for programs that are not stratifiable, and the
+  alternating fixed point that computes it. Chapter 17's
+  parity-stratified fragment is the two-valued corner of this.
 
 ## Related languages
 

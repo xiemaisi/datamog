@@ -249,8 +249,9 @@ and `p(c ? a : integer)` collides with the annotation slot
 (`AnnotatedHeadTerm.expr ':' PrimitiveType`). The postfix form lets `if` and `else`
 stay *contextual* keywords, since they appear only where a binary operator could,
 whereas prefix `if c then a else b` puts `if` in expression-start position and has
-to reserve it; `keywords.ts` already separates those two classes and contextual is
-the cheaper one. And it needs no new precedence level:
+to reserve it, and contextual is the cheaper one. (`keywords.ts` does not yet
+split the two classes; today it is one `RESERVED_KEYWORDS` array, so this would
+add the distinction rather than use it.) And it needs no new precedence level:
 `Cond ::= Or ('if' Or 'else' Cond)?` is right-associative, which gives the elif
 chain. It also sits exactly where a `:-` guard would, so it reads as a guard with an
 else, in the same order as `head :- body`.

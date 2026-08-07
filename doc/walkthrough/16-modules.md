@@ -307,6 +307,7 @@ elem(X) :- cover(X, _).
 elem(X) :- cover(_, X).
 
 output predicate minimal(X) :- elem(X), not lt(_, X).
+output predicate maximal(X) :- elem(X), not lt(X, _).
 ```
 
 Instantiating it is nothing new — wire the covers, take the `minimal` output:
@@ -322,8 +323,8 @@ The new part is the three `!-` lines. A module's constraints survive elaboration
 and are checked **once per instance, against the data actually wired in** — and,
 as in Chapter 10, before any query runs, so a violation yields no results at all.
 `order.dl` therefore does not merely document what it wants of an order; it
-enforces it at every use site. Point it at covers that form a cycle and its first
-law fires:
+enforces it at every use site. Point it at covers that form a cycle and its laws
+fire, all of them, not just the first:
 
 ```
 $ datamog order-cycle.dl
@@ -331,6 +332,9 @@ order-cycle.dl: Constraint `!- lt(X, X).` is violated by 3 rows:
   X = 1
   X = 2
   X = 3
+Constraint `!- lt(X, Y), lt(Y, X).` is violated by 9 rows:
+  X = 1, Y = 2
+  ... and 8 more
 ```
 
 The message quotes the law as *the module author* wrote it, over the *importer's*
@@ -372,8 +376,8 @@ overridable hooks, written entirely with `input predicate`s.
 
 An import site selects **one** output, which looks thin for an interface with
 several operations. It is not: bind the module once per output you want, wired the
-same way each time, and the instances are shared. Add a `maximal` to `order.dl`
-and take both:
+same way each time, and the instances are shared. `order.dl` already exports a
+`maximal` alongside its `minimal`, so take both:
 
 ```prolog
 # order-both.dl

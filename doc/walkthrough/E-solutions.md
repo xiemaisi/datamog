@@ -97,6 +97,34 @@ A flat index to every exercise solution, grouped by chapter.
 - 13.2 Unreachable pairs *(cross-product then filter)*
 - 13.3 Path reconstruction *(open-ended)*
 
+## Chapter 14
+
+- 14.1 Status-code histogram *(straightforward from chapter 9 + `as_integer`)*
+- 14.2 Largest JSON shape *(compose `length` with `as_integer` and a comparison)*
+- 14.3 Pull a value out of an array *(two forms, both given in the exercise)*
+- 14.4 Mixed-shape headers *(open-ended — the point is the trade-off)*
+
+## Chapter 15
+
+- 15.1 Booleans as a datatype *(two nullary constructors — the chapter's `bit` pattern)*
+- 15.2 Binary trees *(non-linear; run on `--backend native`)*
+- 15.3 Included vs. suppressed *(observational — run it both ways)*
+- 15.4 Length by folding *(pattern-match `Nil` / `Cons`, as in the chapter's `append`)*
+
+## Chapter 16
+
+Every exercise here is a variation on the chapter's own `code/ch16/` programs;
+the answer is the file you edit, so none ships separately.
+
+- 16.1 Point it somewhere new *(extend `main.dl`)*
+- 16.2 A data-file binding *(the answer is in the error you get without `as csv`)*
+- 16.3 Filter, then reach *(chain two modules)*
+- 16.4 Break the contract *(read the two boundary errors)*
+- 16.5 A parameterised pair *(follow `option.dl`)*
+- 16.6 Break a law *(observational — count which constraints fire)*
+- 16.7 Watch sharing appear and disappear *(count views under `--dry-run`)*
+- 16.8 A law that only the importer can state *(open-ended)*
+
 ## Chapter 17
 
 - [17.1 Where does the sigil go?](solutions/ch17/ex1.dl)

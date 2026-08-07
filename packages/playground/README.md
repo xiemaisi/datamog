@@ -13,7 +13,8 @@ pipeline (parse, analyze, translate, execute) runs in your browser.
 - **CodeMirror editor** with Datamog syntax highlighting, jump-to-definition,
   recursive-call markers, smart auto-complete, and live diagnostics (parse
   errors, arity mismatches, unsafe variables, unstratifiable negation,
-  finiteness warnings).
+  finiteness warnings, nullness risks, and inert `^` sigils and refinement
+  contracts).
 - **Cycle visualiser**: a rejected negation or finiteness cycle carries a "Show
   cycle" action that highlights the predicates and rules involved.
 - **Backend picker**: run on SQLite (via sql.js), the `native` / `seminaive`
@@ -22,6 +23,8 @@ pipeline (parse, analyze, translate, execute) runs in your browser.
   and a per-iteration step trace for the in-memory evaluators.
 - **Data panel**: paste CSV/JSONL or fetch a CORS-enabled CSV URL per input
   predicate; rows are held in memory as the EDB.
+- **Example dropdown** of the runnable programs that opt in with a
+  `playground.json`, and a toolbar link to the rendered language spec.
 
 SQL runs on [sql.js](https://sql.js.org/) (SQLite compiled to WASM); the
 `native` / `seminaive` evaluators run directly in JavaScript. Execution happens

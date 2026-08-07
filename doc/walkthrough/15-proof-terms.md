@@ -17,6 +17,14 @@ named rule is a *constructor*, and a proof term is an
 its proof terms are the values of that type. We'll build up to
 that with four small datatypes.
 
+Two complete programs go with this chapter:
+[`packages/cli/examples/peano`](../../packages/cli/examples/peano/)
+builds naturals from an index bound, and
+[`packages/cli/examples/sk-proof-terms`](../../packages/cli/examples/sk-proof-terms/)
+builds combinator terms on demand from a request predicate. Those
+are the two ways to mint new nodes, and the chapter's "one node per
+derivation" rule below is why there is no third.
+
 ## Naming a rule
 
 Write a constructor name after the head with `::`:

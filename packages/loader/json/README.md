@@ -34,3 +34,15 @@ with `data/config.json`:
 It loads as a single row whose `blob` column holds the whole parsed object. Use the JSON destructuring builtins (`J["key"]`, `object_entry`, `array_element`, `as_*`, `length`, `type_of`) inside rule bodies to project the bits you care about.
 
 For row-per-line shaped data, use `datamog-jsonl` instead. For arbitrary nested JSON inside one of several typed columns, use `datamog-jsonl` with mixed columns.
+
+## Loading over HTTP
+
+`UrlJsonLoader` reads the same whole-file JSON shape from an HTTP(S) URL via the platform `fetch`, keyed by predicate name:
+
+```ts
+new UrlJsonLoader({ urls: { config: "https://example.com/config.json" } });
+```
+
+## Platform-neutral parsing
+
+The root entry reads files, so it imports `node:path` and `Bun.file`. Consumers that already hold the text import `datamog-json/parse-content` instead, which exports `parseJsonContent` and pulls in nothing Bun-specific.

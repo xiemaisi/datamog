@@ -8,8 +8,9 @@ default output), the Bun file resolver, CLI wiring (`datamog main.dl` resolves
 `from` imports from disk and wires `:=` data-file bindings into loaders), and
 boundary type-checking (actual vs callee input, selected output vs receiving
 declaration), and VS Code wiring (the language-server validator and the
-`datamog.run` command both elaborate imports from disk) all exist. Still to come:
-per-instance diagnostics, and REPL / playground wiring (see *Deferred*). A `:=`
+`datamog.run` command both elaborate imports from disk) all exist. A violated
+constraint already names the instance it came from (`engine/src/constraints.ts`).
+Still to come: REPL and playground wiring (see *Deferred*). A `:=`
 binding that reaches analysis (i.e. one the elaborator did not handle) is
 rejected.
 
@@ -157,9 +158,11 @@ silently revert to the default. See the walkthrough's Chapter 16 for the worked
 example.
 
 Column types on the receiving declaration (`road_reach(src: integer, dst:
-integer)`) must match the selected output's signature, and each actual's columns
-must match the callee input's declared types. The existing type machinery checks
-both at the boundary. The receiving types could later be inferred from the
+integer)`) must accept the selected output's signature, and each actual's columns
+must be accepted by the callee input's declared types. Accept, not equal: the
+declared type may equal or widen, never narrow (see *type checking* below).
+Nullness rides the same contract. The existing type machinery checks both at the
+boundary. The receiving types could later be inferred from the
 selected output instead of restated, but declaring them keeps the interface
 explicit.
 
@@ -227,9 +230,9 @@ State these plainly; they are the cost of expansion.
   expanded program. The *instantiation* graph (to build a copy of module A I
   must first build a copy of module B, because an input of A defaults to an
   instance of B) must not cycle. Expansion is not idempotent: each instantiation
-  is a fresh copy (decision 4), so a cycle among instantiations spawns copies
-  without end, and instantiation is static and data-independent, so there is no
-  base case to stop it. Recursion *within* a module is therefore fine; recursion
+  is expanded before its importer, and the post-expansion cache is keyed on the
+  finished expansion, so a cycle among instantiations has no base case to stop
+  it: instantiation is static and data-independent. Recursion *within* a module is therefore fine; recursion
   *across* a wiring cycle (A takes an input from B while B takes an input from A)
   is rejected. The practical rule: mutually recursive predicates must live in the
   same module. This is the one real expressiveness loss against the conservative
@@ -366,7 +369,8 @@ diagnostics, per-module EDB directories):
 - **Inferring receiving column types** from the selected output signature instead
   of restating them.
 - **Aliased whole-module access** (`import g = "mod.dl"(...)` then `g.a`, `g.b`).
-  The first version selects one output per import site with `.name`. (An
+  The first version selects one output per import site, naming it before
+  `from` (`minimal from "order.dl"(...)`). (An
   instance's proof constructors are reachable as `<import>::<Ctor>`, so matching
   several instantiations of one ADT module already works; what remains deferred
   is multi-*output* access under one alias.)

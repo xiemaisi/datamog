@@ -4,9 +4,9 @@ Status: **phases 0, 1, 2, 3 and 5 implemented**; phase 4, static discharge, is
 the remainder.
 Refinements parse, the position erases, and a contract is checked against the
 derived tuples; spec §5.11 and walkthrough chapter 7 describe it. Static
-discharge (phase 4) is designed and unbuilt; obligations are emitted
-as SMT-LIB, which `--obligations` now emits, so discharge never requires a
-particular solver.
+discharge (phase 4) is designed and unbuilt. `--obligations` writes the
+obligations out as SMT-LIB 2, so discharge never requires a particular solver,
+and `--strict-contracts` promotes the vacuous-contract advisory to an error.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -207,7 +207,7 @@ Because §2.1 makes partial annotation silently useless, it needs a diagnostic.
 The precedent is `findInertPolarity` (`core/src/polarity.ts:31`), which warns
 when a `^` sigil sits in a stratum where it buys nothing. The same shape applies:
 warn when a predicate has at least one annotated rule and at least one
-unannotated one, naming the rules that dilute the contract.
+unannotated one, saying how many of the predicate's rules carry no refinement.
 
 That recovers most of what conjunction would have given, at warning level, and
 leaves the semantics alone.
@@ -215,8 +215,8 @@ leaves the semantics alone.
 **Decided: warning by default, error under `--strict-contracts`.** The teaching
 default stays permissive, and CI can opt into the strict reading. Two precedents
 give the shape: nullness and polarity diagnostics print unconditionally from
-`emitNullnessWarnings` / `findInertPolarity` (`cli/src/main.ts:590`), while
-`--warn-finiteness` (`main.ts:636`) shows how an opt-in analysis flag is wired,
+`emitPolarityWarnings` / `emitNullnessWarnings` (`cli/src/main.ts`), while
+`--warn-finiteness` shows how an opt-in analysis flag is wired,
 including its rejection in REPL mode. Note the flag inverts the usual sense:
 `--warn-finiteness` turns a diagnostic *on*, whereas `--strict-contracts`
 promotes one that is already on. The alternative considered was an error in batch
@@ -806,12 +806,12 @@ readings (§5) and would be this proposal's first runtime component.
 ## 9 What the corpus says
 
 `functional-sublanguage.md` set the precedent of surveying the example corpus
-before committing and letting it choose. Done here over the 80 `.dl` files under
+before committing and letting it choose. Done here over the `.dl` files under
 `packages/cli/examples/`.
 
 ### 9.1 Coverage
 
-Around 25 predicates across 11 of the 78 example directories carry a per-tuple
+Around 25 predicates across 11 of the example directories carry a per-tuple
 invariant worth stating and expressible in tier 1.
 
 | Predicate (example) | Invariant | Rules | Verdict |
@@ -997,7 +997,7 @@ former one.
 Against: the single clearest "catches a real bug" instance is gone (§9.2), taken
 by a feature that already exists and costs one annotation. What remains is
 documentation-plus-assumption for arithmetic invariants over roughly 25
-predicates in 11 of 78 examples, headed by `fib_step`, `span`, `jugs` and the
+predicates in 11 of the examples, headed by `fib_step`, `span`, `jugs` and the
 `n-queens` contract chain. Those are real, but none of them is currently *wrong*,
 so the feature would be confirming what already holds rather than finding
 defects. Two of the three remaining high-value cases argue for design changes
@@ -1012,9 +1012,9 @@ conjuncts. A refinement checker is the same shape with a richer claim, and can
 reuse all five.
 
 So: still worth designing, but as an extension of a pattern that now exists three
-times over rather than as a feature carrying its own weight. One follow-up
-decision remains: whether solver-backed discharge belongs in the first
-implementation slice.
+times over rather than as a feature carrying its own weight. The slice
+question is settled: phase 3 shipped the check, and solver-backed discharge is
+phase 4 (§4.5).
 
 ## 10 Implementation plan
 
@@ -1022,13 +1022,17 @@ implementation slice.
 
 Widen the `AnnotatedHeadTerm` slot to admit a condition and extract it in
 `liftHeadAnnotations` (`parser/src/post-process.ts`) before head-name substitution
-erases positional aliases. Store it as rule-level contract metadata, not in
+erases positional aliases. **As built**, the extraction is
+`extractRefinements` in the new `parser/src/refinements.ts`, called from
+`liftHeadAnnotations`. Store it as rule-level contract metadata, not in
 `argTypes`: that array has one record per runtime argument, while the witness is a
 syntactic position that disappears. Keep several witnesses as a source-ordered
 list and conjoin them as the rule's contract, keeping the source claims separate
 so a report names the exact annotation that failed. Validate that each formula
-mentions only named head positions and is inside §4.1's fragment. No solver, and
-nothing here may assume one.
+mentions only named head positions. Fragment membership is **not** checked
+here: an out-of-fragment formula is instead reported at obligation time, as a
+`; not emitted, outside tier 1: ...` line, so nothing is silently encoded as
+something it is not. No solver, and nothing here may assume one.
 
 Test: goldens for the parsed contract, plus one rejection test per §4.1
 exclusion.
@@ -1042,6 +1046,12 @@ Emit the inert annotation warning (§2.2).
 
 Test: a predicate with mixed annotated and unannotated rules yields `True` and
 one warning.
+
+**As built**, no Φ_p is materialised anywhere. The disjunction is implicit:
+`synthesiseContractChecks` (`parser/src/refinements.ts`) emits one `!-` per
+contracted predicate only when *every* rule carries a refinement, and
+`findInertContracts` (`core/src/contracts.ts`) warns about the mixed case. Since
+nothing consumes Φ_p as a value, the type-system placement never arose.
 
 ### Phase 2: obligation generation — built
 
@@ -1061,9 +1071,17 @@ its limits:
   so an ordering can be false at NULL.
 - A named head position contributes its definition, which §3.3's last row
   requires and §4.2 depends on.
-- **Body-atom contracts are not yet hypotheses.** That is the one §3.3 row left,
-  and it is what §4.2's R2 and §5's payoff need, so it is the first thing phase
-  4 should add. Omitting a hypothesis only weakens a goal, so this is sound: an
+- **Body-atom contracts are not yet hypotheses.** That is one of the two §3.3
+  rows left, and it is what §4.2's R2 and §5's payoff need, so it is the first
+  thing phase 4 should add.
+- **A range atom contributes nothing either**, the other missing row:
+  `hypotheses()` handles `Filter` and `Equality` only, so `n(X, _: X >= 2) :- X
+  in [2 .. 5].` emits a goal with no assumptions and cannot discharge.
+- **A goal mentioning a non-`integer` position is not emitted.** QF_LIA has one
+  sort, so a `float`, `string` or `value` variable would be declared `Int` and
+  could discharge for the wrong reason. Ordering per §3.2 is not implemented
+  either: the blocks come out in `typed.rules` order, which is moot while
+  body-atom contracts are absent. Omitting a hypothesis only weakens a goal, so this is sound: an
   obligation may fail that a later pass discharges.
 - **A rule with an aggregate in its head is not emitted**, with a note saying
   so. Its contract needs §4.1's derived facts and §3.1's empty-group goal.
@@ -1114,10 +1132,10 @@ run a solver over phase 2's script rather than linking one, keeping §11.2's
 no-required-dependency rule, at which point `cyk-parser` (§4.2) discharges and
 §4.3's variant fails with a message naming the rule and the unprovable formula.
 This is where a contract becomes a theorem rather than a checked fact, so it is
-what §5's module-interface story waits for. `--strict-contracts`
-(§2.2, §11.4) can land with phase 1 instead, since the warning it promotes
-exists from then on and promoting it does not depend on anything being
-discharged.
+what §5's module-interface story waits for. `--strict-contracts` (§2.2, §11.4)
+did not wait for it: the warning it promotes exists from phase 1 on, and
+promoting one does not depend on anything being discharged, so it shipped with
+phase 3.
 
 ### Phase 5: documentation — built
 

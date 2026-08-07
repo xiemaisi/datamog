@@ -305,6 +305,8 @@ declarative rules. The Doop framework for Java pointer analysis, written
 entirely in Datalog, runs faster than hand-coded Java implementations while
 being far more concise.
 
+The complete program is [`packages/cli/examples/reaching-defs/`](../../packages/cli/examples/reaching-defs/).
+
 ## What's next?
 
 The final chapter puts the whole language to work: [Prove a

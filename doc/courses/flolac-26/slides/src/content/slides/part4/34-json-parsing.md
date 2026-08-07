@@ -15,7 +15,7 @@ conj(F, T, {"type": "and", "args": [L, R]}) :- conj(F, M, L), char(M, "&"), lit(
 
 Parsing `p & q` now yields the tree itself:
 
-```prolog
+```json
 {"type": "and", "args": [{"type": "var", "name": "p"}, {"type": "var", "name": "q"}]}
 ```
 

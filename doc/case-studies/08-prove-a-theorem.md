@@ -183,7 +183,7 @@ group; `>` binds loosest and associates to the right. The example's `input.csv`
 holds De Morgan's law `~(p&q)>(~p|~q)` under a column header `s`, so:
 
 ```bash
-$ bun run datamog --backend seminaive parse-to-cnf.dl
+$ bun run datamog --backend seminaive parse-to-cnf.dl theorem
 # theorem = "yes"
 ```
 
@@ -265,7 +265,8 @@ CNF derivation this prover is native/seminaive only.
 ## What's next?
 
 You have now seen Datamog used for everything from family trees to a working
-theorem prover. To go deeper, run any example with `--dry-run` to see the SQL
-it compiles to, or switch backends with `--backend native` / `--backend
+theorem prover. To go deeper, run `cnf-falsifiability` with `--dry-run` to see
+the SQL it compiles to (the recursive provers in this chapter have no SQL
+translation), or switch backends with `--backend native` / `--backend
 seminaive` to watch the same program evaluated by a pure-TS interpreter instead
 of SQLite.

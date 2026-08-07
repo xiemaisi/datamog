@@ -13,6 +13,9 @@ definitions**, as expressed in
 The example is a complete, runnable Datalog program that captures
 the textbook data-flow equations directly — no auxiliary
 scaffolding, no worklists, no abstract interpretation boilerplate.
+It reads its CFG from `cfg.csv` and marks `reaches` an
+`output predicate`; the version below inlines the same edges as
+facts so it stands alone.
 
 [soufflé]: https://souffle-lang.github.io/
 [lb]: https://en.wikipedia.org/wiki/LogicBlox
@@ -62,16 +65,16 @@ reaches(D, V) :- cfg(U, V), reaches(D, U), not kill(U, D).
 ?- reaches(Def, Block).
 ```
 
-Two extensional predicates for the program (`gen`, `kill`), one for
-the CFG (`cfg`), and one intensional predicate `reaches` with two
-rules — one base case (definitions reach the block where they're
+Three sets of ground facts — the CFG (`cfg`) and the program's
+`gen` and `kill` sets — and one intensional predicate `reaches` with
+two rules — one base case (definitions reach the block where they're
 generated) and one recursive propagation step.
 
 That's it. Six lines of actual logic. No worklist code, no
 termination condition, no iteration counter. Datalog handles all
 of that as part of its fixed-point semantics.
 
-**[Open this program in the playground →](https://max-schaefer.github.io/datamog/#p=%23%20Reaching%20definitions%20%E2%80%94%20a%20classic%20data-flow%20analysis%0A%23%0A%23%20In%20compiler%20design%2C%20a%20%22reaching%20definition%22%20analysis%20determines%20which%0A%23%20variable%20definitions%20(assignments)%20can%20reach%20a%20given%20program%20point%0A%23%20without%20being%20overwritten%20along%20the%20way.%0A%23%0A%23%20This%20example%20models%20a%20simple%20control-flow%20graph%20(CFG)%20with%20four%20blocks%0A%23%20forming%20a%20loop.%20Each%20block%20may%20generate%20a%20new%20definition%20of%20a%20variable%0A%23%20or%20kill%20an%20existing%20one.%20A%20definition%20reaches%20a%20block%20if%3A%0A%23%20%20%201.%20It%20is%20generated%20at%20that%20block%2C%20OR%0A%23%20%20%202.%20It%20reaches%20a%20predecessor%20block%20and%20is%20not%20killed%20there.%0A%23%0A%23%20Adapted%20from%20the%20Souffl%C3%A9%20tutorial%20(https%3A%2F%2Fsouffle-lang.github.io%2Ftutorial).%0A%0A%23%20Control-flow%20graph%20edges%0Acfg(%22start%22%2C%20%22b1%22).%0Acfg(%22b1%22%2C%20%22b2%22).%0Acfg(%22b1%22%2C%20%22b3%22).%0Acfg(%22b2%22%2C%20%22b4%22).%0Acfg(%22b3%22%2C%20%22b4%22).%0Acfg(%22b4%22%2C%20%22b1%22).%0Acfg(%22b4%22%2C%20%22end%22).%0A%0A%23%20Definitions%20generated%20at%20each%20block%0Agen(%22b2%22%2C%20%22d1%22).%0Agen(%22b4%22%2C%20%22d2%22).%0A%0A%23%20Definitions%20killed%20at%20each%20block%0Akill(%22b4%22%2C%20%22d1%22).%0Akill(%22b2%22%2C%20%22d2%22).%0A%0A%23%20A%20definition%20reaches%20a%20block%20if%20it%20is%20generated%20there%2C%0A%23%20or%20it%20reaches%20a%20predecessor%20and%20is%20not%20killed%20there.%0Areaches(D%2C%20U)%20%3A-%20gen(U%2C%20D).%0Areaches(D%2C%20V)%20%3A-%20cfg(U%2C%20V)%2C%20reaches(D%2C%20U)%2C%20not%20kill(U%2C%20D).%0A%0A%3F-%20reaches(Def%2C%20Block).%0A)**
+**[Open this program in the playground →](https://max-schaefer.github.io/datamog/#p=%23%20Control-flow%20graph%0Acfg(%22start%22%2C%20%22b1%22).%0Acfg(%22b1%22%2C%20%22b2%22).%0Acfg(%22b1%22%2C%20%22b3%22).%0Acfg(%22b2%22%2C%20%22b4%22).%0Acfg(%22b3%22%2C%20%22b4%22).%0Acfg(%22b4%22%2C%20%22b1%22).%0Acfg(%22b4%22%2C%20%22end%22).%0A%0A%23%20Definitions%20generated%20at%20each%20block%0Agen(%22b2%22%2C%20%22d1%22).%0Agen(%22b4%22%2C%20%22d2%22).%0A%0A%23%20Definitions%20killed%20at%20each%20block%0Akill(%22b4%22%2C%20%22d1%22).%0Akill(%22b2%22%2C%20%22d2%22).%0A%0A%23%20A%20definition%20reaches%20a%20block%20if%20it%20is%20generated%20there%2C%20or%20it%0A%23%20reaches%20a%20predecessor%20and%20is%20not%20killed%20there.%0Areaches(D%2C%20U)%20%3A-%20gen(U%2C%20D).%0Areaches(D%2C%20V)%20%3A-%20cfg(U%2C%20V)%2C%20reaches(D%2C%20U)%2C%20not%20kill(U%2C%20D).%0A%0A%3F-%20reaches(Def%2C%20Block).%0A)**
 
 ## What Datalog is doing for us
 
@@ -163,6 +166,8 @@ Again, one rule on top of the existing pipeline.
 
 Run
 [`packages/cli/examples/reaching-defs/reaching-defs.dl`](../../packages/cli/examples/reaching-defs/reaching-defs.dl).
+with `reaches` as the output (`datamog reaching-defs.dl reaches`;
+its default query prints the CFG instead).
 For each block, list which definitions reach it. Cross-check
 against the CFG by tracing on paper.
 

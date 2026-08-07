@@ -2,7 +2,7 @@
 
 The rule
 
-```
+```prolog
 self_parent(X) :- parent(X, X).
 ```
 

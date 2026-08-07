@@ -13,6 +13,10 @@ bun run build     # static build into dist/
 bun run preview   # serve the built dist/
 ```
 
+`dev` and `build` both run `build:embed` first, which bundles
+`packages/playground/src/embed/` into `public/embed/`. Without it the live
+```datamog blocks silently do not mount.
+
 Open the dev/preview URL; the root is a course home page linking to each part's
 deck.
 
@@ -61,7 +65,8 @@ The intro slides (title, motivation, and the `Course overview` roadmap) live
 only in the intro deck; they are **not** repeated in the part decks. The one
 shared slide is the overview: `deckSequence()` in `decks.ts` prepends it to
 each part deck (so a part opens with its row of the roadmap highlighted) while
-the intro deck closes on the same slide unhighlighted.
+the intro deck shows the same slide unhighlighted, second to last, before the
+closing about slide.
 
 ## How it is put together
 
@@ -72,7 +77,10 @@ the intro deck closes on the same slide unhighlighted.
   - `kind` — `content` (default) · `title` · `section` · `emphasis` · `placeholder`
   - `section` — short label shown in the footer
   - `image` — full-bleed background image under `public/images/`
+  - `imageAlt` — accessible name for that image
   - `tight` — shrink body type for formula-/code-dense slides
+  - `roadmap` — end-of-part navigation slide, rendering the roadmap with the
+    parts covered so far marked (set on each `*-roadmap.md`)
 - `src/pages/[...slide].astro` generates one route per slide **per deck**;
   `src/layouts/SlideLayout.astro` is the full-page chrome (FLOLAC banner, footer
   pager, progress bar, key handler). `src/pages/index.astro` is the course home
@@ -82,7 +90,10 @@ the intro deck closes on the same slide unhighlighted.
   that deck's first slide, and the route passes `currentPart` so the deck's own
   part row is highlighted ("you are here"); in the intro deck none is.
 - Each part deck opens with a `kind: title` slide (`partN/00-title.md`) carrying
-  a `Part N` kicker, mirroring the intro deck's title slide.
+  a `Part N` kicker, mirroring the intro deck's title slide (which is
+  `intro/01-title.md`, the intro folder being the one that starts at `01`).
+- `glossary.md` and `pokemon-glossary.md` in this directory are prose companions
+  to the decks, not slides; nothing builds them.
 - **Diagrams** use fenced ```mermaid blocks. `src/plugins/remark-mermaid.mjs`
   turns them into `<pre class="mermaid">`, and the layout's client script renders
   them with Mermaid, themed to the FLOLAC palette (Starlight-style).

@@ -239,6 +239,8 @@ The thief is **kate**!
 - **Negation**: `not predicate(...)` — define what you want to negate as a predicate, then negate it
 - **Aggregates**: `max`, `min`, `avg`, `count`, `sum` appear in rule heads; reference the derived values in other rules
 
+The complete program is [`packages/cli/examples/find-the-thief/`](../../packages/cli/examples/find-the-thief/).
+
 ## What's next?
 
 The thief is behind bars, but trouble is not over. Continue to

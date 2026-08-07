@@ -1,6 +1,6 @@
 # Tutorial, chapter 1 — a tiny "people" database.
 #
-# The `extensional` declaration tells datamog that `person` is a
+# The `input predicate` declaration tells Datamog that `person` is a
 # base predicate backed by a table; the data comes from the sibling
 # `person.csv` (auto-loaded by predicate name).
 

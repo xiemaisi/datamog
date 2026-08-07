@@ -82,6 +82,26 @@ describe("what it declines to emit", () => {
     expect(out).not.toContain("not emitted");
   });
 
+  test("a goal over a non-integer position, which QF_LIA cannot state", () => {
+    // Every declared sort is `Int`. Encoding a `string` or a `float` as one
+    // could discharge an obligation for the wrong reason, which is the one
+    // direction that must not happen.
+    for (const [type, source] of [
+      ["string", "input predicate p(a: string, b: string).\nr(X, Y, _: Y > X) :- p(X, Y)."],
+      ["float", "input predicate p(a: float).\nr(X, _: X > 1.5) :- p(X)."],
+    ] as const) {
+      const out = script(source);
+      expect(out).toContain(`not emitted, outside tier 1: a ${type} variable`);
+      expect(out).not.toContain("(check-sat)");
+    }
+  });
+
+  test("a non-integer literal, which would be ill-typed against an Int declaration", () => {
+    const out = script("p(1).\nr(X, _: X > 1.5) :- p(X).");
+    expect(out).toContain("not emitted, outside tier 1: a non-integer literal");
+    expect(out).not.toContain("1.5)");
+  });
+
   test("nothing at all for a predicate whose contract is vacuous", () => {
     expect(
       obligations(`

@@ -195,8 +195,9 @@ unreachable(X, Y) :- town(X), town(Y), X <> Y, not shortest(X, Y, _).
 ?- unreachable(X, Y).
 ```
 
-Result: bridge is unreachable from itself and has no outgoing roads, so
-every pair `(bridge, Y)` with `Y <> bridge` appears.
+Result: bridge has no outgoing roads, so every pair `(bridge, Y)` with
+`Y <> bridge` appears, and nothing else does. The `X <> Y` guard already
+excludes the self pairs.
 
 </details>
 
@@ -221,7 +222,8 @@ round_trip(X, min(C)) :- path(X, X, C).
 ?- round_trip(X, C).
 ```
 
-Result: castle has a round trip of cost 5 (castle → village → castle).
+Result: four towns have a round trip. Castle and village cost 5 (castle →
+village → castle), forest and river cost 12. Bridge has none.
 
 </details>
 
@@ -243,6 +245,8 @@ biroad(Y, X, C) :- road(X, Y, C).
 Then rewrite `path` to use `biroad` instead of `road`.
 
 </details>
+
+The complete program is [`packages/cli/examples/shortest-path/`](../../packages/cli/examples/shortest-path/).
 
 ## What's next?
 

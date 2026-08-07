@@ -122,7 +122,7 @@ maybenull like anything else that can yield SQL NULL.
 ### 3.1 EDB columns: `?` already exists
 
 `ColumnDecl` already carries it (`datamog.langium:46`), and the loader and the
-DDL already honour it (`loader.ts:70`, `translator.ts:217`). Stage 0 made the
+DDL already honour it (`loader.ts`, `translator.ts`). Stage 0 made the
 analyzer read the same bit. An unannotated EDB column remains non-null (`NOT
 NULL`, coercion failures raise at load time), while a `?` column enters the
 environment as maybenull.
@@ -135,7 +135,7 @@ Head type annotations were already per rule and per argument. Stage 1 added the
 ```
 Expression ({infer AnnotatedHeadTerm.expr=current}
     ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
-    | ':' type=PrimitiveType (nullable?='?')?))?;
+    | ':' (type=PrimitiveType (nullable?='?')? | refinement=Expression)))?;
 ```
 
 ```prolog
@@ -171,7 +171,7 @@ nullness as one more component:
 
 **An unannotated IDB column's nullness is inferred, not required to be
 non-null.** The Kotlin reading, where the absence of `?` is a claim that the
-analyzer must prove, is declined in §8: it breaks every program that divides,
+analyzer must prove, is declined in §7: it breaks every program that divides,
 and the diagnostic it would deliver is the §1 payoff 2 warning, which does not
 need to be an error to be useful.
 
@@ -229,7 +229,7 @@ complementation.
 | `e1 <= e2`, `e1 >= e2` | nothing: both are true when both sides are null |
 | `X = e`, `e = X` | `X` non-null if `e` is non-null |
 | `X in [lo .. hi]` | `X` non-null |
-| positive atom `p(..., X, ...)` | `X` non-null if `p`'s published column is non-null |
+| positive atom `p(..., X, ...)` | `X` non-null if `p`'s inferred column is non-null (`publishedNullness` is read only at module boundaries) |
 | `f1 && f2` | the union of what `f1` and `f2` refine |
 | `f1 \|\| f2` | the intersection of what `f1` and `f2` refine |
 | negated atom `not p(...)` | nothing: it binds nothing |
@@ -276,11 +276,13 @@ in it is non-null and every operation in it is total on non-null arguments. A
 bare `null` head argument is maybenull, and it is the one source that needs no
 expression walk.
 
-Aggregates propagate rather than originate, which null.md §6 already got right:
-a group exists only because a row exists, so `count(*)` and `count(e)` are always
-non-null (an empty count is `0`, not NULL), while `sum`, `avg`, `min`, `max`,
-`concat` and `list` are nullable exactly when their argument is, since only an
-all-NULL group yields NULL.
+Aggregates mostly propagate rather than originate: a group exists only because
+a row exists, so `count(*)` and `count(e)` are always non-null (an empty count is
+`0`, not NULL), while `sum`, `avg`, `min`, `max`, `concat` and `list` are
+nullable when their argument is, since only an all-NULL group yields NULL. Two
+cases originate anyway, which §6 works through and null.md §6 gets wrong: an
+integer `sum`, which can overflow, and *any* ungrouped aggregate, whose
+empty-group row is NULL for everything but `count`.
 
 Across rules, join. Over the dependency graph, take the least fixed point seeded
 with every IDB column at **non-null**, rising to maybenull. Same shape as
@@ -450,7 +452,7 @@ documents the boundary rather than hiding it.
 `checkHeadAnnotations` and `checkModuleBoundaries`. The interpreters needed
 nothing, as expected: nullness never changes what they evaluate.
 
-**Stage 2, diagnostics.** The two warnings from §1 payoff 2, in
+**Stage 2, diagnostics.** The three warnings from §1 payoff 2, in
 `core/src/nullness-diagnostics.ts`, surfaced by the CLI, the playground worker
 and the embed.
 
@@ -461,8 +463,8 @@ answers "no" for the very comparison being warned about and the warning never
 fires. It has to ask what the operand's nullness would be *without* that
 conjunct, which is why `refineBody` takes a conjunct to skip.
 
-The sweep this stage was expected to need did not happen: across the 181 `.dl`
-files under `examples/`, the walkthrough and the solutions, neither warning
+The sweep this stage was expected to need did not happen: across the `.dl`
+files under `examples/`, the walkthrough and the solutions, none of the three
 fires. Both require a NULL to actually reach the place in question, and the
 corpus does not put one there.
 

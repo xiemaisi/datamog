@@ -51,6 +51,7 @@ const result = translate(analyzed, new PostgresSqlDialect());
 result.createTables; // CREATE TABLE statements for extensional predicates
 result.createViews;  // CREATE [RECURSIVE] VIEW statements for intensional predicates
 result.queries;      // SELECT statements for queries
+result.constraints;  // SELECT statements for integrity constraints, run before any query
 ```
 
 ## Executor
@@ -67,6 +68,8 @@ const results = await executor.execute(source);
 await backend.close();
 ```
 
+`execute` is `prepare` plus `executeAnalyzed`. Split them when you already hold a `TypedProgram`, or use `prepareElaborated(source, resolve, file)` to run the whole front end including `:=` module resolution.
+
 ## Extensional Loader Interface
 
 Implement `ExtensionalLoader` to add custom data sources:
@@ -77,6 +80,19 @@ import type { ExtensionalLoader, Backend } from "datamog-engine";
 const myLoader: ExtensionalLoader = {
   name: "my-loader",
   async canLoad(decl) { /* return true if you can handle this predicate */ },
-  async load(decl, backend) { /* INSERT rows via backend.execute() */ },
+  async load(decl, backend) {
+    // `insertRows` routes to SQL INSERTs or to the interpreter's own
+    // ingestion, so a loader works on every backend.
+    return insertRows(backend, decl, rows);
+  },
 };
 ```
+
+`load` returns a `LoadResult` (`{ rowsLoaded }`). Use `coerceValue` for string sources (CSV, Google Sheets) and `checkValue` for sources that already carry native types (JSONL).
+
+## Subpath entries
+
+Two Node/Bun-only pieces sit off the root entry so the browser playground bundle does not pull them in:
+
+- `datamog-engine/directory-loader` — `createDirectoryLoader`, the file-per-predicate factory the csv/jsonl/json/mermaid loaders share.
+- `datamog-engine/module-resolver` — `createNodeModuleResolver`, which resolves `:=` module imports from disk. The VS Code extension passes it to `DatamogExecutor.prepareElaborated`; the CLI passes it to `elaborate` directly, running the same stages inline.

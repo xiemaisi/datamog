@@ -370,8 +370,10 @@ since their delta-aware iteration computes the correct fixed point either way.
 - **Combining recursion with negation**: filter recursive results with `not`
   (Datamog handles the evaluation order via stratification)
 
+The complete program is [`packages/cli/examples/crown-the-rightful-heir/`](../../packages/cli/examples/crown-the-rightful-heir/).
+
 ## What's next?
 
-You have mastered recursion. In the final tutorial, you will push it to the
-limit by encoding a classic logic puzzle as a Datamog program:
+You have mastered recursion. Next you will push it to the limit by encoding a
+classic logic puzzle as a Datamog program:
 [Cross the river](05-cross-the-river.md).

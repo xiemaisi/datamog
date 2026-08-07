@@ -320,7 +320,8 @@ Starter: [`code/ch06/ex5-divergent.dl`](code/ch06/ex5-divergent.dl)
 Write a rule that genuinely fails to terminate on `native` — a
 recursive predicate that manufactures an integer on each step
 *without* a termination bound. Observe the behaviour (the process
-will spin until you kill it). Then add a bound and confirm
+will spin until you kill it, or until a `--max-iterations <n>` cap
+stops it with a note). Then add a bound and confirm
 termination. This exercise's point is to internalise that
 "Datalog always terminates" has hidden premises — and that the
 engine will not save you from an unbounded rule.

@@ -68,7 +68,7 @@ function args, iteration sources, IDB column unification).
 | boolean        | `&&`, `\|\|`, `!` (three-valued logic on `null`)              |
 | string         | `+` (concat), `length(W)`, `upper(W)`, `lower(W)`, `trim(W)`, `replace(W, old, new)`, `W[i]`, `W[i:j]`, `W[:j]`, `W[i:]` |
 | math           | `abs(x)`, `round(x)` / `round(x, n)`, `floor(x)`, `ceil(x)`, `sqrt(x)`, `ln(x)`, `exp(x)` (exponentiation is the `**` operator) |
-| value          | `V["key"]`, `V[i]`, `V[i:j]` (subscript / slice), `as_string(V)`, `as_integer(V)`, `as_float(V)`, `as_boolean(V)`, `length(V)` (array length / object key count / string length), `type_of(V)`, `keys(V)` / `values(V)` (object projection, NULL on non-object), `to_json(V)` (canonical JSON text), array literal `[e1, ...]`, object literal `{"k": v, ...}` |
+| value          | `V["key"]`, `V[i]`, `V[i:j]` (subscript / slice), `as_string(V)`, `as_integer(V)`, `as_float(V)`, `as_boolean(V)`, `length(V)` (array length / object key count / string length), `type_of(V)`, `has_key(V, K)`, `keys(V)` / `values(V)` (object projection, NULL on non-object), `to_json(V)` (canonical JSON text), array literal `[e1, ...]`, object literal `{"k": v, ...}` |
 | conversion     | `to_string(x)`, `to_integer(s)`, `to_float(s)`, `to_boolean(s)`, `parse_json(s)` (parsing variants return `NULL` on malformed input). Primitive → `value` is automatic at the unify-with-`value` boundary; no explicit lift is needed. `to_json(value)` serialises canonical JSON text, and primitive arguments embed first. |
 | aggregate (head-only) | `count`, `sum`, `avg`, `min`, `max`, `concat`, `list` (primitives auto-lift to a `value`; result is an array `value`) |
 
@@ -84,7 +84,43 @@ function args, iteration sources, IDB column unification).
   declared `float` or `value`; a narrower claim is rejected). Annotations are the
   predicate's **published** contract: consumers are checked against them, while
   the predicate's own body still sees its inferred types.
+- Nullability is part of the annotation: `x: integer?` declares the column may
+  hold NULL, spelled the way an input column spells it.
 - No runtime effect; codegen ignores them.
+
+## Head argument names
+
+- `e as N` names a head position so later positions can refer to it:
+  `p(count(*) as N, N + 1) :- ...`.
+- The name is head-scoped and substituted away at parse time; nothing below the
+  `:-` can see it.
+- It is also what lets a refinement mention a computed position.
+
+## Refinement annotations
+
+- A `_` head position may carry a **proposition** over the head's other
+  positions instead of a type: `span(X, Y, _: Y > X) :- edge(X, Y).`
+- The witness is erased, so the position is not a column and `span` stays
+  binary. A refinement anywhere but a `_` is an error.
+- It may mention only the head's own positions; a computed one needs an `as`
+  name first (`sp(I, I + 1 as K, _: I < K)`).
+- A predicate's contract is the **disjunction over its rules**, so one
+  unannotated sibling makes it vacuous, which is warned about.
+  `--strict-contracts` makes that warning an error.
+- Checked at the fixed point, before any query, exactly as an integrity
+  constraint is. `--obligations` writes the obligations out as SMT-LIB 2.
+
+## Parity-stratified recursion
+
+- A postfix `^` marks a predicate **maximal**: the anti-monotone side of a
+  recursion through an even number of negations (`bad^(E)`).
+- Written at every occurrence, but not part of the name, so `bad` and `bad^`
+  are one predicate and every occurrence must agree.
+- Inside an SCC, a positive call needs matching polarity and a negated call
+  the opposite. With no sigil anywhere this is ordinary stratified negation.
+- Evaluated by an alternating fixed point, so it runs on `native` and
+  `seminaive` only. A sigil in a single-polarity stratum is inert and warned
+  about.
 
 ## Proof terms (ADTs)
 
@@ -175,5 +211,12 @@ A file is a function: its `input predicate`s are parameters, its
 | `--output-format F`    | output format (`table`, `csv`, `jsonl`, ...)   |
 | `--csv-no-header`      | treat CSV files as headerless                  |
 | `--warn-finiteness`    | warn about predicate columns that may grow unboundedly |
+| `--max-iterations <n>` | cap fixed-point passes per stratum and stop with a note (`native`/`seminaive` only) |
+| `--strict-contracts`   | treat refinement-contract advisories as errors |
+| `--obligations`        | print refinement proof obligations as SMT-LIB 2 instead of evaluating |
+| `--repl` / `--json`    | start the REPL (the default with no program); `--json` makes it emit ndjson events |
+
+The one positional argument after the program selects the output to evaluate:
+an `output predicate` name, or `default`.
 
 Default backend: `sqlite` (unless `DATABASE_URL` is set, then `postgres`).

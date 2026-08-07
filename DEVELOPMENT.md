@@ -58,6 +58,7 @@ bun run test:coverage    # TypeScript tests with coverage
 bun run typecheck        # TypeScript project-reference build
 bun run check            # Biome lint/format check
 bun run check:fix        # Biome lint/format autofix
+bun run build:cli        # compile the CLI to a standalone binary (dist/datamog)
 ```
 
 Run a single test file with:
@@ -133,6 +134,17 @@ bun run playground:build
 The deployed GitHub Pages workflow installs dependencies with
 `bun install --frozen-lockfile` and publishes `packages/playground/dist`.
 
+Both commands first render the docs the site links to. Run them on their own
+with:
+
+```bash
+bun run spec:html      # doc/spec.md -> packages/playground/public/spec.html
+bun run tutorial:html  # doc/embed-tutorials -> packages/playground/tutorial.html
+bun run docs:html      # both
+```
+
+Both outputs are gitignored build artifacts.
+
 ## Parser And Grammar
 
 The grammar lives at `packages/parser/src/datamog.langium`. Generated parser
@@ -191,6 +203,9 @@ Generated slide PDFs are written under `doc/walkthrough/slides/pdf`.
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`: alternative Google
   Sheets credentials for service-account access.
 - `DATAMOG_CMD`: command used by `datamog-magic` to start the Datamog CLI.
+- `DATAMOG_REPO`: checkout the `datamog-magic` subprocess tests launch the CLI
+  from. Unset, they derive it from the test file's own location, which is right
+  for an in-tree run; set it when the package is installed elsewhere.
 
 ## Before Opening A Change
 

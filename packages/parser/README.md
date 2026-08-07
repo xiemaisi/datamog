@@ -26,9 +26,15 @@ for (const stmt of program.statements) {
 ```
 # Comments run to end of line
 input predicate <name>(<col>: <type>, ...).   # input (extensional) declaration
+input predicate <name>(...) := <binding>.     # bound to a data file or a module instance
 <head>(<args>) :- <body>, ... .               # rule
 <head>(<args>).                               # fact (rule with empty body)
+output predicate <head>(<args>) :- ... .      # a named, additionally-printed output
+error predicate <head>(<args>) :- ... .       # a named integrity constraint
 ?- <atom>.                                    # query
+!- <atom>, ... .                              # anonymous integrity constraint
+<head>(X, _: <proposition>) :- ... .          # refinement annotation on an erased position
+<name>^(<args>)                               # the parity sigil: this predicate is maximal
 ```
 
 Column types are `string`, `integer`, `float`, `boolean`, or `value`; the annotation is optional and defaults to `string`.
@@ -43,7 +49,20 @@ Column types are `string`, `integer`, `float`, `boolean`, or `value`; the annota
 4. **Bracket-access splitting:** the unified `BracketAccess` node the grammar produces (to avoid an LL(k) ambiguity) is split into `Subscript` (`x[i]`) or `Slice` (`x[i:j]`) based on whether a `:` was present.
 5. **Proof-term / ADT desugaring:** a named rule `p(...) :: Ctor` and constructor terms are lowered onto the `value` machinery.
 
-`parseRaw` itself applies two small normalisations up front (lifting optional head type annotations onto `head.argTypes`, and defaulting an unannotated column type to `string`), so every consumer, including the module elaborator that runs before `postProcess`, sees them.
+6. **Contract lowering:** `synthesiseContractChecks` turns each refinement-carrying predicate into one synthesised `!-`, so no stage after parsing sees a refinement.
+
+`parseRaw` itself applies the normalisations that must precede everything else (lifting optional head type annotations onto `head.argTypes`, extracting refinements, substituting `as` head-argument names away, and defaulting an unannotated column type to `string`), so every consumer, including the module elaborator that runs before `postProcess`, sees them.
+
+## Parse entry points
+
+Four, one per (raw vs post-processed) x (throwing vs best-effort) combination:
+
+| | throws on error | best effort |
+| --- | --- | --- |
+| **grammar shape** | `parseRaw` | `parseRawLenient` |
+| **post-processed** | `parse` | `parseLenient` |
+
+The lenient pair is what editor features use, so navigation and completion survive a file that does not parse cleanly. The raw pair is what the module elaborator and any feature keyed on *source* shapes use, since post-processing lowers away `Ctor(...)` and `_`. `propertySpan(node, property)` locates an identifier's source span; it is the single place coupled to Langium's CST helpers, so `datamog-core` can stay Langium-free.
 
 ## Langium services
 

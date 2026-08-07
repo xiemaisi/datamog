@@ -78,6 +78,7 @@ existing database, use `postgres`. For browser deployments, use
 | Linear recursion      | ✓      | ✓     | ✓        | ✓      | ✓         |
 | Mutual recursion      | ✓      | ✓     | ✓        | ✓      | ✓         |
 | Non-linear recursion  | ✗      | ✗     | ✗        | ✓      | ✓         |
+| Parity-stratified recursion | ✗ | ✗    | ✗        | ✓      | ✓         |
 
 The `native` and `seminaive` backends don't go through SQL, so
 they're the only ones that can correctly compute non-linear
@@ -86,3 +87,9 @@ rejects non-linear recursion at translation time (their recursive
 CTE semantics would silently produce wrong results), so a program
 that uses two recursive body atoms is portable only across the
 in-memory backends.
+
+Parity-stratified recursion (the `^` sigil, Chapter 17) is the other
+in-memory-only feature, and rejected at the same point. It needs an
+outer loop that rebuilds a relation from empty between rounds, where
+a `WITH RECURSIVE` CTE computes one least fixed point and cannot
+delete.

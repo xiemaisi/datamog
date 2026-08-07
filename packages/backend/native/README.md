@@ -24,3 +24,13 @@ await backend.close();
 
 `--dry-run` is not available for this backend since there's no SQL to
 preview.
+
+## Options
+
+`create(options?)` accepts:
+
+- `trace` — a callback invoked with stratum / iteration / rule events during evaluation, which is what the playground's step-through view is built on.
+- `maxIterations` — cap the fixed-point passes per stratum instead of running to convergence (the CLI's `--max-iterations`).
+- `onIterationCap` — called once if a stratum hit that cap; the partial results are still returned.
+
+This backend and `datamog-backend-seminaive` are also the only two that accept **non-linear recursion** and **parity-stratified recursion** (the `^` sigil); every SQL backend rejects both at translation time.

@@ -163,17 +163,8 @@ ingesting heterogeneous nested data — useful when the records you
 receive arrive as deeply-nested blobs and you don't want to flatten
 them in some other language first.
 
-After that the [appendices](#appendices) close out the tutorial — a
-summary table of the three lenses, a quick reference, backend
-notes, and further reading. If you've worked through everything to
-here, you know enough Datalog to tackle production analyses and to
-understand the academic literature on the language.
-
-## Appendices
-
-See:
-
-- [Appendix A — The three lenses cheat sheet](A-lenses.md)
-- [Appendix B — Datamog quick reference](B-quickref.md)
-- [Appendix C — Backend cheatsheet](C-backends.md)
-- [Appendix D — Further reading](D-reading.md)
+After that, [Part V](README.md) covers proof terms, modules, and
+parity-stratified recursion, and the appendices close the tutorial
+out. If you've worked through everything to here, you know enough
+Datalog to tackle production analyses and to understand the academic
+literature on the language.

@@ -199,6 +199,8 @@ concept is a **predicate**, and you compose them using rules. This is the
 essence of Datalog — everything is a logical relation, and complex queries are
 built by chaining simple relations together.
 
+The complete program is [`packages/cli/examples/catch-the-fire-starter/`](../../packages/cli/examples/catch-the-fire-starter/).
+
 ## What's next?
 
 Emma and frank are locked up. But now the kingdom faces a succession crisis.

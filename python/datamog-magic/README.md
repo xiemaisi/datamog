@@ -86,6 +86,7 @@ Recognised flags:
 | `--data-dir PATH` | Directory file-based loaders read from. |
 | `--cwd PATH` | Working directory the subprocess runs in. |
 | `--cmd 'bun run datamog'` | Override the launch command. |
+| `--input name=source` | Map an input predicate to a file or URL (`.csv`, `.jsonl`, `.json`, `.mmd`, a Google Sheets URL, or a `gh:` shorthand). Repeatable; forwarded to the CLI verbatim. |
 
 ### Other line magics
 

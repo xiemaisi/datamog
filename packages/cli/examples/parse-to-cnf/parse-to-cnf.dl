@@ -1,4 +1,4 @@
-# Theorem proving by falsifiability -- step 1 of 3: parsing, and the whole
+# Theorem proving by falsifiability -- step 3 of 3: parsing, and the whole
 # pipeline end to end.
 #
 # Steps 2 and 3 took the formula's abstract syntax tree as an *extensional*

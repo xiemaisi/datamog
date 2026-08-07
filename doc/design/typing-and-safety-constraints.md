@@ -89,7 +89,7 @@ r(X) :- p(X), q(X).      % {null} on native, seminaive and sqlite
 
 The reason is that nullness is a second component beside the base type rather
 than an element within it
-([nullness-tracking.md](./nullness-tracking.md) §7), so a NULL cannot inhabit a
+([nullness-tracking.md](./nullness-tracking.md) §2), so a NULL cannot inhabit a
 base-type conflict. Nothing met to ⊥ above: `p` and `q` are both `integer`. A
 variable shared between a `string` atom and an `integer` atom is rejected
 statically and never runs at all. So there is no type below the primitives
@@ -102,7 +102,7 @@ carries NULL rows.
 `=`, subscripted, embedded in an array) whereas ⊤ is the absence of
 information. It is the identity of the meet, which is what the
 implementation's `undefined` is doing at
-[types.ts:1152](../../packages/core/src/types.ts#L1152). `value` being the
+[types.ts](../../packages/core/src/types.ts). `value` being the
 top of `T` and ⊤ being the top of `T̂` are not in tension: the language
 wants a nameable top and the solve wants a unit for the meet, and those
 are different things.
@@ -132,7 +132,7 @@ deliberately *not* the order:
 ```
 
 This is `joinTypesWithJsonLift ≠ null`
-([types.ts:1130](../../packages/core/src/types.ts#L1130)). Two properties
+([types.ts](../../packages/core/src/types.ts)). Two properties
 worth naming: it is symmetric, so it is not subtyping, and it accepts
 `float` in a position declared `integer`. The directional check does
 exist, as `columnTypesCompatible`, but is used only for head annotations
@@ -146,7 +146,7 @@ if undetermined); admissibility is reported by the checks, not by the
 denotation. Totality is what keeps every `f` in §4 monotone.
 
 Following `inferTermType`
-([types.ts:983](../../packages/core/src/types.ts#L983)):
+([types.ts](../../packages/core/src/types.ts)):
 
 ```
 ⟦x⟧            = Γ(x)
@@ -209,7 +209,7 @@ the paragraph below.
 **Operators do not propagate ⊤.** An arithmetic operator's result is
 determined by whichever operands have types and is ⊤ only if none do, so
 `⟦Y + 1⟧ = integer` even when `Γ(Y) = ⊤`
-([numericResultType:1088](../../packages/core/src/types.ts#L1088)).
+([numericResultType](../../packages/core/src/types.ts)).
 Comparisons, logical and bitwise operators ignore their operands
 altogether. §5 shows why this is sound, and it is deliberate: it is what
 lets an expression name a type its operands do not, which is how a typed
@@ -245,10 +245,10 @@ No bindings, for any position, bare or not. This is the single rule that
 makes negation behave: it constrains types but grounds nothing, so a
 variable appearing only under `not` keeps ⊤ and is reported unsafe. The
 implementation matches:
-[types.ts:323](../../packages/core/src/types.ts#L323) type-checks negated
+[types.ts](../../packages/core/src/types.ts) type-checks negated
 literals without testing `negated`, while
-[types.ts:231](../../packages/core/src/types.ts#L231) and
-[analyzer.ts:989](../../packages/core/src/analyzer.ts#L989) both skip them
+[types.ts](../../packages/core/src/types.ts) and
+[analyzer.ts](../../packages/core/src/analyzer.ts) both skip them
 when deriving types and safety.
 
 An anonymous variable under negation is the one apparent exception, and it
@@ -257,7 +257,7 @@ negation and bound there. Give each anonymous variable in a negated atom
 the binding `Γ(_) ⊑ Σ(p)ᵢ` and it comes out concrete for the right reason.
 The implementation reaches the same answer by exempting anonymous
 variables from the check
-([analyzer.ts:1084](../../packages/core/src/analyzer.ts#L1084)).
+([analyzer.ts](../../packages/core/src/analyzer.ts)).
 
 **Equality** `e₁ = e₂`
 
@@ -297,7 +297,7 @@ rather than the maximal Γ: a range that is a variable's sole binding must
 enumerate integers, since that is all the translator can synthesise,
 whereas a range on a variable bound elsewhere is only a filter and may
 have float bounds. `isBoundElsewhere`
-([types.ts:957](../../packages/core/src/types.ts#L957)) is exactly "does
+([types.ts](../../packages/core/src/types.ts)) is exactly "does
 another binding constraint on x exist", so the condition is syntactic.
 
 **Getting "x's only binding" right is where this went wrong twice.** Read
@@ -383,8 +383,8 @@ That is the whole algorithm: start every variable at ⊤, repeatedly replace
 each with the meet of its constraints, stop when nothing changes.
 
 The implementation's two fixed-point loops
-([types.ts:261](../../packages/core/src/types.ts#L261) for types,
-[analyzer.ts:1035](../../packages/core/src/analyzer.ts#L1035) for safety)
+([types.ts](../../packages/core/src/types.ts) for types,
+[analyzer.ts](../../packages/core/src/analyzer.ts) for safety)
 are this one iteration split in two, which is why they have the same shape.
 Both descend, matching the greatest fixed point: an absent entry in
 `varTypes` is ⊤ and each meet moves down, and absence from `safeVars` is
@@ -493,9 +493,9 @@ s(X) :- s(X), b(X).      % accepted; `s` is empty
 
 ```sql
 CREATE RECURSIVE VIEW "s" (col1) AS (
-  SELECT CAST(NULL AS INTEGER) AS col1 WHERE 1 = 0
+  SELECT CAST(NULL AS BIGINT) AS col1 WHERE 1 = 0
   UNION
-SELECT __b0."col1" AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE (__b0."col1" IS NOT DISTINCT FROM __b1."col1")
+SELECT CAST(__b0."col1" AS BIGINT) AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE __b0."col1" = __b1."x"
 );
 ```
 
@@ -579,7 +579,7 @@ q(X) :- N = null, X in [1 .. N].
 inferred, and every static check passed. The native backend then returned no
 rows while the sqlite backend threw `Unbound variable 'X'` from the
 translator. The binding-equality path never had that hole (`allVarsTyped` at
-[types.ts:269](../../packages/core/src/types.ts#L269) declines to type
+[types.ts](../../packages/core/src/types.ts) declines to type
 anything until every variable in the expression is typed), so the same
 program written through an equality was already rejected on both backends.
 
@@ -609,7 +609,7 @@ range path, and is what the regression test uses.
   outer Σ fixed point (§9): `s(X) :- s(Y), X = Y + 1.` reports "cannot
   infer type of column 1" today only because the guard declines to type
   `X`. Without it, `numericResultType(undefined, integer)` returns
-  `integer` ([types.ts:1137](../../packages/core/src/types.ts#L1088)) and
+  `integer` ([types.ts](../../packages/core/src/types.ts)) and
   the column would silently infer `integer`. Replacing the guard requires
   `⟦·⟧` to be strict in ⊥ while still ignoring ⊤, which is the distinction
   §9 says the single `undefined` cannot make.
@@ -630,7 +630,8 @@ range path, and is what the regression test uses.
 
 - **What is worth doing is the deduplication underneath.** Body-binding logic
   is re-derived in five places: `checkSafety`, `rebuildVarTypes` (itself called
-  four times in `types.ts` and exported to the translator), the translator's
+  five times in `types.ts`, once in `nullness-diagnostics.ts`, and exported to
+  the translator), the translator's
   own Pass 1/2, `planner.ts`'s hand-written mirror, and `finiteness.ts`'s edge
   builder.
 

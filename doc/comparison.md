@@ -8,7 +8,7 @@ system it is (an educational prototype, a research system, a production system,
 an embedded library, a verification tool), what its surface syntax looks like,
 and which language features it supports.
 
-The comparison is a snapshot (2026) and errs toward the load-free facts:
+The comparison is a snapshot (2026) and errs toward the slow-moving facts:
 categories, evaluation strategy, syntax flavour, and the presence or absence of
 core features. Version numbers are deliberately omitted since they age quickly;
 the Sources section links the authoritative references for each system.
@@ -22,9 +22,13 @@ semantics: three that compile a program to SQL (`CREATE TABLE` / `CREATE VIEW` /
 the WASM build of SQLite), and two pure in-memory interpreters (a naive and a
 seminaive bottom-up evaluator) that serve as readable reference implementations.
 The surface is Prolog-like Horn clauses with `input predicate` declarations,
-stratified negation, aggregates, and static type inference over five column
+parity-stratified negation, aggregates, and static type inference over five column
 types, one of which (`value`) is a first-class JSON/nested type; type
-annotations are optional and, on rule heads, checked against inference. A small
+annotations are optional and, on rule heads, checked against inference, as is
+whether a column may be NULL. A head position may also carry a proposition
+instead of a type, checked against the tuples the predicate derives. Integrity
+constraints (`!- ...`) declare conjunctions that must have no solutions, and
+their counterexamples are reported before any query runs. A small
 functor-style module system lets one file act as a function from its input
 predicates to its outputs, bound to data files or other modules with `:=`. It is
 built for
@@ -57,7 +61,7 @@ extensibility that production engines carry.
 
 | System | Recursion | Negation | Aggregation | Types | Standout feature |
 |---|---|---|---|---|---|
-| **Datamog** | General (in-memory) / linear only (SQL backends) | Stratified | count, sum, avg, min, max, concat, list | Static inference (annotations optional): string/integer/float/boolean/value (JSON); algebraic datatypes as proof terms | Multiple cross-checked backends; compiles Datalog to SQL |
+| **Datamog** | General (in-memory) / linear only (SQL backends) | Parity-stratified (in-memory) / stratified (SQL backends) | count, sum, avg, min, max, concat, list | Static inference (annotations optional): string/integer/float/boolean/value (JSON); algebraic datatypes as proof terms | Multiple cross-checked backends; compiles Datalog to SQL |
 | **DES** | General | Stratified | Yes, with `group_by` | Optional, declared as integrity constraints | One database queried via Datalog, SQL, and relational algebra; tracers and declarative debuggers; nulls and duplicates |
 | **Soufflé** | General | Stratified | count, sum, min, max, mean | Static: number/unsigned/float/symbol plus records and ADTs | Subsumption, choice domains, generic components, C++ foreign functors |
 | **CodeQL** | General, plus `+`/`*` transitive-closure operators | Parity-stratified (recursion through an even number of negations) | Yes, plus monotonic aggregates usable inside recursion | Static OO: int/float/string/boolean/date/bigint, classes, and algebraic datatypes (`newtype`) | First-order-logic bodies (not just Horn clauses); OO classes plus ADTs; no nulls |
@@ -220,14 +224,17 @@ pattern matching). That richer surface buys a stronger negation rule: QL is
 recursive cycle passes an even number of negations, which keeps the recursion
 monotone and its least fixed point well-defined and rules out liar-paradox
 predicates that would hold exactly when they do not. That is strictly more
-permissive than the plain stratified negation of Datamog, Soufflé, and DES,
-which forbid recursion through negation altogether, and it only makes sense
-because the language is full first-order logic, not Horn clauses. QL is a
+permissive than the plain stratified negation of Soufflé and DES, which forbid
+recursion through negation altogether, and it only makes sense because the
+language is full first-order logic, not Horn clauses. Datamog admits the same
+even-parity cycles, but asks the author to mark which side is maximal with a
+`^` sigil rather than inferring it, and only its in-memory backends evaluate
+one. QL is a
 production, largely commercial system for security analysis, running queries
 over a relational snapshot database extracted from a codebase, and it notably
 has no nulls: a predicate either holds for a tuple or it does not. Datamog is
 far smaller: flat predicates rather than a statically typed OO class hierarchy,
-Horn-clause bodies, classic stratified negation, and explicit nulls.
+Horn-clause bodies, an explicitly annotated parity stratification, and nulls.
 
 ### A research language
 
@@ -372,7 +379,8 @@ such as symbolic execution and refinement typing. Datamog has algebraic
 datatypes of its own — proof terms, where a named rule is a constructor — and
 refinement annotations, where a head position carries a proposition rather than
 a type. But it has no solver, so a refinement is *checked* against the tuples a
-predicate derived rather than proved for all inputs, and it has no ML-style
+predicate derived rather than proved for all inputs; `--obligations` writes the
+proof obligations out as SMT-LIB for a solver you supply. It also has no ML-style
 functional sublanguage; its datatypes also desugar to the dynamically-shaped
 `value` type rather than Formulog's statically-typed ADTs.
 
@@ -435,17 +443,19 @@ DES ships two smaller versions of the same shape: `russell.dl`, where the
 barber shaves everyone who does not shave himself, and `paradox.dl`, which
 is just `p :- not p`.
 
-Datamog rejects all three at analysis time, because negation must be
-stratified: no cycle in the dependency graph may pass through a `not`. The
-systems that accept them give up a two-valued model to do it. XSB evaluates
+Datamog rejects all three at analysis time. Each of their cycles passes an
+odd number of negations, and Datamog's parity rule needs a negated call to
+flip polarity, which an odd cycle cannot do. The systems that accept them
+give up a two-valued model to do it. XSB evaluates
 under the well-founded semantics, where a game position can be *undefined*
 rather than won or lost, which is exactly what a drawn position should be.
 DES warns that the program is non-stratifiable and reports a set of
 undefined tuples alongside the true ones, by an algorithm its manual notes
 is incomplete. CodeQL takes a third route, parity stratification, accepting
 recursion through an even number of negations, which readmits some useful
-programs while still ruling out the liar-shaped ones. Of the four, Datamog
-draws the strictest line.
+programs while still ruling out the liar-shaped ones. Datamog takes that
+route too, so an even cycle is expressible, but none of these three is: the
+odd parity is what makes them paradoxical in the first place.
 
 ### Search that needs propagation or pruning
 

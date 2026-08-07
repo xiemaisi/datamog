@@ -54,6 +54,18 @@ views we've developed across the tutorial.
 | safety (every head var bound) | domain independence           | guarantees a finite `FROM` clause           |
 | column types (`string`/`integer`/`float`/`boolean`/`value`) | single-sorted model | standard SQL column types                   |
 | `integer → float` widening  | numerical embedding           | implicit cast / `CAST AS REAL`              |
+| `x: integer?`               | the column's domain includes ⊥ | nullable column (no `NOT NULL`)            |
+| `_: Y > X` (refinement)     | a proposition the predicate guarantees | a `SELECT` that must return no rows |
+
+## Part V concepts
+
+| Datalog                     | Logic                                  | SQL                                        |
+| --------------------------- | -------------------------------------- | ------------------------------------------ |
+| `p(...) :: Ctor`            | a named rule is a proof constructor (Curry-Howard) | an extra JSON column holding the derivation |
+| `V : p(...)`                | capture the proof term as a value      | select that JSON column                     |
+| `:= from "m.dl"(...)`       | a file as a function from its inputs to its outputs | the module's views, freshened per instance |
+| module `!-` law             | an axiom the instance must satisfy     | a `SELECT` run per instance                 |
+| `bad^(E)` (maximal)         | the anti-monotone side of an even-parity recursion | no translation: needs a loop that can delete |
 
 ## What each lens is best at
 

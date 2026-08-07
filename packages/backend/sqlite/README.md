@@ -20,3 +20,8 @@ const executor = new DatamogExecutor(backend);
 const results = await executor.execute(source);
 backend.close();
 ```
+
+## Dialect subpath
+
+`datamog-backend-sqlite/dialect` exports the `SqlDialect` without the root entry's `bun:sqlite` import. `datamog-backend-sqljs` consumes it for exactly that reason: it shares SQLite's SQL but runs on WASM, where `bun:sqlite` does not exist.
+

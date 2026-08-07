@@ -4,8 +4,10 @@ Status: implemented, both halves. This is the home for design decisions about ho
 Datamog keeps recursion from running forever. It has two independent halves, and
 they are meant to grow separately:
 
-1. **Static analysis** (implemented): a conservative, opt-in warning that flags
-   value-producing recursion cycles at edit/compile time. The normative rules
+1. **Static analysis** (implemented): a conservative warning that flags
+   value-producing recursion cycles at edit/compile time. Opt-in on the CLI
+   (`--warn-finiteness`); the playground, the embed and the VS Code validator
+   run it unconditionally, since there is no flag to type at. The normative rules
    live in the spec (§5.8); the code is `packages/core/src/finiteness.ts`.
 2. **Runtime iteration cap** (implemented): a per-stratum cap on the in-memory
    interpreters that turns a non-terminating fixpoint into a bounded, reported

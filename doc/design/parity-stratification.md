@@ -450,9 +450,9 @@ $ bun run datamog --backend native outer.dl   # := sink from "inner.dl"(node = n
 That is the spelling check firing on a freshened internal name the user never
 wrote and cannot write, so there is no way to act on it. An SCC closing through
 the boundary gives the same error rather than a polarity error. Selecting the
-module's `?-` default *does* work, because `expandModule` copies the sigil into
-the generated `$default` rule's body and the alias then targets the minimal
-`$default`.
+module's `?-` default *does* work, because `nameDefaultOutput`
+(`core/src/elaborate.ts`) repurposes the `?-` statement in place, sigil and all,
+and the alias then targets the minimal `$default`.
 
 No test covers any of this. Fixing it means copying the flag onto both ends of
 the alias rule, at which point the original prediction applies: an SCC that
@@ -484,7 +484,7 @@ Phased so each phase is separately testable and committable.
   and a `clearRelation` helper.
 - `packages/backend/native/src/evaluator.ts` and
   `packages/backend/seminaive/src/evaluator.ts`: split `evaluateStratum` into
-  the trace-emitting wrapper and a `runFixpoint(predicates, stratumIdx)` core
+  the trace-emitting wrapper and a `runFixpoint(stratum, stratumIdx, opts)` core
   that treats every predicate outside `predicates` as frozen. Both already key
   their delta positions off stratum membership, so this is a parameter rename
   plus moving the `stratum-start` / `stratum-end` emission out.
@@ -515,8 +515,7 @@ Phased so each phase is separately testable and committable.
   `Subscript`, `Slice`), and the full suite stays green at 1618 pass / 0 fail.
   Confirmed parsing: `p^(X)` heads, `not p^(X)` bodies, `output predicate
   top^(X)`, the proof-capture shorthand `V : p^`, and `?- ... not p^(E)`.
-  XOR survives everywhere it is currently legal, including `A ^ (3) > 5` and
-  `R = A ^ (3)`; Chevrotain looks past the closing paren to pick `Filter`. The
+  XOR survives everywhere it is currently legal, `R = A ^ (3)` for instance; Chevrotain looks past the closing paren to pick `Filter`. The
   one shape that changes meaning is a bare `A ^ (3)` as a complete body element,
   which now parses as a literal on `A^` instead of failing the boolean-filter
   type check (§6.5).
@@ -530,7 +529,8 @@ Phased so each phase is separately testable and committable.
   sigil (§3). Replace the stratification loop with the polarity check of §3,
   keeping the `NegationCycle` payload on both new error shapes so the
   playground's "Show cycle" keeps working. Reject the sigil on an
-  `error predicate` head and on an `input predicate`.
+  `error predicate` head. An `input predicate` needs no check: the declaration
+  has no sigil slot, so it is a parse error.
 - Error text: the same-polarity negation error should point at the fix, e.g.
   "... are mutually recursive. If this is recursion through a universal
   quantification, mark one of them with `^`."
@@ -573,8 +573,10 @@ Phased so each phase is separately testable and committable.
 ### Phase 3: SQL rejection
 
 - `packages/engine/src/translator.ts`: alongside the non-linear-recursion check
-  in `translateViews`, reject a stratum with a maximal predicate, naming the
-  predicates and pointing at `--backend native` / `seminaive`. Anchor the error
+  in `translateViews`, reject a stratum holding *both* polarities, naming the
+  maximal predicates and pointing at `--backend native` / `seminaive`. An
+  all-maximal stratum has nothing to alternate against, so the sigil is inert
+  (§7) and it compiles as usual. Anchor the error
   at the first maximal rule's CST node so the playground squiggly lands.
 - Tests: one per SQL dialect, mirroring the non-linear-recursion tests.
 

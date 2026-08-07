@@ -46,6 +46,9 @@ before the program configures the run; everything after belongs to the program.
 | `--warn-finiteness` | run the finiteness analysis and print warnings |
 | `--max-iterations <n>` | cap fixed-point passes per stratum on the native/seminaive interpreters; stop with a note instead of looping (see `finiteness-checking.md`) |
 | `--csv-no-header` | treat CSV inputs as having no header row |
+| `--strict-contracts` | treat refinement-contract advisories as errors (see `refinement-annotations.md`) |
+| `--obligations` | print the refinement proof obligations as SMT-LIB 2 instead of evaluating |
+| `--repl`, `--json` | start the REPL (the default with no program); `--json` emits ndjson events |
 | `--help`, `-h` | usage |
 
 `--backend postgres` still requires `DATABASE_URL`; with no `--backend`, a set
@@ -65,8 +68,7 @@ that is deliberate, since outputs are the program's intended interface.
 ## Input flags (after the output)
 
 For each input predicate `p`, `--p <source>` (or `--p=<source>`) supplies its
-data, overriding the default. `<source>` takes the same four forms as today's
-`--extensional`:
+data, overriding the default. `<source>` takes four forms:
 
 - a local file path,
 - an `http(s)://` URL,
@@ -102,8 +104,8 @@ also serves as the escape hatch when an input name collides with a global
 option. Because it names its own predicate, `--input name=source` is itself a
 global option (it may appear before the program) and is the way to supply data
 in `--repl` mode, where there is no program to attach `--<input>` flags to.
-`--<input>` is sugar over `--input` for the common case; the old
-`--extensional name=source` spelling is dropped.
+`--<input>` is sugar over `--input` for the common case; the older
+`--extensional name=source` spelling is gone.
 
 ## Evaluation
 
@@ -134,30 +136,27 @@ The REPL has no program at launch, so it cannot know the input predicates and
 there is no output positional or `--<input>` sugar. It keeps `--data-dir`,
 `--backend`, `--json`, and `--input name=source` (the self-describing form,
 which datamog-magic uses to supply data); un-mapped inputs load by the directory
-convention as declarations arrive. The `--extensional` spelling is dropped.
+convention as declarations arrive.
 
-## What changes from today
+## What this changed
 
-- `--extensional pred=source` is replaced by `--<input> source` (with `--input
-  name=source` as the general form).
-- The second positional is no longer a data directory (that is `--data-dir`
-  only); it is the output name.
+- `--extensional pred=source` became `--<input> source`, with `--input
+  name=source` as the general form.
+- The second positional stopped being a data directory (that is `--data-dir`
+  only) and became the output name.
 - Running a program evaluates one output, not all; `--all` restores all.
-- Files with no default output now require an output positional or `--all` at
-  the CLI. The examples migrated to all-named-outputs (for instance
-  `aggregates`) are the ones this affects; decide per file whether to give them
-  a default `?-` or to document running them with an explicit output.
+- A file with no default output needs an output positional or `--all`. The
+  examples that moved to all-named-outputs are the ones this affects, and they
+  document their outputs rather than gaining a filler `?-`: `examples/aggregates`
+  is the worked case.
 
 ## Touch points
 
-- `packages/cli/src/main.ts`: rewrite the argument loop into the two-phase form
-  (global options and program path first; parse; then output positional and
-  input flags resolved against the parsed program). Replace `parseExtensionalArg`
-  / `--extensional` handling with the flag-name resolver and `--input`. Replace
-  the `dataDir` positional with `--data-dir` only. Gate evaluation on the
-  selected output (or `--all`).
-- The executor already supports selecting one output (each output is a query in
+- `packages/cli/src/main.ts` holds the two-phase argument loop: global options
+  and program path first; parse; then the output positional and the input flags
+  resolved against the parsed program.
+- The executor already supported selecting one output (each output is a query in
   `analyzed.queries`, keyed by `outputName`); the CLI filters to the chosen one
   rather than running all.
-- Usage/help text and the CLI section of `CLAUDE.md` and the walkthrough's
-  `bun run datamog ...` invocations need updating to the new surface.
+- Usage text, `.claude/CLAUDE.md`, and the walkthrough's `bun run datamog ...`
+  invocations track this surface.

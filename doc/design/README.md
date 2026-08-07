@@ -6,8 +6,8 @@ normative description of the language is `doc/spec.md`; when the two disagree, t
 spec wins and the doc needs updating.
 
 Every doc states its status near the top, since they do not all describe shipped
-behaviour: one records a design that was turned down, and another a model that is
-implemented without the structure it proposes.
+behaviour: one records a design that was turned down, two describe nothing built yet, and
+another a model that is implemented without the structure it proposes.
 
 | Doc | Status | Covers |
 |---|---|---|
@@ -19,7 +19,7 @@ implemented without the structure it proposes.
 | [`type-lattice.md`](./type-lattice.md) | implemented | The five types, `value` as top, meet within a rule vs join across rules, head annotations |
 | [`imports-as-functors.md`](./imports-as-functors.md) | largely implemented | A file as a function from its input relations to its output relations, wired with `:=` |
 | [`typing-and-safety-constraints.md`](./typing-and-safety-constraints.md) | model implemented, structure not | Recasting safety checking and type inference as one constraint system over one lattice |
-| [`postgres-alignment.md`](./postgres-alignment.md) | one open cause, one won't-fix | Where the Postgres backend disagrees with the others, and what each fix would take |
+| [`postgres-alignment.md`](./postgres-alignment.md) | example-suite defects fixed; one won't-fix, one untested limitation | Where the Postgres backend disagrees with the others, and what each fix would take |
 | [`functional-sublanguage.md`](./functional-sublanguage.md) | proposal, nothing implemented; boundary decisions settled, datatype half deferred | Recursive functions over `value` and a conditional expression, so a computation can be named over an argument the caller supplies |
 | [`value-construction.md`](./value-construction.md) | proposal; ordered aggregate ready, computed keys to be split out | Ordered aggregates and computed object keys for constructing data-dependent `value` shapes |
 | [`head-arguments.md`](./head-arguments.md) | implemented | Aggregates inside head expressions, and naming a head position so something else can refer to it |

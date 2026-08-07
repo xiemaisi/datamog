@@ -74,7 +74,7 @@ CELLS: list[dict] = [
     ),
     code(
         "%%datamog",
-        "extensional greeting(message: string).",
+        "input predicate greeting(message: string).",
         "loud(M) :- greeting(M), length(M) > 0.",
     ),
     md(
@@ -96,7 +96,7 @@ CELLS: list[dict] = [
     ),
     code(
         "%%datamog",
-        "extensional passenger(",
+        "input predicate passenger(",
         "    PassengerId: integer,",
         "    Survived:    integer,",
         "    Pclass:      integer,",
@@ -154,7 +154,7 @@ CELLS: list[dict] = [
         "Two ways out:",
         "",
         "1. **Define every rule for one predicate in one cell.** This is the normal pattern — Datalog rules are usually grouped by head anyway.",
-        "2. **`%datamog_reset`** wipes all accumulated state (declarations, rules, EDB tables) and starts a fresh subprocess on the next cell. You'll lose loaded data, so you'll need to re-declare anything you want to keep.",
+        "2. **`%datamog_reset`** wipes all accumulated state (declarations, rules, EDB tables) in the running subprocess. You'll lose loaded data, so you'll need to re-declare anything you want to keep.",
     ),
     code("%datamog_reset"),
     md(
@@ -173,14 +173,17 @@ CELLS: list[dict] = [
         "",
         "You can see the same wire format directly:",
     ),
-    code("!echo 'extensional p(x: integer).' | bun run datamog --repl --json --backend sqlite"),
+    code(
+        "!echo 'input predicate p(x: integer).' "
+        "| bun run datamog --repl --json --backend sqlite"
+    ),
     md(
         "This is the same channel a future Jupyter kernel could speak; the magic is the smallest possible adapter on top.",
     ),
     md(
         "## Limits",
         "",
-        "This is `datamog-magic` v1. Known rough edges:",
+        "`datamog-magic` is early. Known rough edges:",
         "",
         "- **Predicate redefinition isn't supported.** The underlying `IncrementalSession` forbids extending a predicate's rule set across chunks; `:reset` is the only way back. A finer-grained \"drop and recreate\" mode could relax this.",
         "- **One subprocess per kernel.** No multi-session support yet — every `%%datamog` cell shares the same backend.",

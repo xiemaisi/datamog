@@ -338,6 +338,6 @@ Total: 2 + 1 + 10 + 2 + 2 = 17 minutes.
 
 ## What's next?
 
-There is one more tutorial: [Find the shortest path](06-find-the-shortest-path.md)
+Next up: [Find the shortest path](06-find-the-shortest-path.md)
 shows how to combine recursion with aggregates to solve graph optimization
 problems.

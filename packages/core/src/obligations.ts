@@ -9,7 +9,7 @@
 //
 //   - SMT-LIB's `div`/`mod` are Euclidean, with a non-negative remainder,
 //     where Datamog truncates toward zero and takes the dividend's sign
-//     (spec §2.6). Both are written out.
+//     (spec §5.3). Both are written out.
 //   - `integer` is `[-(2^53 - 1), 2^53 - 1]` and arithmetic leaving it is
 //     NULL, so every arithmetic term carries an overflow condition.
 //
@@ -22,7 +22,7 @@ import type { AnalyzedProgram } from "./analyzer.ts";
 import { containsAggregate } from "./analyzer.ts";
 import type { HeadTerm, PrimitiveType, Rule } from "./ast.ts";
 import type { TypedProgram } from "./types.ts";
-import { rebuildVarTypes } from "./types.ts";
+import { inferTermType, rebuildVarTypes } from "./types.ts";
 
 const MAX_SAFE = "9007199254740991";
 
@@ -68,13 +68,26 @@ export interface ObligationContext {
 function toSmt(expr: HeadTerm, ctx: ObligationContext, vars: Map<string, PrimitiveType>): Term {
   switch (expr.$type) {
     case "NumberLiteral":
+      // Every declared sort is `Int`, so a non-integral literal would make the
+      // goal ill-typed in QF_LIA. Report it rather than emit it. The value is
+      // what decides, not `isFloatLiteral`: a refinement formula never reaches
+      // the walker that attaches `rawText`.
+      if (!Number.isInteger(expr.value)) throw new UnsupportedTerm("a non-integer literal");
       return { v: String(expr.value), isNull: NOT_NULL };
     case "BooleanLiteral":
       return { v: expr.value ? "true" : "false", isNull: NOT_NULL };
     case "NullLiteral":
       return { v: "0", isNull: "true" };
     case "Variable": {
-      const type = vars.get(expr.name) ?? "integer";
+      // Tier 1 is QF_LIA, so `integer` is the only sort that can be declared
+      // faithfully. Anything else — a `float`, a `string`, a `value` — would
+      // be declared `Int` and could then be discharged for the wrong reason,
+      // which is the one direction that must not happen. An unresolved type
+      // takes the same route.
+      const type = vars.get(expr.name);
+      if (type !== "integer") {
+        throw new UnsupportedTerm(type ? `a ${type} variable` : "an untyped variable");
+      }
       ctx.declared.set(expr.name, type);
       return { v: expr.name, isNull: `${expr.name}$null` };
     }
@@ -183,7 +196,10 @@ function hypotheses(
     const arg = rule.head.args[i];
     if (name === undefined || arg === undefined) return;
     if (arg.$type === "Variable" && arg.name === name) return; // `X = X`
-    ctx.declared.set(name, vars.get(name) ?? "integer");
+    // Only an `integer` name can be declared faithfully in QF_LIA; for
+    // anything else the goal mentioning it is already being dropped.
+    if (vars.get(name) !== "integer") return;
+    ctx.declared.set(name, "integer");
     attempt(() => binary("=", { v: name, isNull: `${name}$null` }, toSmt(arg, ctx, vars)).v);
   });
   return out;
@@ -207,6 +223,14 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
     if (!rules.every((r) => (r.head.refinements?.length ?? 0) > 0)) continue;
     for (const [index, rule] of rules.entries()) {
       const vars = rebuildVarTypes(rule.body, typed.columnTypes);
+      // An `as` name is head-scoped, so the body knows nothing about it. Its
+      // type is that of the expression it names, which the head does know.
+      rule.head.positionNames?.forEach((name, i) => {
+        const arg = rule.head.args[i];
+        if (name === undefined || arg === undefined || vars.has(name)) return;
+        const type = inferTermType(arg, vars, typed.columnTypes);
+        if (type) vars.set(name, type);
+      });
       for (const refinement of rule.head.refinements!) {
         const ctx: ObligationContext = { types: typed, declared: new Map() };
         let block: string;

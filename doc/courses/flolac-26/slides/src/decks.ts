@@ -8,7 +8,7 @@
 export interface Deck {
   slug: string;
   title: string;
-  /** Course part number (1-3); undefined for the standalone intro deck. */
+  /** Course part number (1-4); undefined for the standalone intro deck. */
   part?: number;
   /** Content sub-folder under `src/content/slides` holding this deck's slides. */
   dir: string;
@@ -88,7 +88,8 @@ export const baseName = (id: string): string => id.split("/").slice(1).join("/")
 
 /**
  * The ordered slide sequence for a deck. The intro deck is just its folder
- * (title, intro slides, then the overview last). A part deck opens on its own
+ * in numeric order, so it runs title, intro slides, the overview, then the
+ * about slide. A part deck opens on its own
  * title slide (sorted first in its folder), then the shared overview slide
  * with that part highlighted, then the rest of the part's slides. `all` is the
  * full slide collection.

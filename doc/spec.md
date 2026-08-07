@@ -192,7 +192,7 @@ Binding:       :=
 Constructor:   ::
 Maximal:       ^        (postfix, on a predicate name)
 Range:         ..
-Grouping:      (  )  [  ]
+Grouping:      (  )  [  ]  {  }
 Separators:    ,  :  .
 ```
 
@@ -219,11 +219,13 @@ constraints below are the only exceptions.
 
 **The namespaces**
 
-- **Reserved keywords**: `input predicate`, `not`, `in`, `true`, `false`, `null`,
+- **Reserved keywords**: `not`, `in`, `true`, `false`, `null`,
   and the five type names `string`, `integer`, `float`, `boolean`, `value`.
   These are *lexical* keywords, so the parser rejects them as a bare identifier
   in every position (predicate, extensional column, and variable alike). `true`, `false`,
-  and `null` are also the literals of §1.5.
+  and `null` are also the literals of §1.5. The declaration words `input`,
+  `output`, `error`, `predicate`, `from`, and `as` are *contextual* (§1.6) and
+  stay available as ordinary names.
 - **Built-in operation names**: one set covering the three kinds of built-in
   operation, the *functions* (`upper`, `abs`, `as_integer`, `to_json`,
   and so on), the *body atoms* (`object_entry`, `array_element`), and the
@@ -347,9 +349,14 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ```
 Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
-HeadTerm    ::= Expression ('as' Identifier)? (':' (PrimitiveType '?'? | Refinement))?
+HeadTerm    ::= Expression ( 'as' Identifier (':' PrimitiveType '?'?)?
+                           | ':' (PrimitiveType '?'? | Refinement) )?
 Refinement  ::= Expression
 ```
+
+A refinement attaches only to the bare `:` branch, so a named position takes a
+type but not a refinement: `_ as N: I < N` is a parse error. Name the position
+in one term and refine it from another (`I + 1 as K, _: I < K`).
 
 An `Expression` in head position may contain aggregate calls (§2.7).
 
@@ -876,6 +883,10 @@ string concatenation (`||`):
 prefixed(R) :- words(W), R = "hello_" + W.
 ```
 
+The other operand must be numeric or `string`. A `boolean` or a `value` is
+rejected rather than rendered, because the backends disagree on how to render
+one (SQLite gives `1` for a boolean, the interpreter `true`).
+
 ### 2.7 Aggregates
 
 ```
@@ -1246,7 +1257,8 @@ is wrong. A **ground constraint** (one with no projected variables, as in
 
 Constraints are otherwise ordinary intensional predicates: they may be
 recursive, use aggregates and negation, carry head type annotations (§5.10),
-and be referenced from other rules. Nothing about the marker changes how the
+and be referenced from other rules. They may not be maximal: a `^` sigil on a
+constraint's own name is an error, since ⊤ is never materialised (§4.3). Nothing about the marker changes how the
 predicate is evaluated or how it is compiled (§6) — only what happens to a
 non-empty result. See §4.7 for when constraints are checked, and §9 for how a
 module's constraints reach its importer.
@@ -1267,17 +1279,23 @@ Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)  
                  | (STRING ('as' Identifier)?)                                    -- data file
 Actual         ::= Identifier '=' Identifier
 
-Rule           ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
+Rule           ::= (('output' | 'error') 'predicate')? HeadAtom
+                   ('::' Identifier ('(' (Expression (',' Expression)*)? ')')?)?
+                   (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom       ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
-HeadTerm       ::= (AggregateCall | Expression) (':' PrimitiveType)?
-AggregateCall  ::= IDENT '(' Expression ')'
+HeadTerm       ::= (AggregateCall | Expression)
+                   ( 'as' Identifier (':' PrimitiveType '?'?)?
+                   | ':' (PrimitiveType '?'? | Expression) )?
+AggregateCall  ::= IDENT '(' (Expression | '*') ')'
 
 Query          ::= '?-' BodyElement (',' BodyElement)* '.'
 Constraint     ::= '!-' BodyElement (',' BodyElement)* '.'
 
 BodyElement    ::= Literal | Equality | RangeAtom | Filter
-Literal        ::= ('not')? Atom
-Atom           ::= Identifier '^'? '(' (Expression (',' Expression)*)? ')'
+Literal        ::= Identifier ':' ('not')? Identifier '^'? ArgList?   -- proof capture
+                 | ('not')? Atom
+Atom           ::= Identifier '^'? ArgList
+ArgList        ::= '(' (Expression (',' Expression)*)? ')'
 Equality       ::= Addition '=' Expression
 RangeAtom      ::= Expression 'in' '[' Expression '..' Expression ']'
 Filter         ::= ('not')? Expression
@@ -1299,9 +1317,9 @@ Postfix        ::= Primary (('[' Expression ']')
                           | ('[' Expression? ':' Expression? ']'))*
 Primary        ::= '(' Expression ')' | FunctionCall
                   | Variable | STRING | NUMBER | BOOLEAN | 'null'
-                  | ArrayLiteral | ObjectLiteral
+                  | ArrayLiteral | ObjectLiteral | '*'
 BOOLEAN        ::= 'true' | 'false'
-FunctionCall   ::= IDENT '(' Expression (',' Expression)* ')'
+FunctionCall   ::= (Identifier '::')? IDENT '(' (Expression (',' Expression)*)? ')'
 ArrayLiteral   ::= '[' (Expression (',' Expression)*)? ']'
 ObjectLiteral  ::= '{' (STRING ':' Expression (',' STRING ':' Expression)*)? '}'
 Identifier     ::= IDENT | QUOTED_IDENT
@@ -1496,10 +1514,11 @@ backends reject it and the `native` / `seminaive` evaluators run it.
    be recursive.
 2. **Consistency:** All rules for the same predicate must agree on which
    head positions are aggregates and which are grouping columns.
-3. **Top-level only:** Aggregates must appear as direct head arguments, not
-   embedded in arithmetic expressions.
-4. **No nesting:** Aggregate calls may not contain other aggregate calls.
-5. **Name conflict:** A predicate name cannot be the same as an aggregate
+3. **No nesting:** Aggregate calls may not contain other aggregate calls.
+4. **No facts:** A rule with an aggregate in its head must have a body.
+5. **Same function:** Sibling rules must agree on which aggregate function
+   occupies an aggregate position, not merely that the position aggregates.
+6. **Name conflict:** A predicate name cannot be the same as an aggregate
    function name (`count`, `sum`, `avg`, `min`, `max`, `concat`, `list`).
 
 ### 4.6 Predicate Uniqueness
@@ -1545,7 +1564,7 @@ Datamog has five basic types:
 | Type      | Description           | SQL type                                  |
 |-----------|-----------------------|-------------------------------------------|
 | `string`    | Unicode strings       | `TEXT`                                    |
-| `integer` | Whole numbers         | `INTEGER`                                 |
+| `integer` | Whole numbers         | `BIGINT` (Postgres) / `INTEGER` (SQLite/sql.js) |
 | `float`    | Floating-point numbers| `DOUBLE PRECISION` (Postgres) / `REAL` (SQLite/sql.js, 8-byte) |
 | `boolean` | True/false values     | `BOOLEAN`                                 |
 | `value`   | union of `null` / `boolean` / `integer` / `float` / `string` / array / object | `JSONB` (Postgres) / `TEXT` (SQLite/sql.js) |
@@ -1708,9 +1727,9 @@ and may contain runtime NULLs.
 
 Whether a column can hold a NULL is inferred, as a second component beside the
 base type rather than a type of its own. It is checked where annotations and
-module boundaries are checked (§5.10, §9.3), it feeds two warnings, and it
-selects between the two equality lowerings (§6). It never changes which tuples a
-program derives.
+module boundaries are checked (§5.10, §9.3), it feeds three warnings, and it
+selects between the two equality lowerings (§6.2). It never changes which tuples
+a program derives.
 
 An extensional column is nullable exactly when declared `?`. An intensional
 column is nullable when some rule for it can contribute a NULL, computed as a
@@ -1718,8 +1737,10 @@ least fixed point seeded at non-null, so a recursive predicate is non-null when
 its base case is and its recursive step propagates. A head expression can
 contribute a NULL when it mentions a nullable variable, or when it applies an
 operation that is partial on non-null arguments (the sources above). `count` is
-never NULL; the other aggregates are NULL exactly when their argument is, a
-group existing only because a row does.
+never NULL; another aggregate is NULL when its argument is, a group existing
+only because a row does. Two cases are nullable regardless: an integer `sum`,
+which can overflow, and any ungrouped aggregate, whose empty-group row is NULL
+for everything but `count` (§2.7).
 
 Within a rule, a variable is **non-null** if the body proves it so. A body is a
 conjunction, so this is not order-sensitive: a guard written last constrains an
@@ -1728,6 +1749,7 @@ atom written first. The following prove it:
 | body element (holding) | proves |
 |---|---|
 | a positive atom position whose column is non-null | that variable |
+| `object_entry(V, K, _)` or `array_element(V, I, _)` | every variable in a strict position of `V`, plus `K` / `I` (not the value slot, which can be a JSON null) |
 | `X <> null`, `null <> X`, `not (X = null)` | `X` |
 | `e1 < e2` or `e1 > e2` | every variable in a strict position of `e1` and `e2` |
 | `X in [lo .. hi]` | every variable in a strict position of `X` |
@@ -1742,13 +1764,15 @@ position** of an expression when the path to it passes only through operations
 that propagate NULL; `=`, `<>`, the orderings and the connectives are not among
 them, so nothing under one of those is proven.
 
-Two conditions are warned about rather than rejected, since both are specified
+Three conditions are warned about rather than rejected, since each is specified
 behaviour that is sometimes wanted:
 
 - a filter that can evaluate to NULL, which drops its row as a false one would;
 - two rule bodies comparing the same operands with complementary operators
   (`<` against `>=`, or `<=` against `>`), which read as a partition but leave
-  out NULL.
+  out NULL;
+- a negated ordering over a nullable operand, which keeps the NULL row: every
+  ordering is false at NULL, so its negation is true there.
 
 #### Propagation in expressions
 
@@ -1939,6 +1963,14 @@ The following type constraints are enforced after type inference:
   primitive ↔ `value` via auto-lift — see §2.9 and §5.6). The
   ordering operators `<`, `<=`, `>`, `>=` additionally reject
   `boolean` and `value` operands.
+- **Addition**: with a `string` operand, `+` is concatenation (§2.6) and the
+  other operand must be numeric or `string`; `boolean` and `value` are
+  rejected, since their rendering differs across backends. Otherwise both
+  operands must be numeric.
+- **Aggregate arguments**: `sum` and `avg` require a numeric argument.
+  `min` and `max` require an orderable one (`integer`, `float`, or `string`),
+  rejecting `boolean` and `value`, which the backends order differently.
+  `count`, `concat`, and `list` accept any type.
 
 ```
 X in [1 .. 10]            # OK: integer bounds
@@ -2154,11 +2186,25 @@ position does not satisfy the contract and is reported.
 Refinements never reach codegen beyond that check: no column is added and no
 tuple is altered.
 
+**Advisories.** The vacuous-contract report is a warning by default;
+`--strict-contracts` promotes every contract advisory to an error, and the CLI
+then exits non-zero without evaluating the program.
+
+**Proof obligations.** `--obligations` prints the contracts as an SMT-LIB 2
+script instead of evaluating: one `push` / `assert` / `check-sat` / `pop` block
+per refinement, in the `QF_LIA` logic, where `unsat` discharges the obligation.
+No solver ships with Datamog and nothing is discharged today; the script is the
+deliverable, so that any solver can consume it. The encoding writes out what
+SMT-LIB spells differently: division and modulo truncate toward zero (§5.3)
+rather than being Euclidean, `integer` is bounded (§5.1) so arithmetic carries
+an overflow condition, and NULL is modelled as a value paired with a
+null-condition so the null-aware comparisons of §5.4 hold.
+
 ## 6 SQL Translation
 
 ### 6.1 Overview
 
-A Datamog program translates to three groups of SQL statements:
+A Datamog program translates to four groups of SQL statements:
 
 1. **CREATE TABLE** statements for each extensional predicate.
 2. **CREATE VIEW** statements for each intensional predicate (one view per
@@ -2181,8 +2227,11 @@ has no effect on evaluation and compiles normally.
 
 ### 6.2 Rule Translation
 
-Each rule translates to a SELECT statement. The translation makes a single
-left-to-right pass over the body elements, classifying them into:
+Each rule translates to a SELECT statement. The translation makes two passes
+over the body: pass 1 registers the bindings introduced by positive atoms, and
+pass 2 iterates to a fixed point over equalities and range atoms, so a forward
+reference across the body resolves and body order stays irrelevant (§4.1). The
+body elements classify into:
 
 - **Positive atoms** -- become FROM clause entries with aliases (`__b0`,
   `__b1`, ...).
@@ -2198,6 +2247,12 @@ left-to-right pass over the body elements, classifying them into:
 
 Shared variables between atoms produce join conditions. Non-variable atom
 arguments produce equality filters.
+
+Equality has two lowerings, and nullness inference (§5.4) picks between them.
+The null-aware spelling of §6.8 is the meaning; where inference proves an
+operand non-null, a plain `=` is emitted instead. The two agree there, since a
+NULL against a non-null value is false either way, and the plain form is what
+keeps a large join hash-joinable on Postgres.
 
 Multiple rules for the same predicate are combined with UNION.
 
@@ -2348,8 +2403,9 @@ Loads data from a file named `{predicate}.csv` in a configured directory.
   `-?[1-9]\d*` within `[-(2^53 - 1), 2^53 - 1]`; `float` requires canonical
   decimal `((0|-?[1-9]\d*)(\.\d+)?|-0\.\d+)` (no exponent, no leading
   `+`, no leading zeros except plain `0`, no surface `-0`); `boolean`
-  accepts `true`/`1`/`yes` and `false`/`0`/`no` (case-insensitive,
-  surrounding whitespace allowed). Anything else raises a load-time error
+  accepts `true`/`1`/`yes` and `false`/`0`/`no` (case-insensitive).
+  Surrounding whitespace is stripped for all three, so a padded field from a
+  hand-formatted CSV still loads. Anything else raises a load-time error
   rather than silently coercing.
 - A `value` column accepts any JSON text; the contents are parsed
   with `JSON.parse` and canonicalised on insert.
@@ -2632,7 +2688,7 @@ predicate already enumerates. `num_list` above is finite (lists over a fixed set
 up to a length cap), so `append` computes the append *relation restricted to
 that universe*: concatenating two lists whose result exceeds the cap yields no
 matching proof, and that row drops out. To invent a value that is not a proof of
-any predicate, use a raw `value` literal (§7), not constructor syntax.
+any predicate, use a raw `value` literal (§2.9), not constructor syntax.
 
 ### 8.5 Proving a universal quantification
 
@@ -3022,4 +3078,4 @@ integration:
 | **Analyzer error** | Undefined predicate, arity mismatch, unsafe variable, unstratifiable negation, duplicate input predicate declaration, EDB/IDB conflict, aggregate constraint violation, unknown function, function arity mismatch |
 | **Type error**  | Non-numeric range bounds, unary minus on string, subscript/slice on non-string, wrong function argument type |
 | **Module error** | Import cycle, missing default output, unknown named export, boundary type/arity mismatch (§9), unreadable module reference |
-| **Translation error** | Non-linear recursion (SQL backends only — `native` and `seminaive` accept it) |
+| **Translation error** | Non-linear recursion, parity-stratified recursion (SQL backends only — `native` and `seminaive` accept both) |

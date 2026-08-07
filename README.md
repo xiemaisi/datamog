@@ -67,6 +67,13 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
   NULL. A head position can carry a *proposition* rather than a type
   (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
   derives and costs nothing at runtime otherwise.
+- **Integrity constraints.** Declare a conjunction that must have no solutions
+  (`!- p(X), not q(X).`) and its tuples become the counterexamples, reported
+  before any query runs. See the [language spec](doc/spec.md).
+- **Parity-stratified recursion.** A `^` sigil marks the anti-monotone side of a
+  recursion through an even number of negations, evaluated by an alternating
+  fixed point, which is what a `forall`-shaped rule needs. See
+  [Parity](doc/walkthrough/17-parity.md).
 - **Diagnostics that explain.** Safety, arity, stratification, and finiteness
   checks report the offending source span, and the playground visualises a
   rejected negation or finiteness cycle.
@@ -93,9 +100,10 @@ DATABASE_URL=postgres://localhost/mydb bun run datamog --backend postgres progra
 The CLI loads each input predicate `p` from a like-named data file next to the
 program (`p.csv`, `p.jsonl`, `p.json`, `p.mmd`), or from a file/URL/Google
 Sheet/GitHub path you pass explicitly. The [CLI README](packages/cli/README.md)
-covers data loading, output formats, and every flag.
+covers data loading, output formats, and the flags; `datamog --help` is the
+authoritative list.
 
-Over 40 runnable programs live in
+Seventy-nine runnable programs live in
 [`packages/cli/examples/`](packages/cli/examples/), covering transitive closure,
 stratified negation, aggregates, puzzles, JSON handling, proof-term ADTs, and
 Boolean-circuit solvers:
@@ -140,7 +148,7 @@ Datamog is a Bun-workspace monorepo. The pieces, from foundation to frontend:
 | [`datamog-repl`](packages/repl) | Incremental REPL session engine |
 | [`datamog-cli`](packages/cli) | Command-line interface |
 | [`datamog-playground`](packages/playground) | Browser playground (Preact + sql.js, no server) |
-| [`datamog-vscode`](packages/vscode-extension) | VS Code extension (highlighting + diagnostics) |
+| [`datamog-vscode`](packages/vscode-extension) | VS Code extension (highlighting, diagnostics, completion, go-to-definition, run command) |
 
 A sibling Python package, [`datamog-magic`](python/datamog-magic), provides a
 `%%datamog` IPython/Jupyter cell magic that drives the CLI.
