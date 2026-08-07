@@ -1,11 +1,12 @@
 # Design notes: refinement annotations on rule heads
 
-Status: **first slice implemented and documented** (phases 0, 1, 3 and 5).
+Status: **phases 0, 1, 2, 3 and 5 implemented**; phase 4, static discharge, is
+the remainder.
 Refinements parse, the position erases, and a contract is checked against the
 derived tuples; spec §5.11 and walkthrough chapter 7 describe it. Static
-discharge (phases 2 and 4) is designed and unbuilt; obligations will be emitted
-as SMT-LIB so it never requires a particular solver. One decided item is also
-unbuilt: `--strict-contracts` (§2.2, §11.4).
+discharge (phase 4) is designed and unbuilt; obligations are emitted
+as SMT-LIB, which `--obligations` now emits, so discharge never requires a
+particular solver.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -466,7 +467,17 @@ R2:  (I < J)  ∧  (J < K)          ⊢  I < K
 R1's hypothesis is the definition of the named position (§3.3's last row), not
 a body equality: `as K` rewrites nothing, so `K = I + 1` holds because position
 3 is that expression. `token` and `lexicon` are input predicates and contribute
-nothing. R2's two hypotheses are the contract of
+nothing.
+
+**R1 does not actually discharge, and emitting it is what showed that.** The
+integer domain is `[-(2^53 - 1), 2^53 - 1]` and arithmetic leaving it is NULL
+(spec §2.6), so `I + 1` is NULL when `I` is the largest integer, `K` is then
+NULL, and `I < K` is false because an ordering is false at NULL. The contract
+holds only for `I` bounded away from the top of the domain, and nothing in
+`cyk-parser` says token positions are. The fix is a second claim,
+`_: I < K, _: K <= 1000000`, or a bound on the input; the point for this
+document is that the obligation is right to fail and the earlier text claiming
+otherwise predated the integer domain. R2's two hypotheses are the contract of
 `span` instantiated at each recursive atom, which is the induction hypothesis of
 §3.2. Both are valid in linear integer arithmetic and discharge with no
 interaction.
@@ -1032,7 +1043,7 @@ Emit the inert annotation warning (§2.2).
 Test: a predicate with mixed annotated and unannotated rules yields `True` and
 one warning.
 
-### Phase 2: obligation generation
+### Phase 2: obligation generation — built
 
 Hypotheses per §3.3, SCC ordering per §3.2. `--obligations` writes the goals as
 an SMT-LIB 2 script (§4.5), encoding truncating division and a dividend-signed
@@ -1041,6 +1052,26 @@ solver: the script is the deliverable, and it is testable against a golden file
 and by running any solver that happens to be installed.
 
 Independent of phase 4, since a `.smt2` file is usable on its own.
+
+**As built**, in `core/src/obligations.ts`, behind `--obligations`. Coverage and
+its limits:
+
+- The encoding writes out what it must not delegate: truncating division, the
+  integer domain on every arithmetic term, and NULL as a value-plus-Bool pair
+  so an ordering can be false at NULL.
+- A named head position contributes its definition, which §3.3's last row
+  requires and §4.2 depends on.
+- **Body-atom contracts are not yet hypotheses.** That is the one §3.3 row left,
+  and it is what §4.2's R2 and §5's payoff need, so it is the first thing phase
+  4 should add. Omitting a hypothesis only weakens a goal, so this is sound: an
+  obligation may fail that a later pass discharges.
+- **A rule with an aggregate in its head is not emitted**, with a note saying
+  so. Its contract needs §4.1's derived facts and §3.1's empty-group goal.
+- A hypothesis outside the fragment, a string equality say, is dropped rather
+  than failing the obligation, for the same soundness reason.
+
+No solver ran against the output, none being installed here, so the encoding is
+pinned by tests rather than by a verdict.
 
 ### Phase 3: dynamic checking — built
 

@@ -12,6 +12,7 @@ import {
   findInfiniteRisks,
   findNullnessRisks,
   inferTypes,
+  obligationScript,
 } from "datamog-core";
 import { CsvLoader, parseCsvContent } from "datamog-csv";
 import {
@@ -71,6 +72,8 @@ function usage(exitCode = 1): never {
   console.error("                             program's directory; working directory in --repl)");
   console.error("  --all                      Evaluate every output, not just one (table only)");
   console.error("  --dry-run                  Print generated SQL without executing");
+  console.error("  --obligations              Print refinement proof obligations as SMT-LIB 2");
+  console.error("  --strict-contracts         Treat refinement-contract advisories as errors");
   console.error("  --warn-finiteness          Print a warning for each predicate column whose");
   console.error("                             values may grow unboundedly across iterations");
   console.error("  --max-iterations <n>       Cap fixed-point passes per stratum and stop with a");
@@ -576,16 +579,31 @@ function emitFinitenessWarnings(analyzed: Parameters<typeof findInfiniteRisks>[0
   }
 }
 
+/**
+ * The refinement checker's advisories. Warnings by default, since the teaching
+ * default stays permissive, and errors under `--strict-contracts` so CI can
+ * take the strict reading. The flag governs them as a class rather than this
+ * one diagnostic, so a later advisory is promoted by the same switch.
+ * See doc/design/refinement-annotations.md §2.2 and §11.4.
+ *
+ * Returns whether anything was reported, so a strict run can exit non-zero.
+ */
+function emitContractDiagnostics(
+  analyzed: Parameters<typeof findInertContracts>[0],
+  strict: boolean,
+): boolean {
+  const diagnostics = findInertContracts(analyzed);
+  for (const d of diagnostics) {
+    console.error(`${strict ? "error" : "warning"}: ${d.message}`);
+  }
+  return diagnostics.length > 0;
+}
+
 // An inert `^` is always reported, unlike finiteness risks, which are opt-in
 // behind --warn-finiteness. It costs one SCC walk and means the sigil never
 // silently does nothing. See doc/design/parity-stratification.md §11.
 function emitPolarityWarnings(analyzed: Parameters<typeof findInertPolarity>[0]): void {
   for (const d of findInertPolarity(analyzed)) {
-    console.error(`warning: ${d.message}`);
-  }
-  // Same shape and the same reason: an annotation that reads as a claim but
-  // checks nothing.
-  for (const d of findInertContracts(analyzed)) {
     console.error(`warning: ${d.message}`);
   }
 }
@@ -617,6 +635,8 @@ async function main() {
   let dryRun = false;
   let csvNoHeader = false;
   let warnFiniteness = false;
+  let strictContracts = false;
+  let obligations = false;
   let allOutputs = false;
   let backendOverride: BackendName | undefined;
   let outputFormat: OutputFormat = "table";
@@ -640,6 +660,8 @@ async function main() {
     if (arg === "--dry-run") dryRun = true;
     else if (arg === "--csv-no-header") csvNoHeader = true;
     else if (arg === "--warn-finiteness") warnFiniteness = true;
+    else if (arg === "--strict-contracts") strictContracts = true;
+    else if (arg === "--obligations") obligations = true;
     else if (arg === "--all") allOutputs = true;
     else if (arg === "--repl") replMode = true;
     else if (arg === "--json") jsonMode = true;
@@ -824,6 +846,15 @@ async function main() {
   checkModuleBoundaries(analyzed, boundaries);
   emitPolarityWarnings(analyzed);
   emitNullnessWarnings(analyzed);
+  if (emitContractDiagnostics(analyzed, strictContracts) && strictContracts) {
+    process.exitCode = 1;
+    return;
+  }
+  // The script is the deliverable; nothing here runs a solver.
+  if (obligations) {
+    process.stdout.write(obligationScript(analyzed));
+    return;
+  }
 
   if (dryRun) {
     if (warnFiniteness) emitFinitenessWarnings(analyzed);

@@ -61,6 +61,7 @@ export {
   queryProjection,
 } from "./analyzer.ts";
 export { type ContractDiagnostic, findInertContracts } from "./contracts.ts";
+export { type Obligation, generateObligations, obligationScript } from "./obligations.ts";
 export {
   type Builtin,
   BUILTINS,
