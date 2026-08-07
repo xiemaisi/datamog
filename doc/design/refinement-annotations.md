@@ -4,8 +4,8 @@ Status: **all six phases implemented**.
 Refinements parse, the position erases, and a contract is checked against the
 derived tuples; spec §5.11 and walkthrough chapter 7 describe it.
 `--obligations` writes the obligations out as SMT-LIB 2 and `--verify` runs
-them through whatever solver `$DATAMOG_SMT_SOLVER` names (default `z3 -in`), so
-discharge never requires a particular solver and no solver is a dependency.
+them through the solver `--solver` names (default `z3 -in`), so discharge never
+requires a particular solver and no solver is a dependency.
 `--strict-contracts` promotes the vacuous-contract advisory to an error.
 
 A head position may be annotated with a *proposition* over the predicate's
@@ -582,9 +582,9 @@ neither ties the language to a prover.
 an SMT-LIB 2 script, and nothing that produces it may assume a particular
 solver. That is the whole of the corner-avoidance: the artifact is text, every
 solver reads it, and the choice moves to whoever runs it. `--verify` runs one,
-but by name: `$DATAMOG_SMT_SOLVER`, defaulting to `z3 -in`, spawned on the
-script. It also answers what this section previously left open, whether printed
-obligations have an independent user. Prose goals arguably do not; a `.smt2`
+but by name: `--solver`, defaulting to `z3 -in`, spawned on the script. It also
+answers what this section previously left open, whether printed obligations have
+an independent user. Prose goals arguably do not; a `.smt2`
 file does, since it can be piped to any solver or checked into CI.
 
 Weighing what a bundled solver would cost settles it. `z3-solver` unpacks to
@@ -1162,10 +1162,10 @@ noise.
 
 **As built**, in `cli/src/verify.ts`, behind `--verify`. A solver is run over
 phase 2's script rather than linked, keeping §11.2's no-required-dependency
-rule: the command comes from `$DATAMOG_SMT_SOLVER` and defaults to `z3 -in`, so
-cvc5 or anything else that reads SMT-LIB 2 on stdin is an environment variable
-away. A missing solver fails once, naming the variable, rather than once per
-obligation.
+rule: the command comes from `--solver` and defaults to `z3 -in`, so cvc5 or
+anything else that reads SMT-LIB 2 on stdin is one flag away. Passing `--solver`
+implies `--verify`, naming a solver being a request to run one. A missing solver
+fails once, naming the flag, rather than once per obligation.
 
 One solver call per obligation rather than one for the file. A single call is
 tempting, the script already being a sequence of `push`/`check-sat`/`pop`
@@ -1342,14 +1342,18 @@ Nothing here is blocking.
    `_: 1 <= N, _: N <= 1000000` to `size` is what takes
    `examples/binary-search` from nothing discharged to everything, and it is
    the same thing a proof about machine arithmetic needs in any language.
-9. **A refinement mentioning no head position is inert, and nothing says so.**
-   Open. `_: 0 <= 0` is a closed formula: true, but not a claim about the tuple,
-   so the rule contributes `True` to the disjunction and the predicate's whole
-   contract goes vacuous. This bit `examples/fibonacci`, whose base case was
-   written that way, and it is silent: the contract still checks, it just checks
-   nothing, and no consumer can assume anything. It is the same failure mode
-   §2.2's `inert-contract` warns about, arriving by a different route, and it
-   belongs in `contracts.ts` beside it.
+9. **A refinement mentioning no head position is inert.** Decided: warn, as
+   `constant-refinement`, from `contracts.ts` beside `inert-contract`, which
+   `--strict-contracts` promotes with the rest. `_: 0 <= 0` is a closed formula,
+   so it is the same proposition for every tuple and constrains none of them.
+   This bit `examples/fibonacci`, whose base case was written that way, and it
+   was silent: the contract still checked, it just checked nothing.
+
+   A warning rather than an error, because a closed refinement is not always
+   pointless. A false one, `_: false`, claims the rule never fires, which is a
+   real claim and the strongest a rule can make. Distinguishing the two means
+   deciding the formula, which is the obligation problem, so the diagnostic
+   reports what it can see and says what follows either way.
 
 ## Appendix: adjacent findings, all fixed
 

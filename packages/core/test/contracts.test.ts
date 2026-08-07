@@ -78,6 +78,35 @@ describe("the contract lowers to a constraint", () => {
   });
 });
 
+describe("a refinement that mentions no head position", () => {
+  const codes = (source: string) => findInertContracts(analyze(parse(source))).map((d) => d.code);
+
+  test("warns, being the same proposition for every tuple", () => {
+    // The route `examples/fibonacci` took: a base case annotated `_: 0 <= 0`
+    // is true, but not about the tuple, so the rule claims nothing and the
+    // predicate's whole contract goes vacuous.
+    expect(codes("p(1).\nr(X, _: 0 <= 0) :- p(X).")).toEqual(["constant-refinement"]);
+  });
+
+  test("names the claim, since a rule may carry several", () => {
+    const [diagnostic] = findInertContracts(
+      analyze(parse("p(1).\nr(X, _: X > 0, _: 2 > 1) :- p(X).")),
+    );
+    expect(diagnostic!.message).toContain("2 > 1");
+    expect(diagnostic!.message).not.toContain("X > 0");
+  });
+
+  test("does not fire on one that mentions a position", () => {
+    expect(codes("p(1).\nr(X, _: X > 0) :- p(X).")).toEqual([]);
+  });
+
+  test("does not fire on a literal position that has been named", () => {
+    // The fix: `0` is still a literal, but `Z` names its position, so the
+    // claim substitutes into a consumer's atom.
+    expect(codes("p(1).\nr(0 as Z, X, _: Z <= X) :- p(X).")).toEqual([]);
+  });
+});
+
 describe("inert contracts", () => {
   test("a partly annotated predicate warns", () => {
     const diagnostics = findInertContracts(

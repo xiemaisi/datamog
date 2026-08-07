@@ -110,6 +110,8 @@ function args, iteration sources, IDB column unification).
 - Checked at the fixed point, before any query, exactly as an integrity
   constraint is. `--obligations` writes the obligations out as SMT-LIB 2 and
   `--verify` discharges them with a solver you supply.
+- A refinement that mentions no head position is the same proposition for every
+  tuple, so it constrains none of them, and warns.
 - A rule may assume the contract of any predicate it calls positively, its own
   included, which is the induction hypothesis.
 
@@ -217,7 +219,8 @@ A file is a function: its `input predicate`s are parameters, its
 | `--max-iterations <n>` | cap fixed-point passes per stratum and stop with a note (`native`/`seminaive` only) |
 | `--strict-contracts`   | treat refinement-contract advisories as errors |
 | `--obligations`        | print refinement proof obligations as SMT-LIB 2 instead of evaluating |
-| `--verify`             | discharge them with an SMT solver (`$DATAMOG_SMT_SOLVER`, default `z3 -in`) |
+| `--verify`             | discharge them with an SMT solver |
+| `--solver <command>`   | the solver `--verify` runs (default `z3 -in`); implies `--verify` |
 | `--repl` / `--json`    | start the REPL (the default with no program); `--json` makes it emit ndjson events |
 
 The one positional argument after the program selects the output to evaluate:

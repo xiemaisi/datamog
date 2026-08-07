@@ -2188,9 +2188,13 @@ position does not satisfy the contract and is reported.
 Refinements never reach codegen beyond that check: no column is added and no
 tuple is altered.
 
-**Advisories.** The vacuous-contract report is a warning by default;
-`--strict-contracts` promotes every contract advisory to an error, and the CLI
-then exits non-zero without evaluating the program.
+**Advisories.** Two are reported, both warnings by default. The first is the
+vacuous contract above. The second is a refinement that mentions no head
+position: `_: 0 <= 0` is a closed formula, so it is the same proposition for
+every tuple and constrains none of them, and if it is true it takes the whole
+contract vacuous by the disjunction rule. `--strict-contracts` promotes every
+contract advisory to an error, and the CLI then exits non-zero without
+evaluating the program.
 
 **Proof obligations.** `--obligations` prints the contracts as an SMT-LIB 2
 script instead of evaluating: one `push` / `assert` / `check-sat` / `pop` block
@@ -2212,8 +2216,8 @@ of a tuple says nothing about values.
 **Discharging them.** `--verify` runs each obligation through an SMT solver and
 reports `proved`, `FAILED` with the assignment that falsifies the claim, or
 `skipped` for a claim outside the fragment above. The solver is named by
-`$DATAMOG_SMT_SOLVER` and defaults to `z3 -in`; anything that reads an SMT-LIB 2
-script on standard input will do. The exit status is non-zero unless every
+`--solver` and defaults to `z3 -in`; anything that reads an SMT-LIB 2 script on
+standard input will do. The exit status is non-zero unless every
 obligation is discharged.
 
 A contract that cannot be discharged is not thereby false. It may be a property
