@@ -40,7 +40,7 @@ import {
 import { ParseError, parseRaw, postProcess } from "datamog-parser";
 import { bigintSafeReplacer, formatCellAsString, prettifyProofRows } from "./output.ts";
 import { runRepl } from "./repl-driver.ts";
-import { reportVerdicts, verifyObligations } from "./verify.ts";
+import { DEFAULT_SOLVER, reportVerdicts, verifyObligations } from "./verify.ts";
 
 function usage(exitCode = 1): never {
   console.error("Usage: datamog [global options] <program.dl> [output] [--<input> <source>]...");
@@ -76,7 +76,10 @@ function usage(exitCode = 1): never {
   console.error("  --dry-run                  Print generated SQL without executing");
   console.error("  --obligations              Print refinement proof obligations as SMT-LIB 2");
   console.error("  --verify                   Discharge those obligations with an SMT solver");
-  console.error("                             ($DATAMOG_SMT_SOLVER, default `z3 -in`)");
+  console.error(
+    `  --solver <command>         Solver to run for --verify (default \`${DEFAULT_SOLVER}\`);`,
+  );
+  console.error("                             any SMT-LIB 2 solver reading a script on stdin");
   console.error("  --strict-contracts         Treat refinement-contract advisories as errors");
   console.error("  --warn-finiteness          Print a warning for each predicate column whose");
   console.error("                             values may grow unboundedly across iterations");
@@ -642,6 +645,7 @@ async function main() {
   let strictContracts = false;
   let obligations = false;
   let verify = false;
+  let solver = DEFAULT_SOLVER;
   let allOutputs = false;
   let backendOverride: BackendName | undefined;
   let outputFormat: OutputFormat = "table";
@@ -668,7 +672,12 @@ async function main() {
     else if (arg === "--strict-contracts") strictContracts = true;
     else if (arg === "--obligations") obligations = true;
     else if (arg === "--verify") verify = true;
-    else if (arg === "--all") allOutputs = true;
+    // Naming a solver is asking for one to run, so it implies --verify rather
+    // than being silently ignored without it.
+    else if (arg === "--solver") {
+      solver = requireValue(args, ++i, "--solver");
+      verify = true;
+    } else if (arg === "--all") allOutputs = true;
     else if (arg === "--repl") replMode = true;
     else if (arg === "--json") jsonMode = true;
     else if (arg === "--input")
@@ -862,7 +871,7 @@ async function main() {
     return;
   }
   if (verify) {
-    if (!reportVerdicts(await verifyObligations(generateObligations(analyzed)))) {
+    if (!reportVerdicts(await verifyObligations(generateObligations(analyzed), solver))) {
       process.exitCode = 1;
     }
     return;

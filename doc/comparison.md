@@ -381,7 +381,7 @@ refinement annotations, where a head position carries a proposition rather than
 a type. But it bundles no solver: a refinement is *checked* against the tuples a
 predicate derived, and proving it for all inputs means supplying one.
 `--obligations` writes the proof obligations out as SMT-LIB and `--verify` runs
-them through whatever `$DATAMOG_SMT_SOLVER` names. It also has no ML-style
+them through the solver `--solver` names. It also has no ML-style
 functional sublanguage; its datatypes also desugar to the dynamically-shaped
 `value` type rather than Formulog's statically-typed ADTs.
 

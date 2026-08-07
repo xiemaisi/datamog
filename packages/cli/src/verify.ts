@@ -1,14 +1,14 @@
 // Discharge refinement obligations with an SMT solver.
 //
 // Phase 4 of doc/design/refinement-annotations.md. The obligations are
-// SMT-LIB 2 text (see core's `obligations.ts`), so this shells out to whatever
-// solver is on PATH rather than linking one in: no dependency, and swapping z3
-// for cvc5 is an environment variable.
+// SMT-LIB 2 text (see core's `obligations.ts`), so this shells out to a solver
+// named on the command line rather than linking one in: no dependency, and
+// swapping z3 for cvc5 is `--solver`.
 
 import type { Obligation } from "datamog-core";
 
-/** Overridable so the solver is not baked in. */
-const DEFAULT_SOLVER = "z3 -in";
+/** Overridable with `--solver` so no particular solver is baked in. */
+export const DEFAULT_SOLVER = "z3 -in";
 
 export interface Verdict {
   obligation: Obligation;
@@ -43,7 +43,7 @@ async function runSolver(command: string[], script: string): Promise<string> {
  */
 export async function verifyObligations(
   obligations: Obligation[],
-  solver = process.env.DATAMOG_SMT_SOLVER ?? DEFAULT_SOLVER,
+  solver = DEFAULT_SOLVER,
 ): Promise<Verdict[]> {
   const command = solver.split(/\s+/);
   const verdicts: Verdict[] = [];
@@ -69,7 +69,7 @@ export async function verifyObligations(
     // failed rather than the claim. Fail once.
     const output = await runSolver(command, script).catch((e: Error) => {
       throw new Error(
-        `could not run \`${command.join(" ")}\`: ${e.message}. Set DATAMOG_SMT_SOLVER to an SMT-LIB 2 solver that reads a script on stdin.`,
+        `could not run \`${command.join(" ")}\`: ${e.message}. Pass --solver with an SMT-LIB 2 solver that reads a script on stdin.`,
       );
     });
     const lines = output.split("\n").filter((l) => l.trim() !== "");

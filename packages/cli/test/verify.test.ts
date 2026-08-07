@@ -4,9 +4,9 @@
 import { describe, expect, test } from "bun:test";
 import { analyze, generateObligations, inferTypes } from "datamog-core";
 import { parse } from "datamog-parser";
-import { verifyObligations } from "../src/verify.ts";
+import { DEFAULT_SOLVER, verifyObligations } from "../src/verify.ts";
 
-const solver = (process.env.DATAMOG_SMT_SOLVER ?? "z3 -in").split(/\s+/)[0]!;
+const solver = DEFAULT_SOLVER.split(/\s+/)[0]!;
 const withSolver = Bun.which(solver) ? describe : describe.skip;
 
 const verify = (source: string) =>
@@ -45,7 +45,7 @@ withSolver(`with ${solver}`, () => {
     const program = "p(1, 2).\nr(X, Y, _: Y > X) :- p(X, Y).";
     const obligations = generateObligations(inferTypes(analyze(parse(program))));
     await expect(verifyObligations(obligations, "datamog-no-such-solver")).rejects.toThrow(
-      /DATAMOG_SMT_SOLVER/,
+      /--solver/,
     );
   });
 });

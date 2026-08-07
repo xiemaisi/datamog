@@ -48,7 +48,8 @@ before the program configures the run; everything after belongs to the program.
 | `--csv-no-header` | treat CSV inputs as having no header row |
 | `--strict-contracts` | treat refinement-contract advisories as errors (see `refinement-annotations.md`) |
 | `--obligations` | print the refinement proof obligations as SMT-LIB 2 instead of evaluating |
-| `--verify` | discharge those obligations with the solver named by `$DATAMOG_SMT_SOLVER` (default `z3 -in`) |
+| `--verify` | discharge those obligations with an SMT solver |
+| `--solver <command>` | the solver `--verify` runs (default `z3 -in`); passing it implies `--verify` |
 | `--repl`, `--json` | start the REPL (the default with no program); `--json` emits ndjson events |
 | `--help`, `-h` | usage |
 

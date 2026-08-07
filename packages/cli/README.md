@@ -120,7 +120,8 @@ The one positional argument after the program picks which output to evaluate: an
 | `--csv-no-header` | CSV files have no header row (columns are matched by position) |
 | `--dry-run` | Print generated SQL without executing |
 | `--obligations` | Print the refinement proof obligations as SMT-LIB 2 instead of evaluating |
-| `--verify` | Discharge those obligations with an SMT solver (`$DATAMOG_SMT_SOLVER`, default `z3 -in`) |
+| `--verify` | Discharge those obligations with an SMT solver |
+| `--solver <command>` | Solver to run for `--verify` (default `z3 -in`); implies `--verify` |
 | `--strict-contracts` | Treat refinement-contract advisories as errors |
 | `--warn-finiteness` | Print a warning for each predicate column whose values may grow unboundedly across iterations |
 | `--max-iterations <n>` | Cap fixed-point passes per stratum and stop with a note instead of looping (native/seminaive only) |
