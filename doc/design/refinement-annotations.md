@@ -53,8 +53,9 @@ Decisions taken (see §2.1, §4, §5 for what each entails):
 
 ## Review findings
 
-The contract idea survives review. Seven issues came out of the first pass. Most
-have answers in the body; the unresolved parts are collected below.
+The contract idea survives review. Seven issues came out of two passes, five from
+the first and two more from a re-read of what the first left standing. Most have
+answers in the body; the unresolved part is collected below.
 
 - **The erased witness does not fit `argTypes`.** That array aligns with runtime
   head arguments; a witness is a syntactic position that erases entirely, so
@@ -114,10 +115,11 @@ That is the whole soundness argument for erasure, and it is worth stating
 carefully because the failure it rules out is real. Datamog relations are sets,
 so a witness that *varied* between derivations would make `p(1, 2, w₁)` and
 `p(1, 2, w₂)` two tuples, which erasure collapses into one, changing every
-`count` downstream. That is exactly what §8 proof terms do: §8.2 makes two
-distinct derivations of one fact into two rows, which is why they are observable
-data and not erasable. A refinement witness does not vary, so a column holding it
-would be constant-valued, and dropping a constant column changes no cardinality.
+`count` downstream. That is exactly what spec §8's proof terms do: spec §8.2
+makes two distinct derivations of one fact into two rows, which is why they are
+observable data and not erasable. A refinement witness does not vary, so a column
+holding it would be constant-valued, and dropping a constant column changes no
+cardinality.
 
 **So the constraint to hold on to is that the annotation language stays
 proof-irrelevant.** No connective may make a witness observable. An existential
@@ -311,9 +313,16 @@ trusted.
 |---|---|
 | Positive atom of an annotated predicate | Its contract, instantiated at the atom's arguments |
 | Positive atom of an unannotated or input predicate | Nothing |
-| Negated atom | Nothing (mirrors §8.2, where negations contribute no witness) |
+| Negated atom | Nothing (mirrors spec §8.2, where negations contribute no witness) |
 | Comparison, equality, arithmetic | Itself |
 | Range atom `X in a..b` | `a ≤ X ∧ X ≤ b` |
+| A named head position (§2.3) | `name = ` the head expression it names |
+
+The last row is easy to miss and §4.2 depends on it. A name is not a body
+variable and §2.3 introduces no body equality, so without this row nothing
+connects `K` to `I + 1` and an obligation mentioning `K` would have no
+hypothesis at all. It is definitional rather than derived: the position *is*
+that expression.
 
 The atoms themselves contribute no relation symbol to the query. Only their
 contracts matter, which is what keeps tier 1 inside a decidable theory (§4.1) and
@@ -445,8 +454,10 @@ R1:  K = I + 1                    ⊢  I < K
 R2:  (I < J)  ∧  (J < K)          ⊢  I < K
 ```
 
-R1's hypothesis is the body equality; `token` and `lexicon` are input
-predicates and contribute nothing. R2's two hypotheses are the contract of
+R1's hypothesis is the definition of the named position (§3.3's last row), not
+a body equality: `as K` rewrites nothing, so `K = I + 1` holds because position
+3 is that expression. `token` and `lexicon` are input predicates and contribute
+nothing. R2's two hypotheses are the contract of
 `span` instantiated at each recursive atom, which is the induction hypothesis of
 §3.2. Both are valid in linear integer arithmetic and discharge with no
 interaction.
@@ -969,8 +980,10 @@ decide whether printed obligations have an independent user. If not, this phase
 belongs in the first slice. Wire a solver behind `--check-refinements`, at which
 point `cyk-parser` (§4.2) discharges and §4.3's variant fails with a message naming
 the rule and the unprovable formula. Only at this point may a consumer rely on a
-contract, so §5's payoff and the `--strict-contracts` flag of §2.2 land here
-rather than earlier.
+contract, so §5's payoff lands here rather than earlier. `--strict-contracts`
+(§2.2, §11.4) can land with phase 1 instead, since the warning it promotes
+exists from then on and promoting it does not depend on anything being
+discharged.
 
 ### Phase 4: documentation
 
