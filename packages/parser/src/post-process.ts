@@ -34,6 +34,7 @@ import {
 } from "./generated/ast.js";
 import { substituteHeadNames } from "./head-names.ts";
 import { ParseError } from "./parse-error.js";
+import { extractRefinements, synthesiseContractChecks } from "./refinements.ts";
 
 // Post-processing attaches the original source text of numeric literals on
 // `rawText` so the translator can distinguish `1` from `1.0`. Declaration
@@ -334,9 +335,20 @@ export function liftHeadAnnotations(program: Program): void {
     let annotated = false;
     const argTypes: (HeadAnnotation | undefined)[] = new Array(args.length).fill(undefined);
     const named = new Map<string, Expression>();
+    // Kept per position so `extractRefinements` can see what each wrapper held
+    // after the wrappers themselves are gone.
+    const annotations: { refinement?: Expression; name?: string; wasDontCare: boolean }[] = [];
     for (let i = 0; i < args.length; i++) {
       const arg = args[i]!;
-      if (!isAnnotatedHeadTerm(arg)) continue;
+      if (!isAnnotatedHeadTerm(arg)) {
+        annotations[i] = { wasDontCare: isVariable(arg) && arg.name === "_" };
+        continue;
+      }
+      annotations[i] = {
+        refinement: arg.refinement,
+        name: arg.name,
+        wasDontCare: isVariable(arg.expr) && arg.expr.name === "_",
+      };
       // A wrapper may carry a name, a type, or both. Only a type marks the
       // position annotated; a name is substituted away below and leaves no
       // trace for `checkHeadAnnotations` to check.
@@ -356,6 +368,8 @@ export function liftHeadAnnotations(program: Program): void {
         named.set(arg.name, inner);
       }
     }
+    // Before substitution, which erases the name-to-position link.
+    extractRefinements(stmt.head, annotations, parseErrorAtNode);
     if (named.size > 0) substituteHeadNames(stmt, named, parseErrorAtNode);
     if (annotated) {
       (stmt.head as { argTypes?: (HeadAnnotation | undefined)[] }).argTypes = argTypes;
@@ -390,6 +404,10 @@ export function normalizeOperatorAliases(program: Program): void {
 }
 
 export function postProcess(program: Program): void {
+  // Before anything else walks the tree: a contract check is an ordinary `!-`
+  // once synthesised, so it must be in place for the passes below to treat it
+  // like one (don't-care desugaring, literal tagging, alias rewriting).
+  synthesiseContractChecks(program);
   for (const node of streamAll(program)) {
     if (isExtDecl(node)) {
       node.predicateQuoted = isQuotedIdentifier(node.predicate);

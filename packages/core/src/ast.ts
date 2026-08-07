@@ -13,6 +13,7 @@ import type {
   HeadAtom as ParserHeadAtom,
   Query as ParserQuery,
   Rule as ParserRule,
+  Refinement,
   Slice,
   StringLiteral,
   Subscript,
@@ -96,6 +97,9 @@ export type HeadTerm = AggregateCall | Expression;
 export type HeadAtom = Omit<ParserHeadAtom, "args"> & {
   args: HeadTerm[];
   argTypes?: (HeadAnnotation | undefined)[];
+  /** Refinement contracts this rule claims, in its own position names. The
+   *  parser strips their positions, so they never correspond to a column. */
+  refinements?: Refinement[];
 };
 export type Rule = Omit<ParserRule, "head"> & { head: HeadAtom };
 

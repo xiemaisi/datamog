@@ -870,26 +870,48 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                         "value": ":"
                       },
                       {
-                        "$type": "Assignment",
-                        "feature": "type",
-                        "operator": "=",
-                        "terminal": {
-                          "$type": "RuleCall",
-                          "rule": {
-                            "$ref": "#/rules@6"
+                        "$type": "Alternatives",
+                        "elements": [
+                          {
+                            "$type": "Group",
+                            "elements": [
+                              {
+                                "$type": "Assignment",
+                                "feature": "type",
+                                "operator": "=",
+                                "terminal": {
+                                  "$type": "RuleCall",
+                                  "rule": {
+                                    "$ref": "#/rules@6"
+                                  },
+                                  "arguments": []
+                                }
+                              },
+                              {
+                                "$type": "Assignment",
+                                "feature": "nullable",
+                                "operator": "?=",
+                                "terminal": {
+                                  "$type": "Keyword",
+                                  "value": "?"
+                                },
+                                "cardinality": "?"
+                              }
+                            ]
                           },
-                          "arguments": []
-                        }
-                      },
-                      {
-                        "$type": "Assignment",
-                        "feature": "nullable",
-                        "operator": "?=",
-                        "terminal": {
-                          "$type": "Keyword",
-                          "value": "?"
-                        },
-                        "cardinality": "?"
+                          {
+                            "$type": "Assignment",
+                            "feature": "refinement",
+                            "operator": "=",
+                            "terminal": {
+                              "$type": "RuleCall",
+                              "rule": {
+                                "$ref": "#/rules@17"
+                              },
+                              "arguments": []
+                            }
+                          }
+                        ]
                       }
                     ]
                   }

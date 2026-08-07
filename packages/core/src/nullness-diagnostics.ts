@@ -47,6 +47,11 @@ export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
   const orderings: OrderingUse[] = [];
 
   for (const owner of owners) {
+    // A synthesised statement is not something the user can act on. The
+    // contract check `refinements.ts` emits trips the negated-ordering warning
+    // by construction, since it negates the contract and integer arithmetic
+    // makes a computed column nullable.
+    if ((owner as { synthetic?: boolean }).synthetic) continue;
     const nonNull = typed.nullness.nonNullVars.get(owner.body) ?? new Set<string>();
     for (const elem of owner.body) {
       if (elem.$type !== "Filter") continue;

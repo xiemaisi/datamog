@@ -110,10 +110,14 @@ HeadAtom:
 // expression, so downstream stages still see a plain head term. Aggregate
 // calls (`count(X)`, `sum(X)`, ...) are syntactically FunctionCalls here;
 // post-processing rewrites those into AggregateCall.
+// A `_` position may instead carry a *refinement*: a proposition over the
+// other head positions, whose witness is erased. `PrimitiveType` is a keyword
+// set that `Identifier` does not re-admit, so `: integer` and `: Y > X` cannot
+// be confused. See doc/design/refinement-annotations.md.
 HeadTerm:
     Expression ({infer AnnotatedHeadTerm.expr=current}
         ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
-        | ':' type=PrimitiveType (nullable?='?')?))?;
+        | ':' (type=PrimitiveType (nullable?='?')? | refinement=Expression)))?;
 
 // Not referenced directly by the grammar — synthesised by post-processing
 // so downstream stages (analyzer, translator) can rely on the AggregateCall

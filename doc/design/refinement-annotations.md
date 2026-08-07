@@ -1,11 +1,10 @@
 # Design notes: refinement annotations on rule heads
 
-Status: proposal, unblocked, nothing implemented and nothing in the spec. Every
-review finding is answered in the body, including the last one: the first slice
-is dynamic checking (§4.5, phase 3), which needs no prover, and obligations are
-emitted as SMT-LIB so that static discharge never requires one either. The
-runtime prerequisite it did depend on, the portable integer domain, is
-implemented.
+Status: **first slice implemented** (phases 0, 1 and 3), not yet in the spec.
+Refinements parse, the position erases, and a contract is checked against the
+derived tuples. Static discharge (phases 2 and 4) is designed and unbuilt;
+obligations will be emitted as SMT-LIB so it never requires a particular
+solver.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -1007,22 +1006,22 @@ implementation slice.
 
 ## 10 Implementation plan
 
-### Phase 0: surface and validation
+### Phase 0: surface and validation — built
 
 Widen the `AnnotatedHeadTerm` slot to admit a condition and extract it in
 `liftHeadAnnotations` (`parser/src/post-process.ts`) before head-name substitution
 erases positional aliases. Store it as rule-level contract metadata, not in
 `argTypes`: that array has one record per runtime argument, while the witness is a
 syntactic position that disappears. Keep several witnesses as a source-ordered
-list, conjoin them as the rule's contract, and generate one obligation per source
-formula so a failure points at the exact annotation. Validate that each formula
+list and conjoin them as the rule's contract, keeping the source claims separate
+so a report names the exact annotation that failed. Validate that each formula
 mentions only named head positions and is inside §4.1's fragment. No solver, and
 nothing here may assume one.
 
 Test: goldens for the parsed contract, plus one rejection test per §4.1
 exclusion.
 
-### Phase 1: contracts
+### Phase 1: contracts — built
 
 Compute `Φ_p` per predicate by disjunction over rules with position abstraction
 (§2.1), using the alias-to-position mapping captured before head-name lowering.
@@ -1042,7 +1041,7 @@ and by running any solver that happens to be installed.
 
 Independent of phase 4, since a `.smt2` file is usable on its own.
 
-### Phase 3: dynamic checking
+### Phase 3: dynamic checking — built
 
 The smallest slice that makes an annotation do something. Assemble `Φ_p` from
 phase 1, emit it as a check over `p`'s extension, and route violations through
@@ -1055,6 +1054,25 @@ induction are all irrelevant to this mode.
 Test: a contract that holds passes silently; one that does not names the
 predicate, the annotation and the tuple. A predicate with an unannotated sibling
 checks nothing, since `Φ_p` is `True` (§2.1), and warns (§2.2).
+
+**As built**, in `parser/src/refinements.ts`. Three notes.
+
+The lowering is the whole implementation: a contract becomes a synthesised
+`!- p(Col1, .., Coln), !(Φ_p).`, so the translator, both interpreters and the
+violation reporting are untouched. Nothing after parsing knows refinements
+exist.
+
+Where the contract splits, it is split, so a violation names the claim that
+failed rather than the first one. A single rule's contract is a conjunction and
+`!- p(..), !(a && b).` is exactly `!- p(..), !a.` plus `!- p(..), !b.`, so one
+check per refinement is emitted. Several rules disjoin, which does not split, so
+they share one.
+
+A synthesised statement is marked `synthetic` and diagnostics skip it. Without
+that, the check trips the negated-ordering warning by construction, since it
+negates the contract and integer arithmetic makes a computed column nullable
+(`nullness-tracking.md`). Warning about a statement the user cannot edit is
+noise.
 
 ### Phase 4: static discharge, deferred
 

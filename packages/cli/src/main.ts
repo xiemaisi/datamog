@@ -7,6 +7,7 @@ import {
   analyze,
   checkModuleBoundaries,
   elaborate,
+  findInertContracts,
   findInertPolarity,
   findInfiniteRisks,
   findNullnessRisks,
@@ -580,6 +581,11 @@ function emitFinitenessWarnings(analyzed: Parameters<typeof findInfiniteRisks>[0
 // silently does nothing. See doc/design/parity-stratification.md §11.
 function emitPolarityWarnings(analyzed: Parameters<typeof findInertPolarity>[0]): void {
   for (const d of findInertPolarity(analyzed)) {
+    console.error(`warning: ${d.message}`);
+  }
+  // Same shape and the same reason: an annotation that reads as a claim but
+  // checks nothing.
+  for (const d of findInertContracts(analyzed)) {
     console.error(`warning: ${d.message}`);
   }
 }

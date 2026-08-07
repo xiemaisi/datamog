@@ -84,6 +84,7 @@ export type BinaryOp =
   | "="
   | "<>";
 
+export type { Refinement } from "./refinements.ts";
 export {
   defaultColumnTypes,
   type HeadAnnotation,

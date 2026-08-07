@@ -60,6 +60,7 @@ export {
   isBuiltinBodyAtom,
   queryProjection,
 } from "./analyzer.ts";
+export { type ContractDiagnostic, findInertContracts } from "./contracts.ts";
 export {
   type Builtin,
   BUILTINS,
