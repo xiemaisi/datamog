@@ -15,7 +15,10 @@ concurrency:
 
 env:
   BUN_VERSION: 1.3.11
+  # Two databases, because both Postgres suites drop and recreate `public` and
+  # would trash each other if `bun test` ever stopped running files serially.
   DATABASE_URL: postgres://postgres:postgres@localhost:5432/datamog_test
+  DATAMOG_EXAMPLES_DATABASE_URL: postgres://postgres:postgres@localhost:5432/datamog_examples
 
 jobs:
   postgres:
@@ -47,4 +50,15 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun test packages/backend/postgres/test/postgres.test.ts
+      # The service container creates only `POSTGRES_DB`. `psql` is preinstalled
+      # on the GitHub-hosted Ubuntu images.
+      - name: Create the examples database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d datamog_test -c 'CREATE DATABASE datamog_examples'
+
+      # The whole suite, not just the Postgres backend's own file. Both
+      # `DATABASE_URL`-gated blocks then run, and a new one is covered without
+      # anyone remembering to add it here; that drift is why the examples suite,
+      # which is the cross-backend differential one, went unrun in CI for so long.
+      - run: bun run test

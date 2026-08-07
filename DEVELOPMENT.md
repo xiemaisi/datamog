@@ -181,6 +181,11 @@ Generated slide PDFs are written under `doc/walkthrough/slides/pdf`.
 
 - `DATABASE_URL`: selects and configures the Postgres backend for the CLI and
   enables Postgres backend tests.
+- `DATAMOG_EXAMPLES_DATABASE_URL`: optional second database for the examples
+  suite, so it does not share one with the Postgres backend tests. Both drop and
+  recreate `public`, which only makes them safe neighbours while `bun test` runs
+  files serially. Unset, the examples suite falls back to `DATABASE_URL`, which
+  is what the devcontainer does.
 - `GOOGLE_API_KEY`: lets the CLI load private Google Sheets through the Google
   Sheets loader.
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`: alternative Google

@@ -243,13 +243,21 @@ describe.skipIf(!process.env.DATABASE_URL)("examples (postgres backend)", () => 
   // sharing it would break whichever suite `bun test` happens to run second.
   let sql: typeof Bun.sql;
 
+  // Both Postgres suites drop and recreate `public`, so pointing them at one
+  // database is only safe while `bun test` runs files serially in a single
+  // process. `DATAMOG_EXAMPLES_DATABASE_URL` gives this suite a database of its
+  // own where one is provisioned (CI does); without it the two share, which is
+  // the convenient default for a local devcontainer.
+  // Non-null by the `skipIf` above: this block only runs with `DATABASE_URL` set.
+  const databaseUrl = process.env.DATAMOG_EXAMPLES_DATABASE_URL ?? process.env.DATABASE_URL!;
+
   async function resetSchema(): Promise<void> {
     await sql`DROP SCHEMA IF EXISTS public CASCADE`;
     await sql`CREATE SCHEMA public`;
   }
 
   beforeAll(async () => {
-    sql = new Bun.SQL(process.env.DATABASE_URL);
+    sql = new Bun.SQL(databaseUrl);
     backend = await createPostgres(sql);
   });
 
