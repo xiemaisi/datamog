@@ -23,6 +23,6 @@ implemented without the structure it proposes.
 | [`functional-sublanguage.md`](./functional-sublanguage.md) | proposal, nothing implemented; boundary decisions settled, datatype half deferred | Recursive functions over `value` and a conditional expression, so a computation can be named over an argument the caller supplies |
 | [`value-construction.md`](./value-construction.md) | proposal; ordered aggregate ready, computed keys to be split out | Ordered aggregates and computed object keys for constructing data-dependent `value` shapes |
 | [`head-arguments.md`](./head-arguments.md) | implemented | Aggregates inside head expressions, and naming a head position so something else can refer to it |
-| [`refinement-annotations.md`](./refinement-annotations.md) | proposal, nothing implemented; design blockers remain | A head position typed by a proposition rather than a primitive type, so the witness is erasable and each rule owes a proof obligation |
+| [`refinement-annotations.md`](./refinement-annotations.md) | proposal, unblocked, nothing implemented | A head position typed by a proposition rather than a primitive type, so the witness is erasable and each rule owes a proof obligation |
 | [`nullness-tracking.md`](./nullness-tracking.md) | implemented, one stage declined | A nullness bit beside the base type, inferred per column and refined per rule from the guards that imply non-nullness |
 | [`imports.md`](./imports.md) | not adopted, not planned | The conventional module system, kept because it is the road not taken |
