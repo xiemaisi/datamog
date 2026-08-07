@@ -49,7 +49,44 @@ bun run datamog \
 
 # Preview generated SQL without executing
 bun run datamog --dry-run program.dl
+
+# Prove the refinement contracts rather than checking them against the data
+bun run datamog --verify program.dl
 ```
+
+## Proving contracts
+
+A refinement contract (`span(X, Y, _: Y > X)`) is checked against the tuples a
+predicate derives. `--verify` proves it instead, for every input rather than the
+data at hand, by handing each obligation to an SMT solver.
+
+No solver ships with Datamog and none is a dependency: the obligations are
+SMT-LIB 2 text, which any solver reads. Install one to use `--verify`:
+
+```bash
+brew install z3         # macOS
+apt-get install z3      # Debian/Ubuntu
+```
+
+The default command is `z3 -in`. Anything that reads an SMT-LIB 2 script on
+standard input works, named with `--solver`:
+
+```bash
+bun run datamog --solver "cvc5 --lang smt2" program.dl
+```
+
+Each obligation is reported as `proved`, `FAILED` with the assignment that
+falsifies the claim, or `skipped` where the claim is outside the solver
+fragment (which is linear integer arithmetic, so a `float`, `string` or `value`
+position cannot be proved about). The exit status is non-zero unless every
+obligation is discharged. Use `--obligations` to print the script instead of
+running it.
+
+A contract that will not discharge is not thereby false. It may be a property of
+the data rather than a theorem, or it may need a bound the program has not
+stated: integer arithmetic is NULL on overflow, so an ordering over a computed
+column is provable only where the inputs are bounded. The counterexample is
+usually the missing precondition.
 
 ## Loading data
 

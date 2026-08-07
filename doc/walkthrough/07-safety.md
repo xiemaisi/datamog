@@ -291,17 +291,56 @@ r(X, Y) :- q(X, Y).             # claims nothing, so `r` claims nothing
 
 Nothing goes wrong, which is exactly the problem, so Datamog warns
 rather than letting the annotation sit there looking like a guarantee.
-Annotate the rest, or drop the annotation. Run with
-`--strict-contracts` to make that warning fatal, `--obligations` to
-print the contracts as an SMT-LIB script instead of evaluating the
-program, and `--verify` to run those through a solver you supply.
+Annotate the rest, or drop the annotation. A refinement that mentions
+no head position warns for the same reason: `_: 0 <= 0` is true of
+every tuple, so it constrains none of them. `--strict-contracts` makes
+both warnings fatal.
+
+### Proving a contract instead of checking it
+
+A contract is checked against the tuples a predicate derived. To know
+it holds for *every* input, hand it to a solver:
+
+```bash
+brew install z3                       # or apt-get install z3
+datamog --verify binary-search.dl
+```
+
+```
+proved   size rule 1: 1 <= N
+proved   size rule 1: N <= 1000000
+proved   probe rule 1: 0 <= L0
+...
+14/14 discharged.
+```
+
+No solver ships with Datamog. The obligations are SMT-LIB 2 text, so
+any solver reads them: `--solver` names the command (default `z3 -in`)
+and `--obligations` prints the script instead of running it.
+
+A rule may assume the contract of every predicate it calls positively,
+its own included. (A negated call assumes nothing: a tuple's absence
+says nothing about values.) That last one is the induction hypothesis, and it is what
+lets a recursive predicate's invariant be proved at all: the induction
+is on the derivation, so a tuple comes from some rule applied to tuples
+derived earlier, which already satisfy the contract.
 
 Proving is not the same as checking, and most contracts worth writing
 are checkable long before they are provable. A claim can be a property
 of the data rather than a theorem, and arithmetic that can overflow is
 provable only where the inputs are bounded. `--verify` prints the
 assignment that falsifies a claim it cannot discharge, which is usually
-the precondition you forgot to state.
+the precondition you forgot to state:
+
+```
+FAILED   probe rule 1: M <= H
+         ((M (- 1)) (M$null false) (H (- 2)) (H$null false) (N (- 1)) ...)
+```
+
+An array of size -1. Saying `size(7 as N, _: 1 <= N)` is what fixes it,
+and the fix is a refinement too. See
+[`examples/binary-search`](../../packages/cli/examples/binary-search/binary-search.dl),
+whose loop invariant discharges in full.
 
 You could write the same check by hand as
 `!- slot(_, S, E), S >= E.`, and for a one-off that is fine. What the
@@ -384,6 +423,12 @@ the first place.
   derived tuples and the position erases. A predicate's contract is
   the disjunction over its rules, so one unannotated sibling makes it
   vacuous, and that is warned about.
+- `--verify` **proves** a contract instead, for every input rather
+  than the data at hand, by handing each obligation to an SMT solver
+  you install. A rule may assume the contract of every predicate it
+  calls positively, its own included, which is the induction
+  hypothesis. What will not discharge is usually missing a
+  precondition, and the counterexample names it.
 - Both checks run *before* any SQL is emitted. Programs that
   pass them are guaranteed to have finite, well-typed SQL behind
   them; programs that don't are rejected with a line-numbered

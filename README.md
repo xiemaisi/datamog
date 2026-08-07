@@ -66,7 +66,9 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
   or a rule head when you want to pin one down, including whether it may be
   NULL. A head position can carry a *proposition* rather than a type
   (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
-  derives and costs nothing at runtime otherwise.
+  derives and costs nothing at runtime otherwise. With an SMT solver installed,
+  `--verify` proves it instead, for all inputs rather than the data at hand.
+  See [Contracts and refinements](doc/walkthrough/07-safety.md).
 - **Integrity constraints.** Declare a conjunction that must have no solutions
   (`!- p(X), not q(X).`) and its tuples become the counterexamples, reported
   before any query runs. See the [language spec](doc/spec.md).
