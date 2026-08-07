@@ -6,6 +6,7 @@ import { SqliteSqlDialect } from "datamog-backend-sqlite/dialect";
 import { sqljsBackendForDatabase } from "datamog-backend-sqljs";
 import {
   AnalyzerError,
+  findInertContracts,
   findInertPolarity,
   findInfiniteRisks,
   findNullnessRisks,
@@ -420,6 +421,13 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             : undefined,
         })),
         ...findNullnessRisks(typed).map((d) => ({
+          message: d.message,
+          from: d.offset,
+          to: d.end,
+          severity: "warning" as const,
+          cycle: undefined,
+        })),
+        ...findInertContracts(typed).map((d) => ({
           message: d.message,
           from: d.offset,
           to: d.end,

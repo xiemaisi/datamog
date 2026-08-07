@@ -1,10 +1,11 @@
 # Design notes: refinement annotations on rule heads
 
-Status: **first slice implemented** (phases 0, 1 and 3), not yet in the spec.
+Status: **first slice implemented and documented** (phases 0, 1, 3 and 5).
 Refinements parse, the position erases, and a contract is checked against the
-derived tuples. Static discharge (phases 2 and 4) is designed and unbuilt;
-obligations will be emitted as SMT-LIB so it never requires a particular
-solver.
+derived tuples; spec §5.11 and walkthrough chapter 7 describe it. Static
+discharge (phases 2 and 4) is designed and unbuilt; obligations will be emitted
+as SMT-LIB so it never requires a particular solver. One decided item is also
+unbuilt: `--strict-contracts` (§2.2, §11.4).
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -1087,10 +1088,12 @@ what §5's module-interface story waits for. `--strict-contracts`
 exists from then on and promoting it does not depend on anything being
 discharged.
 
-### Phase 5: documentation
+### Phase 5: documentation — built
 
-Spec §5.10 gains the refinement form; walkthrough coverage; one example under
-`packages/cli/examples/`.
+Spec §5.11 gains the refinement form, placed after head type annotations rather
+than before so the existing references to §5.10 keep resolving. Walkthrough
+chapter 7 covers it beside the type system, since a refinement occupies the slot
+a type would. `examples/refinements` is the worked program.
 
 ## 11 Decisions and residuals
 

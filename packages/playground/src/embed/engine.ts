@@ -11,6 +11,7 @@ import {
 import { create as createSeminaive } from "datamog-backend-seminaive";
 import {
   AnalyzerError,
+  findInertContracts,
   findInertPolarity,
   findInfiniteRisks,
   findNullnessRisks,
@@ -59,6 +60,7 @@ export function lintSource(source: string): EmbedLintResult {
       ...findInertPolarity(typed),
       ...findInfiniteRisks(typed),
       ...findNullnessRisks(typed),
+      ...findInertContracts(typed),
     ].map((d) => ({
       from: d.offset ?? 0,
       to: d.end ?? source.length,
