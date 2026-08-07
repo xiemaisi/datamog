@@ -1,9 +1,11 @@
 # Design notes: refinement annotations on rule heads
 
-Status: proposal, one review blocker remains. Refinement annotations are not
-implemented or in the spec. The soundness findings, witness multiplicity, and
-portable integer domain are addressed in the body, and the runtime implements
-that integer domain. The first refinement implementation slice remains unsettled.
+Status: proposal, unblocked, nothing implemented and nothing in the spec. Every
+review finding is answered in the body, including the last one: the first slice
+is dynamic checking (§4.5, phase 3), which needs no prover, and obligations are
+emitted as SMT-LIB so that static discharge never requires one either. The
+runtime prerequisite it did depend on, the portable integer domain, is
+implemented.
 
 A head position may be annotated with a *proposition* over the predicate's
 earlier arguments rather than with a primitive type. The position's inhabitant
@@ -47,9 +49,10 @@ Decisions taken (see §2.1, §4, §5 for what each entails):
   predicates) is designed in §7, not built.
 - Once discharged, **consumers may assume a contract**. Contracts add no codegen;
   §4.1's safe-integer runtime prerequisite is implemented.
-- The staged plan currently defers discharge (§4.5), but follow-up review leaves
-  that first-slice decision open. A generator-only slice would not deliver the
-  payoff above.
+- A contract is **checked dynamically or proved statically** (§4.5). Dynamic
+  checking is the first slice and needs no prover; static discharge emits
+  SMT-LIB and runs whatever solver you have. Mixing them is sound per predicate.
+  No solver is ever a required dependency (§11.2).
 
 ## Review findings
 
@@ -87,19 +90,25 @@ answers in the body; the unresolved part is collected below.
   portable arithmetic domain has to be fixed before discharge can be sound.
   Answered in §4.1: safe-integer results are exact and overflow produces NULL.
   The runtimes and normative spec now enforce that domain.
-- **A generator-only increment has no consumer.** Until obligations are
-  discharged, no analysis or module boundary may rely on a contract, so phases 0
-  to 2 land only if printed obligations are useful on their own. §4.5 and §10
-  leave open whether discharge belongs in the first slice.
+- **A generator-only increment has no consumer.** Answered twice over in §4.5.
+  Emitting SMT-LIB gives the goals a consumer of their own, and dynamic checking
+  gives an annotation an effect without any discharge at all, so the first slice
+  no longer has to choose between being small and being useful.
 
 ### Follow-up review
 
-The proposal is not closed yet. One decision remains explicit in its own plan:
+The last blocker, what the first delivery slice is, is settled and the plan is
+unblocked. Two changes did it, both in §4.5.
 
-- §4.5 and phase 3 leave open whether printed obligations have an independent
-  user or solver-backed discharge belongs in the first slice.
+Obligations are emitted as SMT-LIB 2, so no phase depends on a particular
+solver, and printed goals have an independent user after all: a `.smt2` file
+runs under any solver or sits in CI, where prose goals would not have.
 
-Until that is settled, the implementation plan remains blocked.
+And discharge is no longer the only way an annotation can mean something.
+Checking a contract against the tuples a predicate derived, the way an
+integrity constraint is checked, is a much smaller slice than proving it and
+sidesteps §3.1's empty-group hole, §4.1's derived aggregate contracts and
+§3.2's induction entirely. That is phase 3, and it is the first slice.
 
 ## 1 What the annotation is
 
@@ -539,36 +548,83 @@ depend on it. Note that `null.md` §7's verdict survives intact and should not b
 cited against this: nullness rides as a bit *beside* the base type, so there is
 still no `null` type and base-type inference still does not see nullability.
 
-### 4.5 Discharging, deferred
+### 4.5 Discharging: two modes, no solver dependency
 
-The staged plan has `--obligations` print goals before anything discharges them.
-That takes no dependency and lets the goal format settle against real output,
-but follow-up review leaves this delivery choice open: it is worthwhile only if
-the printed goals have an independent user.
+An obligation can be **proved** or it can be **checked**. Both are supported and
+neither ties the language to a prover.
 
-The obligations are quantifier-free linear integer arithmetic, which is the
-easiest thing an SMT solver does, so the eventual choice is between running one
-in the CLI only, following the module-resolver precedent that the playground may
-simply omit a feature, and `z3-solver`'s WASM build for parity at an unmeasured
-bundle cost. A built-in procedure is ruled out already: the corpus needs
-coefficients and constant division (`20 * D1 < 21 * D2` in `population-query`,
-`P = P0 * 2` in `hanoi`, `%` and `/` in `collatz`), so the fragment is full
-linear integer arithmetic rather than difference logic, and hand-rolling a
-decision procedure for it is the wrong trade at any dependency cost.
+**Static: SMT-LIB out, solver not included.** The obligation set's public form is
+an SMT-LIB 2 script, and nothing in phases 0 to 2 may assume a particular solver.
+That is the whole of the corner-avoidance: the artifact is text, every solver
+reads it, and the choice moves to whoever runs it. It also answers what this
+section previously left open, whether printed obligations have an independent
+user. Prose goals arguably do not; a `.smt2` file does, since it can be piped to
+any solver or checked into CI.
 
-One consequence to state plainly, because it bounds what the first cut delivers.
-The generated goals are *correct* including their contract hypotheses (§3.3):
-discharging a whole SCC's obligations together is a simultaneous induction, and
-that is sound. But until something discharges them, **no consumer may rely on a
-contract**, since assuming an unverified claim is exactly the unsoundness the
-obligations exist to rule out. So §5's payoff, the one chosen as this feature's
-reason to exist, arrives with discharge and not before. Phases 0 to 2 are a goal
-generator.
+Weighing what a bundled solver would cost settles it. `z3-solver` unpacks to
+about 35 MB, orders of magnitude past what the playground budget tolerates, for a
+logic it barely stretches: the fragment is `QF_LIA` plus booleans, and every
+hypothesis set in §9.1 is a conjunction of linear constraints with the case split
+coming only from `||` and §4.4's null bit. cvc5 compiles to WebAssembly but
+publishes no package, so it would mean owning a build. A pure-JS LP library could
+carry the arithmetic, but it optimises in floating point, and a proof obligation
+discharged by a floating-point simplex is not a proof.
+
+One detail makes the output *more* portable rather than less. SMT-LIB's `div` and
+`mod` are Euclidean, with a non-negative remainder, where §4.1 requires
+truncation toward zero and a dividend-signed remainder. The emission therefore
+encodes those explicitly rather than leaning on a solver's builtins, so it does
+not depend on any solver's conventions.
+
+Incompleteness is safe here, which keeps a small built-in checker on the table
+later. An obligation that is not discharged simply does not publish its contract,
+so a checker that answers "unsat" or "don't know" is sound. The cost is
+diagnostic sharpness: it can say "I could not prove `D >= 0`" but not "this is
+false", which for a teaching implementation is arguably the more honest message.
+
+**Dynamic: check the contract against the tuples.** The alternative to proving
+`Φ_p` is evaluating it over what `p` actually derived, and reporting a violation
+the way an integrity constraint does. This is the cheaper mode by a wide margin,
+and it is the one that gives the annotation an observable effect without any
+prover at all.
+
+It sidesteps the three hardest parts of the static mode outright:
+
+- **The empty-group hole (§3.1) does not exist.** There is nothing to reason
+  about: the row an ungrouped aggregate emits is checked like any other.
+- **Derived aggregate contracts (§4.1) are unnecessary.** The aggregate's value
+  is there to look at.
+- **Recursion needs no induction (§3.2).** The check runs at the fixed point.
+
+What it checks is exactly the published contract. A tuple does not record which
+rule derived it, so the check is against `Φ_p`, the disjunction of §2.1, which is
+precisely what a consumer assumes. NULL needs no special handling either: a null
+in a constrained position makes a strict comparison false, so the tuple is
+reported, which is what the contract said.
+
+**Mixing the two is sound**, and that is worth stating because it is the reason
+to have both. A static obligation proved under the assumption `Φ_q`, together
+with a run in which `Φ_q` was dynamically checked, gives `Φ_p` for that run. So
+every assumed contract must be either proved or checked in the same run, and the
+modes compose per predicate rather than per program.
+
+**What dynamic mode does not give you** is a theorem. It covers the run, not all
+inputs, so §5's module-interface story, a law that holds for every wiring, still
+needs the static mode. It also costs a scan of the extension per contract, the
+same cost an integrity constraint already carries.
+
+Being honest about the overlap: a dynamically-checked contract is expressible
+today as `!- p(X, Y), not (Y > X).` The annotation earns its place by sitting at
+the definition site and by being the same text that static discharge later
+proves, not by expressing something new.
 
 ## 5 Consumers assume contracts
 
 This is the chosen payoff and the part that makes it a specification language
-rather than a lint. A body atom's contract is a hypothesis in the enclosing
+rather than a lint. It comes in two strengths, per §4.5: a dynamically checked
+contract may be assumed for the run that checked it, which is enough for one
+program's own reasoning, while only a statically discharged one may be assumed
+for all inputs, which is what a module interface needs. A body atom's contract is a hypothesis in the enclosing
 rule's obligations (§3.3), automatically, with no witness naming, so a
 predicate's invariant propagates to everything built on it:
 
@@ -629,8 +685,16 @@ express.
 There is no erasure step. §5.10 already establishes that head annotations never
 reach codegen ("Codegen uses `columnTypes` only"), and §1.1 establishes that a
 witness is unique, so a column holding one would be constant-valued and is simply
-never built. With §4.1's runtime prerequisite in place, the refinement feature
-itself is analysis-only:
+never built.
+
+One qualification, since §4.5 has two modes: **static discharge is
+analysis-only, dynamic checking is not.** The dynamic mode emits a check
+alongside the program, exactly as an integrity constraint does, so it reaches
+codegen. What it does not do is change the predicate: no column is added, no
+tuple is altered, and the witness is as absent as ever. Only the check is new,
+and it is the constraint machinery rather than anything contract-specific.
+
+With §4.1's runtime prerequisite in place, the static mode is analysis-only:
 
 - no grammar change beyond the one production,
 - no contract-specific change to the translator, any SQL dialect, or either
@@ -952,10 +1016,10 @@ erases positional aliases. Store it as rule-level contract metadata, not in
 syntactic position that disappears. Keep several witnesses as a source-ordered
 list, conjoin them as the rule's contract, and generate one obligation per source
 formula so a failure points at the exact annotation. Validate that each formula
-mentions only named head positions and is inside §4.1's fragment. No solver yet.
-A `--obligations` flag prints the generated goals.
+mentions only named head positions and is inside §4.1's fragment. No solver, and
+nothing here may assume one.
 
-Test: goldens for the obligation text, plus one rejection test per §4.1
+Test: goldens for the parsed contract, plus one rejection test per §4.1
 exclusion.
 
 ### Phase 1: contracts
@@ -970,22 +1034,42 @@ one warning.
 
 ### Phase 2: obligation generation
 
-Hypotheses per §3.3, SCC ordering per §3.2. Still no solver, so the whole
-pipeline is testable against expected goal text.
+Hypotheses per §3.3, SCC ordering per §3.2. `--obligations` writes the goals as
+an SMT-LIB 2 script (§4.5), encoding truncating division and a dividend-signed
+remainder explicitly rather than using SMT-LIB's Euclidean `div`/`mod`. Still no
+solver: the script is the deliverable, and it is testable against a golden file
+and by running any solver that happens to be installed.
 
-### Phase 3: discharge, deferred
+Independent of phase 4, since a `.smt2` file is usable on its own.
 
-The current proposal leaves this out of the first cut (§4.5). Before implementation,
-decide whether printed obligations have an independent user. If not, this phase
-belongs in the first slice. Wire a solver behind `--check-refinements`, at which
-point `cyk-parser` (§4.2) discharges and §4.3's variant fails with a message naming
-the rule and the unprovable formula. Only at this point may a consumer rely on a
-contract, so §5's payoff lands here rather than earlier. `--strict-contracts`
+### Phase 3: dynamic checking
+
+The smallest slice that makes an annotation do something. Assemble `Φ_p` from
+phase 1, emit it as a check over `p`'s extension, and route violations through
+`engine/src/constraints.ts`, which already reports a predicate, a source claim
+and the offending rows, and already runs after evaluation and before any query
+(spec §4.7). No solver, no obligation generation, and none of §3's machinery:
+§4.5 explains why the empty-group hole, the derived aggregate contracts and the
+induction are all irrelevant to this mode.
+
+Test: a contract that holds passes silently; one that does not names the
+predicate, the annotation and the tuple. A predicate with an unannotated sibling
+checks nothing, since `Φ_p` is `True` (§2.1), and warns (§2.2).
+
+### Phase 4: static discharge, deferred
+
+Deferred, and no longer blocking anything: phase 3 gives an annotation an effect
+and phase 2 gives its goals a consumer, so neither waits on this. When taken up,
+run a solver over phase 2's script rather than linking one, keeping §11.2's
+no-required-dependency rule, at which point `cyk-parser` (§4.2) discharges and
+§4.3's variant fails with a message naming the rule and the unprovable formula.
+This is where a contract becomes a theorem rather than a checked fact, so it is
+what §5's module-interface story waits for. `--strict-contracts`
 (§2.2, §11.4) can land with phase 1 instead, since the warning it promotes
 exists from then on and promoting it does not depend on anything being
 discharged.
 
-### Phase 4: documentation
+### Phase 5: documentation
 
 Spec §5.10 gains the refinement form; walkthrough coverage; one example under
 `packages/cli/examples/`.
@@ -1013,10 +1097,13 @@ decision remains blocking: the first useful delivery slice.
    proves nothing about its own operands, so there is no self-refinement to skip,
    and any other conjunct that does prove the operand non-null should silence
    it.
-2. **Solver dependency.** This follows the delivery-slice decision in §4.5. A
-   built-in procedure is ruled out on the corpus's fragment. If discharge joins
-   the first slice, choose between CLI-only and `z3-solver`'s WASM build by
-   measuring the bundle cost.
+2. **Solver dependency.** Decided: none, ever, as a required dependency. The
+   obligation set's public form is SMT-LIB 2 and no phase may assume a
+   particular solver (§4.5). `z3-solver` unpacks to about 35 MB, which settles
+   it against bundling; cvc5 publishes no WebAssembly package; a floating-point
+   LP library cannot discharge a proof obligation soundly. An optional
+   in-process checker stays available later precisely because incompleteness is
+   safe here.
 3. **Floats.** Decided: tier 1 covers integer positions only; a refinement on a
    float position is rejected. Two of the three worries turned out not to exist.
    Every partial float operation returns NULL rather than a special value, and
