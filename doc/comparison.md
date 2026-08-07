@@ -369,10 +369,12 @@ mid-evaluation and discharge it with `is_sat` / `is_valid` against an external
 solver (Z3 by default). It is a Harvard research language, a Java interpreter
 with a newer Soufflé/C++ compiled backend, built for SMT-based static analyses
 such as symbolic execution and refinement typing. Datamog has algebraic
-datatypes of its own — proof terms, where a named rule is a constructor — but
-none of the rest: no ML-style functional sublanguage and no solver, and its
-datatypes desugar to the dynamically-shaped `value` type rather than Formulog's
-statically-typed ADTs.
+datatypes of its own — proof terms, where a named rule is a constructor — and
+refinement annotations, where a head position carries a proposition rather than
+a type. But it has no solver, so a refinement is *checked* against the tuples a
+predicate derived rather than proved for all inputs, and it has no ML-style
+functional sublanguage; its datatypes also desugar to the dynamically-shaped
+`value` type rather than Formulog's statically-typed ADTs.
 
 ## Where Datamog fits
 

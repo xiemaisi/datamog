@@ -2828,6 +2828,41 @@
       ]
     }
   },
+  "example/refinements/refinements.dl": {
+    "ok": true,
+    "types": {
+      "booking": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "merged": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "padded": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "padded_slots": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "slot": [
+        "string",
+        "integer",
+        "integer"
+      ],
+      "slots": [
+        "string",
+        "integer",
+        "integer"
+      ]
+    }
+  },
   "example/reflexive-tc/reflexive-tc.dl": {
     "ok": true,
     "types": {

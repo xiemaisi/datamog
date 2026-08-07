@@ -347,7 +347,8 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ```
 Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
-HeadTerm    ::= Expression ('as' Identifier)? (':' PrimitiveType '?'?)?
+HeadTerm    ::= Expression ('as' Identifier)? (':' (PrimitiveType '?'? | Refinement))?
+Refinement  ::= Expression
 ```
 
 An `Expression` in head position may contain aggregate calls (§2.7).
@@ -2113,6 +2114,45 @@ declared-must-equal-or-widen-inferred.
 
 Codegen reads the inferred nullness, never the declared one, so a `?` on a
 provably non-null column does not change the emitted SQL.
+
+### 5.11 Head refinements
+
+A `_` head position may carry a **proposition** over the predicate's other
+positions instead of a type. It declares a contract: every tuple the predicate
+derives satisfies it.
+
+```
+span(X, Y, _: Y > X) :- edge(X, Y).
+```
+
+The position is not a column. Its inhabitant would be a witness that the
+proposition holds, which carries no information beyond that fact, so it is
+erased and `span` is binary. Writing a refinement anywhere but a `_` is an
+error, since any other position *is* a column.
+
+A refinement may mention only the head's own positions. A bare variable names
+its own position; a literal or computed position needs an `as` name (§2.3)
+before a refinement can refer to it, and a body variable may not be mentioned
+at all.
+
+```
+sp(I, I + 1 as K, _: I < K) :- token(I).
+```
+
+**A predicate's contract is the disjunction over its rules**, since a tuple
+comes from whichever rule derived it, and a rule that carries no refinement
+contributes `true`. So one unannotated sibling makes the contract vacuous, and
+that is reported as a warning rather than silently checking nothing. Several
+refinements on one rule conjoin.
+
+**The contract is checked**, at the fixed point and before any query runs,
+exactly as an integrity constraint is (§4.7), and a violation is reported the
+same way. A tuple that satisfies no rule's claim is a counterexample. NULL needs
+no special rule: an ordering is false at NULL (§2.6), so a null in a constrained
+position does not satisfy the contract and is reported.
+
+Refinements never reach codegen beyond that check: no column is added and no
+tuple is altered.
 
 ## 6 SQL Translation
 

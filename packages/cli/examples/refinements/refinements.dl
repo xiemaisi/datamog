@@ -1,0 +1,57 @@
+# Refinement annotations: a contract where the predicate is defined
+#
+# A `_` head position can carry a *proposition* over the other positions
+# instead of a type. It says what every tuple of the predicate satisfies, and
+# it is checked against the tuples actually derived, at the fixed point and
+# before any query runs -- the same treatment an integrity constraint gets.
+#
+# The position is not a column. Its inhabitant would be a witness that the
+# proposition holds, which says nothing beyond "it holds", so it is erased:
+# `slot` below is ternary, not quaternary.
+
+booking("aud", 9, 11).
+booking("aud", 11, 12).
+booking("lab", 13, 17).
+
+# Every slot is a well-formed interval. Written here rather than as a separate
+# `!- slot(_, S, E), S >= E.`, so the claim sits next to the thing it is about.
+slot(R, S, E, _: S < E) :- booking(R, S, E).
+
+# Two adjacent slots merge into one, and the result is still well formed. The
+# contract is not restated as a check: it is the same claim, made about a
+# predicate whose rule happens to be the one that has to preserve it.
+merged(R, S, E2, _: S < E2) :- slot(R, S, E), slot(R, E, E2).
+
+# A computed position needs an `as` name before a refinement can mention it,
+# because `E + 60` names nothing a contract could refer to. Two claims on one
+# rule conjoin, and a violation names whichever one failed.
+#
+# Only head positions are mentionable: `_: F > E` would be rejected here, `E`
+# being a body variable. A contract is what consumers see, and they see
+# columns.
+padded(R, S, E + 60 as F, _: S < F, _: F > 0) :- slot(R, S, E).
+
+?- merged(R, S, E).
+output predicate slots(R, S, E) :- slot(R, S, E).
+output predicate padded_slots(R, S, F) :- padded(R, S, F).
+
+# Try breaking one. Adding
+#
+#     booking("aud", 12, 12).
+#
+# makes `slot`'s contract false for that row, and the run stops before any
+# query with
+#
+#     Constraint `S < E` is violated by 1 row:
+#       Col1 = "aud", Col2 = 12, Col3 = 12
+#     Constraint `S < E2` is violated by 1 row:
+#       Col1 = "aud", Col2 = 12, Col3 = 12
+#
+# Both fire, which is the point of putting the claim on `merged` too: the bad
+# interval does not stop at `slot`, it propagates, and every contract it
+# breaks says so rather than only the first.
+#
+# A contract with an unannotated sibling rule would instead check nothing at
+# all -- a predicate's contract is the disjunction over its rules, so a rule
+# that claims nothing claims everything -- and Datamog warns when a predicate
+# is annotated that way.

@@ -245,6 +245,62 @@ well-defined on every type. There is only the one pair, and it is
 null-aware: `null = null` is `true`. We'll come back to what that
 means once `null` shows up in Chapter 8.
 
+## Claiming more than a type
+
+A type says what shape a column has. Sometimes you know something
+sharper, and there is a place to write it: a `_` head position can
+carry a **proposition** over the other positions instead of a type.
+
+```prolog
+slot(R, S, E, _: S < E) :- booking(R, S, E).
+```
+
+That reads "every slot is a well-formed interval". It is a claim about
+the predicate, checked against the tuples the rules actually derive,
+and reported like any other violation if it turns out false:
+
+```
+Constraint `S < E` is violated by 1 row:
+  Col1 = "aud", Col2 = 12, Col3 = 12
+```
+
+The `_` position is not a column. What would live there is a *witness*
+that the proposition holds, and a witness says nothing beyond "it
+holds", so it is erased: `slot` above is ternary. That is why the
+position has to be `_` and not a name — a named position is a column,
+and this one is not.
+
+A refinement may mention only the head's own positions, because a
+contract is what consumers see and consumers see columns. A bare
+variable names its own position; a computed one needs an `as` name
+first (Chapter 9), and a body variable cannot be mentioned at all:
+
+```prolog
+padded(R, S, E + 60 as F, _: S < F) :- slot(R, S, E).
+```
+
+One rule catches people out. A predicate's contract is the
+**disjunction** over its rules, since a tuple comes from whichever rule
+derived it, and a rule carrying no refinement claims everything. So a
+single unannotated sibling makes the whole contract vacuous:
+
+```prolog
+r(X, Y, _: Y > X) :- p(X, Y).
+r(X, Y) :- q(X, Y).             # claims nothing, so `r` claims nothing
+```
+
+Nothing goes wrong, which is exactly the problem, so Datamog warns
+rather than letting the annotation sit there looking like a guarantee.
+Annotate the rest, or drop the annotation.
+
+You could write the same check by hand as
+`!- slot(_, S, E), S >= E.`, and for a one-off that is fine. What the
+annotation buys is that the claim lives next to the definition it is
+about, so it is read and maintained together with the rule rather than
+drifting away from it. See
+[`examples/refinements`](../../packages/cli/examples/refinements/refinements.dl)
+for a program that leans on it.
+
 ## Putting safety and typing together
 
 In practice you encounter these two checks at the same time, because
@@ -311,6 +367,11 @@ the first place.
   `boolean`, `value`) and two widenings (`integer → float`, and
   primitive → `value` via auto-lift). Types are inferred by
   fixed-point walk; mismatches are reported before translation.
+- A `_` head position can carry a **proposition** instead of a type,
+  claiming what every tuple satisfies. It is checked against the
+  derived tuples and the position erases. A predicate's contract is
+  the disjunction over its rules, so one unannotated sibling makes it
+  vacuous, and that is warned about.
 - Both checks run *before* any SQL is emitted. Programs that
   pass them are guaranteed to have finite, well-typed SQL behind
   them; programs that don't are rejected with a line-numbered

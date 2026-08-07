@@ -52,6 +52,53 @@ AVG(score) FROM scores GROUP BY student` — the implicit `GROUP BY`
 is determined by which columns in the `SELECT` list aren't inside
 an aggregate function.
 
+Two refinements of that rule are worth knowing.
+
+**A constant argument is not a grouping column.** A literal, or a
+variable the body binds to one, does not vary per group, so it is
+carried along rather than grouped by:
+
+```prolog
+totals("all", count(*)) :- scores(_, _, _).
+totals(G, count(*)) :- scores(_, _, _), G = "all".   # the same rule
+```
+
+You notice the difference only over empty input. A rule with no
+grouping columns still derives one row there, matching SQL's
+`SELECT COUNT(*) FROM <empty>`: every `count` is `0` and every other
+aggregate is `NULL`. A rule that does group derives nothing, there
+being no group to reduce.
+
+**An aggregate can sit inside an expression.** It does not have to be
+the whole argument, so a rank counted from one becomes a 0-based index
+without a second predicate:
+
+```prolog
+var_index(Name, count(Other) - 1) :- varname(Name), varname(Other), Other <= Name.
+```
+
+The argument is a grouping column exactly when it contains no
+aggregate, so `Name` groups and the second argument does not. One
+rule comes with it: beside an aggregate you may mention only grouping
+variables, since anything else has no single value within the group.
+`bad(X, sum(S) + Y) :- scores(X, S, Y).` is rejected for that reason.
+
+### Naming a head argument
+
+When one value is wanted twice, or when something outside the
+expression needs to refer to the column it computes, give the
+argument a name with `as`:
+
+```prolog
+p(count(*) as N, N + 1) :- q(_).
+```
+
+The name belongs to the head alone: it is invisible below the `:-`,
+so it cannot collide with a body variable, and order does not matter,
+`p(N + 1, count(*) as N)` deriving the same thing. It is the
+intensional counterpart of the column names an `input predicate`
+declaration already gives its columns.
+
 ### `count(*)` is `COUNT(*)`
 
 The special form `count(*)` counts rows without caring about a

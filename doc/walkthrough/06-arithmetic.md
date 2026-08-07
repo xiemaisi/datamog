@@ -65,6 +65,12 @@ backends:
   behaviour; Postgres would raise without the `NULLIF` wrapper).
 - `sqrt(-x)`, `ln(0)` or `ln(-x)`, `0 ** -n`, `-x ** fractional`
   also return `NULL` (wrapped in a `CASE` in the generated SQL).
+- **Integer arithmetic that leaves the integer domain** returns
+  `NULL` too. That domain is `[-(2^53 - 1), 2^53 - 1]`, the range
+  JavaScript numbers represent exactly, and it is the same on every
+  backend rather than whatever width the database happens to use.
+  So `X + 1` is a partial operation like the others: exact while the
+  answer fits, `NULL` when it does not.
 - Slice bounds going the wrong way (`W[5:2]`) return the empty
   string.
 
@@ -72,6 +78,21 @@ A `NULL` from one of these flows on through the rule rather than
 killing it: `Y = 10 / X` with `X = 0` binds `Y` to `NULL`, and the
 row still appears with the `NULL` in it. Add `Y <> null` if you want
 badly computed rows gone.
+
+Overflow is worth a second look, because it is the one that surprises.
+Every arithmetic column is potentially nullable for this reason, even
+one built only from non-null inputs, which is why a guard sometimes
+looks redundant and is not:
+
+```prolog
+big(9007199254740991).
+step(N + 1) :- big(N).      # derives NULL, not 9007199254740992
+```
+
+The alternative would be to pick a width and let each backend disagree
+at the edges, or to raise. Returning `NULL` keeps the same program
+meaning the same thing everywhere, which is the trade the whole
+chapter has been making.
 
 ## Range atoms: generating values
 

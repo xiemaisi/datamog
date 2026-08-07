@@ -62,8 +62,11 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
 - **A module system.** A file is a function from its input predicates to its
   outputs; bind an input with `:=` to a data file or to an instance of another
   module. See [Modules](doc/walkthrough/16-modules.md).
-- **Optional, checked types.** Column types are inferred; annotate a column or a
-  rule head when you want a contract, and inference checks it.
+- **Optional, checked contracts.** Column types are inferred; annotate a column
+  or a rule head when you want to pin one down, including whether it may be
+  NULL. A head position can carry a *proposition* rather than a type
+  (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
+  derives and costs nothing at runtime otherwise.
 - **Diagnostics that explain.** Safety, arity, stratification, and finiteness
   checks report the offending source span, and the playground visualises a
   rejected negation or finiteness cycle.
@@ -147,7 +150,7 @@ A sibling Python package, [`datamog-magic`](python/datamog-magic), provides a
 - [Language specification](doc/spec.md): the full reference for syntax,
   semantics, the type system, and SQL translation.
 - [Language walkthrough](doc/walkthrough/README.md): the feature-by-feature
-  tutorial (chapters 00-16 plus appendices), with runnable code and exercises.
+  tutorial (chapters 00-17 plus appendices), with runnable code and exercises.
 - [Case studies](doc/case-studies/README.md): a puzzle-driven companion that
   builds end-to-end solutions to bigger problems.
 - [Comparison with other Datalog systems](doc/comparison.md): how Datamog
