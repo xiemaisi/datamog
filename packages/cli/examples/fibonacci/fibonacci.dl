@@ -29,10 +29,22 @@
 # is the oldest move in the subject.
 #
 # A computed position needs an `as` name before a claim can mention it, since
-# `Prev + Curr` names nothing a contract could refer to.
-fib_step(1, 0, 1, _: 0 <= 0, _: 0 <= 1).
+# `Prev + Curr` names nothing a contract could refer to. The base case needs
+# names for the same reason, and for a sharper one: a claim that mentions no
+# position is a closed formula, so `_: 0 <= 0` is true without saying anything
+# about the tuple. A rule that claims nothing about its positions contributes
+# `True` to the predicate's contract, which makes the whole disjunction vacuous
+# and leaves a consumer -- including the recursive rule below, reading its own
+# contract as the induction hypothesis -- with nothing to go on.
+fib_step(1, 0 as P0, 1 as C0, _: 0 <= P0, _: P0 <= C0).
 fib_step(I + 1, Curr, Prev + Curr as Next, _: 0 <= Curr, _: Curr <= Next) :-
   fib_step(I, Prev, Curr), I < 10.
+
+# `--verify` discharges three of these four with an SMT solver. The fourth,
+# `Curr <= Next`, is not a theorem: `Prev + Curr` can leave the integer domain,
+# and then `Next` is NULL, which no ordering satisfies. Bounding the values
+# would need the invariant to relate them to `I`, which this formulation does
+# not. Checking and proving are different things, and the gap is the point.
 
 # Extract the sequence: the I-th Fibonacci number is V.
 fibonacci(I, V) :- fib_step(I, _, V).

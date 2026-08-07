@@ -5,10 +5,16 @@
 # textbook loop invariant becomes a contract on a predicate, which is what the
 # refinement annotations below say.
 #
-# `Lo <= Mid <= Hi` is the whole of it. It is what makes `sorted(Mid, V)` a
-# legal probe: an index outside the window would read outside the array, and
+# `0 <= Lo <= Mid <= Hi` is the whole of it. It is what makes `sorted(Mid, V)`
+# a legal probe: an index outside the window would read outside the array, and
 # in a language with arrays that is the bug the invariant exists to exclude.
-# Here it is checked against the states actually reached.
+#
+# It is checked against the states actually reached, and it is also provable.
+# `datamog --verify binary-search.dl` discharges all fourteen claims with an
+# SMT solver, the two recursive rules included: a rule may assume its own
+# predicate's contract of the tuples in its body, which for a self-reference is
+# the induction hypothesis, sound because the induction is on the derivation
+# and every rule is discharged together or not at all.
 #
 # A computed position needs an `as` name before a claim can mention it, since
 # `(Lo + Hi) / 2` names nothing a contract could refer to. That is why the
@@ -16,20 +22,30 @@
 
 sorted(0, 10). sorted(1, 20). sorted(2, 30).
 sorted(3, 40). sorted(4, 50). sorted(5, 60). sorted(6, 70).
-size(7).
 target(20).
 
+# The array is non-empty and smaller than a million entries. Both halves are
+# needed, and neither is decoration. Without the lower bound the first window
+# is empty and its midpoint falls outside it. Without the upper bound `L + M`
+# in the rules below can leave the integer domain, where it evaluates to NULL,
+# and a NULL midpoint satisfies no ordering: any proof about machine arithmetic
+# has to bound its inputs somewhere.
+size(7 as N, _: 1 <= N, _: N <= 1000000).
+
 # The initial window is the whole array.
-probe(0, N - 1 as H, (N - 1) / 2 as M, _: 0 <= M, _: M <= H) :- size(N).
+probe(0 as L0, N - 1 as H, (N - 1) / 2 as M,
+      _: 0 <= L0, _: L0 <= M, _: M <= H, _: H < 1000000) :- size(N).
 
 # Too high: search the left half. The new window is [Lo, Mid-1], and the guard
 # `Lo <= Mid - 1` is what keeps it non-empty, which is what keeps the new
 # midpoint inside it.
-probe(L, M - 1 as H2, (L + M - 1) / 2 as M2, _: L <= M2, _: M2 <= H2) :-
+probe(L, M - 1 as H2, (L + M - 1) / 2 as M2,
+      _: 0 <= L, _: L <= M2, _: M2 <= H2, _: H2 < 1000000) :-
   probe(L, _, M), sorted(M, V), target(T), V > T, L <= M - 1.
 
 # Too low: search the right half.
-probe(M + 1 as L2, H, (M + 1 + H) / 2 as M2, _: L2 <= M2, _: M2 <= H) :-
+probe(M + 1 as L2, H, (M + 1 + H) / 2 as M2,
+      _: 0 <= L2, _: L2 <= M2, _: M2 <= H, _: H < 1000000) :-
   probe(L, H, M), sorted(M, V), target(T), V < T, M + 1 <= H.
 
 # Found it.
@@ -41,7 +57,7 @@ output predicate found(M) :- probe(_, _, M), sorted(M, V), target(T), V = T.
 # for something the array does not hold, `target(5)`. The window goes empty and
 # the midpoint falls outside it:
 #
-#     Constraint `0 <= M` is violated by 1 row:
+#     Constraint `0 <= L0` is violated by 1 row:
 #       Col1 = 0, Col2 = -1, Col3 = 0
 #
 # Lo is 0, Hi is -1, Mid is 0. The guard is not decoration, and the contract is
@@ -50,4 +66,6 @@ output predicate found(M) :- probe(_, _, M), sorted(M, V), target(T), V = T.
 # Note which claim the message names. `probe` has three rules, so its contract
 # is their disjunction, which cannot be split into one check per claim the way
 # a single rule's conjunction can. The label is the first claim rather than the
-# one that failed, and the row is what tells you what went wrong.
+# one that failed, and the row is what tells you what went wrong. `--verify`
+# has no such trouble: it works per rule, so it names `probe rule 2: L <= M2`
+# and prints the assignment that falsifies it.
