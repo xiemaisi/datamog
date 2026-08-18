@@ -19,6 +19,13 @@ env:
   # would trash each other if `bun test` ever stopped running files serially.
   DATABASE_URL: postgres://postgres:postgres@localhost:5432/datamog_test
   DATAMOG_EXAMPLES_DATABASE_URL: postgres://postgres:postgres@localhost:5432/datamog_examples
+  # In this workflow a skipped Postgres suite is a failure, not a no-op. Both
+  # suites gate on `DATABASE_URL`, so a broken container or a typo'd URL would
+  # otherwise turn ~100 tests into zero and still report green — which is how they
+  # went stale for a whole branch once. `require-postgres.test.ts` reads this and
+  # fails instead. Not keyed on `CI`, because ci.yml's Quality Gate runs the same
+  # `bun test` with no database and must stay green.
+  DATAMOG_REQUIRE_POSTGRES: "1"
 
 jobs:
   postgres:
