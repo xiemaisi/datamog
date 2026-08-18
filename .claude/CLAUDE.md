@@ -48,7 +48,7 @@ Bun ≥ 1.3.0 is required (root `engines` field).
 The Postgres tests skip themselves when `DATABASE_URL` is unset, which is how they
 once went stale for a whole branch. **`bun run test:pg`** is the one command that runs
 them: it creates a throwaway cluster, runs the whole suite against it, and deletes it
-again (`scripts/test-postgres.sh`). Roughly 2022 pass against 1943 without a database.
+again (`scripts/test-postgres.sh`). Roughly 2046 pass against 1967 without a database.
 Pass `PGTESTPORT=55444` if 55432 is taken, and `-- <paths>` to narrow the run.
 
 CI does the same with a `postgres:16` service container
