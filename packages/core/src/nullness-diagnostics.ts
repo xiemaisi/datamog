@@ -1,18 +1,22 @@
 // Warnings about a row going missing for a reason that is easy not to expect.
 //
-// Three are about NULL reaching somewhere surprising, the residual oddities
-// null.md §5 and §8 name. The fourth is about an expression having no value at
-// all, which withholds its row (doc/design/null-as-a-value.md §1). They sit
-// together because the symptom is the same and it is the reason any of them is
-// worth reporting: a missing row, whose cost is paid by reading output and
-// counting. None is an error; each is specified behaviour that is sometimes
-// exactly what was wanted.
+// Six of them, split by which of the two the row lost it to. Three are about a
+// `null` reaching somewhere surprising: a filter that a null cannot satisfy, two
+// orderings that read as a partition but leave the null out, and a `not` over an
+// ordering that keeps the null row. Three are about an expression having no value
+// at all, which withholds its row (doc/design/null-as-a-value.md §1): a `<>` over
+// a partial operand, a `defined(X)` that asks the question about a variable rather
+// than about an expression, and the opt-in report of every partial expression
+// whose value a rule uses. They sit together because the symptom is the same and
+// it is the reason any of them is worth reporting: a missing row, whose cost is
+// paid by reading output and counting. None is an error; each is specified
+// behaviour that is sometimes exactly what was wanted.
 //
 // Shaped like `FinitenessDiagnostic` / `PolarityDiagnostic` and consumed the
 // same way (a pull-based call from the CLI and the playground), so no warning
 // channel out of `inferTypes` is needed.
 
-import type { Expression, PrimitiveType } from "./ast.ts";
+import type { BodyElement, Expression, PrimitiveType } from "./ast.ts";
 import { ORDERING_OPS } from "./ast.ts";
 import type { BodyOwner } from "./nullness.ts";
 import { mayBeNull, refineBody } from "./nullness.ts";
@@ -91,9 +95,10 @@ export function findNullnessRisks(
       // A filter that does not hold drops its row without a trace, and a `null`
       // in truth-value position never holds: as the filter's own value it is not
       // `true`, and inside a connective it leaves the connective with no value.
-      // Comparison is total, so this only fires where a null reaches that
-      // position some other way: a `boolean?` column, `as_boolean`, or a
-      // connective over one.
+      // No comparison returns a null, and neither does `as_boolean`, whose failed
+      // projection has no value at all, so this only fires where a null reaches
+      // that position some other way: a `boolean?` column, a variable the body
+      // binds to the `null` literal, or a connective over one of those.
       //
       // Not for a negated filter, where the premise is inverted: `not e` is
       // negation as failure, so an operand with no value *keeps* the row rather
@@ -115,18 +120,28 @@ export function findNullnessRisks(
       // Seeded from the filter's own flag, since `not X < 2` is now a negated
       // Filter rather than a Filter over `!(X < 2)`.
       collectNegatedOrderings(elem.expr, owner, nonNull, ctx, elem.negated ?? false, diagnostics);
-      // Refine again without this conjunct: a strict comparison proves its own
-      // operands non-null, so asking the fully-refined set whether the operand
-      // can be NULL would always answer no and the gap would never be found.
+    }
+
+    // The three position-independent warnings, over every position an expression
+    // can occupy: a filter, a head argument, and either side of a body equality.
+    // A `<>`, an ordering and a `defined(X)` read the same way in each and go
+    // wrong the same way, so none of them is a filter-only question. Only the two
+    // warnings above are, their subject being what a filter does with a row.
+    for (const { expr, filter } of expressionPositions(owner)) {
+      collectPartialInequalities(expr, owner, typed, varTypeCache, diagnostics);
+      collectConstantDefined(expr, typed, diagnostics);
+      // In a filter, refine again without this conjunct: a strict comparison
+      // proves its own operands non-null, so asking the fully-refined set whether
+      // the operand can be null would always answer no and the gap would never be
+      // found. Elsewhere there is no such conjunct to leave out, an equality over
+      // a comparison and a head argument both proving nothing about the operands.
       collectOrderings(
-        elem.expr,
+        expr,
         owner,
-        refineBody(owner, typed.nullness.columnNullness, ctx, elem),
+        filter ? refineBody(owner, typed.nullness.columnNullness, ctx, filter) : nonNull,
         ctx,
         orderings,
       );
-      collectPartialInequalities(elem.expr, owner, typed, varTypeCache, diagnostics);
-      collectConstantDefined(elem.expr, typed, diagnostics);
     }
   }
 
@@ -135,14 +150,22 @@ export function findNullnessRisks(
 }
 
 /**
- * `defined(X)` on a bare variable, which is constantly true and is **not**
- * `X <> null` (doc/design/null-as-a-value.md §11.6, third rider).
- *
- * A variable is bound to a value, `null` included, so it is always defined. The
- * two readings are one keystroke apart and only one of them is ever what a reader
- * means on a variable, which is what makes this worth a warning rather than
- * leaving as a tautology to discover.
+ * Every position of `owner` an expression can occupy: a filter, either side of a
+ * body equality, and a head argument. `filter` is the conjunct itself where the
+ * position is one, since a warning that reads the refined variable set has to be
+ * able to leave its own guard out.
  */
+function expressionPositions(owner: BodyOwner): { expr: Expression; filter?: BodyElement }[] {
+  const positions: { expr: Expression; filter?: BodyElement }[] = [];
+  for (const elem of owner.body) {
+    if (elem.$type === "Filter") positions.push({ expr: elem.expr, filter: elem });
+    else if (elem.$type === "Equality") positions.push({ expr: elem.left }, { expr: elem.expr });
+  }
+  const head = (owner as { head?: { args?: readonly Expression[] } }).head;
+  for (const arg of head?.args ?? []) positions.push({ expr: arg });
+  return positions;
+}
+
 /**
  * Does a `null` reach a truth-value position in `expr`?
  *
@@ -169,12 +192,25 @@ function nullReachesTruthValue(
   return mayBeNull(expr, nonNull, owner, ctx);
 }
 
+/**
+ * `defined(X)` on a bare variable, which is constantly true and is **not**
+ * `X <> null` (doc/design/null-as-a-value.md §11.6, third rider).
+ *
+ * A variable is bound to a value, `null` included, so it is always defined. The
+ * two readings are one keystroke apart and only one of them is ever what a reader
+ * means on a variable, which is what makes this worth a warning rather than
+ * leaving as a tautology to discover.
+ *
+ * Walks every operator, the way `collectPartialInequalities` does, so the call is
+ * found wherever it is written: bare in a filter, under a connective or a `!`, or
+ * as an operand of anything else.
+ */
 function collectConstantDefined(
   expr: Expression,
   typed: TypedProgram,
   into: NullnessDiagnostic[],
 ): void {
-  if (expr.$type === "BinaryExpr" && (expr.op === "&&" || expr.op === "||")) {
+  if (expr.$type === "BinaryExpr") {
     collectConstantDefined(expr.left, typed, into);
     collectConstantDefined(expr.right, typed, into);
     return;
@@ -206,6 +242,10 @@ function collectConstantDefined(
  *
  * Not reported for `=`, which has no competing reading, nor for the orderings,
  * whose own two warnings are about nulls rather than about absence.
+ *
+ * Reached from every position a `<>` can occupy, not only a filter: bound to a
+ * variable, projected into a head, or under a `!`, the reading is the same and so
+ * is the invisibility of the difference.
  */
 function collectPartialInequalities(
   expr: Expression,
@@ -214,13 +254,16 @@ function collectPartialInequalities(
   varTypeCache: Map<BodyOwner, Map<string, PrimitiveType>>,
   into: NullnessDiagnostic[],
 ): void {
+  if (expr.$type === "UnaryExpr") {
+    collectPartialInequalities(expr.operand, owner, typed, varTypeCache, into);
+    return;
+  }
   if (expr.$type !== "BinaryExpr") return;
-  if (expr.op === "&&" || expr.op === "||") {
+  if (expr.op !== "<>") {
     collectPartialInequalities(expr.left, owner, typed, varTypeCache, into);
     collectPartialInequalities(expr.right, owner, typed, varTypeCache, into);
     return;
   }
-  if (expr.op !== "<>") return;
   let vars = varTypeCache.get(owner);
   if (!vars) {
     vars = rebuildVarTypes(owner.body, typed.columnTypes);

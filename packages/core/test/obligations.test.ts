@@ -110,6 +110,70 @@ describe("the encoding does not delegate to the solver", () => {
   });
 });
 
+describe("a negated body conjunct is negation as failure", () => {
+  // `not e` holds wherever `e` fails to hold, which is where `e` is false *and*
+  // where it has no value, so the negation wraps the whole reading of the
+  // conjunct. Asserting `(not value)` instead reads the guard positively, and
+  // `_: X > 100` under a body that excludes exactly that was discharged.
+  const assertsOf = (out: string) => out.split("\n").filter((l) => l.startsWith("(assert "));
+
+  test("the hypothesis is that the conjunct did not hold", () => {
+    const out = script("p(5).\nq(X, _: X > 100) :- p(X), not (X > 100).");
+    expect(assertsOf(out)).toContain("(assert (not (> X 100)))");
+    expect(assertsOf(out)).not.toContain("(assert (> X 100))");
+  });
+
+  test("a negated equality goes the same way, the grammar making it a filter", () => {
+    const out = script("p(5).\nq(X, _: X > 100) :- p(X), not X = 5.");
+    expect(assertsOf(out)).toContain("(assert (not (or (and false false) (and true (= X 5)))))");
+    expect(assertsOf(out)).not.toContain("(assert (or (and false false) (and true (= X 5))))");
+  });
+
+  test("a partial conjunct keeps its definedness under the negation", () => {
+    // `not (100 / X > 0)` holds at `X = 0`, the quotient having no value there,
+    // so the divisor condition belongs inside the negation, not beside it.
+    const out = script("p(4).\nq(X, _: X > 0) :- p(X), not (100 / X > 0).");
+    expect(out).toContain("(assert (not (and (not (= X 0)) (> ");
+  });
+
+  test("a positive filter still contributes it directly", () => {
+    const out = script("p(5).\nq(X, _: X > 100) :- p(X), X > 100.");
+    expect(assertsOf(out)).toContain("(assert (> X 100))");
+  });
+});
+
+describe("a connective's definedness is stated, not assumed", () => {
+  test("an operand that can leave the integer domain puts its condition in the goal", () => {
+    // The goal is `def ∧ value` and is asserted negated, so a `def` of `true`
+    // discharges the claim wherever the product overflows: `X * 1000000000` has
+    // no value there, the conjunction has none either, and every backend
+    // reports the contract violated.
+    const out = script(
+      "p(9007200, 0).\nq(X, Y, _: X * 1000000000 > 0 && Y >= 0) :- p(X, Y), X > 0, Y >= 0.",
+    );
+    const goal = out.split("\n").find((l) => l.startsWith("(assert (not "))!;
+    expect(goal).toContain("(<= (* X 1000000000) 9007199254740991)");
+  });
+
+  test("a dominating operand gives the term a value whatever the other side does", () => {
+    // `false && e` is false and `true || e` is true, so a defined dominating
+    // side is one of the three ways the term has a value; the third is both
+    // sides having one.
+    const nullable = "input predicate p(a: integer?, b: integer).";
+    expect(script(`${nullable}\nq(X, Y, _: X > 0 && Y > 0) :- p(X, Y).`)).toContain(
+      "(or (and (not X$null) (not (> X 0))) (not (> Y 0)) (not X$null))",
+    );
+    expect(script(`${nullable}\nq(X, Y, _: X > 0 || Y > 0) :- p(X, Y).`)).toContain(
+      "(or (and (not X$null) (> X 0)) (> Y 0) (not X$null))",
+    );
+  });
+
+  test("two total operands leave the goal bare", () => {
+    const out = script("p(1, 2).\nq(X, Y, _: Y > X && X > 0) :- p(X, Y).");
+    expect(out).toContain("(assert (not (and (> Y X) (> X 0))))");
+  });
+});
+
 describe("a consumer may assume what a producer promised", () => {
   test("a positive atom contributes its predicate's contract", () => {
     const out = script(`

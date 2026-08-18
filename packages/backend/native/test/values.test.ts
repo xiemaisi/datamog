@@ -6,7 +6,13 @@
 // than silently coercing.
 
 import { describe, expect, test } from "bun:test";
-import { type Substitution, type TypeEnv, compareOp, evalTerm } from "datamog-backend-native";
+import {
+  type Substitution,
+  type TypeEnv,
+  type Value,
+  compareOp,
+  evalTerm,
+} from "datamog-backend-native";
 import type { HeadTerm } from "datamog-core";
 
 const env: TypeEnv = { vars: new Map(), columns: new Map(), functionOverloads: new Map() };
@@ -383,5 +389,54 @@ describe("bitwise / shift operators (32-bit signed, Java/JS semantics)", () => {
       expect(evalTerm(binary(op, variable("N"), i(7)), sub, env)).toBe(null);
       expect(evalTerm(binary(op, i(7), variable("N")), sub, env)).toBe(null);
     }
+  });
+});
+
+describe("evalTerm — an absent part leaves the compound with no value", () => {
+  // An absence is not a wrong type, so it must never reach one of the assertion
+  // helpers: an accessor is strict in it and answers `undefined`, which is what
+  // withholds the row. See doc/design/null-as-a-value.md §1.
+  //
+  // `1 / 0` is the shortest expression with no value.
+  const absent = (): HeadTerm => binary("/", num(1), num(0));
+
+  test("a subscript with an absent index or receiver", () => {
+    expect(evalTerm(subscript(str("abcdef"), absent()), new Map(), env)).toBeUndefined();
+    expect(evalTerm(subscript(absent(), num(0)), new Map(), env)).toBeUndefined();
+  });
+
+  test("a string slice with an absent bound or receiver", () => {
+    expect(evalTerm(slice(str("abcdef"), num(0), absent()), new Map(), env)).toBeUndefined();
+    expect(evalTerm(slice(str("abcdef"), absent(), num(3)), new Map(), env)).toBeUndefined();
+    expect(evalTerm(slice(absent(), num(0), num(3)), new Map(), env)).toBeUndefined();
+  });
+
+  test("a value slice with an absent bound, next to one that has values", () => {
+    const withArr = new Map([["J", [1, 2, 3] as unknown as Value]]);
+    expect(evalTerm(slice(variable("J"), num(0), absent()), withArr, jsonEnv)).toBeUndefined();
+    expect(evalTerm(slice(variable("J"), absent(), num(3)), withArr, jsonEnv)).toBeUndefined();
+    expect(evalTerm(slice(variable("J"), num(0), num(2)), withArr, jsonEnv)).toEqual([1, 2]);
+  });
+});
+
+describe("evalTerm — round at a scale beyond the float range", () => {
+  test("a scale finer than the value's precision is the identity", () => {
+    // `9e12 * 10 ** 300` leaves the float range, but no double that large carries
+    // a digit at the 300th decimal place, so there is nothing to round away and
+    // the answer is the input. Both SQL backends answer the same.
+    expect(evalTerm(call("round", [num(9_000_000_000_000), num(300)]), new Map(), env)).toBe(
+      9_000_000_000_000,
+    );
+  });
+
+  test("a rounded result outside the float range has no value", () => {
+    // Scaling by `10 ** -308` and rounding up pushes the unscaled result past the
+    // float range. The integer overload truncates whatever the scaling produced,
+    // so it has to carry the absence through rather than assert on it.
+    const sub: Substitution = new Map<string, number>([
+      ["X", 1.7e308],
+      ["N", -308],
+    ]);
+    expect(evalTerm(call("round", [variable("X"), variable("N")]), sub, env)).toBeUndefined();
   });
 });

@@ -456,7 +456,7 @@ export function isObjectLiteral(item: unknown): item is ObjectLiteral {
 export type PrimitiveType = 'boolean' | 'float' | 'integer' | 'null' | 'string' | 'value';
 
 export function isPrimitiveType(item: unknown): item is PrimitiveType {
-    return item === 'string' || item === 'integer' || item === 'float' || item === 'boolean' || item === 'value';
+    return item === 'string' || item === 'integer' || item === 'float' || item === 'boolean' || item === 'value' || item === 'null';
 }
 
 export interface Program extends langium.AstNode {

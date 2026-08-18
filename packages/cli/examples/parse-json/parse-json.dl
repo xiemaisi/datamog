@@ -3,8 +3,26 @@
 # Each row of raw.csv carries a kind tag and a payload string. The
 # rules below parse each payload via `parse_json`, then exercise the
 # resulting `value` against the existing destructuring / projection
-# builtins (length, subscript, type_of). Malformed payloads surface
-# as NULL and propagate cleanly through subsequent operations.
+# builtins (length, subscript, type_of).
+#
+# Read the output for what is *missing*. A malformed payload has no
+# value, so its whole row is absent rather than present with a NULL
+# in the parsed column: the `malformed` row appears in none of the
+# four results, not even the default `parsed` one. No NULL appears
+# anywhere in this program's output. That is the point worth taking
+# away, since a rule that quietly derives fewer tuples than its
+# input suggests looks the same as one that derives none for a
+# different reason.
+#
+# To see which payloads were rejected, ask for the ones whose parse
+# has no value. `defined` is the readable spelling:
+#
+#     rejected(P) :- raw(_, P), not defined(parse_json(P)).
+#
+# `not (e = e)` says the same thing without the builtin, an equality
+# needing both sides to have a value:
+#
+#     rejected(P) :- raw(_, P), not (parse_json(P) = parse_json(P)).
 #
 # Note on object payloads: SQLite's `json()` validates and minifies
 # but does not sort object keys, while Postgres `jsonb` and the
@@ -14,25 +32,27 @@
 
 input predicate raw(kind: string, payload: string).
 
-# Parse each payload into a `value`. Malformed input → NULL.
+# Parse each payload into a `value`. A malformed payload has no value,
+# so the equality does not hold and no tuple is derived for that row.
 parsed(K, P, J) :- raw(K, P), J = parse_json(P).
 
-# Length of each parsed value: array length / object key count, NULL
-# for the malformed row. The malformed payload still flows through —
-# `length(NULL)` is NULL, propagated through to the integer column.
+# Length of each parsed value: array length / object key count. Four
+# rows, one per row `parsed` kept; the malformed payload never got
+# this far.
 output predicate parsed_length(K, N) :- parsed(K, _, J), N = length(J).
 
 # Projection on parsed arrays: pull the first element as a `value`,
-# then coerce to integer. Non-arrays (the object row, the malformed
-# row) miss the array-shape gate and yield NULL, which the integer
-# column surfaces as a NULL row in the result.
+# then coerce to integer. Two rows out of four, and the two that go
+# do so for different reasons: the object misses the array-shape
+# gate, while `empty_array` passes it and then loses `J[0]`, a
+# missing index having no value.
 output predicate first_element(K, V) :-
     parsed(K, _, J),
     type_of(J) = "array",
     V = as_integer(J[0]).
 
-# Type of each parsed value. The malformed row's J is NULL, so
-# type_of(J) is NULL too — flowing through unchanged.
+# Type of each parsed value. Three rows rather than four: the two
+# arrays agree, and a predicate's extension is a set.
 output predicate parsed_type(K, T) :- parsed(K, _, J), T = type_of(J).
 
 ?- parsed(K, P, J).

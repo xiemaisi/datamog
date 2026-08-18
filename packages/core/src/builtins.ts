@@ -1,38 +1,40 @@
 import type { PrimitiveType } from "./ast.ts";
 
 /**
- * How an overload behaves on NULL. The nullness analysis needs both
- * directions, and they are independent — see
- * doc/design/nullness-tracking.md §4.1.
+ * How an overload behaves on a `null` argument and on the edges of its domain.
+ * Two bits, and they answer two different questions in two different analyses,
+ * so neither implies the other.
  *
- * `strict`: a NULL argument forces a NULL result, so a non-null *result*
+ * `strict`: a null argument forces a null result, so a non-null *result*
  * proves every argument was non-null. This is what licenses reasoning
- * backwards from a guard, which is how `f(X) < 2` refines `X`.
+ * backwards from a guard, which is how `f(X) < 2` refines `X` (`nullness.ts`).
  *
- * `total`: non-null arguments never produce NULL, so nullness does not
- * originate here. This is what licenses reasoning forwards, which is how a
- * head expression's nullness is computed.
+ * `total`: a call with **defined arguments always has a value**. That is
+ * definedness rather than nullness, and it is the reading `canBeUndefined`
+ * (`partiality.ts`) takes: a `false` here means the call can have no value at
+ * all, so its use needs a definedness guard. A total builtin may still return a
+ * null, by propagating one it was given.
  *
- * Every builtin is strict (spec §5.4 propagates NULL through all of them),
- * but the field is stated rather than assumed, because a future non-strict
- * builtin would otherwise inherit refinement it does not license. Totality
- * is the one that varies: the parsing, projection and domain-error families
- * are all partial.
+ * Most builtins are strict, but not all: `type_of` and `defined` answer *about*
+ * a null rather than propagating it (`ANSWERS_NULL` below), which is why the bit
+ * is stated at every overload rather than assumed. Totality varies the same way:
+ * the parsing, projection and domain-error families are all partial.
  */
 export interface NullBehaviour {
   readonly strict: boolean;
   readonly total: boolean;
 }
 
-/** Strict, and never NULL when its arguments are not. */
+/** Strict, and always has a value where its arguments do. */
 const TOTAL: NullBehaviour = { strict: true, total: true };
 
-/** Strict, but a NULL source: can yield NULL from non-null arguments. */
+/** Strict, and can have no value at arguments that have one. */
 const PARTIAL: NullBehaviour = { strict: true, total: false };
 
 /**
- * Answers for a null argument instead of propagating it. `type_of` is the case:
- * `null` is an ordinary value with an ordinary type name, so reporting it is the
+ * Answers for a null argument instead of propagating it, and always has a value.
+ * `type_of` and `defined` are the two: `null` is an ordinary value, with an
+ * ordinary type name and a definedness of its own, so reporting on it is the
  * function's job rather than something to short-circuit. See
  * doc/design/null-as-a-value.md §8.
  */
@@ -61,11 +63,12 @@ export interface Builtin {
 }
 
 /**
- * `nulls` is a required parameter, not a defaulted one. A new partial
- * builtin that inherited `TOTAL` by omission would make the analysis claim
- * non-nullness it cannot prove, which is the unsound direction and the exact
- * risk null.md §6 declined this analysis over. Omitting it is a compile
- * error instead.
+ * `nulls` is a required parameter, not a defaulted one. A new partial builtin
+ * that inherited `TOTAL` by omission would make the analysis claim a value where
+ * there may be none, which drops the definedness guard the call needs, and a
+ * non-strict one that inherited `strict` would license a refinement it does not
+ * support. Both are the unsound direction. Omitting the field is a compile error
+ * instead.
  */
 const ov = (
   key: string,
@@ -131,15 +134,16 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
 
   // Value coercion / introspection. All take a single `value`
   // argument and dispatch to per-dialect SQL fragments at translation
-  // time. The projections are partial: a wrong-shape argument yields NULL
-  // rather than raising (spec §5.4). `type_of` is total, its NULL result
-  // being strictness on a NULL argument rather than a shape failure.
+  // time. The projections are partial: a wrong-shape argument has no value
+  // rather than raising (spec §5.4). `type_of` is total and answers for every
+  // shape a `value` holds, `type_of(null)` being `"null"`: `null` is one of
+  // those shapes, so reporting it is the function's job (§8).
   builtin("as_string", [ov("as_string.value", ["value"], "string", PARTIAL)]),
   builtin("as_integer", [ov("as_integer.value", ["value"], "integer", PARTIAL)]),
   builtin("as_float", [ov("as_float.value", ["value"], "float", PARTIAL)]),
   builtin("as_boolean", [ov("as_boolean.value", ["value"], "boolean", PARTIAL)]),
   builtin("length", [
-    // Non-collection `value` → NULL; a string always has a length.
+    // A non-collection `value` has no length; a string always has one.
     ov("length.value", ["value"], "integer", PARTIAL),
     ov("length.string", ["string"], "integer", TOTAL),
   ]),
@@ -172,10 +176,9 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   // Object helpers. `has_key` is a boolean presence test. `keys`
   // returns a sorted array of the object's keys (as JSON strings);
   // `values` returns the corresponding array of values, ordered by key
-  // for cross-backend determinism. The projection helpers return
-  // `NULL` on non-object input.
-  // `has_key` is total: a missing key or non-object receiver is `false`, not
-  // NULL. `keys` / `values` are partial, non-object input yielding NULL.
+  // for cross-backend determinism.
+  // `has_key` is total: a missing key or non-object receiver is `false`. `keys` /
+  // `values` are partial, non-object input having no value at all.
   builtin("has_key", [ov("has_key.value_string", ["value", "string"], "boolean", TOTAL)]),
   builtin("keys", [ov("keys.value", ["value"], "value", PARTIAL)]),
   builtin("values", [ov("values.value", ["value"], "value", PARTIAL)]),
@@ -188,7 +191,7 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
 
   // Primitive conversions. `to_string` is polymorphic over numeric and
   // boolean inputs; the parsing variants (`to_integer`/`to_float`/
-  // `to_boolean`) take string and return NULL on any malformed input —
+  // `to_boolean`) take string and have no value on malformed input,
   // strict canonical decimals only (no leading zeros, no whitespace,
   // exact 'true'/'false' literals). Number-to-number conversions are
   // intentionally absent: integer-into-float promotion already widens
@@ -203,8 +206,8 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   builtin("to_float", [ov("to_float.string", ["string"], "float", PARTIAL)]),
   builtin("to_boolean", [ov("to_boolean.string", ["string"], "boolean", PARTIAL)]),
 
-  // Parse a string as JSON. Returns NULL on malformed input rather
-  // than raising — matching the rest of the parsing family
+  // Parse a string as JSON. Has no value on malformed input rather
+  // than raising, matching the rest of the parsing family
   // (`to_integer`, `to_float`, `to_boolean`). This is a value-producing
   // operation: a recursion that loops a string back through `parse_json`
   // can manufacture an unbounded family of JSON values, so the

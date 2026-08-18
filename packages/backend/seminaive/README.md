@@ -37,4 +37,4 @@ preview.
 - `maxIterations` — cap the fixed-point passes per stratum instead of running to convergence (the CLI's `--max-iterations`).
 - `onIterationCap` — called once if a stratum hit that cap; the partial results are still returned.
 
-This backend and `datamog-backend-seminaive` are also the only two that accept **non-linear recursion** and **parity-stratified recursion** (the `^` sigil); every SQL backend rejects both at translation time.
+This backend and `datamog-backend-native` are also the only two that accept **non-linear recursion** and **parity-stratified recursion** (the `^` sigil); every SQL backend rejects both at translation time.

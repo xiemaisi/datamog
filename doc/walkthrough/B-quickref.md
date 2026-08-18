@@ -40,10 +40,20 @@ definition, see [`doc/spec.md`](../spec.md).
 | `float`    | `3.14`                        | floating point                              |
 | `boolean` | `true`, `false`               | equality-only — no `<` / `>` ordering       |
 | `value`   | (loaded via JSONL / `.json`)  | union of `null` / boolean / integer / float / string / array / object. Equality-only — no ordering. Destructure via `V["k"]`, `V[i]`, `V[i:j]`, the iteration primitives, and the `as_*` / `length` / `type_of` builtins. |
+| `null`    | `null`                        | the one value `null`, a type beside the primitives rather than under them. Declarable on a column, which is only useful with a `?` |
 
-Widening: `integer → float` (automatic), and primitive → `value`
+Any type takes a `?` suffix (`age: integer?`) to admit `null` as well as
+its own values. A `?` column is checked statically, not only at load
+time: an operation that *computes* (arithmetic, concatenation, an index
+or bound, a bitwise operator, `sum`/`avg`/`min`/`max`/`concat`) rejects a
+nullable operand, so narrow with `X <> null` first. Comparisons, the
+connectives and `value` operands are exempt.
+
+Widening: `integer → float` (automatic), primitive → `value`
 (automatic at any unify-with-`value` site — atom args, equalities,
-function args, iteration sources, IDB column unification).
+function args, iteration sources, IDB column unification), and `null`
+with anything (it contributes the nullability and leaves the base type
+to the other rules).
 
 ## Body atoms
 
@@ -51,6 +61,9 @@ function args, iteration sources, IDB column unification).
 | ------------------------------ | ----------------------------- |
 | `p(X, Y)`                      | predicate atom (EDB or IDB)   |
 | `not p(X, Y)`                  | negated atom (stratified)     |
+| `expr`                         | filter: holds where the expression is `true` |
+| `not expr`                     | negation as failure over any body element, comparisons included: holds wherever `expr` does not hold, an absence included. Not the operator `!expr`, which propagates the absence |
+| `defined(expr)`, `not defined(expr)` | whether `expr` has a value. `defined` is `true` or undefined, never `false`, so `not defined(e)` names the rows `e` lost. `defined(X)` on a bare **variable** is always `true` (a variable is bound to a value, and `null` is one) — for "is this null" you want `X <> null` |
 | `X = expr`, `expr = X`         | equality (binds a bare variable or filters) |
 | `X = Y`, `X <> Y` | equality / inequality over values, `null` included (filter or binding); `!=` spells `<>`. `X <> Y` needs both sides to have a value, so it is not `not (X = Y)` where one can be undefined |
 | `X < Y`, `X <= Y`, `X > Y`, `X >= Y` | ordering comparisons (filter); strict at `null`, which is outside the order, so they have no value there and the row drops |
@@ -70,6 +83,7 @@ function args, iteration sources, IDB column unification).
 | math           | `abs(x)`, `round(x)` / `round(x, n)`, `floor(x)`, `ceil(x)`, `sqrt(x)`, `ln(x)`, `exp(x)` (exponentiation is the `**` operator) |
 | value          | `V["key"]`, `V[i]`, `V[i:j]` (subscript / slice), `as_string(V)`, `as_integer(V)`, `as_float(V)`, `as_boolean(V)`, `length(V)` (array length / object key count / string length), `type_of(V)`, `has_key(V, K)`, `keys(V)` / `values(V)` (object projection, no value on non-object), `to_json(V)` (canonical JSON text), array literal `[e1, ...]`, object literal `{"k": v, ...}` |
 | conversion     | `to_string(x)`, `to_integer(s)`, `to_float(s)`, `to_boolean(s)`, `parse_json(s)` (parsing variants have no value on malformed input, so the row is withheld). Primitive → `value` is automatic at the unify-with-`value` boundary; no explicit lift is needed. `to_json(value)` serialises canonical JSON text, and primitive arguments embed first. |
+| partiality     | `defined(e)` — `true` where `e` has a value, undefined where it does not, never `false`. It takes an operand every other computing operation would reject. See the body-atom table above for the `not defined(e)` reading and the bare-variable trap |
 | aggregate (head-only) | `count`, `sum`, `avg`, `min`, `max`, `concat`, `list` (primitives auto-lift to a `value`; result is an array `value`) |
 
 `count(*)` means `COUNT(*)` — count all rows.
@@ -219,6 +233,7 @@ A file is a function: its `input predicate`s are parameters, its
 | `--output-format F`    | output format (`table`, `csv`, `jsonl`, ...)   |
 | `--csv-no-header`      | treat CSV files as headerless                  |
 | `--warn-finiteness`    | warn about predicate columns that may grow unboundedly |
+| `--warn-undefined`     | name every expression that can have no value, and so every rule that can derive fewer tuples than its input suggests. Off by default (most partiality is deliberate); reach for it when rows you expected are missing |
 | `--max-iterations <n>` | cap fixed-point passes per stratum and stop with a note (`native`/`seminaive` only) |
 | `--strict-contracts`   | treat refinement-contract advisories as errors |
 | `--obligations`        | print refinement proof obligations as SMT-LIB 2 instead of evaluating |

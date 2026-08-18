@@ -49,10 +49,10 @@ const POSTGRES_KNOWN_FAILURES = new Map<string, string>([
 /**
  * Examples the sql.js backend cannot run. sql.js ships a stock SQLite WASM
  * build without the math extension that `bun:sqlite` enables, so `LN` is
- * missing. The translator emits `LN` for `ln` and again inside the `**`
- * overflow guard (`EXP(exp * LN(base))`), so those two features are
- * unavailable on this backend; `SQRT`, `EXP`, `ABS`, and `ROUND` are all
- * present, which is why nothing else is affected.
+ * missing. The translator emits `LN` for `ln`, inside the `**` overflow guard
+ * (`EXP(exp * LN(base))`), and inside `exp`'s own overflow guard, so those three
+ * features are unavailable on this backend; `SQRT`, `EXP`, `ABS`, and `ROUND` are
+ * all present, which is why nothing else is affected.
  *
  * Worth knowing before anyone adds a base-10 log: sql.js does define `LOG`,
  * but as the natural logarithm, where SQLite's math extension defines it as

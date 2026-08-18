@@ -415,10 +415,11 @@ the first place.
 - Safety is equivalent to domain-independence: the answer doesn't
   depend on what values exist "out there in the universe",
   only on what's in the input.
-- Datamog has five column types (`string`, `integer`, `float`,
-  `boolean`, `value`) and two widenings (`integer → float`, and
-  primitive → `value` via auto-lift). Types are inferred by
-  fixed-point walk; mismatches are reported before translation.
+- Datamog has six column types (`string`, `integer`, `float`,
+  `boolean`, `value`, `null`) and two widenings (`integer → float`, and
+  primitive → `value` via auto-lift); `null` joins with anything and
+  leaves its base type alone. Types are inferred by fixed-point walk;
+  mismatches are reported before translation.
 - A `_` head position can carry a **proposition** instead of a type,
   claiming what every tuple satisfies. It is checked against the
   derived tuples and the position erases. A predicate's contract is

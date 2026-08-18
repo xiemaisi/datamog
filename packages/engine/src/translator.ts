@@ -894,12 +894,29 @@ function translateRule(
           functionOverloads,
           dialect,
         );
-        const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
         const colSql = `${alias}.${ident(col)}`;
+        // §1: an atom holds only where every argument has a value. The null-aware
+        // operator would otherwise match an absence against a stored null. Guard
+        // the unlifted SQL, so a lift into `value` cannot read as a JSON null.
+        if (canBeUndefined(term, partialCtx)) {
+          conditions.push(markSpan(atom, `${termSql} IS NOT NULL`));
+        }
+        // The same equality a repeated variable and a spelled-out `X = Y` get,
+        // which lifts whichever side is the primitive. A `value`-typed argument
+        // against a primitive column needs the *column* lifted, and comparing the
+        // two unlifted matched only where a dialect's affinity rules happened to
+        // coerce one to the other.
         conditions.push(
           markSpan(
             atom,
-            cannotBeNullHere(term) ? `${colSql} = ${lifted}` : dialect.logicalEq(colSql, lifted),
+            sqlEqWithJsonLift(
+              colSql,
+              expectedType,
+              termSql,
+              termType,
+              dialect,
+              cannotBeNullHere(term),
+            ),
           ),
         );
       }
@@ -940,18 +957,15 @@ function translateRule(
       if (term.$type === "Variable") {
         const refs = bindings.get(term.name);
         if (refs && refs.length > 0) {
-          const varType = varTypes.get(term.name);
-          const lifted = liftToJsonIfNeeded(
-            bindingToSql(refs[0]!),
-            varType,
-            expectedType,
-            dialect,
-            !nonNullVars.has(term.name),
-          );
           subConditions.push(
-            isLiteralBinding(refs[0]!) || nonNullVars.has(term.name)
-              ? `${ident(col)} = ${lifted}`
-              : dialect.logicalEq(ident(col), lifted),
+            sqlEqWithJsonLift(
+              ident(col),
+              expectedType,
+              bindingToSql(refs[0]!),
+              varTypes.get(term.name),
+              dialect,
+              isLiteralBinding(refs[0]!) || nonNullVars.has(term.name),
+            ),
           );
         }
       } else {
@@ -964,11 +978,22 @@ function translateRule(
           functionOverloads,
           dialect,
         );
-        const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
+        // The guard belongs *inside* the subquery, not at rule level: `not p(1 / 0)`
+        // holds, §1's `not` complementing failure for any reason including an
+        // absence. An unmatched subquery is what makes `NOT EXISTS` true, so an
+        // argument with no value has to stop the match rather than drop the row.
+        if (canBeUndefined(term, partialCtx)) {
+          subConditions.push(`${termSql} IS NOT NULL`);
+        }
         subConditions.push(
-          cannotBeNullHere(term)
-            ? `${ident(col)} = ${lifted}`
-            : dialect.logicalEq(ident(col), lifted),
+          sqlEqWithJsonLift(
+            ident(col),
+            expectedType,
+            termSql,
+            termType,
+            dialect,
+            cannotBeNullHere(term),
+          ),
         );
       }
     }
@@ -1013,6 +1038,18 @@ function translateRule(
   for (const eq of equalityConstraints) {
     let lhs = termToSql(eq.left, bindings, varTypes, columnTypes, functionOverloads, dialect);
     let rhs = termToSql(eq.expr, bindings, varTypes, columnTypes, functionOverloads, dialect);
+    // §1: an equality holds only where both sides have a value. Without this the
+    // null-aware operator answers *true* for two absences, so a conjunct over two
+    // missing `value` keys holds and a constraint over it reports a violation that
+    // is not there. The guards read the unlifted SQL, before the `value` lift
+    // below can spell an absence as a JSON null. A negated equality never reaches
+    // here, being a `Filter` whose own emit carries the guard inside the negation.
+    for (const side of [eq.left, eq.expr]) {
+      if (canBeUndefined(side, partialCtx)) {
+        const sideSql = side === eq.left ? lhs : rhs;
+        conditions.push(markSpan(eq, `${sideSql} IS NOT NULL`));
+      }
+    }
     const leftType = inferTermType(eq.left, varTypes, columnTypes);
     const rightType = inferTermType(eq.expr, varTypes, columnTypes);
     if (leftType === "value" && rightType !== undefined && rightType !== "value") {
@@ -1056,6 +1093,11 @@ function translateRule(
 function translateFact(rule: Rule, analyzed: TypedProgram, dialect: SqlDialect): string {
   const emptyBindings = new Map<string, Binding[]>();
   const emptyVarTypes = new Map<string, PrimitiveType>();
+  // §1's head rule holds here too: a fact whose head expression has no value
+  // derives no tuple. The guards read the *unlifted* SQL, so a lift into `value`
+  // cannot turn an absence into a stored JSON null.
+  const partialCtx = partialityCtx(emptyVarTypes, analyzed.columnTypes, analyzed.functionOverloads);
+  const definedness: string[] = [];
   const selectParts = rule.head.args.map((term, i) => {
     if (term.$type === "AggregateCall") {
       // The analyzer rejects aggregates in facts (empty rule bodies), so this
@@ -1076,12 +1118,14 @@ function translateFact(rule: Rule, analyzed: TypedProgram, dialect: SqlDialect):
     );
     const headColType = analyzed.columnTypes.get(rule.head.predicate)?.[i];
     const termType = inferTermType(term, emptyVarTypes, analyzed.columnTypes);
+    if (canBeUndefined(term, partialCtx)) definedness.push(`${rawSql} IS NOT NULL`);
     const lifted = liftToJsonIfNeeded(rawSql, termType, headColType, dialect);
     return `${castHeadColumn(lifted, headColType, dialect)} AS col${i + 1}`;
   });
   // A nullary fact (empty head) becomes the constant marker column; see translateRule.
   const selectList = selectParts.length > 0 ? selectParts.join(", ") : "1 AS col1";
-  const selectClause = markSpan(rule.head, `SELECT ${selectList}`);
+  let selectClause = markSpan(rule.head, `SELECT ${selectList}`);
+  if (definedness.length > 0) selectClause += ` WHERE ${definedness.join(" AND ")}`;
   return markSpan(rule, selectClause);
 }
 
@@ -1397,6 +1441,15 @@ function termToSql(
         op = "||";
       }
       const resultType = inferTermType(term, varTypes, columnTypes);
+      // A float operation that leaves the domain has no value, so the row is
+      // withheld. Postgres raises "value out of range: overflow" while
+      // *evaluating* the operation, which kills the whole query before a guard
+      // reading the result can fire, so the magnitude is tested in exact decimal
+      // instead: that cannot overflow on Postgres, and on SQLite it is the same
+      // Infinity the direct form gives. `CASE` evaluates the float arm only where
+      // the test says it is in range, so the operation itself never overflows.
+      const guardFloatBinary = (opSql: string, l: string, r: string): string =>
+        `(CASE WHEN ABS(${asDecimal(l)} ${opSql} ${asDecimal(r)}) > ${MAX_FLOAT_SQL} THEN NULL ELSE (${l} ${opSql} ${r}) END)`;
       const guardNumericResult = (sql: string): string => {
         if (!guardResult) return sql;
         if (resultType === "float") return finiteFloatOrNullSql(sql);
@@ -1428,7 +1481,11 @@ function termToSql(
         ) {
           return guardNumericResult(dialect.divideIntegers(leftSql, safeRhs));
         }
+        if (guardResult && resultType === "float") return guardFloatBinary(op, leftSql, safeRhs);
         return guardNumericResult(`(${leftSql} ${op} ${safeRhs})`);
+      }
+      if (guardResult && resultType === "float" && (op === "+" || op === "-" || op === "*")) {
+        return guardFloatBinary(op, leftSql, rightSql);
       }
       const leftOperand = resultType === "integer" && op === "*" ? asDecimal(leftSql) : leftSql;
       const rightOperand = resultType === "integer" && op === "*" ? asDecimal(rightSql) : rightSql;
@@ -1833,6 +1890,14 @@ function orderingSql(op: string, leftSql: string, rightSql: string): string {
  * NULL. Both forms drop the row when the other side is NULL, one via NULL
  * and one via FALSE, so they are interchangeable in a WHERE conjunct, and
  * the plain form keeps the emitted SQL readable and hash-joinable.
+ *
+ * The lift asks the same question §9.4 asks everywhere: a NULL in one of these
+ * operands is the `null` value, every operand here being a variable or a literal
+ * binding and so never undefined, and it has to reach the `value` side as a JSON
+ * null. Without that a repeated variable and a spelled-out `X = Y` lift
+ * differently and the two stop meaning the same thing, which is the invariant
+ * §1's atom rule rests on. `plainEq` is the exact test: it is true precisely
+ * where no NULL can arrive, so the lift needs no `CASE` there.
  */
 function sqlEqWithJsonLift(
   leftSql: string,
@@ -1845,9 +1910,9 @@ function sqlEqWithJsonLift(
   let lhs = leftSql;
   let rhs = rightSql;
   if (leftType === "value" && rightType !== undefined && rightType !== "value") {
-    rhs = primitiveToJsonSql(rhs, rightType, dialect);
+    rhs = primitiveToJsonSql(rhs, rightType, dialect, !plainEq);
   } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
-    lhs = primitiveToJsonSql(lhs, leftType, dialect);
+    lhs = primitiveToJsonSql(lhs, leftType, dialect, !plainEq);
   }
   return plainEq ? `${lhs} = ${rhs}` : dialect.logicalEq(lhs, rhs);
 }
@@ -1895,11 +1960,19 @@ function translateAggregate(
       // overflowing SUM are both SQL NULL and have to go opposite ways, 0 and
       // undefined, so guarding the coalesced result is the only order that
       // distinguishes them (§9.4).
-      return argType === "integer" ? dialect.integerSum(argSql) : `COALESCE(SUM(${argSql}), 0)`;
+      //
+      // A float fold can also leave the domain, and SQL's `SUM` reports that as
+      // an infinity rather than as NULL, which no `IS NOT NULL` catches. The
+      // finite guard turns it into the absence the interpreters produce, and it
+      // sits outside the COALESCE so the empty group still folds to 0.
+      return argType === "integer"
+        ? dialect.integerSum(argSql)
+        : finiteFloatOrNullSql(`COALESCE(SUM(${argSql}), 0)`);
     // No identity in the domain, so an empty group leaves these NULL, which the
-    // HAVING guard below reads as undefined and withholds the row for.
+    // HAVING guard below reads as undefined and withholds the row for. `AVG` can
+    // leave the float domain the same way `SUM` can.
     case "avg":
-      return `AVG(${argSql})`;
+      return finiteFloatOrNullSql(`AVG(${argSql})`);
     case "min":
       return `MIN(${orderArgSql})`;
     case "max":
@@ -1927,7 +2000,13 @@ function translateAggregate(
       if (argType === "boolean") {
         wrapped = `(CASE WHEN ${argSql} THEN 'true' WHEN NOT (${argSql}) THEN 'false' END)`;
       } else if (argType === "value") {
-        wrapped = dialect.stringOrder(dialect.jsonStringify(argSql));
+        // `concat` skips a null, having nothing to do with one (spec §5.4), and
+        // Position 3 makes a nullable primitive a static error, so a `value` is
+        // the only argument that can carry one. Its null is the JSON spelling
+        // (§9.3), which the group-concat NULL-skip does not see, so map it to a
+        // SQL NULL and let the existing skip apply. A JSON string `"null"` keeps
+        // its quotes through `jsonStringify` and so is left alone.
+        wrapped = dialect.stringOrder(`NULLIF(${dialect.jsonStringify(argSql)}, 'null')`);
       } else if (argType === "string") {
         wrapped = orderArgSql;
       } else {
@@ -2182,7 +2261,14 @@ function translateCall(
   const sqlArgs = call.args.map((a, i) => {
     const rawSql = termToSql(a, bindings, varTypes, columnTypes, functionOverloads, dialect);
     const argType = inferTermType(a, varTypes, columnTypes);
-    return liftToJsonIfNeeded(rawSql, argType, overload.params[i], dialect);
+    // A `value` parameter accepts a null as one of the shapes it holds, so a
+    // nullable primitive argument has to arrive as a JSON null rather than as a
+    // SQL NULL, which the function would read as an absence. Then `type_of(X)` is
+    // `"null"` and `has_key(X, k)` is false, as they are on the interpreters. No
+    // nullness bit is in scope here, so the test is whether the operand is a
+    // variable, a variable being the only lifted operand that can be null and
+    // still have a value.
+    return liftToJsonIfNeeded(rawSql, argType, overload.params[i], dialect, a.$type === "Variable");
   });
   const emit = SQL_EMIT.get(overload.key);
   if (!emit) {

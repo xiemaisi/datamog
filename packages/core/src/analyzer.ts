@@ -1073,15 +1073,6 @@ export function isGroupingArg(
 }
 
 /**
- * Does `rule` have any grouping column?
- *
- * This is the one definition of the question. A rule with no grouping column
- * emits a single row even over empty input, filled with the empty-group
- * aggregate values, so the answer decides what the evaluator emits, what the
- * translator puts in `GROUP BY`, and whether a non-`count` aggregate column can
- * be NULL (`nullness.ts`). Copies of it have drifted apart twice.
- */
-/**
  * Every head annotation in the program, as `(predicate, position, annotation)`.
  *
  * Both published contracts are the inferred map widened by these: the type half
@@ -1105,6 +1096,18 @@ export function* headAnnotations(
   }
 }
 
+/**
+ * Does `rule` have any grouping column?
+ *
+ * This is the one definition of the question. A rule with no grouping column
+ * emits a single row even over empty input, filled with the empty-group
+ * aggregate values, so the answer decides what the evaluator emits and what the
+ * translator puts in `GROUP BY`. Copies of it have drifted apart twice.
+ *
+ * It says nothing about nullness: no aggregate returns a null over any group, an
+ * empty one included, since the folds with an identity return it and the ones
+ * without have no value there.
+ */
 export function hasGroupingColumns(rule: Rule): boolean {
   const literalBound = literalBindings(rule);
   return rule.head.args.some((arg) => isGroupingArg(arg, literalBound));

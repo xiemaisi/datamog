@@ -35,6 +35,7 @@ import {
   type TypeEnv,
   type Value,
   evalTerm,
+  finiteOrUndef,
   logicalEq,
   scrubNonFiniteForJson,
 } from "./values.ts";
@@ -560,7 +561,10 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
         total += v as number;
         hasAny = true;
       }
-      return hasAny ? total : 0;
+      // `+`'s identity again for the empty group, and the same domain rule a
+      // plain `+` follows for a total that leaves the float range: no value, so
+      // the tuple is withheld rather than carrying an Infinity (§1).
+      return hasAny ? finiteOrUndef(total) : 0;
     }
     case "avg": {
       let total = 0;
@@ -571,8 +575,8 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
         n++;
       }
       // An average over nothing would be 0/0, so there is no value and the tuple
-      // is withheld (§7).
-      return n === 0 ? undefined : total / n;
+      // is withheld (§7). A total outside the float range has none either.
+      return n === 0 ? undefined : finiteOrUndef(total / n);
     }
     case "min": {
       // No identity: a minimum over nothing would need an infinity, which is not
@@ -779,6 +783,12 @@ export function* enumerate(
       const v = evalTerm(step.expr, sub, env);
       const lo = evalTerm(step.low, sub, env);
       const hi = evalTerm(step.high, sub, env);
+      // `e in [lo .. hi]` is a conjunct, so it does not hold where any of the
+      // three has no value: `2 in [1 .. 10 / V]` is false at `V = 0` rather than
+      // comparing against an absence. The binding form says the same in
+      // `bindRange`. A null fails for the other reason, an order having no place
+      // for one. See doc/design/null-as-a-value.md §1 and §4.1.
+      if (v === undefined || lo === undefined || hi === undefined) return;
       if (v === null || lo === null || hi === null) return;
       if ((v as number) < (lo as number) || (v as number) > (hi as number)) return;
       yield* enumerate(steps, i + 1, sub, env, relations, deltaOverride);

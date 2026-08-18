@@ -135,7 +135,8 @@ input predicate scores(student: string, subject: string, score: integer).
 
 This tells Datamog to look for a file named `scores.csv` in the same directory,
 with columns `student`, `subject`, and `score`. The supported column types are
-`string`, `integer`, `float`, `boolean`, and `value` (for JSON-shaped data).
+`string`, `integer`, `float`, `boolean`, `value` (for JSON-shaped data), and
+`null`. Any of them takes a `?` suffix to admit the `null` value as well.
 
 ## Exercises
 

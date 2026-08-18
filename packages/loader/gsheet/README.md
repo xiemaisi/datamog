@@ -24,6 +24,8 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=... GOOGLE_PRIVATE_KEY=... bun run datamog program.
 
 The first row of the sheet must contain headers that match the declared column names (e.g. `name`, `child`).
 
+Cells are coerced the way the [CSV loader](../csv/README.md) coerces them, so the same `?` rule applies: an empty cell is a `null`, which loads only into a column declared with a `?` suffix (`age: integer?`) and is otherwise a hard load error. A non-nullable `string` column is the exception, taking an empty cell as the empty string.
+
 ## Authentication
 
 Two methods are supported. If both are set, service account takes precedence.

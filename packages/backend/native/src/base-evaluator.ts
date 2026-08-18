@@ -115,7 +115,11 @@ export abstract class BaseDatalogEvaluator {
     const rel = this.relations.get(predicate)!;
     const appended: Value[][] = [];
     for (const row of rows) {
-      const tuple: Value[] = decl.columns.map((c) => row[c.name] as Value);
+      // A column the row does not carry holds the null value, which is what the
+      // SQL backends' INSERT gives it. Never JS `undefined`: no relation cell
+      // holds an absence, and one here would read as an unbound variable in
+      // `matchAtom` and join against anything.
+      const tuple: Value[] = decl.columns.map((c) => (row[c.name] ?? null) as Value);
       if (addRow(rel, tuple)) appended.push(tuple);
     }
     if (this.trace && !this.loadedEmitted.has(predicate)) {

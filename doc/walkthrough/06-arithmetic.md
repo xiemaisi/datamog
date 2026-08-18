@@ -99,12 +99,25 @@ warning is noisy on a working program. Reach for it when rows you expected are
 missing.
 
 To see which rows went, ask for the ones whose expression has no value.
-`not (e = e)` holds exactly when `e` is undefined, since an equality needs
+`defined(e)` is the readable spelling: it is `true` where `e` has a value and
+*undefined* where it does not, never `false`, so the negation names exactly
+the lost rows:
+
+```prolog
+lost(X) :- n(X), not defined(10 / X).     # {0}
+```
+
+`not (e = e)` says the same thing without the builtin, since an equality needs
 both sides to have a value:
 
 ```prolog
 lost(X) :- n(X), not (10 / X = 10 / X).   # {0}
 ```
+
+One trap, and it is one keystroke wide. `defined(X)` on a bare **variable** is
+always `true`: a variable is bound to a value, and `null` is a value. If you
+meant "is this null", you want `X <> null`. Datamog warns when it sees the
+first spelling on a variable, because only one of the two is ever meant there.
 
 Overflow is worth a second look, because it is the one that surprises:
 
@@ -195,8 +208,9 @@ Summary:
 Indexing and slicing use non-negative integer bounds (negative
 literals are rejected at type-check time). An out-of-range
 subscript and a "bad" slice (start ≥ end, or either bound negative
-at runtime) both return `""`; only `NULL` propagating into the
-operand turns the result into `NULL`.
+at runtime) both return `""`, which is a value. A nullable string
+or a nullable bound is a static error rather than a null result:
+guard it with `<> null` first.
 
 ## A complete example: Fibonacci
 

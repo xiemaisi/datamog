@@ -185,11 +185,13 @@ RangeAtom:
 // analyser checks the expression's type is `boolean`.
 //
 // A leading `not` negates a built-in atom (`not X = Y`, `not Age < 18`):
-// any atom can be negated, not just predicate calls. Post-processing
-// desugars the `negated` flag into a logical `!(...)` over `expr`, so
-// downstream stages see an ordinary boolean filter. (Predicate calls
-// still take the `not` on Literal — that alternative is tried first, so
-// `not p(X)` stays a negated literal, never a negated filter.)
+// any atom can be negated, not just predicate calls. The `negated` flag
+// reaches the backends as it stands: `not e` is negation as failure over
+// the expression and holds wherever `e` does not, an absence included,
+// where the operator `!e` propagates the absence. Nothing rewrites one
+// into the other. (Predicate calls still take the `not` on Literal —
+// that alternative is tried first, so `not p(X)` stays a negated
+// literal, never a negated filter.)
 Filter:
     (negated?='not')? expr=Expression;
 
@@ -209,22 +211,27 @@ Filter:
 //   ** (exponentiation, right-associative — binds tighter than * / %)
 //
 // `&&`/`||`/`!` are *logical*, not bitwise — operands and result must
-// be boolean. Three-valued logic with NULL matches SQL semantics
-// (`NULL && false = false`, `NULL || true = true`, `!NULL = NULL`),
-// so the same expression behaves identically on every backend.
+// be boolean. There is no third truth value: a `null` is no truth value,
+// so a connective handed one has *no value* except where the other
+// operand dominates (`null && false` is `false`, `null || true` is
+// `true`, while `null && true` and `!null` have none). The same holds of
+// an operand that has no value, which is what makes `X <> 0 && 10 / X > 0`
+// a usable guard. Identical on every backend (spec §5.4).
 // Comparisons return boolean.
 //
 // `&`/`|`/`^`/`<<`/`>>`/`>>>` are *bitwise*, operating on 32-bit signed
 // two's-complement integers (Java/JS `int` semantics): operands and
 // result are `integer`, `>>` is arithmetic (sign-extending), `>>>` is
-// logical (zero-fill), and the shift count is taken mod 32. NULL
-// propagates. Each backend explicitly applies the 32-bit coercion so the
-// result is identical despite wider integer storage (see spec §5.9).
+// logical (zero-fill), and the shift count is taken mod 32. They compute,
+// so they reject a nullable operand statically. Each backend explicitly
+// applies the 32-bit coercion so the result is identical despite wider
+// integer storage (see spec §5.9).
 //
 // One equality: `=`/`<>`, null-aware (`null = null` is true,
 // `null = X` is false). Body-level Equality (`X = expr`) reuses the same
-// operator and additionally binds an unbound LHS. Ordering is total too,
-// with null an isolated point in the order. See doc/design/null.md §5.
+// operator and additionally binds an unbound LHS. The orderings are
+// *strict* at a null, which is outside the order, so they have no value
+// there. See doc/design/null-as-a-value.md §4.1.
 //
 // `!=` is a spelling of `<>` for programmers who expect it. `parseRaw`
 // rewrites it, so no stage past parsing sees the alias.

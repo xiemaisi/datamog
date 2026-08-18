@@ -31,6 +31,10 @@ new CsvLoader({
 
 Values are automatically coerced to match the declared column types (`string`, `integer`, `float`, `boolean`, `value`). Numeric coercion is strict (canonical decimal form only, with no exponent syntax); a `value` column parses each cell as JSON.
 
+## Empty cells and `?`
+
+An empty cell is a `null`, and a column has to say it accepts one. Declare it with a `?` suffix (`age: integer?`) and the empty cell loads as the `null` value; on a non-nullable column it is a **hard load error** naming the file, line and column, not a silently missing value. The one exception is a non-nullable `string`, where an empty cell is the empty string, which is a perfectly good `string`; declare `string?` if you want the empty cell to mean `null` instead.
+
 ## Platform-neutral parsing
 
 The root entry reads files, so it imports `node:path` and `Bun.file`. Consumers that already hold the text — the browser playground, the VS Code extension — import `datamog-csv/parse-content` instead, which exports `csvRowsFromKeyed` and `csvRowsFromPositional` and pulls in nothing Bun-specific.

@@ -74,6 +74,18 @@ export async function verifyObligations(
     });
     const lines = output.split("\n").filter((l) => l.trim() !== "");
     const verdict = lines.find((l) => /^(sat|unsat|unknown)$/.test(l.trim()))?.trim();
+    // A solver that rejects one command carries on with the rest, so `check-sat`
+    // still answers, but over a script missing an assertion, and reading that as
+    // a verdict turns a malformed encoding into a confident counterexample.
+    // `unsat` survives it: dropping an assertion only ever makes a proof harder,
+    // so a proof that went through is still a proof. Anything else does not.
+    // `(error ...)` is SMT-LIB's own error response, spelled the same way by every
+    // solver, and after `unsat` it is the `get-value` line saying there is no
+    // model to name, which the verdict already accounts for.
+    if (verdict !== "unsat" && lines.some((l) => /^\(error\b/.test(l.trim()))) {
+      verdicts.push({ obligation, status: "error", detail: lines.join(" ").trim() });
+      continue;
+    }
     if (verdict === "unsat") verdicts.push({ obligation, status: "discharged" });
     else if (verdict === "sat")
       verdicts.push({

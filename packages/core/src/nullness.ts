@@ -1,16 +1,22 @@
-// Nullness inference: which columns can hold SQL NULL, and which variables a
-// rule body proves cannot.
+// Nullness inference: which columns can hold the **null value**, and which
+// variables a rule body proves cannot.
 //
-// Two levels, and keeping them apart is the design (see
+// Not "can this be undefined": an operation with no value at its arguments
+// yields no value at all, which no column holds and no variable binds to. That
+// is `canBeUndefined` in `partiality.ts`, and keeping the two questions apart is
+// the whole of doc/design/null-as-a-value.md §1.
+//
+// Two levels, and keeping those apart is the design (see
 // doc/design/nullness-tracking.md §4). Nullness of a *variable* is a per-rule
 // fact refinable by the body's constraints; nullness of a *column* is a
 // per-predicate fact computed as a least fixed point. The first reads the
 // second at body atoms, the second reads the first at the head.
 //
 // Everything here over-approximates: where the answer is not known the answer
-// is "may be NULL". Getting that direction wrong would be unsound rather than
+// is "may be null". Getting that direction wrong would be unsound rather than
 // imprecise, since a column wrongly believed non-null lowers a join to a plain
-// `=` and drops the NULL-NULL match that null.md §4 specifies.
+// `=` and drops the null-to-null match null-as-a-value.md §4.1 specifies, and
+// lets Position 3 (§5) accept an operand it must reject.
 
 import { BUILTIN_BODY_ATOMS, headAnnotations } from "./analyzer.ts";
 import type { AnalyzedProgram } from "./analyzer.ts";
@@ -26,14 +32,15 @@ import type {
 } from "./ast.ts";
 import { EQUALITY_OPS, ORDERING_OPS } from "./ast.ts";
 import type { Overload } from "./builtins.ts";
+import { type PartialityContext, canBeUndefined } from "./partiality.ts";
 
 /** A rule or a query: anything with a body whose variables get refined. */
 export type BodyOwner = Rule | Query;
 
 export interface NullnessInfo {
   /**
-   * Per predicate, per column: can it hold SQL NULL? Extensional columns take
-   * their declared `?`; intensional ones are inferred.
+   * Per predicate, per column: can it hold the null value? Extensional columns
+   * take their declared `?`; intensional ones are inferred.
    */
   readonly columnNullness: ReadonlyMap<string, readonly boolean[]>;
   /**
@@ -213,10 +220,10 @@ export function refineBody(
           if (elem.negated) break;
           const spec = BUILTIN_BODY_ATOMS.get(elem.predicate);
           if (spec) {
-            // Iterating a NULL receiver yields no rows, so the atom firing
+            // Iterating a null receiver yields no rows, so the atom firing
             // proves the source non-null. Of the bound slots, a JSON object
-            // key and an array index are never NULL, while a value slot can
-            // be a JSON null leaf, which is SQL NULL (spec §2.9).
+            // key and an array index are never null, while a value slot can
+            // hold a JSON `null` leaf, which is the null value (§8).
             const source = elem.args[spec.sourceArg];
             if (source) add(strictVars(source, ctx));
             for (const bound of spec.boundArgs) {
@@ -246,11 +253,12 @@ export function refineBody(
           break;
         }
         case "Filter":
-          // `negated` is lowered to `!(...)` by post-processing, but handle it
-          // so the analysis is also correct on a raw AST.
+          // A negated filter is negation as failure over its expression, so all
+          // it reports is that the expression did not hold: `failed` rather than
+          // `false`, which is the distinction `refineFalse` turns on.
           add(
             elem.negated
-              ? refineFalse(elem.expr, nonNull, owner, ctx)
+              ? refineFalse(elem.expr, "failed", nonNull, owner, ctx)
               : refineTrue(elem.expr, nonNull, owner, ctx),
           );
           break;
@@ -265,7 +273,8 @@ export function refineBody(
  *
  * `!` flips to `refineFalse`, which is sound in this direction only: `!e` holds
  * only where `e` has a value and is false, `!` propagating an absence rather than
- * complementing it. The reverse flip is not available, since a comparison is no
+ * complementing it. That is the `false` premise, the stronger of the two the
+ * function takes. The reverse flip is not available, since a comparison is no
  * longer total; `refineFalse` says why.
  */
 function refineTrue(
@@ -275,7 +284,7 @@ function refineTrue(
   ctx: NullnessContext,
 ): Set<string> {
   if (expr.$type === "UnaryExpr" && expr.op === "!") {
-    return refineFalse(expr.operand, nonNull, owner, ctx);
+    return refineFalse(expr.operand, "false", nonNull, owner, ctx);
   }
   if (expr.$type !== "BinaryExpr") return new Set();
   const { op, left, right } = expr;
@@ -294,8 +303,9 @@ function refineTrue(
   if (ORDERING_OPS.has(op)) {
     return union(strictVars(left, ctx), strictVars(right, ctx));
   }
-  // `X <> null` is exactly the non-null test, `<>` being total and null-aware.
-  if (op === "<>") return nullTestVars(expr, ctx);
+  // `X <> null` is exactly the non-null test, `<>` being null-aware. A partial
+  // operand needs no guard on this side: `<>` holding means it had a value.
+  if (op === "<>") return nullTestVars(expr, owner, ctx, false);
   // `X = e` for a non-null `e`, the filter-position twin of body Equality.
   if (op === "=") {
     const proven = new Set<string>();
@@ -306,9 +316,27 @@ function refineTrue(
   return new Set();
 }
 
-/** The variables proven non-null by `expr` *not* holding. */
+/**
+ * What a caller of `refineFalse` knows, and the two callers do not know the same
+ * thing. `!e` being true means `e` is **false**; `not e` holding means `e`
+ * **failed**, which is false *or* no value at all. The leaf case reasons from
+ * falsity, so it has to be told which premise it is under.
+ */
+type Falsity = "false" | "failed";
+
+/**
+ * The variables proven non-null by `expr` *not* holding, in the sense `premise`
+ * names.
+ *
+ * The induction that keeps the compound arms sound is worth stating, because it
+ * runs on "did not hold" rather than on "is false". `a && b` not holding means at
+ * least one side did not hold, and the intersection is contained in whichever
+ * one that is. `a || b` not holding means *neither* side held, both by
+ * dominance, so the union is licensed. Only the leaf needs the premise.
+ */
 function refineFalse(
   expr: Expression,
+  premise: Falsity,
   nonNull: ReadonlySet<string>,
   owner: BodyOwner,
   ctx: NullnessContext,
@@ -319,7 +347,8 @@ function refineFalse(
     // `e` has no value: `not (!(X < 2))` holds at a null `X`, the ordering having
     // no value there and `!` propagating that. So nothing is proven, where
     // `refineTrue` may flip soundly, `!e` being *true* only where `e` has a value
-    // and is false.
+    // and is false. Under the `false` premise a flip back to `refineTrue` would be
+    // sound; `!!e` is not a shape worth the arm.
     return new Set();
   }
   if (expr.$type !== "BinaryExpr") return new Set();
@@ -327,17 +356,22 @@ function refineFalse(
   // De Morgan: `!(a && b)` is `!a || !b`, so both branches must prove it.
   if (op === "&&") {
     return intersect(
-      refineFalse(left, nonNull, owner, ctx),
-      refineFalse(right, nonNull, owner, ctx),
+      refineFalse(left, premise, nonNull, owner, ctx),
+      refineFalse(right, premise, nonNull, owner, ctx),
     );
   }
   if (op === "||") {
-    return union(refineFalse(left, nonNull, owner, ctx), refineFalse(right, nonNull, owner, ctx));
+    return union(
+      refineFalse(left, premise, nonNull, owner, ctx),
+      refineFalse(right, premise, nonNull, owner, ctx),
+    );
   }
   // `not (X = null)` is the same fact as `X <> null`, spelled as a SQL
-  // programmer would. A false ordering comparison proves nothing: that is
-  // exactly where the NULL row lives, `not (X < 2)` holding of it.
-  if (op === "=") return nullTestVars(expr, ctx);
+  // programmer would, *as long as the tested operand has a value everywhere*:
+  // otherwise `not` also holds where the equality has none, and an absence says
+  // nothing about a null. A false ordering comparison proves nothing either way:
+  // that is exactly where the null row lives, `not (X < 2)` holding of it.
+  if (op === "=") return nullTestVars(expr, owner, ctx, premise === "failed");
   return new Set();
 }
 
@@ -345,22 +379,46 @@ function refineFalse(
  * For a comparison against the `null` literal, the strict positions of the
  * other side. Bails on any other shape: `X <> Y` for a non-null `Y` proves
  * nothing, `null <> 5` being true.
+ *
+ * `requireDefined` is what keeps a negation-as-failure caller honest. Equality is
+ * total over values but strict in undefinedness, so `A["x"] = null` has no value
+ * where the key is missing, and `not (A["x"] = null)` holds there without `A`
+ * being anything in particular. Under that premise only an operand that cannot be
+ * undefined licenses the conclusion, which leaves the idiom the guard exists for,
+ * a bare variable, untouched.
  */
-function nullTestVars(expr: BinaryExpr, ctx: NullnessContext): Set<string> {
-  if (expr.right.$type === "NullLiteral") return strictVars(expr.left, ctx);
-  if (expr.left.$type === "NullLiteral") return strictVars(expr.right, ctx);
-  return new Set();
+function nullTestVars(
+  expr: BinaryExpr,
+  owner: BodyOwner,
+  ctx: NullnessContext,
+  requireDefined: boolean,
+): Set<string> {
+  const tested =
+    expr.right.$type === "NullLiteral"
+      ? expr.left
+      : expr.left.$type === "NullLiteral"
+        ? expr.right
+        : undefined;
+  if (tested === undefined) return new Set();
+  if (requireDefined && canBeUndefined(tested, partialityCtx(owner, ctx))) return new Set();
+  return strictVars(tested, ctx);
+}
+
+/** `canBeUndefined`'s context, which is this one minus the rule. */
+function partialityCtx(owner: BodyOwner, ctx: NullnessContext): PartialityContext {
+  return { overloads: ctx.overloads, typeOf: (expr) => ctx.typeOf(owner, expr) };
 }
 
 /**
  * The variables occurring in a *strict position* of `expr`: reachable from the
  * root through strict operations only.
  *
- * The reasoning this licenses is one step. If the whole expression is known
- * non-null and a strictly-occurring variable were null, strictness would have
- * made the expression null. Non-strict operators block the walk and must: a
- * `X <> null` subexpression is non-null whatever `X` is, so nothing under one
- * is proven.
+ * The reasoning this licenses is one step, and every caller supplies the same
+ * premise: this expression has a value, and that value is not null. Were a
+ * strictly-occurring variable null, strictness would have left the expression
+ * with a null or with no value, and either contradicts the premise. Non-strict
+ * operators block the walk and must: a `X <> null` subexpression has a non-null
+ * value whatever `X` is, so nothing under one is proven.
  */
 function strictVars(
   expr: Expression,
@@ -372,7 +430,9 @@ function strictVars(
       into.add(expr.name);
       break;
     case "UnaryExpr":
-      // Both `-` and `!` propagate a NULL operand.
+      // `-` propagates a null operand. `!` has no value at one, a null being no
+      // truth value (§15.26), which is strictness of the kind this walk wants:
+      // `!e` having a value at all means `e` had one and was not a null.
       strictVars(expr.operand, ctx, into);
       break;
     case "BinaryExpr":

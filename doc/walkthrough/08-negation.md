@@ -154,8 +154,10 @@ reach_avoiding(Src, Goal, Bad) :-
 
 That's fine: there's no `not p(...)` in the body at all — the
 "avoid this node" test is just a body-level inequality (`Goal <>
-Bad`), which doesn't recurse. (Datamog's `not` only attaches to
-predicate atoms; a `not X = Y` form does not exist as syntax.)
+Bad`), which doesn't recurse. (`not` attaches to any body element,
+comparisons included, so `not (Goal = Bad)` is also legal; it is
+the reading the `partial-inequality` warning recommends when
+either side of a `<>` can have no value. Neither form recurses.)
 But if you wanted "reachable without touching any node in a
 separately-computed set" and the set itself depended on
 reachability, you'd have a negative edge inside a cycle. Datamog

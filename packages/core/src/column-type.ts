@@ -5,7 +5,17 @@
 // and `PrimitiveType` is compared against a literal string at ~150 sites, every
 // one of which reads the base and must stay blind to the bit.
 //
-// Eleven elements:
+// **Status: a reference implementation, not on the pipeline's path.** Nothing
+// outside its own test imports it. What ships is the pair of maps §6 keeps
+// (`columnTypes` in `types.ts` plus `columnNullness` in `nullness.ts`), with `null`
+// added to `PrimitiveType` as a sibling atom rather than as `(⊥, nullable)`
+// (§15.10), and `types.ts` still lets `undefined` serve as the meet's unit, which
+// the laws below say it may not. The value of this file is the laws test: it is
+// where the lattice §3 specifies is checked, and where a future merge of the two
+// maps would start. Keep it in step with §3, and do not read it as describing what
+// runs.
+//
+// Twelve elements:
 //
 //        ⊥  <  integer  <  float           (the base order, unchanged)
 //        ⊥  <  string
@@ -111,7 +121,9 @@ function joinBase(
  * side requires. Making `undefined` the meet's unit as well breaks associativity
  * and monotonicity, which the law tests catch.
  *
- * The consequence for callers: a variable solve seeds at `value`, not at ⊥.
+ * The consequence for callers: a variable solve seeds at the meet's unit, not at
+ * ⊥. That is `value` for the base lattice here, and `value?` for the column
+ * lattice below, which is what §3.1 states.
  */
 function meetBase(
   a: PrimitiveType | undefined,

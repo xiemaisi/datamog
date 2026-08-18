@@ -80,14 +80,19 @@ function describeValue(v: unknown): string {
   return `${typeof v} (${JSON.stringify(v)})`;
 }
 
-function asNumber(v: Value | undefined): number {
+// The parameter is `Value`, never `EvalResult`. An absence is not a wrong type,
+// it is the lack of one, and the caller has to answer it by withholding rather
+// than by asserting. Keeping `undefined` out of the parameter type turns a
+// missed absence check into a compile error instead of a crash at run time.
+
+function asNumber(v: Value): number {
   if (typeof v !== "number") {
     throw new Error(`Type assertion failed: expected number, got ${describeValue(v)}`);
   }
   return v;
 }
 
-function asString(v: Value | undefined): string {
+function asString(v: Value): string {
   if (typeof v !== "string") {
     throw new Error(`Type assertion failed: expected string, got ${describeValue(v)}`);
   }
@@ -129,7 +134,7 @@ function compareOrderable(a: number | string, b: number | string): number {
   return (a as number) < (b as number) ? -1 : (a as number) > (b as number) ? 1 : 0;
 }
 
-function asBoolean(v: Value | undefined): boolean {
+function asBoolean(v: Value): boolean {
   if (typeof v !== "boolean") {
     throw new Error(`Type assertion failed: expected boolean, got ${describeValue(v)}`);
   }
@@ -143,7 +148,7 @@ function asBoolean(v: Value | undefined): boolean {
  * `value` accessor return a present-but-null key as a value while a missing key
  * withholds the row. See doc/design/null-as-a-value.md §1 and §8.
  */
-function finiteOrUndef(v: number): number | undefined {
+export function finiteOrUndef(v: number): number | undefined {
   return Number.isFinite(v) ? v : undefined;
 }
 
@@ -284,6 +289,11 @@ export function evalTerm(
     case "Subscript": {
       const obj = evalTerm(term.object, sub, env, aggregates);
       const idx = evalTerm(term.index, sub, env, aggregates);
+      // Two markers, one disposition. A part with no value leaves the access with
+      // none either, an access being strict (§1); a null receiver or a null index
+      // is a shape the operation has no answer for. Neither may reach the string
+      // branch's assertions below.
+      if (obj === undefined || idx === undefined) return undefined;
       if (obj === null || idx === null) return undefined;
       const objType = inferTermType(term.object, env.vars, typesFor(env));
       if (objType === "value") {
@@ -314,7 +324,10 @@ export function evalTerm(
     }
     case "Slice": {
       const obj = evalTerm(term.object, sub, env, aggregates);
-      if (obj === null) return undefined;
+      // Same strictness as a subscript, in the receiver and in either bound: a
+      // bound with no value leaves the slice with none, so `W[0 : 10 / V]` is
+      // withheld where `V` is zero rather than reaching the assertions below.
+      if (obj === undefined || obj === null) return undefined;
       const objType = inferTermType(term.object, env.vars, typesFor(env));
       if (objType === "value") {
         // Slicing a non-array `value` returns NULL; otherwise produces a
@@ -323,6 +336,7 @@ export function evalTerm(
         if (!Array.isArray(obj)) return undefined;
         const start = term.start ? evalTerm(term.start, sub, env, aggregates) : 0;
         const end = term.end ? evalTerm(term.end, sub, env, aggregates) : obj.length;
+        if (start === undefined || end === undefined) return undefined;
         if (start === null || end === null) return undefined;
         const si = asNumber(start);
         const ei = asNumber(end);
@@ -333,6 +347,7 @@ export function evalTerm(
       const cp = [...asString(obj)];
       const start = term.start ? evalTerm(term.start, sub, env, aggregates) : 0;
       const end = term.end ? evalTerm(term.end, sub, env, aggregates) : cp.length;
+      if (start === undefined || end === undefined) return undefined;
       if (start === null || end === null) return undefined;
       const si = asNumber(start);
       const ei = asNumber(end);
@@ -467,6 +482,16 @@ function evalBinary(
 }
 
 /**
+ * The argument slots an impl may read. Every builtin has a fixed arity that the
+ * analyzer checks, and `evalCall` has already dropped the call where any
+ * argument has no value, so each slot holds a `Value`. Declaring the slots
+ * rather than passing an array is what keeps the absence marker out of their
+ * type, so `asNumber(args[0])` stays honest under `noUncheckedIndexedAccess`.
+ * The widest builtin is `replace`, at three arguments.
+ */
+type NativeArgs = { readonly [K in 0 | 1 | 2]: Value };
+
+/**
  * Per-overload native implementations. Each entry mirrors the
  * translator's SQL emit for the same overload key — same domain-error
  * guards (sqrt of negative → null, ln of non-positive → null, etc.) and
@@ -474,7 +499,7 @@ function evalBinary(
  * across overloads (`abs.integer` and `abs.float`) reuse the same
  * function value.
  */
-type NativeImpl = (args: Value[]) => EvalResult;
+type NativeImpl = (args: NativeArgs) => EvalResult;
 
 const callAbs: NativeImpl = (args) => finiteOrUndef(Math.abs(asNumber(args[0])));
 
@@ -502,15 +527,24 @@ function roundToScale(x: number, n: number): number | undefined {
   const factor = 10 ** n;
   if (factor === 0) return 0;
   if (!Number.isFinite(factor)) return x;
-  const rounded = roundHalfAwayFromZero(x * factor) / factor;
+  const scaled = x * factor;
+  // A scale fine enough to push `x * 10**n` out of the float range is finer than
+  // any digit `x` has: a double that large has an ulp far above `10**-n`, so
+  // there is nothing at that place to round away and the answer is `x` itself.
+  // Both SQL backends answer the same way, `ROUND(9000000000000, 300)` giving
+  // the input back.
+  if (!Number.isFinite(scaled)) return x;
+  const rounded = roundHalfAwayFromZero(scaled) / factor;
   return Number.isFinite(rounded) ? rounded : undefined;
 }
 const callRound2: NativeImpl = (args) => {
   return roundToScale(asNumber(args[0]), asNumber(args[1]));
 };
 const callRoundInteger2: NativeImpl = (args) => {
-  const rounded = callRound2(args);
-  return rounded === null ? null : Math.trunc(asNumber(rounded));
+  const rounded = roundToScale(asNumber(args[0]), asNumber(args[1]));
+  // Rounding out of the float range has no value, so there is nothing to
+  // truncate and the row is withheld.
+  return rounded === undefined ? undefined : Math.trunc(rounded);
 };
 
 // SQL's `LENGTH(s)` counts characters (code points), so e.g. `LENGTH('😀')`
@@ -804,7 +838,9 @@ function evalCall(call: FunctionCall, args: Value[], env: TypeEnv): EvalResult {
     return null;
   }
 
-  const result = impl(liftedArgs);
+  // `liftedArgs` is as long as the overload's parameter list, so every slot the
+  // impl reads is occupied; the cast is what tells the compiler that.
+  const result = impl(liftedArgs as unknown as NativeArgs);
   return INTEGER_RESULT_GUARDS.has(overload.key) && typeof result === "number"
     ? safeIntegerOrUndef(result)
     : result;

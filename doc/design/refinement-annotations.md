@@ -72,9 +72,9 @@ answers in the body; the unresolved part is collected below.
   Answered in §2.3 and §10 phase 0: extract before substitution, or keep a
   name-to-position map.
 - **The aggregate contracts need group-emptiness rules.** An ungrouped aggregate
-  over empty input still emits one row, `count(*)` being `0` and `min`/`max` NULL,
-  so a contract may strengthen only for a group known to contain an input row.
-  Answered in §4.1.
+  over empty input still emits one row where every head expression has a value,
+  `count(*)` being `0` while `min`/`max` have none, so a contract may strengthen
+  only for a group known to contain an input row. Answered in §4.1.
 - **The obligation rule inherits the same hole, and there it is unsound.** §3.1
   assumed a tuple is derived only when the body is satisfied, which an ungrouped
   aggregate rule breaks: it emits its row whatever the body does, so an
@@ -89,8 +89,8 @@ answers in the body; the unresolved part is collected below.
   and modulo follows the dividend's sign, where a solver's native integer
   operations may not. Integer overflow also differs across back ends, so the
   portable arithmetic domain has to be fixed before discharge can be sound.
-  Answered in §4.1: safe-integer results are exact and overflow produces NULL.
-  The runtimes and normative spec now enforce that domain.
+  Answered in §4.1: safe-integer results are exact and a result outside the domain
+  has no value. The runtimes and normative spec now enforce that domain.
 - **A generator-only increment has no consumer.** Answered twice over in §4.5.
   Emitting SMT-LIB gives the goals a consumer of their own, and dynamic checking
   gives an annotation an effect without any discharge at all, so the first slice
@@ -376,16 +376,18 @@ integer division and modulo without this encoding is unsound for negative values
 
 **The portable integer domain is the JavaScript safe-integer range:**
 `-(2^53 - 1)` through `2^53 - 1`. Every tier-1 integer arithmetic operation is
-exact when its mathematical result is inside that range and produces NULL outside
-it. Integer literals, loaders, conversions, range enumeration, and every backend
-enforce the same range.
+exact when its mathematical result is inside that range and has **no value**
+outside it. Integer literals, loaders, conversions, range enumeration, and every
+backend enforce the same range.
 
 The solver may use unbounded mathematical integers internally, but each runtime
-integer term carries the same null bit as §4.4. For an operation with mathematical
-result `r`, the result is null when an operand is null, another partial case
-applies, or `r` lies outside the safe-integer range; its value equals `r` only in
-the non-null case. This preserves linear arithmetic because multiplication and
-division remain restricted as above.
+integer term carries the same `isNull` and `def` conditions as §4.4, and leaving
+the domain moves the second, not the first. For an operation with mathematical
+result `r`, the result is null when an operand is null; it is undefined when an
+operand is undefined, another partial case applies, or `r` lies outside the
+safe-integer range; and its value equals `r` only in the defined, non-null case.
+This preserves linear arithmetic because multiplication and division remain
+restricted as above.
 
 Runtime evaluation and the spec enforce this rule. Loaders and conversions reject
 unsafe integer inputs, arithmetic and integer-returning builtins guard their
@@ -554,8 +556,8 @@ a / b    ⟹  isNull ⟺ a.isNull ∨ b.isNull
 while `null <= null` was true by convention; null-as-a-value.md §4.1 deletes it,
 which is also what lets nullness inference narrow on them.
 
-Each term becomes a `(isNull, v)` pair, which keeps the query quantifier-free in
-arithmetic plus booleans, so it stays decidable and cheap.
+Each term becomes an `(isNull, def, v)` triple, which keeps the query
+quantifier-free in arithmetic plus booleans, so it stays decidable and cheap.
 
 **Non-nullness is not this feature's problem any more.** An earlier draft of this
 section derived it from three ad-hoc sources: a `?`-free EDB declaration, a true

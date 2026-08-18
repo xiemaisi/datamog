@@ -20,7 +20,8 @@ input predicate area(country: string, sq_miles: integer).
 # derived, so on this data it passes silently.
 #
 # `--obligations` shows why checking and proving are different things, and
-# `--verify` names the reason: `((D -1) (P -1) (A 51))`, a negative population.
+# `--verify` names the reason: `((D (- 1)) (P (- 1)) (A 51))`, a negative
+# population.
 # Nothing here says a population cannot be negative, so `P * 100 / A` need not be
 # non-negative, and no solver will discharge the claim. The contract holds for
 # this data and is not a theorem, which is exactly the gap between the two modes.

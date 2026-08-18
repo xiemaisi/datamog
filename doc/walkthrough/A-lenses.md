@@ -52,9 +52,10 @@ views we've developed across the tutorial.
 | Datalog concept            | Logic view                    | SQL view                                    |
 | -------------------------- | ----------------------------- | ------------------------------------------- |
 | safety (every head var bound) | domain independence           | guarantees a finite `FROM` clause           |
-| column types (`string`/`integer`/`float`/`boolean`/`value`) | single-sorted model | standard SQL column types                   |
+| column types (`string`/`integer`/`float`/`boolean`/`value`/`null`) | single-sorted model | standard SQL column types                   |
 | `integer → float` widening  | numerical embedding           | implicit cast / `CAST AS REAL`              |
-| `x: integer?`               | the column's domain includes ⊥ | nullable column (no `NOT NULL`)            |
+| `x: integer?`               | the column's domain is the integers plus one more value | nullable column (no `NOT NULL`) |
+| a partial expression (`10 / X`) | ⊥: no value at all, so no tuple | `NULL` plus a definedness guard that drops the row |
 | `_: Y > X` (refinement)     | a proposition the predicate guarantees | a `SELECT` that must return no rows |
 
 ## Part V concepts

@@ -78,7 +78,16 @@ export async function insertRows(
     if (jsonCols.length > 0) {
       for (const col of jsonCols) {
         const v = out[col.name];
-        if (v === null) continue;
+        if (v === null) {
+          // §9.3: a `value` spells its null the JSON way, so a SQL NULL stays
+          // free to mean "no value". Storing JS null here would give a `value?`
+          // column a cell that every accessor and `type_of` reads as an absence,
+          // and the SQL backends would then disagree with the interpreters about
+          // a row the program stored deliberately. The native path keeps JS null,
+          // which is the null value in its own domain.
+          out[col.name] = isSqlPath ? canonicalizeJson(null) : null;
+          continue;
+        }
         const value = validateDirectJsonValue(v, col);
         const canonical = canonicalizeJson(value);
         out[col.name] = isSqlPath ? canonical : (JSON.parse(canonical) as JsonValue);
@@ -197,6 +206,11 @@ export function coerceValue(value: string, type: PrimitiveType, context?: string
       }
       return parsed;
     }
+    case "null":
+      // The only value a `null` column holds. An empty cell is already answered
+      // by `coerceColumnValue`, so a cell reaching here has text in it.
+      if (value.trim() === "null") return null;
+      throw new Error(`Invalid null value '${value}'${ctx}`);
   }
 }
 
@@ -246,6 +260,10 @@ export function checkValue(value: unknown, type: PrimitiveType, context?: string
     case "value":
       if (isJsonValue(value)) return value;
       throw new Error(`Expected a value but got ${typeof value}${ctx}`);
+    case "null":
+      // A `null` column holds nothing else. `checkColumnValue` answers the null
+      // itself, so anything arriving here is the wrong shape for the column.
+      throw new Error(`Expected null but got ${JSON.stringify(value)}${ctx}`);
   }
 }
 

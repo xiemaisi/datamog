@@ -150,10 +150,18 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("nullable direct value inserts accept null", async () => {
+  test("a nullable value column stores its null the JSON way, so the language can see it", async () => {
+    // §9.3: a `value` spells its null as JSON, leaving SQL NULL to mean "no
+    // value". Asserting only that the cell prints as `null` does not distinguish
+    // the two, a SQL NULL printing the same way, so ask the questions that do:
+    // `= null` matches a null and nothing else, and `type_of` answers `"null"`
+    // where an absence would make the whole row vanish.
     const program = `
-      input predicate data(j: value?).
-      ?- data(J).
+      input predicate data(id: integer, j: value?).
+      output predicate isnull(I) :- data(I, J), J = null.
+      output predicate notnull(I) :- data(I, J), J <> null.
+      output predicate shape(I, T) :- data(I, J), T = type_of(J).
+      ?- data(I, J).
     `;
 
     for (const create of [
@@ -168,14 +176,30 @@ describe("DatamogExecutor", () => {
             return true;
           },
           async load(decl: ExtDecl, b: Backend): Promise<LoadResult> {
-            await insertRows(b, decl, [{ j: null }]);
-            return { rowsLoaded: 1 };
+            await insertRows(b, decl, [
+              { id: 1, j: null },
+              { id: 2, j: { k: 1 } },
+            ]);
+            return { rowsLoaded: 2 };
           },
         },
       ]);
       try {
         const results = await executor.execute(program);
-        expect(results[0]!.rows).toEqual([{ J: null }]);
+        expect(sortRows(results[0]!.rows)).toEqual([{ I: 1 }]);
+        expect(sortRows(results[1]!.rows)).toEqual([{ I: 2 }]);
+        expect(sortRows(results[2]!.rows)).toEqual(
+          sortRows([
+            { I: 1, T: "null" },
+            { I: 2, T: "object" },
+          ]),
+        );
+        expect(sortRows(results[3]!.rows)).toEqual(
+          sortRows([
+            { I: 1, J: null },
+            { I: 2, J: { k: 1 } },
+          ]),
+        );
       } finally {
         await backend.close();
       }
@@ -2240,5 +2264,107 @@ describe("DatamogExecutor", () => {
     };
     expect(await errFile("prog.dl")).toBe("prog.dl");
     expect(await errFile()).toBeUndefined();
+  });
+});
+
+// §1 requires definedness per conjunct, and each of these is a position where the
+// SQL side used to read a NULL as a value and so kept a row the interpreters
+// withheld, or the reverse under a negation. The interpreters are the reference.
+describe("definedness at every conjunct", () => {
+  test("a fact whose head expression has no value derives no tuple", async () => {
+    // A body-less rule takes its own translation path, which emitted a bare
+    // SELECT with no WHERE, so the head guard never ran. The phantom row was
+    // observable three ways at once: it counted, it satisfied a negation, and it
+    // violated a constraint over a predicate that should have been empty.
+    const [sqlite, native] = await executeOnSqliteAndNative(`
+      bad(1 / 0).
+      good(2).
+      output predicate counted(count(*)) :- bad(_).
+      output predicate empty() :- not bad(_).
+      output predicate kept(N) :- good(N).
+      ?- bad(X).
+    `);
+    expect(sqlite).toEqual(native);
+    expect(sqlite[0]).toEqual([{ count: 0 }]);
+    expect(sqlite[1]).toEqual([{}]);
+    expect(sqlite[2]).toEqual([{ N: 2 }]);
+    expect(sqlite[3]).toEqual([]);
+  });
+
+  test("a body equality holds only where both sides have a value", async () => {
+    // The null-aware operator answers *true* for two absences, so a conjunct
+    // comparing two missing keys held. Row 3 is the case: both keys are absent
+    // and neither side has a value, so the conjunct must not hold.
+    const [sqlite, native] = await executeOnSqliteAndNative(`
+      doc(1, J) :- J = {"k": 1, "m": 1}.
+      doc(2, J) :- J = {"k": 1, "m": 2}.
+      doc(3, J) :- J = {}.
+      doc(4, J) :- J = {"k": null, "m": null}.
+      output predicate eq(Id) :- doc(Id, J), J["k"] = J["m"].
+      output predicate ne(Id) :- doc(Id, J), J["k"] <> J["m"].
+      output predicate notEq(Id) :- doc(Id, J), not (J["k"] = J["m"]).
+      ?- eq(Id).
+    `);
+    expect(sqlite).toEqual(native);
+    // Row 4 matches: two JSON nulls are the same value.
+    expect(sortRows(sqlite[0]!)).toEqual(sortRows([{ Id: 1 }, { Id: 4 }]));
+    expect(sortRows(sqlite[1]!)).toEqual([{ Id: 2 }]);
+    // `not` complements failure, so it also holds where a side has no value.
+    expect(sortRows(sqlite[2]!)).toEqual(sortRows([{ Id: 2 }, { Id: 3 }]));
+  });
+
+  test("an atom argument with no value stops the match, and a negated one holds", async () => {
+    // The guard goes at rule level for a positive atom and inside the subquery
+    // for a negated one: `not p(1 / 0)` holds, §1's `not` complementing failure
+    // for any reason including an absence.
+    const [sqlite, native] = await executeOnSqliteAndNative(`
+      doc(1, J) :- J = {}.
+      doc(2, J) :- J = {"k": 7}.
+      q(7).
+      output predicate pos(I) :- doc(I, J), q(J["k"]).
+      output predicate neg(I) :- doc(I, J), not q(J["k"]).
+      ?- pos(I).
+    `);
+    expect(sqlite).toEqual(native);
+    expect(sortRows(sqlite[0]!)).toEqual([{ I: 2 }]);
+    expect(sortRows(sqlite[1]!)).toEqual([{ I: 1 }]);
+  });
+
+  test("a nullable primitive reaches a value slot as a JSON null, however it is spelled", async () => {
+    // §9.4's lift. A repeated variable and a spelled-out equality are the same
+    // rule, so they have to lift the same way, and a builtin's `value` parameter
+    // takes the null as one of the shapes it holds rather than as an absence.
+    const [sqlite, native] = await executeOnSqliteAndNative(`
+      p(1, 1).
+      p(2, null).
+      v(J) :- J = parse_json("1").
+      v(J) :- J = parse_json("null").
+      output predicate shared(X) :- p(_, X), v(X).
+      output predicate spelled(X) :- p(_, X), v(Y), X = Y.
+      output predicate shape(K, T) :- p(K, X), T = type_of(X).
+      ?- shared(X).
+    `);
+    expect(sqlite).toEqual(native);
+    expect(sortRows(sqlite[0]!)).toEqual(sortRows([{ X: 1 }, { X: null }]));
+    expect(sortRows(sqlite[1]!)).toEqual(sortRows([{ X: 1 }, { X: null }]));
+    expect(sortRows(sqlite[2]!)).toEqual(
+      sortRows([
+        { K: 1, T: "number" },
+        { K: 2, T: "null" },
+      ]),
+    );
+  });
+
+  test("concat skips a null and a missing key alike", async () => {
+    // Position 3 makes a nullable primitive a static error here, so a `value` is
+    // the only argument that can carry a null, and its null is the JSON spelling
+    // rather than a SQL NULL, which the group-concat skip does not see.
+    const [sqlite, native] = await executeOnSqliteAndNative(`
+      arr(J) :- J = parse_json("[1, null, 3]").
+      output predicate joined(concat(J[K])) :- arr(J), K in [0 .. 4].
+      ?- joined(C).
+    `);
+    expect(sqlite).toEqual(native);
+    expect(sqlite[0]).toEqual([{ concat: "1,3" }]);
   });
 });

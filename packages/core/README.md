@@ -60,7 +60,7 @@ Each is a pull-based call the CLI, the playground, and the VS Code extension mak
 
 | Entry point | Module | What it answers |
 | ----------- | ------ | --------------- |
-| `inferNullness`, `findNullnessRisks` | `nullness.ts`, `nullness-diagnostics.ts` | which columns can hold the `null` value, plus five warnings where a null or an absent value lands somewhere easy not to expect |
+| `inferNullness`, `findNullnessRisks` | `nullness.ts`, `nullness-diagnostics.ts` | which columns can hold the `null` value, plus six warnings where a null or an absent value lands somewhere easy not to expect |
 | `canBeUndefined` | `partiality.ts` | whether an expression can have no value, which is a different question from nullness and the one that decides guards, `count`'s emit and `defined`'s |
 | `findNullableOperands` | `nullable-operands.ts` | every nullable operand in a position that needs a value, which is a static error |
 | `findInertContracts` | `contracts.ts` | which refinement contracts an unannotated sibling rule has made vacuous |

@@ -10,7 +10,19 @@ close all seven, the last of them (§13's stage-4 deletions) by finding that
 two-thirds of it was mistaken. §13 and §3.1 carry the corrections in place.
 §15.25 closes three cross-backend divergences a second review found, all of them
 one placement decision, and §15.26 closes the one shape that falsified §9.2 by
-making the connectives strict at a `null`.** This is the design
+making the connectives strict at a `null`. §15.27 and §15.28 close the last four
+code findings of that review: value construction guarded per part, the contract
+check reading `not` rather than `!`, §9.4's promised `T?`-to-`value` lift, and
+`concat`'s empty-group identity on Postgres. §15.29 is the branch's one
+unsoundness, a double negation `refineFalse` eliminated after the orderings turned
+strict, found by chasing a warning whose premise was stale. §15.30 records three
+gaps left open, each a decision rather than an oversight: `X = null` composes with
+any type deliberately, a null-only column does not survive a pass-through, and
+`column-type.ts` is a reference implementation rather than the shipped
+lattice. §15.31 is a seven-way audit that found three more unsoundnesses and six
+more of §9.4's sites, and names what the three had in common: each lived in a file
+that shared a premise this branch changed and was not opened by the change that
+changed it.** This is the design
 [partial-expressions.md](./partial-expressions.md) should have found and did not.
 It supersedes that doc's recommendation: where that one concluded "keep NULL, at
 most forbid it in columns", this one concludes "split NULL's two jobs apart, and
@@ -81,6 +93,10 @@ null.md §7 records, at length and with instructions not to re-derive it, why
 
 The whole argument rests on that first premise, and this proposal removes it.
 `null` is a **sibling** of the primitives, not a subtype of them, so:
+
+> **One of the four claims below did not survive building it, and §15.30 says why:
+> `X = null` is *not* a static error on a type that excludes null. The rest of this
+> section holds.**
 
 - `string ⊓ integer` is still ⊥, still a static error, for the same reason as
   today. Nothing was added below the primitives.
@@ -587,8 +603,11 @@ first. There are five:
 1. the head filter that drops undefined tuples (§1);
 2. the `list` and `concat` aggregate `FILTER` clauses (§9.3);
 3. the `value` accessors, subscript and slice (§9.3);
-4. `defined`'s emit (§11.6), which is `IS NOT NULL` for a non-nullable or `value`
-   argument and constant `TRUE` for a `T?` one;
+4. `defined`'s emit (§11.6), which asks whether a NULL in that position would mean
+   undefined and answers `TRUE` where it would not. **§15.23 corrects the shape:
+   `IS NOT NULL` is wrong, because it returns `FALSE` on an undefined argument
+   where `defined` must be true-or-undefined and never false. What ships is a
+   `CASE` with no `ELSE`, so an undefined argument leaves NULL;**
 5. the aggregate emits (§7), where `SUM` over no rows and an overflowing `SUM` are
    both SQL NULL and must go opposite ways, so the identity `COALESCE` goes inside
    the domain guard rather than outside it.
@@ -804,7 +823,8 @@ of this document. §15.24 is the audit; the annotations below are its verdicts.*
   **Wrong about the replacement.** All three survive alongside the new one, and
   nullable-filter still earns its keep: a `boolean?` column in filter position
   drops its row on a null, which is about a value and not about absence. The file
-  now holds five.
+  now holds six, `constant-defined` (§15.23) and `partial-inequality` (§15.20)
+  having joined since.
 
 So the deletion is not primarily a line count, it is one of two fixed points and
 one of two parallel type-like structures. **The first half of that claim does not
@@ -836,7 +856,9 @@ Nothing here is fatal, and none of it is hidden.
    `nullness-tracking.md` become historical; `values.ts` gains an `UNDEF` sentinel
    distinct from the `null` value; walkthrough 06 and 14; and the examples with
    nulls in `expected.json` (`json-events`, `parse-json`,
-   `primitive-conversions`, `relational-algebra`).
+   `primitive-conversions`). **Three, not four: `relational-algebra`'s eight nulls
+   are genuine `integer?` outer-join nulls and its file is untouched, as the
+   closing paragraph below and §15.4's "the three examples" both say.**
 
 Against that, two costs of the alternatives disappear. `examples/relational-algebra`
 keeps its outer join, `left_join(X, null)` being an ordinary tuple with an
@@ -870,7 +892,8 @@ that merging `columnTypes` and `columnNullness` into one map is a clarity
 refactor rather than a prerequisite, so there is no large representation change
 to do first either.
 
-The order, with the two landed stages marked:
+The order. Every stage below has landed; the notes on each say how, and stage 4
+turned out to be an audit rather than a build (§15.24).
 
 1. **The lattice, as pure functions.** Done: `core/src/column-type.ts`, with its
    laws as a test. §3.1 records the two corrections that test forced.
@@ -878,12 +901,14 @@ The order, with the two landed stages marked:
    prerequisite for §11.6 and is self-contained: it changes behaviour only where
    a NULL reaches boolean position, and all four runnable backends agree.
 3. **Partiality, the `null` type, the aggregate identities and the sweep, as one
-   change.** Attempted as separate stages twice; §15.2 and §15.3 record why they
-   will not separate. Most of it is built on
-   `max/partial-expressions-stage3-wip`; what is left there is the local `<>`
-   rewrite and the 72-test sweep.
-4. **§13's deletions**, unlocked rather than risky by that point.
-5. Then the rest of the spec.
+   change.** Done. Attempted as separate stages twice; §15.2 and §15.3 record why
+   they will not separate. The local `<>` rewrite landed in §15.3 and the sweep
+   finished in §15.9, sixty tests rather than seventy-two.
+4. **§13's deletions**, unlocked rather than risky by that point. Audited instead
+   of built: §15.24 found one buildable, three already true, one impossible and the
+   replacement a bad idea, and annotated §13 in place.
+5. Then the rest of the spec. Done, with the second audit's findings in §15.25
+   through §15.30.
 
 ### 15.2 Why partiality and the `null` type cannot land separately
 
@@ -1970,12 +1995,29 @@ nullness-free site in the translator makes.
 aggregates their identities and §15.11 recorded them landing on four backends;
 `STRING_AGG` has no `COALESCE`, where SQLite's arm does, so an empty group yields a
 row holding NULL on Postgres and `""` everywhere else. `concat` cannot be
-undefined, so no `HAVING` withholds the row either. One `COALESCE`, unverified
-locally for want of a `DATABASE_URL`, and the exact analogue of the arm beside it.
+undefined, so no `HAVING` withholds the row either. One `COALESCE`, the exact
+analogue of the arm beside it.
 
 That is §15.16's process lesson arriving a second time: a suite that skips itself
 without a service is a suite that rots. Both of this branch's Postgres findings were
-found by reading, not by running.
+found by reading rather than by running.
+
+**Since verified by running.** A throwaway cluster is two commands
+(`initdb` into `/tmp`, `pg_ctl` on a spare port), which is cheap enough that the
+skip is no longer an excuse; the recipe is in `.claude/CLAUDE.md`. With
+`DATABASE_URL` set the whole suite is **1925 pass, 66 skip, 0 fail**, against 1850
+pass and 145 skip without it, so the 75 tests this branch could not run all pass:
+17 in `backend/postgres/test` and 58 example runs. And every case from §15.25
+through §15.29 was re-run on Postgres against native: the `<>`-versus-`not (=)`
+divergence, `!` over a partial operand, a bound comparison, the connectives, the
+strict orderings, the null-to-null join the unsound refinement had broken, value
+construction with an undefined part and with a genuine null, the `T?` lift, `count`
+and `list` over a null, the empty-group identities including the `concat` fix, the
+contract violations, `defined`, and §8's absent-versus-null. Byte-identical
+throughout. One wrinkle worth knowing for the next person: Postgres keeps views
+between runs, so a sequence of scratch programs needs
+`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` between them, which is what the
+examples suite already does per example.
 
 ### 15.29 An unsound refinement, found by fixing a warning
 
@@ -2004,6 +2046,17 @@ thing to keep in view, since the two functions otherwise look like duals. `!e` b
 worth writing down: it only ever proves anything from an `=`-against-`null` test,
 which is total, so no absence can arise inside one.
 
+**Two neighbours of it, both left alone deliberately.** `partial-inequality` only
+inspected a filter-rooted `<>`, so the operator was unwarned in a head argument, in
+a binding equality and under a `!`, which are exactly the positions where the
+divergence is least visible. It now walks all three, and the corpus count is
+unchanged at one, so §4.2's "the whole mitigation" is true for the first time. And
+the generated Langium artifacts were out of step with their source, which listed
+`null` as a `PrimitiveType` while the generated parser did not, so the type had no
+surface spelling. Regenerated: `b: null?` now parses, `b: null` parses and can hold
+nothing, and the completion list still declines to offer either (`keywords.ts` says
+why).
+
 **How it was found is the reusable part.** I was correcting the
 `nullable-negated-ordering` warning's text, which still cited the old "every
 ordering is false at NULL" rule. Checking which spellings actually have a gap
@@ -2012,3 +2065,127 @@ warrants a warning) produced a test that said the nested case should warn and di
 not. The missing warning was the refinement claiming the operand non-null. A
 diagnostic whose premise is stale is worth chasing rather than editing, because the
 premise is usually shared with an analysis.
+
+### 15.30 Three gaps left open, and why each is a decision rather than an oversight
+
+The end of the second audit. Each of these is a place where the code and this
+document disagree, and where the document is the one that should move.
+
+**§2's static error on `X = null` does not exist, and should not.** §2 argues that
+`X = null` type-checking only where the type admits a null is "strictly better than
+today, where `X = null` is legal on any column and simply never matches". What
+shipped is today's behaviour: `types.ts` makes the `null` atom compose with every
+type, and its comment says why. The guard the language recommends is `X <> null`,
+and a reader writes it defensively, on a column they have not checked the
+declaration of. Rejecting it on a non-nullable column would punish exactly the
+habit the design wants. §2's other three claims stand; this one was a
+generalisation from the lattice to the surface and it does not survive contact with
+the idiom.
+
+**A null-only column is typed `string`, and does not survive a pass-through.**
+`p(X, null) :- s(X).` types column 2 by picking a base to carry the nulls, which is
+unobservable in that predicate (§15.3) but not once another rule reads it:
+`q(A, B) :- p(A, B).` reports "cannot infer type of column 2". A sibling rule
+contributing a real type fixes it. Closing it properly means letting
+the `null` type flow through inference as a type rather than as a marker resolved
+late, which is the meet §15.10 declined to attempt. Recorded rather than fixed.
+
+**A `?` annotation does not fix it, and this document said it did.** Tried both
+ends, `q(A, B: integer?)` on the reader and `p(X, null: integer?)` on the producer:
+both still report "cannot infer type of column 2". An annotation is checked against
+what inference proved and never drives it (§2.3), so on a column inference could not
+type there is nothing for it to be checked against. Only the sibling rule works.
+
+**`meetTypes` rejects `string? ⊓ integer?`, where §2 and §3.1 promise the `null`
+type.** The same root cause as the bullet above: the meet sees base types only, the
+nullness bit living in a map a later pass computes, so an exact meet wants either
+§6's pair at all 146 comparison sites or a joint fixed point over both. Left as a
+rejection, which is also the better diagnostic: the error names both positions,
+where typing the column `null` would need a second warning to say the rule can only
+ever fire on null-to-null matches and derive a column of pure nulls. §5 already
+calls that shape "worth warning about".
+
+**`column-type.ts` is a reference implementation and now says so.** §3.1 reads as
+though the shipped lattice is this file's; it is not, and the file's header carries
+the correction. What runs is §6's pair of maps with `null` as a sibling atom, and
+`types.ts` still lets `undefined` serve as the meet's unit, which the laws test in
+this file would reject. The file earns its place as the specification of §3 in
+executable form and as the starting point for a merge nobody has needed yet.
+
+### 15.31 The third audit, and the premise the sweep did not follow
+
+Seven parallel audits, run against a suite that was 1925 pass and 0 fail: the
+runtime invariants on four backends, the static analyses, the translator and both
+dialects, the docs, the refinements, Postgres on a real cluster, and the editor
+surfaces. Around twenty findings, none of them covered by an existing test. Three
+were unsound.
+
+**Three unsoundnesses, and all three are the same mistake.** `hypotheses()` in
+`obligations.ts` read `Literal.negated` and never `Filter.negated`, so once §4.4's
+rewrite deletion made `not (X > 100)` a negated filter, the encoder asserted the
+positive reading of every negated guard: `--verify` proved a contract that every
+derived tuple broke. `&&` and `||` reported `def: DEFINED`, which the `Term.def`
+contract licensed as the safe answer, and it is safe in a hypothesis and unsound in
+the goal, which is `def ∧ v`. And `refineFalse` proved non-nullness from falsity
+where negation as failure gives only "false or no value", which is §15.29's bug one
+path over: its own stated reason, that an `=`-against-`null` test is total, holds
+over values and not over absences.
+
+The last one is the pattern named. All three files shared a premise this branch
+changed, and none of them was opened by the change that changed it. `obligations.ts`
+was not in commit `54982cc`'s diff; `translateFact` was not in the guard sweep;
+`values.ts`'s `asNumber` call sites were not re-read when the marker they assert on
+gained a second reading. **The sweep followed the files, where the premise had
+followers the files did not name.** §15.15's "nothing owed" was corrected once by
+§15.18 and this is the third time the same shape has come round, which is enough to
+call it a property of the change rather than an accident of one pass.
+
+**Every cross-backend divergence sat in §9.2's third row.** For the four primitive
+types the static type decides what a SQL NULL means and the design is airtight. For
+`value` it does not decide, so each emit site decides locally, and §9.4 counted five
+such sites when there were at least eleven: the head filter and the aggregates it
+named, plus a body equality, a positive atom argument, a negated atom argument, the
+shared-variable join, a builtin's `value` parameter, `concat`'s filter, a nullable
+`value` column's storage, and the canonical spelling of a numeric leaf. Four
+different predicates were being consulted ad hoc (`cannotBeNullHere`,
+`canBeUndefined`, `mayBeNull`, `nullIsValue`). "The static type decides" reads as a
+rule and is really an obligation on every site that emits a comparison, and nobody
+had enumerated them.
+
+Two of those sites were right by accident and one was wrong by the same accident.
+A numeric JSON leaf was canonicalised to a SQLite *numeric*, so a stored `value`
+matched itself only through TEXT affinity, which a bare `CAST` carries and a `CASE`
+does not: §15.28's own lift fix therefore broke the non-null match on the default
+backend while fixing the null one. Making every scalar arm TEXT then exposed that an
+atom argument compared a `value` against a primitive column with no lift at all,
+matching only where a dialect coerced one side. Atom arguments now take the same
+equality a repeated variable and a spelled-out `X = Y` get, which is the invariant
+§1's atom rule wanted all along and which no site was actually sharing.
+
+**Two structural changes so the classes cannot return.** `asNumber`, `asString` and
+`asBoolean` take `Value` rather than `Value | undefined`, and a builtin receives
+declared argument slots, so an absence reaching an assertion is a compile error; that
+is what found the `round` site rather than a test. And the three position-independent
+diagnostics share one `expressionPositions` walk, where `partial-inequality` had
+been given three positions in §15.29 and its two neighbours had been left in one.
+
+**One prediction of this document was wrong in the safe direction.** A refinement on
+a maximal predicate did not compile, and the audit read that as hiding an
+unsoundness, `contractHypothesis` being an induction on the derivation where a
+maximal predicate looked like a greatest fixed point. It is not one:
+parity-stratification.md §4.2 says the sigil only sets what the other side sees in
+round 0, and `runParityStratum` rebuilds the maximal relations from ∅ every round,
+so every tuple still has a finite derivation and the hypothesis is justified
+unchanged. Verified with z3, 2/2. The one thing that would break it is §6.2's
+deferred coinduction, which would have to refuse the hypothesis at a positive call
+inside such a stratum.
+
+**Recorded rather than fixed, each for a stated reason.** `avg` over an operand near
+the top of the float domain: Postgres accumulates without overflowing and returns
+the correct finite value where SQLite and the interpreters withhold, and matching
+either way costs more than the corner is worth (postgres-alignment.md). A mutually
+recursive SCC whose predicates disagree on a column type, which Postgres rejects
+with a message carrying no source position; the better fix is an analyzer error and
+it is not written. And bun:sqlite's parser overflows on a slice applied inline to a
+`parse_json`, which was already true at 27 KB of generated SQL before this pass and
+is 31 KB after, the definedness guards being the difference.

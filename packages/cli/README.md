@@ -172,7 +172,7 @@ The one positional argument after the program picks which output to evaluate: an
 
 ## Examples
 
-The `examples/` directory holds 79 runnable programs covering transitive closure, stratified negation, aggregates, mutual recursion, classic puzzles, JSON/`value` handling, propositional logic, and Boolean-circuit solvers. Run any of them with:
+The `examples/` directory holds 80 runnable programs covering transitive closure, stratified negation, aggregates, mutual recursion, classic puzzles, JSON/`value` handling, propositional logic, and Boolean-circuit solvers. Run any of them with:
 
 ```bash
 bun run datamog packages/cli/examples/<name>/<name>.dl

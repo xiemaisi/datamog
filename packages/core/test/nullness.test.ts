@@ -3,9 +3,9 @@ import { parse } from "datamog-parser";
 import { analyze } from "../src/analyzer.ts";
 import { inferTypes } from "../src/types.ts";
 
-// Nullness inference: which columns can hold SQL NULL, and which variables a
-// body proves cannot. See doc/design/nullness-tracking.md §4 for the design and
-// §4.2 for the refinement table these tests walk.
+// Nullness inference: which columns can hold the null value, and which variables
+// a body proves cannot. See doc/design/nullness-tracking.md §4 for the design and
+// null-as-a-value.md §5 for the narrowing table these tests walk.
 
 /** Per-column nullness of `predicate`. */
 function cols(source: string, predicate: string): boolean[] {
@@ -274,6 +274,57 @@ describe("refinement from body constraints", () => {
     // The other direction is sound and still narrows: `!e` is true only where `e`
     // has a value and is false.
     expect(cols(`${decl}q(X) :- p(X), !(X = null).`, "q")).toEqual([false]);
+  });
+
+  describe("`not (e = null)` over a partial operand", () => {
+    // The same asymmetry one step further in. `not` is negation as failure, so it
+    // holds where the equality is false *and* where it has no value, and equality
+    // is strict in undefinedness: `A["x"] = null` has no value at all where the
+    // key is missing. So falsity, which is what proves the operand non-null, is
+    // not what `not` reports, and the conclusion has to be dropped wherever the
+    // tested operand can have no value.
+    //
+    // It was observable the same two ways the double negation above was: a `value`
+    // head annotation was accepted over a rule that derives a null, and the join
+    // lowered to a plain `=`, so `ja(A), jb(A)` lost the null-to-null match on the
+    // SQL backends while the interpreters kept it.
+    const json = "input predicate ja(k: value?).\n";
+
+    test("proves nothing, an absence being no evidence about a null", () => {
+      expect(cols(`${json}q(A) :- ja(A), not (A["x"] = null).`, "q")).toEqual([true]);
+    });
+
+    test("the `!` spelling still proves it, `!e` being true only where `e` is false", () => {
+      expect(cols(`${json}q(A) :- ja(A), !(A["x"] = null).`, "q")).toEqual([false]);
+    });
+
+    test("a bare variable is untouched, being defined wherever it is bound", () => {
+      // The idiom the guard exists for. A variable always denotes a value, so the
+      // equality has one and `not` reports falsity after all.
+      expect(cols(`${decl}q(X) :- p(X), not (X = null).`, "q")).toEqual([false]);
+      expect(cols(`${decl}q(X) :- p(X), not (null = X).`, "q")).toEqual([false]);
+    });
+
+    test("a partial operand under a connective proves nothing either", () => {
+      // `||` unions what its sides prove, which is licensed because `not (a || b)`
+      // holding means neither side held. The guard is on the leaf, so it applies
+      // inside the connective too.
+      const or = `${json}q(A) :- ja(A), not ((A["x"] = null) || (A["y"] = null)).`;
+      expect(cols(or, "q")).toEqual([true]);
+      const and = `${json}q(A) :- ja(A), not ((A["x"] = null) && (A["y"] = null)).`;
+      expect(cols(and, "q")).toEqual([true]);
+    });
+
+    test("a total leaf inside a connective still proves it", () => {
+      const source = `
+        input predicate p(a: integer?).
+        input predicate v(k: value?).
+        q(X, A) :- p(X), v(A), not ((X = null) || (A["y"] = null)).
+      `;
+      // `X` is proven and `A` is not: `||` needs only its own side's leaf to be
+      // total, since neither side held.
+      expect(proven(source, "q")).toEqual(["X"]);
+    });
   });
 });
 

@@ -1,10 +1,17 @@
 # Boolean operators: && (logical and), || (logical or), ! (logical not).
-# Operands and results are boolean; NULL propagates with three-valued
-# logic, identical to SQL semantics on every backend.
+# Operands and results are boolean, and there is no third truth value.
 #
-# A boolean expression in a body position is a *filter*: the rule
-# only fires when the expression is `true`. NULL (3VL "unknown") is
-# treated as "doesn't match" — same as SQL's WHERE.
+# A `null` is no truth value, so a connective handed one (from a
+# `boolean?` column, the only way one gets there) has **no value**
+# unless the other operand already decides the answer. With `B` null,
+# `!B` and `B && true` have no value, while `B && false` is still
+# `false` and `B || true` is still `true`, by dominance. Same on every
+# backend (spec §5.4).
+#
+# A boolean expression in a body position is a *filter*: the rule only
+# fires when the expression is `true`. An expression with no value
+# does not hold, so its row goes, and so does a row whose filter is
+# `null`-valued.
 
 user("alice", true,  true ).
 user("bob",   false, true ).

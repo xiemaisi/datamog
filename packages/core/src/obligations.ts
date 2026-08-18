@@ -45,11 +45,12 @@ const MAX_SAFE = "9007199254740991";
  * term denotes the `null` **value**; `def` says it denotes anything. Leaving the
  * integer domain and dividing by zero move `def`, not `isNull`.
  *
- * `def` is only ever *asserted*, never assumed to be false, so it has to be
- * implied by the thing being asserted and never stronger than it. Where the exact
- * condition is awkward to state the safe answer is `DEFINED`, which claims
- * nothing: a missing hypothesis weakens a goal, an over-strong one would prove
- * something false.
+ * `def` has to be **exact**, because it is read in both polarities. A goal is
+ * `def ∧ v` and is asserted negated, and a negated filter contributes
+ * `(not (and def v))`, so a `def` claiming a value where the term has none
+ * discharges a claim the program breaks. The other direction loses a hypothesis
+ * and only weakens a goal, but neither is safe in general, so every arm states
+ * the condition its operation actually carries rather than the convenient one.
  */
 interface Term {
   v: string;
@@ -179,7 +180,15 @@ function toSmt(
     }
     case "UnaryExpr": {
       const operand = toSmt(expr.operand, ctx, vars, subst);
-      if (expr.op === "!") return { v: `(not ${operand.v})`, isNull: NOT_NULL, def: operand.def };
+      if (expr.op === "!") {
+        // `!` is strict at a null as well as at an absence, so it has a value
+        // exactly where its operand has a non-null one.
+        return {
+          v: `(not ${operand.v})`,
+          isNull: NOT_NULL,
+          def: and(operand.def, nonNull(operand)),
+        };
+      }
       const value = `(- ${operand.v})`;
       return {
         v: value,
@@ -204,20 +213,36 @@ export class UnsupportedTerm extends Error {
 }
 
 function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
-  // Connectives over comparisons stay two-valued (§4.1 excludes a bare
-  // boolean term, so neither side can be NULL here). Their definedness is left
-  // unstated: `&&` is non-strict in undefinedness (`false && e` is false), so
-  // "the conjunction has a value" does not give "both sides do", and asserting
-  // the stronger reading would be asserting something false.
-  if (op === "&&") return { v: `(and ${l.v} ${r.v})`, isNull: NOT_NULL, def: DEFINED };
-  if (op === "||") return { v: `(or ${l.v} ${r.v})`, isNull: NOT_NULL, def: DEFINED };
+  // Connectives over comparisons stay two-valued (§4.1 excludes a bare boolean
+  // term, so neither side can be NULL here). They are non-strict past their
+  // dominating operand and strict everywhere else, and that is expressible: a
+  // side that is defined and dominating (`false` for `&&`, `true` for `||`)
+  // gives the whole term a value whatever the other side does, and otherwise
+  // both sides need one. `DEFINED` would read as a claim that a conjunction
+  // always has a value, which in the goal drops the half of the contract saying
+  // the proposition has one at all.
+  if (op === "&&" || op === "||") {
+    const dominating = (t: Term) => and(t.def, op === "&&" ? `(not ${t.v})` : t.v);
+    return {
+      v: op === "&&" ? `(and ${l.v} ${r.v})` : `(or ${l.v} ${r.v})`,
+      isNull: NOT_NULL,
+      def:
+        l.def === DEFINED && r.def === DEFINED
+          ? DEFINED
+          : or(dominating(l), dominating(r), and(l.def, r.def)),
+    };
+  }
 
   // No comparison ever yields a null. They part on what happens at one instead.
   // An ordering is **strict** at null as well as at undefined, `null` having no
   // place in an order (§4.1), so its definedness carries both conditions and its
   // value is the bare SMT-LIB comparison. Equality is total over values, so it
   // answers at a null and is defined wherever its operands are.
-  const both = `(and ${nonNull(l)} ${nonNull(r)})`;
+  //
+  // `both` goes through `and`, so an operand the analysis proves non-null drops
+  // out of the condition instead of padding it with `true`. A connective's
+  // definedness names each operand's condition twice, so the padding shows.
+  const both = and(nonNull(l), nonNull(r));
   const bothNull = `(and ${l.isNull} ${r.isNull})`;
   const bothDef = and(l.def, r.def);
   switch (op) {
@@ -349,9 +374,15 @@ function hypotheses(
       if (!element.negated) attempt(() => contractHypothesis(element, ctx.types, ctx, vars));
     } else if (element.$type === "Filter") {
       // A conjunct holds only where it has a value, so its definedness joins it.
+      // A negated one is negation as failure over that whole reading: `not e`
+      // holds wherever `e` fails to hold, which is where it is false *and* where
+      // it has no value. So the negation goes outside the definedness. Asserting
+      // `(not value)` instead would assert something the program never promised,
+      // and it is why the definedness of a connective has to be exact.
       attempt(() => {
         const t = toSmt(element.expr as HeadTerm, ctx, vars);
-        return and(t.def, t.v);
+        const holds = and(t.def, t.v);
+        return element.negated ? `(not ${holds})` : holds;
       });
     } else if (element.$type === "Equality") {
       // The grammar calls the right-hand side `expr`.

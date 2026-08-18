@@ -626,6 +626,62 @@ describe("translator", () => {
     expect(even.match(/FROM "__mutual_odd_even"/g)).toHaveLength(2); // recursive term + final SELECT
   });
 
+  test("rejects a recursive group whose predicates disagree on a column type (postgres)", () => {
+    // One relation for the whole group means one type per column. Postgres used to
+    // report this as `UNION types text and bigint cannot be matched`, naming
+    // neither the predicate nor the position.
+    const source = `
+      input predicate seed(n: integer).
+      input predicate lab(s: string).
+      a(N) :- seed(N).
+      a(N) :- b(S), N = length(S).
+      b(S) :- lab(S).
+      b(S) :- a(N), S = to_string(N).
+    `;
+    expect(() => translateTyped(source)).toThrow(
+      /mutually recursive but disagree on column 1: 'string' against 'integer'/,
+    );
+    // The span is the head of the rule whose type conflicts, so an editor has
+    // somewhere to put the squiggle.
+    try {
+      translateTyped(source);
+    } catch (e) {
+      const err = e as { offset?: number; end?: number };
+      expect(source.slice(err.offset, err.end)).toBe("a(N)");
+    }
+  });
+
+  test("accepts a recursive group mixing integer and float, which SQL unions (postgres)", () => {
+    // The union resolves to the float, the same widening `joinTypes` performs, so
+    // this is not the shape the check is about.
+    const result = translateTyped(`
+      input predicate seed(n: integer).
+      a(N) :- seed(N).
+      a(N) :- b(F), N = round(F).
+      b(F) :- a(N), F = N * 1.5.
+    `);
+    expect(result.createViews).toHaveLength(2);
+  });
+
+  test("a mixed-type recursive group still runs on the untyped dialects", () => {
+    // SQLite leaves the combined columns untyped and the interpreters keep a
+    // relation per predicate, so neither needs the restriction and a program that
+    // works there is not rejected for Postgres's benefit.
+    expect(() =>
+      translateSource(
+        `
+      input predicate seed(n: integer).
+      input predicate lab(s: string).
+      a(N) :- seed(N).
+      a(N) :- b(S), N = length(S).
+      b(S) :- lab(S).
+      b(S) :- a(N), S = to_string(N).
+    `,
+        sqlite,
+      ),
+    ).not.toThrow();
+  });
+
   test("pads a narrower predicate inside the select list, not after WHERE (postgres)", () => {
     const result = translateTyped(`
       input predicate e(a: integer, b: integer).
@@ -1327,16 +1383,25 @@ describe("translator", () => {
     expect(sql).not.toContain("ABS(EXP");
   });
 
-  test("float arithmetic results are finite-guarded", () => {
+  test("float arithmetic tests its magnitude in decimal, so Postgres never overflows", () => {
+    // Postgres raises "value out of range: overflow" while evaluating the
+    // operation, so a guard reading the result never runs. The magnitude is
+    // tested in exact decimal, which cannot overflow, and the `CASE` reaches the
+    // float arm only where the test says the result fits.
     const result = translateSource(`
       input predicate t(x: float, y: float).
       r(P, Q, R) :- t(X, Y), P = X * Y, Q = X / Y, R = X % Y.
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain('CASE WHEN ABS((__b0."x" * __b0."y"))');
-    expect(sql).toContain('CASE WHEN ABS((__b0."x" / NULLIF(__b0."y", 0)))');
-    expect(sql).toContain("THEN NULL");
-    expect(sql).toContain("<>"); // NaN guard for SQLite/sql.js.
+    expect(sql).toContain(
+      'CASE WHEN ABS(CAST(__b0."x" AS DECIMAL) * CAST(__b0."y" AS DECIMAL)) > 1.7976931348623157e308 THEN NULL ELSE (__b0."x" * __b0."y") END',
+    );
+    expect(sql).toContain(
+      'CASE WHEN ABS(CAST(__b0."x" AS DECIMAL) / CAST(NULLIF(__b0."y", 0) AS DECIMAL)) > 1.7976931348623157e308 THEN NULL',
+    );
+    // Float modulo cannot leave the domain, its result being bounded by the
+    // divisor, so it keeps the result-reading guard and with it the NaN check.
+    expect(sql).toContain("<>");
   });
 
   test("integer arithmetic results are safe-integer guarded", () => {

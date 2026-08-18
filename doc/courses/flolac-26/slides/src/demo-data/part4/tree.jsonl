@@ -1,1 +1,1 @@
-{"type": "and", "args": [{"type": "var", "name": "p"}, {"type": "var", "name": "q"}]}
+{"type": "and", "name": null, "args": [{"type": "var", "name": "p"}, {"type": "var", "name": "q"}]}

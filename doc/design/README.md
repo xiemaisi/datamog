@@ -16,7 +16,7 @@ another a model that is implemented without the structure it proposes.
 | [`null.md`](./null.md) | superseded by `null-as-a-value.md`; two arguments corrected in place | Why there is a NULL at all, how it propagates, why comparison is total and there is one equality |
 | [`parity-stratification.md`](./parity-stratification.md) | implemented | Recursion through an even number of negations, the `^` sigil, the alternating fixed point |
 | [`qualified-constructors.md`](./qualified-constructors.md) | implemented | Why a proof-term constructor is scoped to its predicate (`opt::Some`) |
-| [`type-lattice.md`](./type-lattice.md) | implemented | The five types, `value` as top, meet within a rule vs join across rules, head annotations |
+| [`type-lattice.md`](./type-lattice.md) | implemented, annotated for the `null` type | The six types, `value?` as top and `null` as the unit of both operations, meet within a rule vs join across rules, head annotations |
 | [`imports-as-functors.md`](./imports-as-functors.md) | largely implemented | A file as a function from its input relations to its output relations, wired with `:=` |
 | [`typing-and-safety-constraints.md`](./typing-and-safety-constraints.md) | model implemented, structure not | Recasting safety checking and type inference as one constraint system over one lattice |
 | [`postgres-alignment.md`](./postgres-alignment.md) | example-suite defects fixed; one won't-fix, one untested limitation | Where the Postgres backend disagrees with the others, and what each fix would take |

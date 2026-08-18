@@ -72,6 +72,26 @@ describe("defined", () => {
     expect(codes(source)).toEqual([]);
   });
 
+  test("every position the call can occupy warns, not only a filter", () => {
+    // The tautology is a tautology wherever it is written, and the positions that
+    // used to go unwarned are the ones that keep the constant `true` in a column,
+    // where a reader is even less likely to notice it was not the null test.
+    const decl = "input predicate p(a: integer?).\n";
+    expect(codes(`${decl}q(A) :- p(A), defined(A).`)).toEqual(["constant-defined"]);
+    expect(codes(`${decl}q(A, D) :- p(A), D = defined(A).`)).toEqual(["constant-defined"]);
+    expect(codes(`${decl}q(A, defined(A)) :- p(A).`)).toEqual(["constant-defined"]);
+    expect(codes(`${decl}q(A) :- p(A), X = defined(A), X.`)).toEqual(["constant-defined"]);
+  });
+
+  test("it is found under any operator, not only a connective", () => {
+    const decl = "input predicate p(a: integer?).\n";
+    expect(codes(`${decl}q(A) :- p(A), defined(A) && A < 2.`)).toEqual(["constant-defined"]);
+    expect(codes(`${decl}q(A) :- p(A), !defined(A).`)).toEqual(["constant-defined"]);
+    expect(codes(`${decl}q(A, D) :- p(A), D = (defined(A) <> false).`)).toEqual([
+      "constant-defined",
+    ]);
+  });
+
   test("the bare body form works, negated or not", () => {
     // `name(args)` in body position parses as an atom, and post-processing turns
     // this one into a filter carrying the `negated` flag. So `not defined(e)`

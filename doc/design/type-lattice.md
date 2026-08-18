@@ -1,15 +1,18 @@
 # Design notes: the type lattice and head annotations
 
-Status: implemented. This records *why* the type system is shaped the way it is.
-The normative rules live in the spec (§5.2 inference, §5.6 widening, §5.10 head
-annotations, §9.3 module boundaries); read those for *what*. This doc only
-covers the decisions and the alternatives we rejected, because none of that
-survives in a rule list.
+Status: implemented, with one addition. `null-as-a-value.md` added a sixth type,
+`null`, as a sibling atom below nothing and above nothing; the annotations below
+mark where that changes this doc. The normative rules live in the spec (§5.2
+inference, §5.6 widening, §5.10 head annotations, §9.3 module boundaries); read
+those for *what*. This doc only covers the decisions and the alternatives we
+rejected, because none of that survives in a rule list.
 
 ## The types form a lattice
 
-There are five column types: `string`, `integer`, `float`, `boolean`, `value`.
-They are not a flat set. Ordered by "can stand in for", they form a lattice:
+There are six column types: `string`, `integer`, `float`, `boolean`, `value` and
+`null`. They are not a flat set. Ordered by "can stand in for", they form a
+lattice, with `null` sitting beside the primitives rather than under them and
+serving as the join's identity (`null` ⊔ `T` = `T`):
 
 ```mermaid
 graph BT
@@ -18,6 +21,7 @@ graph BT
     str["string"]
     bool["boolean"]
     val["value<br/>top: any shape, stored as JSON"]
+    nul["null<br/>no base values: unit of both operations"]
 
     int --> flt
     flt --> val
@@ -31,6 +35,13 @@ Arrows point from a type to any type it can stand in for.
 string, a number, an object, `null`). `integer < float` (an integer is a
 usable float). The bottom is spelled `undefined` in the code: the "no
 information yet" seed of the fixed-point, and the identity of the join.
+
+**`null` is drawn unconnected on purpose.** It has no non-null values, so joining
+or meeting it contributes no base at all: `null` ⊔ `integer` is `integer` carrying
+a null, and `null` ⊓ `integer` is `integer` for the same reason. That is why it can
+sit beside the primitives without disturbing anything above, and why a column fed
+nothing but bare `null`s has no base type of its own until a sibling rule supplies
+one. See `null-as-a-value.md` §3 and §6.
 
 That one `undefined` wears two hats, which is worth knowing before reading
 the code. As the join's identity it is the bottom, which is the reading above
@@ -203,11 +214,20 @@ inferred one.
 
 ## Nullness is not in this lattice
 
-Whether a column can hold NULL is not one of the five types and not a position in
+Whether a column can hold NULL is not one of the six types and not a position in
 the order. A `?` suffix (`age: integer?`) leaves the inferred base type identical.
-[null.md](./null.md) §7 records why a `null` *type* below the primitives does not
+[null.md](./null.md) §7 records why a `null` type *below* the primitives does not
 work: it would make `string ⊓ integer` inhabited and turn a conflict into a
 predicate that silently carries NULL rows.
+
+**That verdict still holds, and it is not an argument against the `null` type this
+doc now has.** `null-as-a-value.md` §2 dissolves the objection by putting the type
+*beside* the primitives rather than below them: with no base values of its own it
+is under nothing, so `string ⊓ integer` stays ⊥ and the conflict is still an error.
+What null.md ruled out is a subtype of everything; what shipped is a sibling atom
+that is the unit of both operations. The nullness bit below is what carries "this
+column can hold a null as well", which is a different claim from "this column
+holds nothing but nulls".
 
 It is instead a second component beside the base type, which keeps that verdict
 intact and reuses this document's machinery wholesale: componentwise meet within

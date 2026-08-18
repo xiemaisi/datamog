@@ -7,7 +7,7 @@
 // no tuple.
 //
 // This is deliberately *not* `mayBeNull` in `nullness.ts`, which answers "can
-// this be SQL NULL". The two differ at exactly the two places that matter:
+// this be the null value". The two differ at exactly the two places that matter:
 //
 //   - a **variable** always denotes a value, `null` included, so it is defined;
 //   - the **`null` literal** is a value, so it is defined.
@@ -71,16 +71,21 @@ export function canBeUndefined(expr: HeadTerm, ctx: PartialityContext): boolean 
       // for the orderings below.
       return true;
     case "AggregateCall":
-      // §7. `count` folds with 0, and so do `sum`, `concat` and `list`, so those
-      // always have a value over any group. `avg`, `min` and `max` have no
-      // identity in the domain, an average over nothing being 0/0 and a minimum
+      // §7. `count`, `concat` and `list` fold with an identity the domain has, 0,
+      // `""` and `[]`, so they always have a value over any group. `avg`, `min`
+      // and `max` have none, an average over nothing being 0/0 and a minimum
       // needing an infinity, so an empty or all-null group leaves them with no
-      // value. An integer `sum` can also leave the integer domain.
+      // value.
+      //
+      // `sum` has the identity and can still leave the domain, at either width:
+      // an integer sum past the safe-integer range, and a float sum past the
+      // IEEE range, which the ordinary rule for float arithmetic makes an absence
+      // rather than an `Infinity`.
       //
       // A guard on one of these cannot go in `WHERE`, an aggregate not being
       // allowed there, so the translator emits `HAVING` for it instead.
       if (expr.func === "avg" || expr.func === "min" || expr.func === "max") return true;
-      if (expr.func === "sum") return ctx.typeOf(expr) === "integer";
+      if (expr.func === "sum") return true;
       return false;
     case "FunctionCall": {
       const overload = ctx.overloads.get(expr);

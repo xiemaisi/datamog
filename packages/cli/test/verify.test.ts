@@ -2,7 +2,9 @@
 // so a checkout without z3 still runs green.
 
 import { describe, expect, test } from "bun:test";
+import { create as createNative } from "datamog-backend-native";
 import { analyze, generateObligations, inferTypes } from "datamog-core";
+import { ConstraintViolationError, DatamogExecutor } from "datamog-engine";
 import { parse } from "datamog-parser";
 import { DEFAULT_SOLVER, verifyObligations } from "../src/verify.ts";
 
@@ -11,6 +13,26 @@ const withSolver = Bun.which(solver) ? describe : describe.skip;
 
 const verify = (source: string) =>
   verifyObligations(generateObligations(inferTypes(analyze(parse(source)))));
+
+const statuses = async (source: string) => (await verify(source)).map((v) => v.status);
+
+/**
+ * Whether running the program finds a tuple that breaks a contract. A
+ * refinement lowers to a synthesised constraint check, so a verdict and a run
+ * answer the same question and disagreeing is a bug in one of them.
+ */
+async function violated(source: string): Promise<boolean> {
+  const backend = await createNative();
+  try {
+    await new DatamogExecutor(backend, []).execute(source);
+    return false;
+  } catch (e) {
+    if (e instanceof ConstraintViolationError) return true;
+    throw e;
+  } finally {
+    await backend.close();
+  }
+}
 
 withSolver(`with ${solver}`, () => {
   test("a claim the body entails is discharged", async () => {
@@ -43,6 +65,31 @@ withSolver(`with ${solver}`, () => {
       "discharged",
       "discharged",
     ]);
+  });
+
+  test("a negated guard is read as failure, so the verdict matches the run", async () => {
+    // `not (X > 100)` excludes exactly the tuples the contract claims, and
+    // reading the guard positively proved a claim every backend reports
+    // violated.
+    const broken = "p(5). p(7).\nq(X, _: X > 100) :- p(X), not (X > 100).";
+    expect(await statuses(broken)).toEqual(["counterexample"]);
+    expect(await violated(broken)).toBe(true);
+
+    // The converse is a theorem, and the positive reading lost it.
+    const sound = "p(5). p(7).\nq(X, _: X >= 0) :- p(X), not (X < 0).";
+    expect(await statuses(sound)).toEqual(["discharged"]);
+    expect(await violated(sound)).toBe(false);
+  });
+
+  test("a conjunction must have a value, so an overflowing operand breaks it", async () => {
+    // `X * 1000000000` leaves the integer domain at this row, so the
+    // conjunction has no value and the contract does not hold there. Giving
+    // `&&` an unconditional definedness discharged it while every runnable
+    // backend reported the contract violated.
+    const program =
+      "p(9007200, 0).\nq(X, Y, _: X * 1000000000 > 0 && Y >= 0) :- p(X, Y), X > 0, Y >= 0.";
+    expect(await statuses(program)).toEqual(["counterexample"]);
+    expect(await violated(program)).toBe(true);
   });
 
   test("a counterexample names the assignment that falsifies the claim", async () => {

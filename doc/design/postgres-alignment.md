@@ -1,7 +1,9 @@
 # Postgres backend alignment
 
-Status: example-suite defects fixed. One last-bit float difference is documented
-as inherent, and one untested mixed-type SCC limitation remains.
+Status: example-suite defects fixed. Two divergences are documented as inherent,
+a last-bit float difference and `avg` over an overflowing intermediate. A
+mixed-type recursive group is now rejected with a located message rather than
+reaching Postgres as an ill-typed union.
 
 Every backend is meant to compute the same answer for the same program. Running
 the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
@@ -134,11 +136,72 @@ checked by hand across postgres, sqlite, and seminaive:
 - An SCC with no base case anywhere gets a synthesised empty anchor, typed the
   same way. It evaluates to the empty relation on all three backends.
 
-A residual limitation: the combined CTE gives each column one type across the
-whole SCC, taken from the first predicate wide enough to have it. Two predicates
-in one SCC disagreeing at the same position (say `integer` against `string`)
-would make the union ill-typed and Postgres would reject it. SQLite would not
-care. No example does this and nothing checks for it.
+One restriction the shape imposes: the combined CTE gives each column one type
+across the whole SCC, taken from the first predicate wide enough to have it. Two
+predicates in one SCC disagreeing at the same position (say `integer` against
+`string`) would make the union ill-typed, so that program is rejected before any
+SQL is emitted. SQLite does not care and does not check.
+
+Since demonstrated minimally, so it is a known shape rather than a suspicion:
+
+```prolog
+seed(1). lab("x").
+a(N) :- seed(N).       a(N) :- b(S), N = length(S).
+b(S) :- lab(S).        b(S) :- a(N), S = to_string(N).
+```
+
+Native, seminaive and SQLite answer; Postgres used to report `UNION types text
+and bigint cannot be matched`, with no source position, since by then the failure
+is in the emitted SQL rather than in the program.
+
+**Now rejected with the position, on the dialects that need it.**
+`checkStratumColumnTypes` in `engine/src/dialect.ts` runs from `mutualCteParts`
+and names both predicates, the column, and the two types, anchoring the span on
+the head whose type conflicts so an editor has somewhere to put the squiggle. The
+other option, typing the combined CTE per predicate, the one-CTE-per-SCC shape
+does not allow.
+
+It is deliberately not a check on every backend. The interpreters keep a relation
+per predicate and SQLite leaves the combined columns untyped, so both run such a
+program correctly, and rejecting it there would cost a working program to suit a
+restriction it does not have. The gate is `typedPadding`, which is already the
+flag marking a dialect that types those columns.
+
+Integer against float is accepted: SQL resolves a union over the two to the
+float, which is the widening `joinTypes` performs anyway. Everything else is
+compared by the storage type the dialect would give it, so the question asked is
+exactly whether the two would become one SQL column.
+
+## Float overflow inside an operation (fixed)
+
+Postgres raises `value out of range: overflow` while *evaluating* a float
+operation, where SQLite and the interpreters produce an infinity. A guard reading
+the result therefore never ran and the whole query died, where every other
+backend withheld the row. The magnitude is now tested in exact decimal, which
+cannot overflow, and SQL's `CASE` reaches the float arm only where that test says
+the result fits. `+`, `-`, `*` and `/` take that shape; float `%` cannot leave
+the domain, its result being bounded by the divisor, so it keeps the
+result-reading guard.
+
+One caveat worth knowing: Postgres folds constant subexpressions during planning,
+so a guard around two float *literals* could still raise at plan time. Datamog's
+float literal syntax has no exponent form, so no literal large enough to overflow
+can be written, and every reachable case reads a column.
+
+## `avg` over an overflowing intermediate (inherent)
+
+`avg` of two values near the top of the float domain has a finite mathematical
+answer, and the backends disagree about whether they can reach it. Postgres
+accumulates in a form that does not overflow and returns the correct finite
+value; SQLite and the interpreters compute a sum first, leave the domain, and so
+withhold the tuple.
+
+Left as it is. Matching Postgres means a running-mean accumulation, which the
+interpreters could do and SQLite's built-in `AVG` cannot, and matching the other
+two means making Postgres discard an answer it computed correctly. The residual
+needs an input above roughly `1.8e308 / n`, and the divergence is now between a
+correct value and a missing row rather than between a value and an infinity,
+which is the safer of the two shapes to leave.
 
 ## Anchor and recursive column types must agree (fixed)
 

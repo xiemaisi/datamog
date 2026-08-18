@@ -215,8 +215,12 @@ export function synthesiseContractChecks(program: Program): void {
             },
           ];
 
+    // The sigil is spelled at every occurrence of a maximal predicate and the
+    // analyzer checks that they agree, so the synthesised atom has to carry it too
+    // or the program stops compiling (spec §4.3).
+    const maximal = rules[0]!.head.maximal ?? false;
     for (const { formula, cst } of checks) {
-      program.statements.push(contractCheck(program, predicate, columns, formula, cst));
+      program.statements.push(contractCheck(program, predicate, columns, formula, cst, maximal));
     }
   }
 }
@@ -228,12 +232,13 @@ function contractCheck(
   columns: string[],
   formula: Expression,
   cst: AstNode["$cstNode"],
+  maximal: boolean,
 ): Query {
   const atom = {
     $type: "Literal",
     predicate,
     args: columns.map((c) => mkVariable(c, cst)),
-    maximal: false,
+    maximal,
     negated: false,
     parens: false,
     $cstNode: cst,

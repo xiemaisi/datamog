@@ -799,6 +799,34 @@ describe("analyzer", () => {
     });
   });
 
+  describe("a refinement on a maximal predicate", () => {
+    // The sigil is spelled at every occurrence and the analyzer checks that the
+    // occurrences agree, so the constraint the parser synthesises for a contract
+    // has to spell it too. Hard-coded unspelled, it made the combination
+    // uncompilable, with an error about a predicate the user had spelled right and
+    // no source position to point at.
+    const parity = `
+      input predicate n(x: integer).
+      p^(X, _: X > 0) :- n(X), not q(X).
+      q(X) :- n(X), not p^(X).
+    `;
+
+    test("compiles, the synthesised check carrying the sigil", () => {
+      const analyzed = analyze(parse(parity));
+      expect(analyzed.constraints).toHaveLength(1);
+      const atom = analyzed.constraints[0]!.body[0]!;
+      expect(atom.$type).toBe("Literal");
+      expect((atom as { predicate: string; maximal?: boolean }).predicate).toBe("p");
+      expect((atom as { predicate: string; maximal?: boolean }).maximal).toBe(true);
+    });
+
+    test("a minimal predicate's check still carries no sigil", () => {
+      const analyzed = analyze(parse("n(1).\nr(X, _: X > 0) :- n(X)."));
+      const atom = analyzed.constraints[0]!.body[0]!;
+      expect((atom as { maximal?: boolean }).maximal).toBe(false);
+    });
+  });
+
   describe("source file on errors", () => {
     // Source positions generalise to name their file (for the module system):
     // the file threads through parse -> analyze -> inferTypes and lands on any

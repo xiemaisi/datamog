@@ -158,6 +158,27 @@ describe("ordering gap", () => {
     `;
     expect(codes(source)).toEqual(["nullable-ordering-gap"]);
   });
+
+  test("a head argument is one of the two sides too", () => {
+    // The pair reads as a partition wherever it is written, and in these positions
+    // the comparison's *value* is what the program keeps, so the missing case is a
+    // `null` in a column rather than a row that never appeared.
+    const source = `
+      input predicate p(a: integer?).
+      lo(X, X < 2) :- p(X).
+      hi(X, X >= 2) :- p(X).
+    `;
+    expect(codes(source)).toEqual(["nullable-ordering-gap"]);
+  });
+
+  test("either side of a body equality is one of them", () => {
+    const source = `
+      input predicate p(a: integer?).
+      lo(X, C) :- p(X), C = (X < 2).
+      hi(X, C) :- p(X), C = (X >= 2).
+    `;
+    expect(codes(source)).toEqual(["nullable-ordering-gap"]);
+  });
 });
 
 describe("negated ordering", () => {
@@ -271,6 +292,37 @@ describe("undefined expressions (opt-in)", () => {
     `;
     expect(undefinedRisks(source)).toEqual([]);
   });
+
+  test("`sum` can leave its domain at either width, float included", () => {
+    // A float `sum` overflows to a non-finite value, which the rule for float
+    // arithmetic makes an absence rather than an `Infinity`, so it needs the same
+    // guard the integer width has always had. Answering otherwise let
+    // `q(sum(X)) :- f(A), X = 10.0 ** 308.` produce `Infinity` over two rows.
+    const int = `
+      input predicate n(x: integer).
+      q(sum(X)) :- n(X).
+    `;
+    const float = `
+      input predicate n(x: float).
+      q(sum(X)) :- n(X).
+    `;
+    expect(undefinedRisks(int).map((d) => d.code)).toEqual(["undefined-expression"]);
+    const ds = undefinedRisks(float);
+    expect(ds.map((d) => d.code)).toEqual(["undefined-expression"]);
+    expect(ds[0]!.message).toContain("sum(X)");
+  });
+
+  test("the aggregates that fold with an identity still have a value", () => {
+    // `count`, `concat` and `list` fold monoids the domain has an identity for, so
+    // no group leaves them without one.
+    const source = `
+      input predicate n(x: integer).
+      c(count(X)) :- n(X).
+      s(concat(X)) :- n(X).
+      l(list(X)) :- n(X).
+    `;
+    expect(undefinedRisks(source)).toEqual([]);
+  });
 });
 
 describe("`<>` on a partial operand", () => {
@@ -319,5 +371,19 @@ describe("`<>` on a partial operand", () => {
       q(X) :- n(X, Y), X != 10 / Y.
     `;
     expect(codes(source)).toEqual(["partial-inequality"]);
+  });
+
+  test("every position a `<>` can occupy is covered, not only a filter", () => {
+    // The reading and the divergence are the same wherever it sits, and the
+    // positions the check used to miss are the ones where the operator's value is
+    // *used* rather than tested, so the difference is even harder to see.
+    const decl = "input predicate n(x: integer, y: integer).\n";
+    expect(codes(`${decl}q(X, X <> 10 / Y) :- n(X, Y).`)).toEqual(["partial-inequality"]);
+    expect(codes(`${decl}q(X, C) :- n(X, Y), C = (X <> 10 / Y).`)).toEqual(["partial-inequality"]);
+    expect(codes(`${decl}q(X) :- n(X, Y), !(X <> 10 / Y).`)).toEqual(["partial-inequality"]);
+    // And a nested one, to pin that the walk descends rather than matching a shape.
+    expect(codes(`${decl}q(X, C) :- n(X, Y), C = ((X <> 10 / Y) && (X > 0)).`)).toEqual([
+      "partial-inequality",
+    ]);
   });
 });

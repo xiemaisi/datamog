@@ -425,6 +425,10 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "Keyword",
             "value": "value"
+          },
+          {
+            "$type": "Keyword",
+            "value": "null"
           }
         ]
       },

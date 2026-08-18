@@ -105,7 +105,7 @@ Sheet/GitHub path you pass explicitly. The [CLI README](packages/cli/README.md)
 covers data loading, output formats, and the flags; `datamog --help` is the
 authoritative list.
 
-Seventy-nine runnable programs live in
+Eighty runnable programs live in
 [`packages/cli/examples/`](packages/cli/examples/), covering transitive closure,
 stratified negation, aggregates, puzzles, JSON handling, proof-term ADTs, and
 Boolean-circuit solvers:

@@ -982,3 +982,62 @@ describe("seminaive backend — backend lifecycle", () => {
     }
   });
 });
+
+describe("seminaive backend — an absent operand withholds its row", () => {
+  // The naive counterparts carry the reasoning. Mirrored here because the term
+  // evaluator, the range step and the aggregate fold are shared code, so a
+  // regression in either would show up on both drivers.
+
+  test("an accessor index with no value withholds the row", async () => {
+    const results = await run(`
+      v(0). v(2).
+      output predicate sub(V, R)  :- v(V), R = "abcdef"[10 / V].
+      output predicate strs(V, R) :- v(V), R = "abcdef"[0 : 10 / V].
+      output predicate vals(V, R) :- v(V), J = [1, 2, 3], R = J[0 : 10 / V].
+      ?- sub(V, R).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ V: 2, R: "f" }]);
+    expect(sortRows(results[1]!)).toEqual([{ V: 2, R: "abcde" }]);
+    expect(sortRows(results[2]!)).toEqual([{ V: 2, R: [1, 2, 3] }]);
+  });
+
+  test("a range bound with no value withholds the row, on either side", async () => {
+    const results = await run(`
+      v(0). v(2).
+      output predicate hi(V)       :- v(V), 2 in [1 .. 10 / V].
+      output predicate lo(V)       :- v(V), 2 in [10 / V .. 10].
+      output predicate gen(V, X)   :- v(V), X in [1 .. 10 / V], X > 3.
+      output predicate genlo(V, X) :- v(V), X in [10 / V .. 6], X > 5.
+      ?- hi(V).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ V: 2 }]);
+    expect(sortRows(results[1]!)).toEqual([]);
+    expect(sortRows(results[2]!)).toEqual([
+      { V: 2, X: 4 },
+      { V: 2, X: 5 },
+    ]);
+    expect(sortRows(results[3]!)).toEqual([{ V: 2, X: 6 }]);
+  });
+
+  test("a float sum or avg that leaves the float range withholds its tuple", async () => {
+    const results = await run(`
+      f(1). f(2).
+      output predicate total(sum(X))  :- f(_), X = 10.0 ** 308.
+      output predicate mean(avg(X))   :- f(_), X = 10.0 ** 308.
+      output predicate rows(count(*)) :- f(_), X = 10.0 ** 308.
+      ?- rows(N).
+    `);
+    expect(results[0]).toEqual([]);
+    expect(results[1]).toEqual([]);
+    expect(results[2]).toEqual([{ count: 2 }]);
+  });
+
+  test("rounding to a scale past the float range gives the input back", async () => {
+    const results = await run(`
+      a(9).
+      r(R) :- a(A), R = round(A * 1000000000000, 300).
+      ?- r(R).
+    `);
+    expect(results[0]).toEqual([{ R: 9000000000000 }]);
+  });
+});

@@ -34,10 +34,11 @@ output predicate event_string_header(Id, Key, Value) :-
     object_entry(E["headers"], Key, V),
     Value = as_string(V).
 
-# Tag count per event: array length on each tags array. Events with
-# no `tags` field yield NULL, which `as_integer` then keeps as NULL — but
-# the IDB is integer-typed so we want a real integer. Use the json
-# length builtin and coerce; events without tags simply don't appear.
+# Tag count per event: array length on each tags array. An event with
+# no `tags` field has no value at `E["tags"]`, a missing key being an
+# absence rather than a null, so `length` has none either and the row
+# is not derived: event 5 appears in the default output and in none of
+# the four rows here.
 output predicate tag_count(Id, N) :-
     event(E),
     Id = as_integer(E["id"]),

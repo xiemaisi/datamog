@@ -287,8 +287,8 @@ input predicate sample(name: string, raw: string).
 # a `value`-typed column is fine — the lift fires implicitly.
 counted(N, V) :- sample(N, _), V = [length(N)][0].
 
-# A string parsed into a structured value, with a clean NULL
-# for any row whose payload isn't valid JSON syntax.
+# A string parsed into a structured value. A payload that isn't
+# valid JSON syntax has no value, so its row is not derived.
 parsed(N, V) :- sample(N, R), V = parse_json(R).
 
 # Object and array literals — assemble structured values

@@ -71,11 +71,21 @@ function jsonScalarAsCanonical(typeSql: string, valueSql: string): string {
   // mean *undefined*, so that a missing key withholds its row while a key that is
   // present and holds a null derives one carrying it. Collapsing the two, which
   // this used to do, is what made them indistinguishable.
+  // A numeric leaf becomes TEXT like every other scalar arm. SQLite compares by
+  // storage class, so leaving it numeric makes the canonical form of `1` an
+  // INTEGER that matches canonical text only through affinity, which a `CASE`
+  // does not carry: the lift's `CASE WHEN ... IS NULL THEN 'null' ELSE CAST(x AS
+  // TEXT) END` then compares TEXT against INTEGER and a stored value stops
+  // matching itself. `json_quote` renders a number the way the canonical encoder
+  // does. Objects and arrays reach here only when the recursion in
+  // `canonicalJsonSql` runs out of depth, and they are already JSON text, so they
+  // pass through: quoting one would turn it into a JSON string.
   return `(CASE
     WHEN ${typeSql} = 'text' THEN json_quote(${valueSql})
     WHEN ${typeSql} = 'true' THEN 'true'
     WHEN ${typeSql} = 'false' THEN 'false'
     WHEN ${typeSql} = 'null' THEN 'null'
+    WHEN ${typeSql} IN ('integer', 'real') THEN json_quote(${valueSql})
     ELSE ${valueSql}
   END)`;
 }

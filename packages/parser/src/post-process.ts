@@ -468,6 +468,11 @@ export function defaultColumnTypes(program: Program): void {
     if (!isExtDecl(stmt)) continue;
     for (const col of stmt.columns) {
       if (col.type === undefined) col.type = "string";
+      // `null` is one element of the lattice, not two: `T?` spells `T ⊔ null`, so
+      // `null?` is `null ⊔ null`. Carrying the base without the bit would give a
+      // column whose only inhabitant its own nullness check rejects, so the two
+      // spellings name the same type and both hold a null.
+      if (col.type === "null") col.nullable = true;
     }
   }
 }

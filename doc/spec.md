@@ -4,8 +4,8 @@ Datamog is an educational Datalog dialect. Programs declare table-backed
 predicates, define derived predicates via rules, and issue queries.
 
 Datamog ships with five backends. All of them implement the same
-language semantics and agree on runtime invariants (divide-by-zero /
-domain-error NULLs, slice bounds, integer vs float division); they
+language semantics and agree on runtime invariants (divide-by-zero and
+domain errors having no value, slice bounds, integer vs float division); they
 differ only in how rules are evaluated.
 
 The **SQL backends** — PostgreSQL, SQLite, and sql.js (WASM SQLite) —
@@ -167,7 +167,7 @@ reserved only against unquoted predicate names; they may be used as input-predic
 columns and as variables:
 
 ```
-object_entry    array_element
+object_entry    array_element    defined
 upper    lower    trim    replace
 abs    round    floor    ceil    sqrt    ln    exp
 as_string    as_integer    as_float    as_boolean    length    type_of
@@ -230,8 +230,8 @@ constraints below are the only exceptions.
   stay available as ordinary names.
 - **Built-in operation names**: one set covering the three kinds of built-in
   operation, the *functions* (`upper`, `abs`, `as_integer`, `to_json`,
-  and so on), the *body atoms* (`object_entry`, `array_element`), and the
-  *aggregates* (`count`, `sum`, `avg`, `min`, `max`, `concat`, `list`). The
+  `defined`, and so on), the *body atoms* (`object_entry`, `array_element`), and
+  the *aggregates* (`count`, `sum`, `avg`, `min`, `max`, `concat`, `list`). The
   complete list is in §1.6. Lexically these are ordinary identifiers; they are
   reserved only against predicate names, and may be used freely as extensional
   columns and as variables.
@@ -314,7 +314,7 @@ results at all.
 ```
 ExtDecl     ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
 ColumnDecl  ::= Identifier (':' PrimitiveType)? ('?')?
-PrimitiveType ::= 'string' | 'integer' | 'float' | 'boolean' | 'value'
+PrimitiveType ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 ```
 
 An input predicate declaration introduces an **extensional predicate** (EDB): a
@@ -335,9 +335,22 @@ input predicate survey(name: string, age: integer?, email: string?).
 input predicate edges(from, to).                            # both string
 ```
 
-The optional `?` suffix marks a column as nullable. Nullable columns keep the
-same Datamog base type for type inference, but loaders and the generated table
-permit runtime `NULL` values.
+The optional `?` suffix marks a column as nullable: its cells may hold the `null`
+value as well as values of the base type (§5.1). It leaves the base type alone for
+inference, and it is checked statically as well as at load time. An operation that
+*computes* rejects a nullable operand outright (§5.4), so
+
+```prolog
+input predicate survey(name: string, age: integer?).
+adult(N) :- survey(N, A), A >= 18.        # fine: an ordering takes a null
+doubled(N, A * 2) :- survey(N, A).        # error: `*` needs a value
+doubled(N, A * 2) :- survey(N, A), A <> null.   # fine: narrowed first
+```
+
+A column without `?` is emitted `NOT NULL`, and a `null` in its data is a load
+error rather than a silently missing value (§7). `null` is itself declarable as a
+column type (§1.5), which is only useful with a `?`, that being the one value it
+admits.
 
 An input predicate may be **bound** to a source with `:=` — a specific data file
 or an instance of another module (§9). An unbound input is a free parameter. In
@@ -611,10 +624,19 @@ when the expression evaluates to `true`. Comparisons (`<`, `<=`, `>`,
 `>=`, `=`, `<>`) and the logical operators (`&&`, `||`, `!`) live in
 the expression hierarchy (Section 2.6), so they compose freely:
 
-A leading `not` negates a built-in atom — `not e` is sugar for the filter
-`!(e)`, applied after the predicate-literal alternative (so `not p(X)`
-remains a negated predicate literal, while `not X = Y` is a negated
-comparison). This is the negation referred to under *Literals* above.
+A leading `not` negates the filter. The predicate-literal alternative is tried
+first, so `not p(X)` stays a negated predicate literal while `not X = Y` is a
+negated comparison. It is negation as failure over the expression and **not** the
+filter `!(e)`: `not e` holds wherever `e` does not hold, an absence included,
+while `!e` propagates the absence (§5.4). The two agree wherever the operand is
+defined, which is everywhere the operands are variables or literals. This is the
+negation referred to under *Literals* above.
+
+```prolog
+n(0). n(2).
+neq(X) :- n(X), not (10 / X = 10 / X).   # {0}: the equality has no value there
+bang(X) :- n(X), !(10 / X = 10 / X).     # no rows: `!` has no value either
+```
 
 ```
 Age >= 30                          # single comparison
@@ -770,7 +792,7 @@ joining via Section 5.6). The `null` literal composes with any operand type
 in a **comparison**, `X <> null` being the guard the language expects, but
 not in an arithmetic or string operation: `null + 1` is a type error, since a
 `null` is not a number and, being statically `null`, can never be narrowed to
-one (Section 5.10). Booleans support equality only
+one (Section 5.4). Booleans support equality only
 (set equality is well-defined) but ordering operators reject them.
 String ordering is lexicographic by Unicode code point, independent
 of backend locale.
@@ -1347,7 +1369,7 @@ Statement      ::= ExtDecl | Rule | Query | Constraint
 
 ExtDecl        ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
 ColumnDecl     ::= Identifier (':' PrimitiveType)? ('?')?
-PrimitiveType  ::= 'string' | 'integer' | 'float' | 'boolean' | 'value'
+PrimitiveType  ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)   -- module
                  | (STRING ('as' Identifier)?)                                    -- data file
 Actual         ::= Identifier '=' Identifier
@@ -1885,9 +1907,21 @@ bound, a builtin with a primitive parameter, and the aggregates `sum`, `avg`,
 `min`, `max` and `concat` all reject one statically. So does a statically `null`
 operand, the same rule at its far end: `null + 1` is rejected (§5.3).
 
-Narrow first, with any of the conjuncts §5.4's "Nullness" lists — `X <> null` is
-the direct one — and the narrowing is per rule and order-independent, a body being
-a conjunction. Three positions are exempt:
+Narrow first. Any of these conjuncts proves every variable in a **strict
+position** of its operand non-null for the rest of the rule:
+
+- `X <> null`, the direct one, and `not (X = null)`, which is the same fact;
+- any ordering (`X < 2`, `X >= Y`, …), all four being strict at a null;
+- a range atom (`X in [1 .. 10]`), which is strict for the same reason;
+- an equality `X = e` where `e` cannot be null, only a null matching a null;
+- a positive atom whose column at that position is non-null.
+
+The narrowing is per rule and order-independent, a body being a conjunction, so a
+guard written last refines an atom written first. It is not `defined(X)`: a
+variable denotes a value and `null` is one, so `defined` on a bare variable is
+constantly true and narrows nothing. The two spellings are one keystroke apart
+and the wrong one draws a warning. Three positions are exempt from needing a
+guard at all:
 
 - **Comparisons.** They take a `null` on either side. `=` answers, and an
   ordering is strict at it and simply does not hold, which is a guard doing its
@@ -1954,8 +1988,10 @@ undefined contributes to no aggregate mentioning it and still counts for
 identity where one exists (`count` and `sum` → `0`, `concat` → `""`,
 `list` → `[]`) and is undefined otherwise (`avg`, `min`, `max`), withholding
 the tuple. `count` counts a `null` like any other value and `list` collects one,
-so the two agree on how many; `sum`, `avg`, `min`, `max` and `concat` skip nulls,
-having nothing to do with one.
+so the two agree on how many. `sum`, `avg`, `min` and `max` never meet one: they
+reject a nullable operand statically and their argument types exclude `value`
+(§5.7). `concat` can meet one, a `value` argument being the exemption, and it
+skips it.
 
 #### Nullness
 
@@ -2007,6 +2043,9 @@ contribution. The join is total, so it never fails:
 
 - same type + same type = no change
 - `integer` + `float` = `float`
+- `null` + any type = that type, `null` being the join's identity: a rule
+  contributing a bare `null` makes the column nullable (§5.4) and leaves its base
+  type to the other rules
 - `value` + any primitive = `value` (the primitive auto-lifts; see §2.9)
 - any other pair (`string` + `integer`, `boolean` + `float`, …) = `value`
 
@@ -2025,8 +2064,11 @@ that a mistyped sibling rule silently produces a `value` column instead of an
 error. See the type-lattice design note (`doc/design/type-lattice.md`) for the
 full rationale.
 
-Every column of every predicate is typed with exactly one of `string`,
-`integer`, `float`, `boolean`, or `value`.
+Every column of every predicate is typed with exactly one of the six types of
+§5.1, plus a nullness bit inferred separately (§5.4). A column that only ever
+receives a bare `null` has no base type of its own; one is picked to carry the
+nulls and is unobservable there, but a rule reading such a column cannot infer a
+type for it, so it needs a sibling rule contributing a real type.
 
 ### 5.7 Type Validation
 
@@ -2286,9 +2328,13 @@ refinements on one rule conjoin.
 
 **The contract is checked**, at the fixed point and before any query runs,
 exactly as an integrity constraint is (§4.7), and a violation is reported the
-same way. A tuple that satisfies no rule's claim is a counterexample. NULL needs
-no special rule: an ordering is false at NULL (§2.6), so a null in a constrained
-position does not satisfy the contract and is reported.
+same way. A tuple that satisfies no rule's claim is a counterexample. The check is
+negation as failure over the proposition, so it reports any tuple where the
+proposition fails to *hold*, whether it is false or has no value. NULL therefore
+needs no special rule: an ordering is strict at a null (§2.6), so a null in a
+constrained position leaves the proposition without a value and the tuple is
+reported. A partial proposition (`_: 10 / X > 1` at `X = 0`) is reported for the
+same reason.
 
 Refinements never reach codegen beyond that check: no column is added and no
 tuple is altered.
@@ -2387,6 +2433,29 @@ body elements classify into:
 Shared variables between atoms produce join conditions. Non-variable atom
 arguments produce equality filters.
 
+**Definedness guards.** A partial expression (§5.4) lowers to SQL NULL, and a
+guard is what turns that NULL into a withheld row. One is emitted per **head
+argument** and per **side of an equality**, as `<sql> IS NOT NULL` in the WHERE
+clause; per **aggregate** with no identity, as the same test in `HAVING` (§6.6);
+per **part of a `value` construction**, as a `CASE` with no `ELSE` so an
+undefined part withholds the row instead of becoming a JSON `null`; and around
+**`defined`**'s argument, again a `CASE` with no `ELSE`, since `defined` is
+true-or-undefined and never false. A **comparison** is guarded locally rather
+than at rule level, so the guard sits inside whatever negation encloses it and
+`X <> e` and `not (X = e)` come out different (§5.4).
+
+```sql
+-- root(V, R) :- s(V), R = sqrt(V).
+SELECT __b0."v" AS col1, SQRT(CASE WHEN (__b0."v") < 0 THEN NULL ELSE __b0."v" END) AS col2
+FROM "s" AS __b0
+WHERE SQRT(CASE WHEN (__b0."v") < 0 THEN NULL ELSE __b0."v" END) IS NOT NULL
+```
+
+Head and equality guards read the **unlifted** SQL, so an auto-lift cannot paper
+over an absence. Lifting into a `value` is the one place a NULL changes meaning
+rather than being tested: a nullable expression's NULL becomes the JSON `null`
+the `value` spells it with (§5.4, "Storage").
+
 Equality has two lowerings, and nullness inference (§5.4) picks between them.
 The null-aware spelling of §6.8 is the meaning; where inference proves an
 operand non-null, a plain `=` is emitted instead. The two agree there, since a
@@ -2468,6 +2537,14 @@ across the SCC and Postgres allows only one recursive term. And the padding
 NULLs are cast to their column's type, since PostgreSQL takes the CTE's column
 types from the anchor, where an uncast NULL would resolve to `text`.
 
+Because the group is one relation, it has one type per column, so on a backend
+that types those columns two predicates in the same SCC must agree at every
+position. `a(N)` carrying an `integer` where `b(S)` in its group carries a
+`string` is rejected, naming both predicates and the column. Integer and float
+agree, a union over the two resolving to the float. The in-memory interpreters
+keep a relation per predicate and SQLite leaves the combined columns untyped, so
+neither has the restriction and both run such a program.
+
 ### 6.6 Aggregate Views
 
 Rules with aggregates in the head produce GROUP BY queries:
@@ -2482,7 +2559,15 @@ becomes:
 SELECT __b0."student" AS col1, AVG(__b0."score") AS col2
 FROM "scores" AS __b0
 GROUP BY __b0."student"
+HAVING AVG(__b0."score") IS NOT NULL
 ```
+
+The `HAVING` is the definedness guard of §6.2: `avg` has no identity over an
+empty group, so it has no value there and the tuple is withheld (§2.7). An
+aggregate that does have one (`count`, `sum`, `concat`, `list`) supplies that
+identity instead, and supplies it *inside* the integer-domain guard rather than
+outside it, since an empty `SUM` and an overflowing `SUM` are both SQL NULL and
+have to go opposite ways: `0` for the first, no value for the second.
 
 ### 6.7 Range Sources
 
@@ -3216,5 +3301,6 @@ integration:
 | **Parse error** | Missing period, unexpected token, malformed expression       |
 | **Analyzer error** | Undefined predicate, arity mismatch, unsafe variable, unstratifiable negation, duplicate input predicate declaration, EDB/IDB conflict, aggregate constraint violation, unknown function, function arity mismatch |
 | **Type error**  | Non-numeric range bounds, unary minus on string, subscript/slice on non-string, wrong function argument type |
+| **Nullable operand** | A nullable expression in a position that computes: arithmetic, negation, a bitwise operator, string concatenation, a subscript or slice index, a range bound, a builtin with a primitive parameter, or `sum` / `avg` / `min` / `max` / `concat` (§5.4). Narrow with `<> null` first |
 | **Module error** | Import cycle, missing default output, unknown named export, boundary type/arity mismatch (§9), unreadable module reference |
 | **Translation error** | Non-linear recursion, parity-stratified recursion (SQL backends only — `native` and `seminaive` accept both) |

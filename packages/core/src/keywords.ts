@@ -30,5 +30,13 @@ export const RESERVED_KEYWORDS = [
   "null",
 ] as const;
 
-/** Built-in primitive types declarable on input-predicate columns. */
+/**
+ * Built-in primitive types declarable on input-predicate columns.
+ *
+ * The grammar also accepts `null` here, since it is a type like any other and the
+ * generated union has to contain it, but it is deliberately not offered: a
+ * `null`-declared column can hold nothing but a null, and only with a `?` at that,
+ * so suggesting it would be suggesting a mistake. `null` is highlighted anyway,
+ * being a reserved keyword above.
+ */
 export const BUILTIN_TYPE_NAMES = ["string", "integer", "float", "boolean", "value"] as const;

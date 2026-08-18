@@ -1,3 +1,4 @@
+import { AnalyzerError } from "datamog-core";
 import type { BitwiseOp, PrimitiveType, Rule, TypedProgram } from "datamog-core";
 
 /**
@@ -533,6 +534,58 @@ export interface MutualCteParts {
  * column types from the anchor, and a bare NULL there resolves to `text` and
  * then collides with the recursive term.
  */
+/**
+ * Reject a recursive group whose predicates disagree on a column's type.
+ *
+ * A mutually recursive SCC compiles to one relation, a combined CTE with a tag
+ * column, because neither engine can express an SCC as CTEs referring to each
+ * other. One relation means one type per column, so two predicates wanting
+ * different types at the same position make the union ill-typed. Postgres reports
+ * that as `UNION types text and bigint cannot be matched`, which names neither the
+ * predicate nor the position, because by then the failure is in generated SQL
+ * rather than in the program. Both are still in hand here.
+ *
+ * Only a dialect that types the combined columns consults this, which is the
+ * condition `typedPadding` marks. The interpreters keep a relation per predicate
+ * and SQLite leaves the columns untyped, so both run such a program and neither
+ * needs the restriction.
+ *
+ * Integer and float agree: SQL resolves a union over the two to the float, which is
+ * the widening `joinTypes` already performs. Anything else is compared by the
+ * storage type the dialect would give it, so the question asked is exactly whether
+ * the two would be one SQL column.
+ */
+function checkStratumColumnTypes(
+  stratum: string[],
+  arities: ReadonlyMap<string, number>,
+  rules: ReadonlyMap<string, Rule[]>,
+  analyzed: TypedProgram,
+  dialect: SqlDialect,
+): void {
+  const family = (type: PrimitiveType): string =>
+    type === "integer" || type === "float" ? "numeric" : sqlTypeFor(dialect, type);
+  const maxArity = Math.max(...stratum.map((p) => arities.get(p)!));
+  for (let position = 0; position < maxArity; position++) {
+    let first: { predicate: string; type: PrimitiveType } | undefined;
+    for (const predicate of stratum) {
+      if (arities.get(predicate)! <= position) continue;
+      const type = analyzed.columnTypes.get(predicate)?.[position];
+      if (type === undefined) continue;
+      if (first === undefined) {
+        first = { predicate, type };
+        continue;
+      }
+      if (family(first.type) === family(type)) continue;
+      const head = rules.get(predicate)?.[0]?.head;
+      throw new AnalyzerError(
+        `Predicates '${first.predicate}' and '${predicate}' are mutually recursive but disagree on column ${position + 1}: '${first.type}' against '${type}'. A recursive group becomes one relation on this backend, so its predicates must agree at every position. Give the column one type, or break the recursion between them.`,
+        head?.$cstNode?.offset,
+        head?.$cstNode?.end,
+      );
+    }
+  }
+}
+
 export function mutualCteParts(
   stratum: string[],
   arities: ReadonlyMap<string, number>,
@@ -543,6 +596,7 @@ export function mutualCteParts(
   options: { typedPadding: boolean; selfAlias?: string },
 ): MutualCteParts {
   const maxArity = Math.max(...stratum.map((p) => arities.get(p)!));
+  if (options.typedPadding) checkStratumColumnTypes(stratum, arities, rules, analyzed, dialect);
   const combinedName = `__mutual_${stratum.join("_")}`;
   const combinedCols = `__tag, ${colList(maxArity)}`;
   const renameMap = new Map(stratum.map((p) => [p, combinedName]));
@@ -550,8 +604,8 @@ export function mutualCteParts(
   const stratumSet = new Set(stratum);
 
   // Type per combined column: the first predicate in the SCC wide enough to
-  // have one there. Predicates disagreeing on a position would make the union
-  // ill-typed on Postgres anyway, and SQLite does not consult this.
+  // have one there. Every predicate in the group agrees at each position, which
+  // `checkStratumColumnTypes` has established for the dialects that read this.
   const padType = (position: number): PrimitiveType => {
     for (const p of stratum) {
       if (arities.get(p)! > position) {

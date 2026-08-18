@@ -1867,3 +1867,74 @@ describe("native backend — conjunctive queries", () => {
     ]);
   });
 });
+
+describe("native backend — an absent operand withholds its row", () => {
+  // §1: a conjunct mentioning an expression with no value does not hold, so the
+  // row goes. Every program here derives on `V = 2` and derives nothing on
+  // `V = 0`, and every answer matches `--backend sqlite`.
+
+  test("an accessor index with no value withholds the row", async () => {
+    const results = await run(`
+      v(0). v(2).
+      output predicate sub(V, R)  :- v(V), R = "abcdef"[10 / V].
+      output predicate strs(V, R) :- v(V), R = "abcdef"[0 : 10 / V].
+      output predicate vals(V, R) :- v(V), J = [1, 2, 3], R = J[0 : 10 / V].
+      ?- sub(V, R).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ V: 2, R: "f" }]);
+    expect(sortRows(results[1]!)).toEqual([{ V: 2, R: "abcde" }]);
+    expect(sortRows(results[2]!)).toEqual([{ V: 2, R: [1, 2, 3] }]);
+  });
+
+  test("a range bound with no value withholds the row, on either side", async () => {
+    // `2 in [1 .. 10 / V]` used to hold at `V = 0`, the absent bound reaching a
+    // JS comparison that answers `false` for both `<` and `>`. Both bounds and
+    // both forms of the atom are covered: the filter form is a test, the binding
+    // form a generator, and neither may fire against an absent bound.
+    const results = await run(`
+      v(0). v(2).
+      output predicate hi(V)      :- v(V), 2 in [1 .. 10 / V].
+      output predicate lo(V)      :- v(V), 2 in [10 / V .. 10].
+      output predicate gen(V, X)  :- v(V), X in [1 .. 10 / V], X > 3.
+      output predicate genlo(V, X) :- v(V), X in [10 / V .. 6], X > 5.
+      ?- hi(V).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ V: 2 }]);
+    // `2 in [5 .. 10]` is false on its own merits, so this one is empty either way.
+    expect(sortRows(results[1]!)).toEqual([]);
+    expect(sortRows(results[2]!)).toEqual([
+      { V: 2, X: 4 },
+      { V: 2, X: 5 },
+    ]);
+    expect(sortRows(results[3]!)).toEqual([{ V: 2, X: 6 }]);
+  });
+
+  test("rounding to a scale past the float range gives the input back", async () => {
+    // `9e12 * 10 ** 300` leaves the float range, but a double that large has no
+    // digit anywhere near the 300th decimal place, so there is nothing to round
+    // and the answer is the input. Both SQL backends say the same.
+    const results = await run(`
+      a(9).
+      r(R) :- a(A), R = round(A * 1000000000000, 300).
+      ?- r(R).
+    `);
+    expect(results[0]).toEqual([{ R: 9000000000000 }]);
+  });
+
+  test("a float sum or avg that leaves the float range withholds its tuple", async () => {
+    // Each row contributes a finite 1e308; the total does not fit, so the fold
+    // has no value and the tuple goes, exactly as a plain `1e308 + 1e308` does.
+    // `count(*)` still counts the rows, so the third output shows the body did
+    // run.
+    const results = await run(`
+      f(1). f(2).
+      output predicate total(sum(X))  :- f(_), X = 10.0 ** 308.
+      output predicate mean(avg(X))   :- f(_), X = 10.0 ** 308.
+      output predicate rows(count(*)) :- f(_), X = 10.0 ** 308.
+      ?- rows(N).
+    `);
+    expect(results[0]).toEqual([]);
+    expect(results[1]).toEqual([]);
+    expect(results[2]).toEqual([{ count: 2 }]);
+  });
+});

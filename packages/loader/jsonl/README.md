@@ -24,6 +24,10 @@ The loader looks for `<predicate>.jsonl` in the configured directory (e.g. `data
 
 Values are type-checked against the declared column types (e.g. a JSON string is rejected for an `integer` column). Unlike the CSV loader, no coercion is performed -- values must already have the correct JSON type.
 
+## JSON `null` and `?`
+
+A JSON `null` is a value, and a column has to say it accepts one. Declare it with a `?` suffix (`n: integer?`) and the `null` loads as the `null` value; on a non-nullable column it is a **hard load error** naming the file, line and column (`Expected integer but got null`), not a silently missing value. A `null` *nested inside* a `value` (`{"v": {"a": null}}`) needs no `?`, a `value` spelling its nulls within itself; only a whole cell that is `null` needs one.
+
 ## Platform-neutral parsing
 
 The root entry reads files, so it imports `node:path` and `Bun.file`. Consumers that already hold the text — the browser playground, the VS Code extension — import `datamog-jsonl/parse-content` instead, which exports `parseJsonlContent` and pulls in nothing Bun-specific.
