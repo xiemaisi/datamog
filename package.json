@@ -27,6 +27,7 @@
   "workspaces": ["packages/*", "packages/backend/*", "packages/loader/*"],
   "scripts": {
     "test": "bun test --recursive",
+    "test:pg": "bash scripts/test-postgres.sh",
     "test:coverage": "bun test --recursive --coverage",
     "typecheck": "tsc -b",
     "check": "bunx biome check .",
