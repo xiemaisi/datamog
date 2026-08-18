@@ -923,12 +923,12 @@ function translateRule(
   // shapes that aren't already wrapped (a single boolean variable, a
   // function call, etc.).
   for (const f of filters) {
-    conditions.push(
-      markSpan(
-        f,
-        `(${termToSql(f.expr, bindings, varTypes, columnTypes, functionOverloads, dialect)})`,
-      ),
-    );
+    const sql = termToSql(f.expr, bindings, varTypes, columnTypes, functionOverloads, dialect);
+    // A negated filter is negation as failure, not the `!` operator: it holds
+    // whenever its operand does not, including when the operand is NULL. SQL's
+    // `NOT` propagates NULL instead, so the operand is totalised first. See
+    // doc/design/null-as-a-value.md §4.4.
+    conditions.push(markSpan(f, f.negated ? `(NOT COALESCE(${sql}, FALSE))` : `(${sql})`));
   }
 
   // Non-binding equality constraints (`X + 1 = Y`) use logical equality —

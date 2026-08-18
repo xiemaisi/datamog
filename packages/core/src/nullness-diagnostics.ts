@@ -59,7 +59,11 @@ export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
       // trace. Comparison is total, so this only fires where a NULL reaches
       // boolean position some other way: a `boolean?` column, `as_boolean`, or
       // a connective propagating one (null.md §5).
-      if (mayBeNull(elem.expr, nonNull, owner, ctx)) {
+      //
+      // Not for a negated filter, where the premise is inverted: `not e` is
+      // negation as failure, so a NULL operand *keeps* the row rather than
+      // dropping it. The negated-ordering warning below covers that side.
+      if (!elem.negated && mayBeNull(elem.expr, nonNull, owner, ctx)) {
         diagnostics.push({
           severity: "warning",
           code: "nullable-filter",
@@ -73,7 +77,9 @@ export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
       // set. A negated ordering proves nothing about its own operands (§4.2),
       // so there is no self-refinement to skip, and any other conjunct that
       // does prove the operand non-null closes the gap and should silence it.
-      collectNegatedOrderings(elem.expr, owner, nonNull, ctx, false, diagnostics);
+      // Seeded from the filter's own flag, since `not X < 2` is now a negated
+      // Filter rather than a Filter over `!(X < 2)`.
+      collectNegatedOrderings(elem.expr, owner, nonNull, ctx, elem.negated ?? false, diagnostics);
       // Refine again without this conjunct: a strict comparison proves its own
       // operands non-null, so asking the fully-refined set whether the operand
       // can be NULL would always answer no and the gap would never be found.

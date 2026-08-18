@@ -71,6 +71,15 @@ crashing one, with no static warning. Dropping the offending row instead is
 So this option either collapses into what we have or is strictly worse than
 it.
 
+That paragraph is wrong, and
+[partial-expressions.md](./partial-expressions.md) §1 says why: it answers
+"partial expressions that abort", which nobody proposes, and misses "an
+expression denotes the graph of the function it computes", which is what CodeQL
+does and which leaves every property §2 asks for intact. That doc also disputes
+the option-type rejection below, partiality being the case analysis this one says
+a rule body has nowhere to put. Its conclusion is nonetheless to keep NULL, so
+this section's verdict stands on other grounds than the ones it gives.
+
 **Totality by typing.** Rule out `1 / 0` statically, with a refinement type
 saying the divisor is non-zero. This needs a solver in the analyzer, and
 it cannot work anyway: divisors come from EDB columns, so the obligation is

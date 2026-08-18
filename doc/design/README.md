@@ -6,7 +6,7 @@ normative description of the language is `doc/spec.md`; when the two disagree, t
 spec wins and the doc needs updating.
 
 Every doc states its status near the top, since they do not all describe shipped
-behaviour: one records a design that was turned down, two describe nothing built yet, and
+behaviour: two record a design that was turned down, two describe nothing built yet, and
 another a model that is implemented without the structure it proposes.
 
 | Doc | Status | Covers |
@@ -26,3 +26,5 @@ another a model that is implemented without the structure it proposes.
 | [`refinement-annotations.md`](./refinement-annotations.md) | implemented but for static discharge | A head position typed by a proposition rather than a primitive type, so the witness is erasable and each rule owes a proof obligation |
 | [`nullness-tracking.md`](./nullness-tracking.md) | implemented, one stage declined | A nullness bit beside the base type, inferred per column and refined per rule from the guards that imply non-nullness |
 | [`imports.md`](./imports.md) | not adopted, not planned | The conventional module system, kept because it is the road not taken |
+| [`partial-expressions.md`](./partial-expressions.md) | exploration; recommended against as asked, and superseded by `null-as-a-value.md` | Dropping NULL for CodeQL-style partial expressions, what it would cost the type system and the contract encoding, and which half of it is worth taking |
+| [`null-as-a-value.md`](./null-as-a-value.md) | proposal; lattice and the not/! split built, partiality next | Splitting NULL's two jobs: `null` becomes an ordinary value with its own type beside the primitives, undefinedness becomes partiality, and the nullness fixed point disappears into type inference |

@@ -14,7 +14,6 @@ import type {
   Slice,
   StringLiteral,
   Subscript,
-  UnaryExpr,
   Variable,
 } from "./generated/ast.js";
 import {
@@ -298,12 +297,14 @@ function replaceNode(oldNode: AstNode, newNode: AstNode): void {
  *    colon was seen inside the brackets. The grammar parses `W[...]` as a
  *    unified BracketAccess to avoid a Subscript-vs-Slice LL(k) ambiguity
  *    that surfaced for `W[0:-1]` and `W[:-1]`.
- * 5. Desugar negated filters: a body literal `not <expr>` whose atom is a
- *    built-in (a comparison like `not X = Y`) parses as a Filter with
- *    `negated` set. Rewrite it into an ordinary Filter over `!(<expr>)` so
- *    the analyzer, translator, and evaluators see only the logical-not path
- *    they already implement. (Negated predicate calls keep their own
- *    `Literal.negated` flag — they are negation-as-failure, not `!`.)
+ * A negated filter (`not X = Y`) keeps its `negated` flag and is *not* rewritten
+ * into `!(<expr>)`. The two are different operators: `not` is negation as
+ * failure, holding whenever its operand does not hold, while `!` is the boolean
+ * operator and propagates a NULL operand. They agree on a comparison, comparison
+ * being total, which is why folding one into the other used to be safe. They do
+ * not agree on anything that can put a NULL into boolean position, and they will
+ * not agree at all once an expression can be undefined. See
+ * doc/design/null-as-a-value.md §4.4.
  */
 /**
  * One head type annotation, as lifted onto `HeadAtom.argTypes`: the declared
@@ -520,31 +521,6 @@ export function postProcess(program: Program): void {
         bracket.start = undefined;
       }
       bracket.sliceColon = undefined;
-    }
-  }
-
-  // Desugar negated filters (`not X = Y`) into `!(...)` over the same
-  // expression. Predicate-call literals are negated via `Literal.negated`
-  // and are left untouched here.
-  for (const stmt of program.statements) {
-    const body = isRule(stmt) ? stmt.body : isQuery(stmt) ? stmt.body : undefined;
-    if (!body) continue;
-    for (const element of body) {
-      if (!isFilter(element) || !element.negated) continue;
-      const inner = element.expr;
-      const negation: UnaryExpr = {
-        $type: "UnaryExpr",
-        $container: element,
-        $containerProperty: "expr",
-        $cstNode: element.$cstNode,
-        op: "!",
-        operand: inner,
-      };
-      (inner as { $container: AstNode }).$container = negation;
-      (inner as { $containerProperty?: string }).$containerProperty = "operand";
-      (inner as { $containerIndex?: number }).$containerIndex = undefined;
-      element.expr = negation;
-      element.negated = false;
     }
   }
 
@@ -938,14 +914,16 @@ export function postProcess(program: Program): void {
     };
     // A constructor term is a match; matching hoists a proof capture into the
     // enclosing body. That capture range-restricts the proof variable, which
-    // cannot happen inside a negation (`not X = Ctor(...)`, desugared to a `!`
-    // UnaryExpr, or a negated atom). Hoisting it positively there silently
-    // changes the meaning, so reject it, like a negated proof capture.
+    // cannot happen inside a negation: a `!` UnaryExpr, a negated atom, or a
+    // negated filter (`not X = Ctor(...)`, which keeps its own flag rather than
+    // being folded into a `!`). Hoisting it positively there silently changes
+    // the meaning, so reject it, like a negated proof capture.
     const hasNegationAncestor = (node: AstNode): boolean => {
       let cur = node.$container;
       while (cur) {
         if (cur.$type === "UnaryExpr" && (cur as { op?: string }).op === "!") return true;
         if (isLiteral(cur) && cur.negated) return true;
+        if (isFilter(cur) && cur.negated) return true;
         cur = cur.$container;
       }
       return false;

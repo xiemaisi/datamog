@@ -1725,4 +1725,23 @@ describe("native backend — conjunctive queries", () => {
     `);
     expect(sortRows(results[0]!)).toEqual([{ X: 3 }]);
   });
+
+  test("`not e` is negation as failure, and differs from `!e` at a NULL", async () => {
+    // The two used to be the same node, post-processing folding `not e` into a
+    // Filter over `!(e)`. They agree on a comparison, comparison being total,
+    // and they cannot agree once a NULL reaches boolean position: `!null` is
+    // null and drops the row, while `not` holds of anything that does not
+    // hold. See doc/design/null-as-a-value.md §4.4.
+    // `B && true` is NULL when `B` is, the connectives staying three-valued,
+    // and it is a BinaryExpr so it reaches filter position rather than parsing
+    // as a negated atom the way `not f(x)` would.
+    const results = await run(`
+      b(B) :- B = as_boolean(null).
+      output predicate bang(1) :- b(B), !(B && true).
+      output predicate naf(1)  :- b(B), not (B && true).
+      ?- naf(X).
+    `);
+    expect(results[0]).toEqual([]);
+    expect(results[1]).toEqual([{ col1: 1 }]);
+  });
 });

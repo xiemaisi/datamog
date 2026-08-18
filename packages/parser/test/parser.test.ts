@@ -297,24 +297,22 @@ describe("parser", () => {
     }
   });
 
-  test("negated comparison atom desugars to a logical-not filter", () => {
-    // `not X = Y` is a negated built-in atom: post-processing rewrites it
-    // into a Filter over `!(X = Y)` so the `negated` flag never leaks past
-    // the parser. (Negated predicate calls keep their own flag, above.)
+  test("negated comparison atom stays a negated filter, not a logical-not", () => {
+    // `not X = Y` keeps its `negated` flag rather than being rewritten into a
+    // Filter over `!(X = Y)`. The two are different operators: `not` is
+    // negation as failure and `!` propagates a NULL operand. They agree on a
+    // comparison, which is why the rewrite used to be safe, and they do not
+    // agree in general. See doc/design/null-as-a-value.md §4.4.
     const program = parse("foo(X, Y) :- bar(X), bar(Y), not X = Y.");
     const rule = program.statements[0] as Rule;
     expect(rule.body).toHaveLength(3);
     const filter = rule.body[2]!;
     expect(filter.$type).toBe("Filter");
     if (filter.$type === "Filter") {
-      expect(filter.negated).toBe(false);
-      expect(filter.expr.$type).toBe("UnaryExpr");
-      if (filter.expr.$type === "UnaryExpr") {
-        expect(filter.expr.op).toBe("!");
-        expect(filter.expr.operand.$type).toBe("BinaryExpr");
-        // The synthesised node reparents the original comparison.
-        expect(filter.expr.operand.$container).toBe(filter.expr);
-      }
+      expect(filter.negated).toBe(true);
+      // The comparison is left exactly as parsed, with no synthesised node.
+      expect(filter.expr.$type).toBe("BinaryExpr");
+      expect(filter.expr.$container).toBe(filter);
     }
   });
 
@@ -326,7 +324,8 @@ describe("parser", () => {
     const filter = rule.body[1]!;
     expect(filter.$type).toBe("Filter");
     if (filter.$type === "Filter") {
-      expect(filter.expr.$type).toBe("UnaryExpr");
+      expect(filter.negated).toBe(true);
+      expect(filter.expr.$type).toBe("BinaryExpr");
     }
   });
 

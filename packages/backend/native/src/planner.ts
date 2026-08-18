@@ -100,7 +100,7 @@ export type Step =
   | { kind: "bindEq"; variable: string; expr: Expression }
   | { kind: "bindRange"; variable: string; low: Expression; high: Expression }
   | { kind: "filterEq"; left: Expression; right: Expression }
-  | { kind: "filter"; expr: Expression }
+  | { kind: "filter"; expr: Expression; negated: boolean }
   | {
       kind: "filterRange";
       expr: Expression;
@@ -247,7 +247,7 @@ export function planRule(rule: Rule, analyzed: TypedProgram): RulePlan {
         steps.push({ kind: "filterEq", left: elem.left, right: elem.expr });
         break;
       case "Filter":
-        steps.push({ kind: "filter", expr: elem.expr });
+        steps.push({ kind: "filter", expr: elem.expr, negated: elem.negated ?? false });
         break;
       case "RangeAtom":
         steps.push({
@@ -699,8 +699,13 @@ export function* enumerate(
       // NULL can still reach filter position through a nullable boolean
       // column or a null-propagating expression; the `=== true` check
       // drops that row, matching SQL's WHERE semantics.
+      //
+      // A negated filter is negation as failure: it holds whenever the operand
+      // does *not*, so a NULL operand keeps the row rather than dropping it.
+      // That is what distinguishes `not e` from `!e`, which propagates the NULL.
+      // See doc/design/null-as-a-value.md §4.4.
       const v = evalTerm(step.expr, sub, env);
-      if (v !== true) return;
+      if (step.negated ? v === true : v !== true) return;
       yield* enumerate(steps, i + 1, sub, env, relations, deltaOverride);
       return;
     }
