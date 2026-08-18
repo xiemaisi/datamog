@@ -104,14 +104,30 @@ describe("sibling rules disjoin", () => {
   });
 });
 
-describe("NULL in a constrained position", () => {
-  test("is a violation, since an ordering is false at NULL", async () => {
-    // Integer arithmetic can overflow the safe-integer range, which is how a
-    // NULL reaches the column here. The contract said `Y > X`; a null Y does
-    // not satisfy it, so the tuple is reported.
-    const message = await violation(`
+describe("a constrained position that cannot be computed", () => {
+  test("withholds its tuple, so the contract holds rather than being violated", async () => {
+    // This used to be a violation, and its no longer being one is the payoff
+    // doc/design/null-as-a-value.md §10 predicts. `Y = X + 1` overflows the
+    // integer domain, so it has no value, so the conjunct does not hold and no
+    // tuple is derived. A contract constrains the tuples that exist, and there
+    // are none, so there is nothing to violate.
+    //
+    // The same fact is what makes the *static* obligation discharge: a derived
+    // tuple now witnesses its own definedness, so `def(X + 1)` is a hypothesis
+    // rather than a case the proof has to cover.
+    const rows = await run(`
       seed(9007199254740991).
       r(X, Y, _: Y > X) :- seed(X), Y = X + 1.
+      ?- r(A, B).
+    `);
+    expect(rows[0]).toEqual([]);
+  });
+
+  test("but a genuine counterexample is still reported", async () => {
+    // Lest the above be read as the check having gone quiet.
+    const message = await violation(`
+      seed(5).
+      r(X, Y, _: Y > X) :- seed(X), Y = X - 1.
       ?- r(A, B).
     `);
     expect(message).toContain("Y > X");

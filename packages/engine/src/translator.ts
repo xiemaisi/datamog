@@ -30,7 +30,9 @@ import {
 } from "datamog-core";
 import {
   AnalyzerError,
+  type PartialityContext,
   assertNever,
+  canBeUndefined,
   allVarsBound as coreAllVarsBound,
   chooseEqualityBinding as coreChooseEqualityBinding,
   inferTermType,
@@ -421,6 +423,19 @@ function translateRule(
   // Equalities that cannot bind a bare variable from a ready expression
   // become null-aware constraints.
   const equalityConstraints: Equality[] = [];
+  /**
+   * Expressions whose *value* this rule uses, paired with their raw SQL, so a
+   * definedness guard can be emitted for the ones that can be undefined
+   * (doc/design/null-as-a-value.md §1). Collected here because the sites that
+   * produce them run before `nullCtx` exists.
+   *
+   * The SQL recorded is deliberately the **raw** expression rather than the
+   * json-lifted one: `json_quote(NULL)` is the text `'null'` and
+   * `to_jsonb(NULL)` is a JSONB null, so a guard on the lifted form would see a
+   * defined value where the expression was undefined. That is §9.3's collision,
+   * and this is the side of it that has to be got right.
+   */
+  const definedness: { term: HeadTerm; sql: string }[] = [];
   const bindingRanges: {
     alias: string;
     lowSql: string;
@@ -545,6 +560,12 @@ function translateRule(
             dialect,
           );
           const exprType = inferTermType(binding.expr, varTypes, columnTypes);
+          // `Y = 10 / X` is a conjunct, and a conjunct mentioning an undefined
+          // expression does not hold, so the rule must not fire where the right
+          // side has no value. Without this, `q(10 / X)` and
+          // `Y = 10 / X, q(Y)` would disagree, which is the one thing null.md §4
+          // insists two spellings of the same thing must not do.
+          definedness.push({ term: binding.expr as HeadTerm, sql });
           const list = bindings.get(binding.variable) ?? [];
           list.push({ kind: "expr", sql, type: exprType });
           bindings.set(binding.variable, list);
@@ -692,6 +713,12 @@ function translateRule(
   const literalBound = literalBindings(rule);
   const selectParts: string[] = [];
   const groupByExprs: string[] = [];
+  /**
+   * Definedness guards for head arguments containing an aggregate. An aggregate
+   * cannot appear in `WHERE`, so these go in `HAVING`, which is otherwise the
+   * same guard the non-aggregate positions get (§7, §15.12).
+   */
+  const havingExprs: string[] = [];
 
   for (let i = 0; i < rule.head.args.length; i++) {
     const term = rule.head.args[i]!;
@@ -705,8 +732,15 @@ function translateRule(
       // No GROUP BY entry: an argument containing an aggregate is reduced
       // over the group rather than grouped by.
       const aggSql = termToSql(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
-      const expr = castIntegerForDialect(aggSql, headColType, dialect);
+      const expr = castHeadColumn(aggSql, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
+      // An aggregate with no identity over the group has no value, and a tuple is
+      // derived only where every head expression does. The guard has to be
+      // HAVING rather than WHERE, and on the raw aggregate rather than the cast
+      // one, for the same reason the others guard the raw expression (§9.3).
+      if (canBeUndefined(term, partialityCtx(varTypes, columnTypes, functionOverloads))) {
+        havingExprs.push(`${aggSql} IS NOT NULL`);
+      }
     } else if (term.$type === "Variable") {
       const refs = bindings.get(term.name);
       if (!refs || refs.length === 0) {
@@ -721,7 +755,7 @@ function translateRule(
       const rawExpr = bindingToSql(first);
       const varType = varTypes.get(term.name);
       const lifted = liftToJsonIfNeeded(rawExpr, varType, headColType, dialect);
-      const expr = castIntegerForDialect(lifted, headColType, dialect);
+      const expr = castHeadColumn(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
       if (isAggregateRule && isGroupingArg(term, literalBound)) {
         groupByExprs.push(expr);
@@ -730,8 +764,12 @@ function translateRule(
       const rawExpr = termToSql(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
       const termType = inferTermType(term, varTypes, columnTypes);
       const lifted = liftToJsonIfNeeded(rawExpr, termType, headColType, dialect);
-      const expr = castIntegerForDialect(lifted, headColType, dialect);
+      const expr = castHeadColumn(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
+      // A tuple is derived only where every head expression is defined. An
+      // argument *containing* an aggregate is left alone: its guard belongs in a
+      // HAVING clause, which arrives with the aggregate identities in stage 6.
+      if (!containsAggregate(term)) definedness.push({ term, sql: rawExpr });
       if (isAggregateRule && isGroupingArg(term, literalBound)) {
         groupByExprs.push(expr);
       }
@@ -768,6 +806,19 @@ function translateRule(
   };
   const cannotBeNullHere = (term: HeadTerm): boolean =>
     !mayBeNull(term, nonNullVars, rule, nullCtx);
+  const partialCtx: PartialityContext = {
+    overloads: functionOverloads,
+    typeOf: (expr) => inferTermType(expr, varTypes, columnTypes),
+  };
+
+  // Definedness guards, per §1: an expression that can fail to denote a value
+  // must denote one wherever its value is used. A NULL here means undefined
+  // rather than the `null` value, because the collection sites record only
+  // expressions, never a bare variable or a `null` literal, which are the two
+  // things that can legitimately *be* null.
+  for (const { term, sql } of definedness) {
+    if (canBeUndefined(term, partialCtx)) conditions.push(`${sql} IS NOT NULL`);
+  }
 
   // Join conditions from shared variables. A repeated variable means the
   // same equality the `=` operator does, so these are null-aware unless the
@@ -977,6 +1028,9 @@ function translateRule(
   if (groupByExprs.length > 0) {
     sql += ` GROUP BY ${groupByExprs.join(", ")}`;
   }
+  if (havingExprs.length > 0) {
+    sql += ` HAVING ${havingExprs.join(" AND ")}`;
+  }
   // Wrap the whole rule so hovering anywhere in the rule source still has a
   // matching SQL span at the coarsest level.
   return markSpan(rule, sql);
@@ -1006,7 +1060,7 @@ function translateFact(rule: Rule, analyzed: TypedProgram, dialect: SqlDialect):
     const headColType = analyzed.columnTypes.get(rule.head.predicate)?.[i];
     const termType = inferTermType(term, emptyVarTypes, analyzed.columnTypes);
     const lifted = liftToJsonIfNeeded(rawSql, termType, headColType, dialect);
-    return `${castIntegerForDialect(lifted, headColType, dialect)} AS col${i + 1}`;
+    return `${castHeadColumn(lifted, headColType, dialect)} AS col${i + 1}`;
   });
   // A nullary fact (empty head) becomes the constant marker column; see translateRule.
   const selectList = selectParts.length > 0 ? selectParts.join(", ") : "1 AS col1";
@@ -1139,6 +1193,22 @@ function resolveColumnRef(predicate: string, argIndex: number, analyzed: TypedPr
  * @param columnTypes - Predicate column types (for inferTermType)
  * @param dialect     - Dialect for dialect-specific constructs (group-concat, range sources, etc.)
  */
+/**
+ * The context `canBeUndefined` needs, built from what `termToSql` already has.
+ * Cheap: a map read and a closure, and definedness needs no rule context (see
+ * `PartialityContext`).
+ */
+function partialityCtx(
+  varTypes: Map<string, PrimitiveType>,
+  columnTypes: ReadonlyMap<string, readonly PrimitiveType[]>,
+  functionOverloads: ReadonlyMap<FunctionCall, Overload>,
+): PartialityContext {
+  return {
+    overloads: functionOverloads,
+    typeOf: (expr) => inferTermType(expr, varTypes, columnTypes),
+  };
+}
+
 function termToSql(
   term: HeadTerm,
   bindings: Map<string, Binding[]>,
@@ -1216,10 +1286,30 @@ function termToSql(
           leftSql = primitiveToJsonSql(leftSql, leftType, dialect);
         }
       }
-      // Equality is null-aware, so it routes through the dialect-specific
-      // emitter (Postgres `IS NOT DISTINCT FROM`, SQLite / sql.js `IS`).
-      if (term.op === "=") return dialect.logicalEq(leftSql, rightSql);
-      if (term.op === "<>") return dialect.logicalNeq(leftSql, rightSql);
+      // Equality is null-aware over *values*, so it routes through the
+      // dialect-specific emitter (Postgres `IS NOT DISTINCT FROM`, SQLite /
+      // sql.js `IS`), and it holds only of two defined operands.
+      //
+      // The definedness conjunct goes here, locally, rather than being hoisted
+      // to a rule-level guard, and that placement is the whole point. A
+      // rule-level guard withholds the row, which is right for a head argument
+      // and wrong under a negation: `V <> 10 / V` must not hold at `V = 0`
+      // while `not (V = 10 / V)` must, and only a conjunct sitting *inside* the
+      // negation gives both. See doc/design/null-as-a-value.md §4.2 and §15.3.
+      if (EQUALITY_OPS.has(term.op)) {
+        const cmp =
+          term.op === "="
+            ? dialect.logicalEq(leftSql, rightSql)
+            : dialect.logicalNeq(leftSql, rightSql);
+        const guards: string[] = [];
+        if (canBeUndefined(term.left, partialityCtx(varTypes, columnTypes, functionOverloads))) {
+          guards.push(`${leftSql} IS NOT NULL`);
+        }
+        if (canBeUndefined(term.right, partialityCtx(varTypes, columnTypes, functionOverloads))) {
+          guards.push(`${rightSql} IS NOT NULL`);
+        }
+        return guards.length === 0 ? cmp : `(${cmp} AND ${guards.join(" AND ")})`;
+      }
       if (ORDERING_OPS.has(term.op)) {
         const leftType = inferTermType(term.left, varTypes, columnTypes);
         const rightType = inferTermType(term.right, varTypes, columnTypes);
@@ -1580,11 +1670,19 @@ function castPositionForDialect(sql: string, dialect: SqlDialect): string {
   return `CAST(LEAST(GREATEST(${sql}, -2147483648), 2147483647) AS INTEGER)`;
 }
 
-function castIntegerForDialect(
-  sql: string,
-  type: PrimitiveType | undefined,
-  dialect: SqlDialect,
-): string {
+/**
+ * Give a head column's projection the storage type its declared type asks for.
+ *
+ * Two types need it. `integer`, because a dialect may store it wider than
+ * `INTEGER` and a UNION branch has to agree with its siblings. And `null`, whose
+ * only value is NULL: a bare `NULL` in a view's select list arrives untyped, and
+ * Postgres then refuses to select from the view at all ("could not determine
+ * polymorphic type because input has type unknown"), where the SQLite family,
+ * being dynamically typed, does not care. A NULL of any type is still NULL, so
+ * the cast costs nothing. See doc/design/null-as-a-value.md §9.
+ */
+function castHeadColumn(sql: string, type: PrimitiveType | undefined, dialect: SqlDialect): string {
+  if (type === "null") return `CAST(${sql} AS ${sqlTypeFor(dialect, "null")})`;
   const storageType = sqlTypeFor(dialect, "integer");
   if (type !== "integer" || storageType === "INTEGER") return sql;
   if (sql.startsWith('(WITH __datamog_safe_integer("value")')) return sql;
@@ -1612,12 +1710,13 @@ function asciiFoldSql(sql: string, from: string, to: string): string {
  * `expectedType` is undefined (the analyzer either resolved it or
  * already rejected the program).
  *
- * An expression with no static type is the `null` literal, whose value
- * is NULL whatever slot it lands in. It still needs the slot's type:
- * Postgres cannot resolve `#>>` and the other jsonb operators against
- * an untyped NULL and fails with "operator is not unique", where the
- * SQLite family, being dynamically typed, does not care. Casting is
- * enough, since a NULL of any type is still NULL.
+ * An expression with no static type is one inference could not pin, and it
+ * still needs the slot's type: Postgres cannot resolve `#>>` and the other
+ * jsonb operators against an untyped NULL and fails with "operator is not
+ * unique", where the SQLite family, being dynamically typed, does not care.
+ * Casting is enough, since a NULL of any type is still NULL. The `null` literal
+ * does not come through here: it has the `null` type, which `dialect.toJson`
+ * lifts to the JSON `null` leaf.
  */
 function liftToJsonIfNeeded(
   sql: string,
@@ -1711,10 +1810,33 @@ function translateAggregate(
   const orderArgSql = argType === "string" ? dialect.stringOrder(argSql) : argSql;
 
   switch (agg.func) {
-    case "count":
-      return safeIntegerOrNullSql(`COUNT(${argSql})`, dialect, true);
+    case "count": {
+      // §11.2: `count` counts every row whose argument has a value, null
+      // included. SQL's `COUNT(col)` skips NULLs, which is the wrong rule for a
+      // null and the right one for an undefined, and `canBeUndefined` is exactly
+      // the test for which of those a NULL in this position would be.
+      //
+      // Where the argument cannot be undefined, a NULL there is the null value
+      // and must be counted, so count rows instead. Where it can, `COUNT` skipping
+      // NULLs is what withholding an undefined contribution means. For a
+      // non-nullable argument the two agree, there being no NULLs either way.
+      const counted = canBeUndefined(
+        agg.arg as HeadTerm,
+        partialityCtx(varTypes, columnTypes, functionOverloads),
+      )
+        ? `COUNT(${argSql})`
+        : "COUNT(*)";
+      return safeIntegerOrNullSql(counted, dialect, true);
+    }
     case "sum":
-      return argType === "integer" ? dialect.integerSum(argSql) : `SUM(${argSql})`;
+      // `+`'s identity over an empty group, per §7. The COALESCE sits inside the
+      // integer-domain guard rather than outside it: SUM over no rows and an
+      // overflowing SUM are both SQL NULL and have to go opposite ways, 0 and
+      // undefined, so guarding the coalesced result is the only order that
+      // distinguishes them (§9.4).
+      return argType === "integer" ? dialect.integerSum(argSql) : `COALESCE(SUM(${argSql}), 0)`;
+    // No identity in the domain, so an empty group leaves these NULL, which the
+    // HAVING guard below reads as undefined and withholds the row for.
     case "avg":
       return `AVG(${argSql})`;
     case "min":

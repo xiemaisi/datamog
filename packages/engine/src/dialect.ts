@@ -409,6 +409,10 @@ export const SQL_TYPE_MAP: Record<PrimitiveType, string> = {
   integer: "INTEGER",
   float: "REAL",
   boolean: "BOOLEAN",
+  // The `null` type has one value and no non-null values, so which storage
+  // carries it is unobservable. TEXT is the widest, and a column of this type
+  // holds nothing but NULL. See doc/design/null-as-a-value.md §3.
+  null: "TEXT",
   // `value` (the union of primitive + array + object) is stored as
   // canonical TEXT JSON on SQLite/sql.js; Postgres overrides this to
   // JSONB for native structural equality.

@@ -139,10 +139,11 @@ comparisons are fine.
 null
 ```
 
-It is polymorphic (no fixed base type) and propagates through every
-operation except logical equality (Section 5.4). A column can never be
-declared with type `null`; it acquires a type from another rule that
-contributes a non-null value, and `null` flows through at runtime.
+It has type `null`, whose single value is `null` itself (Section 5.1). It is
+an ordinary value: it binds a variable (`X = null`), inhabits a column, and
+may be written as a column's declared type. It is *not* a marker for a
+failed operation, which is a separate notion with no value at all
+(Section 5.4).
 
 ### 1.6 Keywords
 
@@ -695,15 +696,15 @@ Section 5.4 for the truth tables and short-circuit rules.
 
 #### Comparison Operators
 
-The comparison operators all produce `boolean`, and all of them are
-**total**: no operand combination returns NULL. There is one equality,
-`=` / `<>`, which is null-aware. Ordering treats `null` as an isolated
-point in the order, comparable only to itself.
+The comparison operators all produce `boolean`. Over **values** they are
+total: no combination of values yields `null`. There is one equality,
+`=` / `<>`, which compares `null` like any other value, and ordering treats
+`null` as an isolated point in the order, comparable only to itself.
 
-| operator | meaning | NULL behaviour | SQL emit |
+| operator | meaning | `null` behaviour | SQL emit |
 |----------|---------|----------------|----------|
 | `=` | equality | `null = null` is true; `null = X` is false | `IS NOT DISTINCT FROM` (Postgres), `IS` (SQLite / sql.js) |
-| `<>` (also `!=`) | inequality | inverse of `=` | `IS DISTINCT FROM` / `IS NOT` |
+| `<>` (also `!=`) | inequality | inverse of `=` **over values** | `IS DISTINCT FROM` / `IS NOT` |
 | `<` `>` | strict ordering | false whenever either side is null | `COALESCE(a < b, FALSE)` |
 | `<=` `>=` | ordering | true when both sides are null, otherwise false if either is | `COALESCE(a <= b, (a IS NULL AND b IS NULL))` |
 
@@ -718,10 +719,21 @@ The full table, with `5` standing for any non-null value:
 
 This is a partial order: `<=` is reflexive, antisymmetric and
 transitive, and `a < b` is equivalent to `a <= b && a <> b`. It is not
-total — `null` and `5` are incomparable, so neither `X < 2` nor
-`X >= 2` holds of a NULL `X`. Guard with `<> null` where that matters.
+total: `null` and `5` are incomparable, so neither `X < 2` nor
+`X >= 2` holds of a `null` `X`. Guard with `<> null` where that matters.
 There is no three-valued comparison family; a second equality would be
 indistinguishable from `=`.
+
+**An operand with no value is a separate matter.** A comparison whose operand
+is undefined (§5.4) does not hold, so it drops its row in filter position and
+satisfies `not`. That is where `<>` and `not (=)` come apart: `a <> b` needs
+both sides defined, while `not (a = b)` holds whenever `a = b` does not.
+
+```
+X <> 10 / Y          # does not hold when Y is 0: the right side has no value
+not (X = 10 / Y)     # holds when Y is 0, for the same reason
+X <> null            # ordinary value comparison; both sides are defined
+```
 
 ```
 Age >= 30                             # ordering
@@ -733,8 +745,11 @@ B = (Score = 100)                     # bind B to a boolean
 ```
 
 Operands must have compatible types (same type, or `integer`/`float`
-joining via Section 5.6); the `null` literal is polymorphic and
-composes with any operand type. Booleans support equality only
+joining via Section 5.6). The `null` literal composes with any operand type
+in a **comparison**, `X <> null` being the guard the language expects, but
+not in an arithmetic or string operation: `null + 1` is a type error, since a
+`null` is not a number and, being statically `null`, can never be narrowed to
+one (Section 5.10). Booleans support equality only
 (set equality is well-defined) but ordering operators reject them.
 String ordering is lexicographic by Unicode code point, independent
 of backend locale.
@@ -941,21 +956,45 @@ group, so there is nothing for the expression to denote:
 bad(X, sum(S) + Y) :- scores(X, S, Y).
 ```
 
-**Over input that yields nothing**, a rule with no grouping columns still derives
-exactly one tuple, matching SQL's `SELECT agg(...) FROM <empty>`: every `count`
-is `0`, every other aggregate is NULL, and constants take their own values. A
-rule with at least one grouping column derives nothing, there being no group to
-reduce.
+**Over a group with no defined contributions**, each aggregate folds to its
+identity where the domain has one, and has **no value** where it does not:
+
+| aggregate | identity | empty group |
+|---|---|---|
+| `count(*)`, `count(e)`, `sum(e)` | `0` | `0` |
+| `concat(e)` | `""` | `""` |
+| `list(e)` | `[]` | `[]` |
+| `avg(e)`, `min(e)`, `max(e)` | none in the domain | undefined |
+
+An aggregate with no value withholds its tuple, like any other undefined head
+expression (§5.4). So a rule with no grouping columns derives one tuple when
+every one of its aggregates has an identity, and none otherwise; a rule with at
+least one grouping column derives nothing over empty input either way, there
+being no group to reduce. Constants take their own values.
 
 ```
 totals(count(*)) :- s(_).            # s empty: derives (0)
 totals("all", count(*)) :- s(_).     # s empty: derives ("all", 0)
 totals(G, count(*)) :- s(G).         # s empty: derives nothing
+totals(min(X)) :- s(X).              # s empty: derives nothing, min having no identity
+totals(count(*), min(X)) :- s(X).    # s empty: derives nothing, one undefined position
+                                     # withholding the tuple
 ```
 
+That last line is the cost of the rule: a `count` sharing a head with a `min`
+becomes unobservable over empty input, and the two have to be split to see both.
+
+**A row whose aggregate argument has no value** contributes to no aggregate
+mentioning that argument, and still counts for `count(*)`. So an argument that is
+undefined on every row of a group leaves that group with no contributions, which
+is the case the table above covers.
+
 The argument `*` is a wildcard accepted only by `count`: `count(*)` counts
-every row in the group and translates to SQL `COUNT(*)`. Given an expression,
-`count(expr)` counts the rows in which `expr` is non-null. Neither counts
+every row in the group. Given an expression, `count(expr)` counts the rows in
+which `expr` **has a value**, and a `null` is a value, so nulls are counted. This
+departs from SQL's `COUNT(col)`, which skips them; `COUNT(col)` is the right rule
+for an *undefined* contribution and the wrong one for a `null`, and Datamog now
+distinguishes those. Neither form counts
 _distinct_ values: an aggregate sees one value per row (a multiset), so a value
 that occurs in several rows is counted several times. This holds for `sum` and
 `avg` too, and is what makes them useful — the relation is a set of rows, but
@@ -1000,9 +1039,9 @@ Per-element order depends on the argument's type:
   cross-backend choice.
 
 In both cases the same program produces the same array on every
-backend. SQL `NULL` inputs are skipped, and an all-`NULL` or empty
-group yields `NULL` — matching `concat` and the rest of the
-aggregate family.
+backend. `null` inputs are skipped, and a group with nothing left to collect
+yields `[]`, append's identity, rather than a null. `null` sorts before every
+other value.
 
 `list` is the closest the language gets to a list comprehension:
 build a per-row value in a non-aggregate rule (a primitive
@@ -1067,16 +1106,19 @@ these ways:
    - When `K : string`, looks up an object key.
    - Out-of-range index, missing key, or wrong-shape receiver
      (object indexed with integer / array indexed with string /
-     anything on a primitive leaf) → SQL `NULL`.
+     anything on a primitive leaf) → **no value** (§5.4).
+   - A key that is *present* and holds a JSON `null` → the `null` value.
+     A missing key and a `null`-valued key are therefore distinguishable,
+     which is what reserving SQL `NULL` for "no value" buys.
 3. **Slice** `X[I:J]` where `X : value`. Returns `value`.
-   - Operates on arrays only; slicing a non-array → SQL `NULL`.
+   - Operates on arrays only; slicing a non-array → **no value**.
    - Empty / reversed range (`I >= J`) → `[]`.
 4. **Iteration primitives** (built-in body atoms — see below).
 5. **Coercion / introspection builtins** (see below).
    `as_string` / `as_integer` / `as_float` / `as_boolean` /
    `length` / `type_of` / `has_key` read leaf primitives or summarise
    structure; `parse_json` produces a `value` from a JSON
-   syntax string (NULL on malformed input).
+   syntax string (no value on malformed input).
 6. **Auto-lift.** A primitive expression flowing into a
    `value` slot is lifted automatically — see "Primitive ↔
    value auto-lift" below.
@@ -1120,26 +1162,27 @@ as IDB. Negation of a built-in body atom is rejected.
 
 Functions over `value` (plus `length`, which is also available for
 strings). Most take one argument; `has_key(V, K)` also takes a string
-key. The coercion/projection functions return `NULL` on shape
-mismatch — there is no implicit conversion. `has_key` instead returns
-`false` for non-object values and absent keys, while preserving ordinary
-function NULL propagation for `NULL` arguments. `parse_json` parses a
-string as JSON syntax, returning `NULL` on malformed input rather than
-raising.
+key. The coercion/projection functions have **no value** on a shape
+mismatch (§5.4); there is no implicit conversion. `has_key` instead answers
+`false` for non-object values and absent keys, a `null` receiver included: a
+`value` parameter accepts `null` as one of the shapes it holds, so a `null`
+there is an argument rather than an absence. `parse_json` parses a string as
+JSON syntax, having no value on malformed input rather than raising, and
+parsing a bare `null` to the `null` value.
 
 | Datamog          | Returns   | Behaviour                                                          |
 |------------------|-----------|--------------------------------------------------------------------|
-| `as_string(V)`   | `string`  | string-leaf → string content; anything else → `NULL`.              |
-| `as_integer(V)`  | `integer` | Integer-valued numeric leaf in JS safe-integer range (±(2^53−1)) → integer; anything else (including a numeric leaf with a fractional part) → `NULL`. |
-| `as_float(V)`    | `float`   | Numeric leaf → float; anything else → `NULL`.                      |
-| `as_boolean(V)`  | `boolean` | Boolean leaf → boolean; anything else → `NULL`.                    |
-| `length(V)`      | `integer` | Array length / object key count / string length; non-collection → `NULL`. |
-| `type_of(V)`     | `string`  | Returns one of `"object"`, `"array"`, `"string"`, `"number"`, `"boolean"` for non-NULL values. Returns `NULL` if `V` evaluates to `NULL`. |
-| `has_key(V, K)`  | `boolean` | Object has own string key `K` → `true`; missing key or non-object `V` → `false`; `NULL` argument → `NULL`. |
-| `keys(V)`        | `value`   | Sorted array of the object's keys (each as a string; Unicode-code-point order); empty object → `[]`; non-object → `NULL`. |
-| `values(V)`      | `value`   | Array of the object's values, ordered by key in Unicode-code-point order; empty object → `[]`; non-object → `NULL`. |
+| `as_string(V)`   | `string`  | string-leaf → string content; anything else, `null` included → no value. |
+| `as_integer(V)`  | `integer` | Integer-valued numeric leaf in JS safe-integer range (±(2^53−1)) → integer; anything else (including a numeric leaf with a fractional part) → no value. |
+| `as_float(V)`    | `float`   | Numeric leaf → float; anything else → no value.                    |
+| `as_boolean(V)`  | `boolean` | Boolean leaf → boolean; anything else → no value.                  |
+| `length(V)`      | `integer` | Array length / object key count / string length; non-collection, `null` included → no value. |
+| `type_of(V)`     | `string`  | One of `"object"`, `"array"`, `"string"`, `"number"`, `"boolean"`, `"null"`. Answers for a `null` rather than propagating it, that being the question it exists to answer. No value only where `V` has none. |
+| `has_key(V, K)`  | `boolean` | Object has own string key `K` → `true`; missing key or non-object `V`, `null` included → `false`. |
+| `keys(V)`        | `value`   | Sorted array of the object's keys (each as a string; Unicode-code-point order); empty object → `[]`; non-object → no value. |
+| `values(V)`      | `value`   | Array of the object's values, ordered by key in Unicode-code-point order; empty object → `[]`; non-object → no value. |
 | `to_json(V)`     | `string`  | Canonical JSON text for canonical `value`s (object keys in canonical JSON order, no whitespace), safe as a hash / dedup key. |
-| `parse_json(s)`  | `value`   | Parse `s` as JSON syntax. `NULL` on any malformed input, matching `to_integer` / `to_float` / `to_boolean`. |
+| `parse_json(s)`  | `value`   | Parse `s` as JSON syntax. No value on any malformed input, matching `to_integer` / `to_float` / `to_boolean`. A bare `null` parses to the `null` value. |
 
 #### Equality and ordering
 
@@ -1202,19 +1245,25 @@ by `keys(V)` / `values(V)`.
 values parsed from text join and deduplicate with equivalent values from
 EDB loaders, object literals, and other backends.
 
-The `null` leaf collapses to SQL `NULL` for cross-backend
-uniformity. As a consequence, `type_of(parse_json("null"))` and
-`type_of(J["key"])` for a JSON-null leaf return `NULL`, not the string
-`"null"`; the runtime expression model does not distinguish a JSON-null
-leaf from another NULL-producing expression.
+A JSON `null` leaf is the `null` **value** and is kept as such: inside a
+`value` it is stored the JSON way, as `'null'::jsonb` on Postgres and the
+canonical text `null` on SQLite / sql.js, never as SQL `NULL`. That is
+required rather than incidental, because a `value`-typed expression can be
+both undefined and `null`-valued and SQL has only one `NULL` to say it with,
+so SQL `NULL` there is reserved for "no value" (§5.4).
+
+So `type_of(parse_json("null"))` and `type_of(J["key"])` for a `null`-valued
+key both return the string `"null"`, and a key that is *missing* has no value
+at all and withholds its row. Earlier versions of Datamog collapsed the two,
+and could not express the distinction.
 
 JS `Number` precision (IEEE doubles, 2⁵³) caps integer fidelity
 for numeric leaves — values larger than 2⁵³ may round through
 canonicalisation. This is the same constraint that already
 applies to `integer`-typed columns elsewhere in Datamog.
 Non-finite numeric leaves produced by host JSON parsers (for example
-`9e999` overflowing to IEEE `Infinity`) are rejected: `parse_json`
-returns `NULL` for the whole input.
+`9e999` overflowing to IEEE `Infinity`) are rejected: `parse_json` has no
+value for the whole input, so the row is withheld.
 
 ### 2.10 Integrity Constraints
 
@@ -1561,7 +1610,7 @@ held when written is not re-checked against later additions.
 
 ### 5.1 Types
 
-Datamog has five basic types:
+Datamog has six basic types:
 
 | Type      | Description           | SQL type                                  |
 |-----------|-----------------------|-------------------------------------------|
@@ -1569,7 +1618,20 @@ Datamog has five basic types:
 | `integer` | Whole numbers         | `BIGINT` (Postgres) / `INTEGER` (SQLite/sql.js) |
 | `float`    | Floating-point numbers| `DOUBLE PRECISION` (Postgres) / `REAL` (SQLite/sql.js, 8-byte) |
 | `boolean` | True/false values     | `BOOLEAN`                                 |
+| `null`    | the single value `null` | `TEXT` (unobservable: only `NULL` is stored) |
 | `value`   | union of `null` / `boolean` / `integer` / `float` / `string` / array / object | `JSONB` (Postgres) / `TEXT` (SQLite/sql.js) |
+
+`null` is a type like any other. It sits **beside** the primitives rather
+than below them, so `string` and `integer` still have no common value and a
+variable shared between them is still a type error; a variable shared
+between two *nullable* columns can only be `null`. Which storage carries a
+`null`-typed column is unobservable, nothing but `NULL` ever being written
+there.
+
+A column that can hold `null` **as well as** other values is written with a
+`?` suffix (`age: integer?`, §2.2). That is not a sixth kind of type but the
+union of the base type and `null`, so `integer?` accepts an integer or a
+`null` and `integer` accepts neither `null` nor anything else.
 
 SQLite and sql.js have no native `BOOLEAN` storage type — they round-
 trip `TRUE`/`FALSE` and comparison results as `0` / `1`. The executor
@@ -1620,7 +1682,7 @@ It is an error if a column's type cannot be inferred from its context.
 | Integer literal `42`      | `integer`                                  |
 | Real literal `3.14`       | `float`                                     |
 | Boolean literal `true`/`false` | `boolean`                             |
-| Null literal `null`       | polymorphic — composes with any operand    |
+| Null literal `null`       | `null`                                     |
 | Variable                  | type from environment                      |
 | `a + b` (both numeric)    | `float` if either is `float`, else `integer`  |
 | `a + b` (either `string`)   | `string` (string concatenation)              |
@@ -1664,224 +1726,190 @@ otherwise. Integer inputs from literals, loaders, conversions and direct
 insertion obey the same bound. Bitwise operators are the exception described
 in Section 5.9: they deliberately coerce to and wrap within signed 32 bits.
 
-A handful of these operations are *runtime-partial* — arithmetic
-overflow, `/`, `%`, `sqrt`, `ln`, `exp`, and `**` evaluate to
-`NULL` for inputs outside their mathematical / finite-number domain
-rather than raising an error or producing an IEEE special value. The
-full list, propagation rules, and three-valued logic are in Section 5.4.
+A handful of these operations are *partial*: arithmetic overflow, `/`, `%`,
+`sqrt`, `ln`, `exp`, and `**` have **no value** for inputs outside their
+mathematical / finite-number domain, rather than raising an error, producing
+an IEEE special value, or yielding `null`. The full list and the rules for
+what an expression with no value does are in Section 5.4.
 
-#### Expression totality
+#### Expression partiality
 
-Every well-typed expression denotes a total function from assignments of
-runtime values to its free variables (respecting their inferred types) to
-exactly one Datamog runtime value. Expressions are never nondeterministic,
-set-valued, or allowed to abort evaluation. Operations that would be
-partial in the host language or database instead return `NULL` as specified
-below, and ill-typed expressions are rejected by the analyzer before
-execution.
+Every well-typed expression denotes a *partial* function from assignments of
+runtime values to its free variables (respecting their inferred types) to at
+most one Datamog runtime value. Expressions are never nondeterministic,
+set-valued, or allowed to abort evaluation, and ill-typed expressions are
+rejected by the analyzer before execution. Where an expression has no value,
+the construct containing it does not hold and no row is derived from it; this
+is specified per construct in Section 5.4.
 
-### 5.4 NULL Semantics
+Being *undefined* in this sense is not the same as evaluating to `null`.
+`null` is an ordinary value (Section 1.5) that a column holds and a
+comparison compares; an undefined expression has no value to hold or
+compare. Keeping the two apart is what lets a missing `value` key withhold
+its row while a key present with a `null` derives one carrying it.
 
-Datamog exposes NULL as the polymorphic literal `null` (Section
-1.5), but it is otherwise a *runtime* phenomenon: every column has
-a non-null declared base type, and most operations propagate NULL
-when given one. The *logical* equality operators `=`/`<>` (Section
-2.6) are the exception — they treat null as a value and return a
-total boolean.
+### 5.4 Partiality and NULL
 
-#### Sources
+Two separate notions, and the section is organised around keeping them
+apart.
 
-NULL enters an expression through the `null` literal or through
-runtime-partial operations, builtins, and accessors:
+- **`null`** is an ordinary value with its own type (§1.5, §5.1). It is
+  stored, compared, joined and counted like any other.
+- **Undefined** is the absence of a value. It is not a value: there is no
+  literal for it, no column holds it, and no variable is bound to it.
 
-1. **The `null` literal** in source — appears anywhere a value is
-   expected, with no fixed base type.
-2. **Partial math operations** — the following yield `NULL` rather than
-   raising a database error or producing an IEEE special value, so
-   semantics are identical on every backend:
+An operation is undefined when an operand is undefined, or when the
+operation has no result at those arguments.
 
-   - Integer arithmetic and integer-returning math builtins when the result
+#### Sources of undefinedness
+
+1. **Partial arithmetic and math.** Each of the following has no value
+   rather than raising or producing an IEEE special value, so every backend
+   agrees:
+
+   - Integer arithmetic and integer-returning math builtins whose result
      lies outside `[-(2^53 - 1), 2^53 - 1]`.
-   - Float arithmetic and math builtins when the result would be non-finite
-     (`Infinity`, `-Infinity`, or `NaN`).
+   - Float arithmetic and math builtins whose result would be non-finite.
    - `a / b` and `a % b` when `b = 0`.
-   - `sqrt(x)` for `x < 0`.
-   - `ln(x)` for `x <= 0`.
+   - `sqrt(x)` for `x < 0`; `ln(x)` for `x <= 0`.
    - `exp(x)` when the result overflows the finite `float` range.
-   - `x ** y` for `x < 0` with fractional `y`, or for `x = 0`
-     with `y < 0`, or when the result overflows the finite `float`
-     range.
-3. **Partial conversions, value builtins, and value accessors** —
-   malformed `parse_json`, failed `to_*` parses, failed `as_*`
-   projections, wrong-shape `length` / `keys` / `values`, and missing or
-   wrong-shape `value` subscripts/slices yield `NULL`.
+   - `x ** y` for `x < 0` with fractional `y`, for `x = 0` with `y < 0`, or
+     on overflow.
 
-Slice with `i >= j` produces the empty string `""` / empty array `[]`
-(Section 2.6); a string subscript out of range produces `""`; a `value`
-subscript out of range / missing key / wrong-shape access produces `NULL`.
+2. **Partial conversions, `value` builtins and accessors.** Malformed
+   `parse_json`, a failed `to_*` parse, a failed `as_*` projection, a
+   wrong-shape `length` / `keys` / `values`, and a **missing** `value` key or
+   out-of-range index.
 
-Non-null EDB columns are emitted with `NOT NULL`, so loaders cannot
-introduce NULL through those extensional columns — coercion failures raise
-load-time errors instead. EDB columns declared with `?` omit `NOT NULL`
-and may contain runtime NULLs.
+3. **Aggregates with no identity.** `avg`, `min` and `max` over a group
+   with no defined contributions, and an integer `sum` that leaves the
+   integer domain (§2.7).
 
-#### Nullness tracking
+Slice with `i >= j` produces `""` / `[]`, and a string subscript out of
+range produces `""`; neither is undefined.
 
-Whether a column can hold a NULL is inferred, as a second component beside the
-base type rather than a type of its own. It is checked where annotations and
-module boundaries are checked (§5.10, §9.3), it feeds three warnings, and it
-selects between the two equality lowerings (§6.2). It never changes which tuples
-a program derives.
+#### Sources of `null`
 
-An extensional column is nullable exactly when declared `?`. An intensional
-column is nullable when some rule for it can contribute a NULL, computed as a
-least fixed point seeded at non-null, so a recursive predicate is non-null when
-its base case is and its recursive step propagates. A head expression can
-contribute a NULL when it mentions a nullable variable, or when it applies an
-operation that is partial on non-null arguments (the sources above). `count` is
-never NULL; another aggregate is NULL when its argument is, a group existing
-only because a row does. Two cases are nullable regardless: an integer `sum`,
-which can overflow, and any ungrouped aggregate, whose empty-group row is NULL
-for everything but `count` (§2.7).
+1. The **`null` literal** in source.
+2. An **extensional column declared `?`**, whose cells may be `null`.
+3. **JSON data** containing a `null` leaf, read through a `value` column or
+   `parse_json`.
 
-Within a rule, a variable is **non-null** if the body proves it so. A body is a
-conjunction, so this is not order-sensitive: a guard written last constrains an
-atom written first. The following prove it:
+A `value` key that is *present* and holds a JSON `null` yields the `null`
+value; only a *missing* key is undefined. `type_of` reports `"null"` for the
+former.
 
-| body element (holding) | proves |
+#### Where definedness is required
+
+Per construct, and compositionally: what matters is whether the construct
+*holds*, so an undefined expression inside a negation makes the negation
+hold rather than the rule fail.
+
+| construct | holds when |
 |---|---|
-| a positive atom position whose column is non-null | that variable |
-| `object_entry(V, K, _)` or `array_element(V, I, _)` | every variable in a strict position of `V`, plus `K` / `I` (not the value slot, which can be a JSON null) |
-| `X <> null`, `null <> X`, `not (X = null)` | `X` |
-| `e1 < e2` or `e1 > e2` | every variable in a strict position of `e1` and `e2` |
-| `X in [lo .. hi]` | every variable in a strict position of `X` |
-| `X = e` where `e` cannot be NULL | every variable in a strict position of `X` |
-| `f1 && f2` | whatever either proves |
-| `f1 \|\| f2` | whatever both prove |
+| atom `p(e₁ … eₙ)` | every `eᵢ` is defined **and** the resulting tuple is in `p` |
+| equality `e = f` | both sides are defined and equal as values |
+| filter `e` | `e` is defined and `true` |
+| `not φ` | `φ` does not hold, for any reason, undefinedness included |
+| rule head | every head expression is defined; otherwise no tuple is derived |
 
-`<=` and `>=` prove nothing, being true of two NULLs, and neither does a negated
-ordering comparison, `not (X < 2)` being exactly where a NULL `X` lands. A
-negated atom proves nothing, binding nothing. A variable occurs in a **strict
-position** of an expression when the path to it passes only through operations
-that propagate NULL; `=`, `<>`, the orderings and the connectives are not among
-them, so nothing under one of those is proven.
+Consequences worth stating outright:
 
-Three conditions are warned about rather than rejected, since each is specified
-behaviour that is sometimes wanted:
+- `p(1 / 0)` never holds, and `not p(1 / 0)` always does, whatever `p`
+  contains.
+- **`e <> f` is not `not (e = f)`.** Both sides of `<>` must be defined for
+  it to hold, while `not (e = f)` holds precisely when `e = f` does not,
+  undefinedness included. Where an operand can be undefined, prefer whichever
+  you mean and expect a warning on the other.
+- `not (e = e)` holds exactly when `e` is undefined, which is the language's
+  definedness test.
+- **`not` and `!` differ.** `not` is negation as failure over a body element;
+  `!` is the boolean operator and propagates undefinedness. They agree
+  wherever the operand is defined.
 
-- a filter that can evaluate to NULL, which drops its row as a false one would;
-- two rule bodies comparing the same operands with complementary operators
-  (`<` against `>=`, or `<=` against `>`), which read as a partition but leave
-  out NULL;
-- a negated ordering over a nullable operand, which keeps the NULL row: every
-  ordering is false at NULL, so its negation is true there.
+#### Propagation
 
-#### Propagation in expressions
+Undefinedness propagates through arithmetic, string concatenation,
+subscript, slice, value construction, and every non-aggregate builtin: an
+undefined operand makes the whole expression undefined.
 
-NULL propagates through arithmetic, string concatenation, subscript,
-slice, and built-in (non-aggregate) functions: any `NULL` operand
-makes the whole expression `NULL`. The exceptions are `&&` and `||`
-(short-circuit, see below) and the logical-equality operators
-`=`/`<>` (null-aware, see below).
+`&&` and `||` are **non-strict** in it, so a dominating operand wins:
+`false && e` is `false` and `true || e` is `true` even where `e` is
+undefined. That is what makes `X <> 0 && 10 / X > 0` usable as a guard.
 
-#### Three-valued boolean logic
+The `null` *value* propagates separately, per SQL's three-valued logic, and
+is documented under each operator. Applying arithmetic or a string operation
+to a statically `null` operand is a **type error**, not a runtime
+propagation: `null + 1` is rejected (§5.3).
 
-`&&`, `||`, and `!` extend to NULL via SQL three-valued logic,
-identical on every backend including the native evaluator:
+#### Comparisons
 
-```
-true  && true  = true       true  || true  = true       !true  = false
-true  && false = false      true  || false = true       !false = true
-false && false = false      false || false = false      !null  = null
-null  && true  = null       null  || true  = true
-null  && false = false      null  || false = null
-null  && null  = null       null  || null  = null
-```
+`=` and `<>` compare values, `null` included, and never yield `null`:
+`null = null` is `true` and `null = 1` is `false`. Ordering treats `null` as
+an isolated point, comparable only to itself.
 
-`false` dominates `&&` and `true` dominates `||` — when one operand
-decides the answer, NULL on the other side does not propagate.
+| left   | right  | `=`    | `<>`   | `<`   | `<=`  |
+|--------|--------|--------|--------|-------|-------|
+| `5`    | `5`    | true   | false  | false | true  |
+| `5`    | `6`    | false  | true   | true  | true  |
+| `5`    | `null` | false  | true   | false | false |
+| `null` | `null` | true   | false  | false | true  |
 
-#### Comparisons and filters
+A comparison whose operand is *undefined* does not hold, by the table above
+in "Where definedness is required", and so drops its row in filter position
+and satisfies `not`.
 
-**Comparison is where NULL stops travelling.** Every comparison
-operator is total: no operand combination returns NULL, so a filter
-built from comparisons alone never drops a row "silently for null
-reasons", and `not` over a comparison is genuine complementation.
-
-`=` and `<>` are null-aware (`null = null` is `true`). Ordering treats
-`null` as an isolated point in the order, comparable only to itself.
-
-| left   | right  | `=`    | `<>`   | `<`   | `<=`  | `>`   | `>=`  |
-|--------|--------|--------|--------|-------|-------|-------|-------|
-| `5`    | `5`    | true   | false  | false | true  | false | true  |
-| `5`    | `6`    | false  | true   | true  | true  | false | false |
-| `5`    | `null` | false  | true   | false | false | false | false |
-| `null` | `5`    | false  | true   | false | false | false | false |
-| `null` | `null` | true   | false  | false | true  | false | true  |
-
-A NULL can still reach filter position from elsewhere: a nullable
-`boolean?` column, `as_boolean(null)`, or an expression that
-propagates a NULL into a boolean slot. Such a row is dropped, matching
-SQL's `WHERE`. See Section 2.6 and `doc/design/null.md` §5.
+Atom matching uses the same value equality: a `null` argument matches a
+`null` column, and a shared variable joins `null` to `null`. `p(X), q(X)`
+and `p(X), q(Y), X = Y` therefore denote the same relation.
 
 #### Equalities (body-level)
 
-Body Equality (Section 2.5) is the same logical operator. It has two
-roles:
+Body equality (§2.5) has two roles:
 
-- **Binding** (one side is an unbound bare variable): `X = expr` or
-  `expr = X` introduces `X` and sets it to the value of `expr`,
-  including when `expr` evaluates to NULL — the row is *not* dropped,
-  and subsequent uses of `X` propagate that NULL through any
-  non-logical operation. `expr` must name a type, so a bare `null`
-  does not bind (Section 2.5): `X = 1 / 0` introduces an integer `X`
-  whose value is NULL, while `X = null` leaves `X` unsafe.
-- **Constraint** (both sides already bound): the body equality emits a
-  null-aware comparison. `X = null` matches NULL rows; `Y = Z` with
-  both bound matches when both happen to be NULL.
-
-Atom matching uses the same null-aware equality: a literal `null` in
-an atom argument matches a NULL column, and a shared variable across
-two atoms joins NULL to NULL. `p(X), q(X)` and `p(X), q(Y), X = Y`
-therefore denote the same relation, as they should, and a NULL row of
-`q` is excluded from `not q(X)`. This departs from SQL, which joins
-three-valued; `doc/design/null.md` §4 gives the reasoning and §6 the
-cost, which is a quadratic plan for a large nullable-column join on
-the Postgres backend.
+- **Binding** (one side is an unbound bare variable): `X = expr` introduces
+  `X` and sets it to the value of `expr`. If `expr` has no value the conjunct
+  does not hold and no row is derived, so `X` is never bound to an absence.
+  `X = null` binds `X` to the `null` value and types it `null`.
+- **Constraint** (both sides bound): an ordinary value equality, per the
+  table above.
 
 #### Aggregates
 
-Aggregates inherit standard SQL semantics:
+See §2.7 for the full rules. In summary: a row whose aggregate argument is
+undefined contributes to no aggregate mentioning it and still counts for
+`count(*)`; a group with no defined contributions yields each aggregate's
+identity where one exists (`count` and `sum` → `0`, `concat` → `""`,
+`list` → `[]`) and is undefined otherwise (`avg`, `min`, `max`), withholding
+the tuple. `count` counts a `null` like any other value.
 
-- `count(*)` translates to `COUNT(*)` — counts every group row,
-  including those with NULLs in other columns.
-- `count(expr)`, `sum(expr)`, `avg(expr)`, `min(expr)`, `max(expr)`,
-  `concat(expr)` ignore rows where `expr` is NULL.
-- A group whose `expr` is NULL for every row yields NULL for
-  `sum`/`avg`/`min`/`max`/`concat` and `0` for
-  `count(expr)`.
+#### Nullness
 
-Integer `sum` is exact while both the sum of its positive inputs and the
-absolute sum of its negative inputs fit the integer domain. It yields `NULL`
-when either subtotal exceeds the bound. This makes the result independent of
-row order and prevents a backend's wider accumulator from defining the
-language; a group with cancellation beyond either subtotal bound therefore
-also yields `NULL`.
+Whether a column can hold `null` is inferred per column, as a fixed point over
+the dependency graph seeded non-null. An extensional column is nullable exactly
+when declared `?`; an intensional one is nullable when some rule for it can
+contribute a `null`. Head annotations may declare it (§5.10), module boundaries
+are checked against it (§9.3), and it selects between the two equality lowerings
+so a join over provably non-null columns keeps a plain `=`.
 
-The aggregate's result *type* (Section 5.5) is unaffected by this:
-Datamog has no nullable types, so an all-NULL group simply emits a
-runtime NULL in a column whose declared type is still "same as
-`expr`" (or `integer` / `float` / `string`, per Section 5.5). NULL is
-always a possible runtime value of any column; the type system
-only fixes what the *non-NULL* values look like.
+A partial operation is not a source of nullness, because it yields no value
+rather than a `null` one: `X = A / B` contributes nothing to `X`'s nullness
+whatever `A` and `B` are, and a column receiving it needs no `?`. Nullness
+originates only where an actual `null` can appear: a `null` literal, a `?`
+extensional column, and a `value` expression whose result may be a JSON `null`
+(`parse_json`, or an accessor reaching a `null` leaf). Every other operation
+merely propagates its operands' nullness, and comparison stops it entirely,
+being total (§5.4). No aggregate is nullable, per the empty-group rules above.
 
-#### Heads
+#### Storage
 
-A rule whose head expression evaluates to NULL still emits a row,
-with NULL in the corresponding column. Downstream rules reading
-that column propagate the NULL through the rules above (filtered
-out by comparisons, ignored by aggregates, kept by binding
-equalities).
+`null` is stored as SQL `NULL` in a `T?` column and as a JSON `null` inside
+a `value`. The second is required rather than incidental: a `value`-typed
+expression can be both undefined and `null`-valued, so SQL `NULL` there is
+reserved for undefined and the JSON spelling carries the value.
+
+Non-`?` extensional columns are emitted `NOT NULL`, so a loader cannot
+introduce a `null` through them; coercion failures raise at load time.
 
 ### 5.5 Aggregate Typing Rules
 
@@ -2140,8 +2168,11 @@ declared-must-equal-or-widen-inferred.
   an error naming the annotation that fixes it.
 - A `?` where the contribution cannot be NULL is accepted, and documents
   looseness the way annotating `value` on an integer column does.
-- Nullness is inferred whether or not anything is annotated (§5.4), so the
-  annotation adds a check and never an inference input.
+- Nullness is inferred whether or not anything is annotated (§5.4, "Nullness"),
+  so the annotation adds a check and never an inference input. Note the
+  over-approximation recorded there: a rule that divides is inferred nullable
+  even though division yields no value rather than a `null`, so a `?` can be
+  required where the value model would not need one.
 - The published contract widens by `?` exactly as it widens by type, so
   consumers and module boundaries (§9.3) see the declared nullness while the
   predicate's own body sees the inferred one.

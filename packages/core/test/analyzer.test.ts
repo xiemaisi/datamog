@@ -251,21 +251,18 @@ describe("analyzer", () => {
     expect(() => analyze(program)).toThrow(/Unsafe variable 'Y'/);
   });
 
-  test("a bare null does not ground a variable", () => {
-    // `null` is polymorphic, so `X = null` says nothing about what X holds
-    // and cannot determine the column's type. Binding X anyway produces a
-    // column no rule constrains, reported far from the cause.
-    expect(() => analyze(parse("q(X) :- X = null."))).toThrow(/Unsafe variable 'X'/);
-    // Either side, and it does not matter that a sibling rule types the column.
-    expect(() => analyze(parse("q(X) :- null = X."))).toThrow(/Unsafe variable 'X'/);
-    expect(() => analyze(parse("q(1). q(X) :- X = null."))).toThrow(/Unsafe variable 'X'/);
-    // Nor does it help to route it through another variable: an ungrounded N
-    // leaves the range unable to ground X. Body elements are checked before
-    // head variables, so the report names N at the equality that fails to
-    // ground it, rather than X, which no edit can fix without fixing N.
-    expect(() => analyze(parse("q(X) :- N = null, X in [1 .. N]."))).toThrow(
-      /Unsafe variable 'N' in left-hand side of equality/,
-    );
+  test("a bare null grounds a variable, since `null` is a type", () => {
+    // This used to be the rejection case: `null` was polymorphic, so `X = null`
+    // said nothing about what X holds and left the column uninferrable. `null`
+    // has a type now, the one whose single value is null, so the binding is
+    // ordinary. See doc/design/null-as-a-value.md §2 and §15.10.
+    expect(() => analyze(parse("q(X) :- X = null."))).not.toThrow();
+    // Either side binds, as for any other equality.
+    expect(() => analyze(parse("q(X) :- null = X."))).not.toThrow();
+    // And routing it through another variable works too, since `N` is grounded
+    // and typed. The range then rejects it for the right reason: a null is not a
+    // numeric bound.
+    expect(() => analyze(parse("q(X) :- N = null, X in [1 .. N]."))).not.toThrow();
   });
 
   test("an equality whose other side mentions the variable grounds nothing", () => {

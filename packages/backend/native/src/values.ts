@@ -37,6 +37,19 @@ import { type JsonValue, canonicalizeJson, isJsonValue } from "datamog-engine";
  * primitively.
  */
 export type Value = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/**
+ * What evaluating an expression yields: a value, or `undefined` when the
+ * expression has none.
+ *
+ * The two markers are not interchangeable and the whole of §8 rests on that.
+ * `null` is an ordinary value a column can hold; `undefined` is the absence of
+ * one, so a conjunct mentioning it does not hold and a head containing it
+ * derives no tuple. A `value` accessor returns `null` for a present-but-null key
+ * and `undefined` for a missing one, which the previous single marker could not
+ * express. See doc/design/null-as-a-value.md §1, §8 and §15.4.
+ */
+export type EvalResult = Value | undefined;
 export type Substitution = Map<string, Value>;
 
 export interface TypeEnv {
@@ -124,12 +137,20 @@ function asBoolean(v: Value | undefined): boolean {
   return v;
 }
 
-function finiteOrNull(v: number): number | null {
-  return Number.isFinite(v) ? v : null;
+/**
+ * A non-finite result has no value, so it is *undefined* rather than null.
+ * `undefined` is the interpreter's marker for "no value"; `null` stays the
+ * ordinary null value a column can hold. Keeping them apart is what lets a
+ * `value` accessor return a present-but-null key as a value while a missing key
+ * withholds the row. See doc/design/null-as-a-value.md §1 and §8.
+ */
+function finiteOrUndef(v: number): number | undefined {
+  return Number.isFinite(v) ? v : undefined;
 }
 
-function safeIntegerOrNull(v: number): number | null {
-  return Number.isSafeInteger(v) ? v : null;
+/** Leaving the integer domain is undefined, per §1. */
+function safeIntegerOrUndef(v: number): number | undefined {
+  return Number.isSafeInteger(v) ? v : undefined;
 }
 
 /**
@@ -157,8 +178,8 @@ export function evalTerm(
   term: HeadTerm,
   sub: Substitution,
   env: TypeEnv,
-  aggregates?: (agg: AggregateCall) => Value,
-): Value {
+  aggregates?: (agg: AggregateCall) => EvalResult,
+): EvalResult {
   switch (term.$type) {
     case "StringLiteral":
       return term.value;
@@ -181,49 +202,65 @@ export function evalTerm(
       if (v === null) return null;
       const negated = -asNumber(v);
       return inferTermType(term, env.vars, typesFor(env)) === "integer"
-        ? safeIntegerOrNull(negated)
-        : finiteOrNull(negated);
+        ? safeIntegerOrUndef(negated)
+        : finiteOrUndef(negated);
     }
     case "BinaryExpr": {
       const l = evalTerm(term.left, sub, env, aggregates);
       const r = evalTerm(term.right, sub, env, aggregates);
       if (term.op === "&&") {
-        // 3VL: false dominates, then NULL, then both-true.
+        // 3VL, plus the absence marker. `false` dominates, so it survives an
+        // undefined operand: that non-strictness is what makes
+        // `X <> 0 && 10 / X > 0` a usable guard (§4.4).
         if (l === false || r === false) return false;
+        if (l === undefined || r === undefined) return undefined;
         if (l === null || r === null) return null;
         return asBoolean(l) && asBoolean(r);
       }
       if (term.op === "||") {
-        // 3VL: true dominates, then NULL, then both-false.
         if (l === true || r === true) return true;
+        if (l === undefined || r === undefined) return undefined;
         if (l === null || r === null) return null;
         return asBoolean(l) || asBoolean(r);
       }
-      // `=` / `<>` are null-aware equality. JS `===` / `!==` already give
-      // the right answer for null values (`null === null` is true,
-      // `null === X` is false). For JSON values (arrays / objects) `===` is
-      // reference identity, which would diverge from the SQL backends'
-      // structural equality, so route through `valueStructuralEq`, which
-      // canonicalises on demand.
+      // Every other operator, comparisons included, is undefined at an
+      // undefined operand. For a comparison that is what §4.4 requires: as a
+      // condition it fails to hold, which is what drops the row and what makes
+      // `not` of it hold, and as an expression it has no value to bind.
+      //
+      // This replaced a static `canBeUndefined` test. With a runtime marker the
+      // interpreter can see which of the two a NULL is, so it no longer has to
+      // be told.
+      if (l === undefined || r === undefined) return undefined;
+      // `=` / `<>` are null-aware over *values*. JS `===` already gives the
+      // right answer for the null value; JSON values need structural equality
+      // to agree with the SQL backends.
       if (term.op === "=") return valueStructuralEq(l, r);
       if (term.op === "<>") return !valueStructuralEq(l, r);
-      // Ordering is total: null is an isolated point in the order,
+      // Ordering is total over values: null is an isolated point in the order,
       // comparable only to itself. See doc/design/null.md §5.
       if (l === null || r === null) {
         if (ORDERING_OPS.has(term.op)) {
           return (term.op === "<=" || term.op === ">=") && l === null && r === null;
         }
-        // Every other operator propagates.
+        // Arithmetic, concatenation and the bitwise operators still *propagate*
+        // the null value, as spec §5.4 says. This is deliberately not the
+        // absence marker: under §5's hybrid position, arithmetic on a nullable
+        // operand is a static type error, so the right answer is to reject the
+        // program rather than to invent a runtime one. Until that lands,
+        // propagation is what the spec documents and what these operators do.
         return null;
       }
       return evalBinary(term.op, l, r, term.left, term.right, env);
     }
-    case "FunctionCall":
-      return evalCall(
-        term,
-        term.args.map((a) => evalTerm(a, sub, env, aggregates)),
-        env,
-      );
+    case "FunctionCall": {
+      // Builtins are strict in the absence marker: a call on an argument with no
+      // value has no value either. That strictness is what makes
+      // `not defined(e)` work rather than `undefined(e)` (§11.6).
+      const args = term.args.map((a) => evalTerm(a, sub, env, aggregates));
+      if (args.some((a) => a === undefined)) return undefined;
+      return evalCall(term, args as Value[], env);
+    }
     case "AggregateCall": {
       if (aggregates) return aggregates(term);
       throw new Error(`Aggregate '${term.func}' evaluated outside aggregate context`);
@@ -231,23 +268,25 @@ export function evalTerm(
     case "Subscript": {
       const obj = evalTerm(term.object, sub, env, aggregates);
       const idx = evalTerm(term.index, sub, env, aggregates);
-      if (obj === null || idx === null) return null;
+      if (obj === null || idx === null) return undefined;
       const objType = inferTermType(term.object, env.vars, typesFor(env));
       if (objType === "value") {
-        // Array index → integer; object key → string. Wrong-shape access
-        // (string index on array, integer index on object, anything on a
-        // primitive leaf) returns NULL, matching the SQL backends.
+        // This is §8, and it is why the interpreter needs two markers. A missing
+        // key, an out-of-range index, a wrong-shape access and a primitive leaf
+        // all have *no value*, so they are undefined and the row goes. A key that
+        // is present and holds a JSON null has a value, namely null, so the row
+        // stays and carries it. The single marker could not tell those apart.
         if (Array.isArray(obj)) {
-          if (typeof idx !== "number" || !Number.isInteger(idx)) return null;
-          if (idx < 0 || idx >= obj.length) return null;
+          if (typeof idx !== "number" || !Number.isInteger(idx)) return undefined;
+          if (idx < 0 || idx >= obj.length) return undefined;
           return obj[idx] as Value;
         }
         if (typeof obj === "object") {
-          if (typeof idx !== "string") return null;
-          if (!Object.hasOwn(obj as object, idx)) return null;
+          if (typeof idx !== "string") return undefined;
+          if (!Object.hasOwn(obj as object, idx)) return undefined;
           return (obj as Record<string, JsonValue>)[idx] as Value;
         }
-        return null;
+        return undefined;
       }
       // Iterate code points so multi-byte characters (e.g. 😀, which is a
       // UTF-16 surrogate pair) count as one position — matches SQL's
@@ -259,16 +298,16 @@ export function evalTerm(
     }
     case "Slice": {
       const obj = evalTerm(term.object, sub, env, aggregates);
-      if (obj === null) return null;
+      if (obj === null) return undefined;
       const objType = inferTermType(term.object, env.vars, typesFor(env));
       if (objType === "value") {
         // Slicing a non-array `value` returns NULL; otherwise produces a
         // sub-array. Empty / reversed ranges return [], matching the SQL
         // backends' `COALESCE(...)` shape.
-        if (!Array.isArray(obj)) return null;
+        if (!Array.isArray(obj)) return undefined;
         const start = term.start ? evalTerm(term.start, sub, env, aggregates) : 0;
         const end = term.end ? evalTerm(term.end, sub, env, aggregates) : obj.length;
-        if (start === null || end === null) return null;
+        if (start === null || end === null) return undefined;
         const si = asNumber(start);
         const ei = asNumber(end);
         if (si < 0 || ei < 0) return [];
@@ -278,7 +317,7 @@ export function evalTerm(
       const cp = [...asString(obj)];
       const start = term.start ? evalTerm(term.start, sub, env, aggregates) : 0;
       const end = term.end ? evalTerm(term.end, sub, env, aggregates) : cp.length;
-      if (start === null || end === null) return null;
+      if (start === null || end === null) return undefined;
       const si = asNumber(start);
       const ei = asNumber(end);
       if (ei <= si) return "";
@@ -293,15 +332,17 @@ export function evalTerm(
       // literal-construction output matches what the canonicalisation
       // path already does silently via JSON.stringify, and to keep the
       // SQL backends' element-finiteness guard from diverging.
-      const arr = term.elements.map((e) =>
-        scrubNonFiniteForJson(evalTerm(e, sub, env, aggregates)),
-      );
+      const elems = term.elements.map((e) => evalTerm(e, sub, env, aggregates));
+      if (elems.some((e) => e === undefined)) return undefined;
+      const arr = (elems as Value[]).map(scrubNonFiniteForJson);
       return JSON.parse(canonicalizeJson(arr)) as Value;
     }
     case "ObjectLiteral": {
       const obj: Record<string, JsonValue> = {};
       for (const entry of term.entries) {
-        obj[entry.key] = scrubNonFiniteForJson(evalTerm(entry.value, sub, env, aggregates));
+        const v = evalTerm(entry.value, sub, env, aggregates);
+        if (v === undefined) return undefined;
+        obj[entry.key] = scrubNonFiniteForJson(v);
       }
       return JSON.parse(canonicalizeJson(obj)) as Value;
     }
@@ -316,16 +357,16 @@ export function evalTerm(
 }
 
 /**
- * The `**` operator. Mirrors the SQL `powerSql` guards: negative base
- * with a fractional exponent → NULL (imaginary); zero base with a
- * negative exponent → NULL (division by zero inside POWER); a result
- * that overflows to ±Infinity → NULL.
+ * The `**` operator. Mirrors the SQL `powerSql` guards, each a domain failure
+ * and so undefined rather than null: negative base with a fractional exponent
+ * (imaginary); zero base with a negative exponent (division by zero inside
+ * POWER); a result that overflows to ±Infinity.
  */
-function evalPower(base: number, exp: number): number | null {
-  if (base < 0 && exp !== Math.floor(exp)) return null;
-  if (base === 0 && exp < 0) return null;
+function evalPower(base: number, exp: number): number | undefined {
+  if (base < 0 && exp !== Math.floor(exp)) return undefined;
+  if (base === 0 && exp < 0) return undefined;
   const v = base ** exp;
-  return Number.isFinite(v) ? v : null;
+  return Number.isFinite(v) ? v : undefined;
 }
 
 function evalBinary(
@@ -335,7 +376,7 @@ function evalBinary(
   left: Expression,
   right: Expression,
   env: TypeEnv,
-): Value {
+): EvalResult {
   if (op === "+") {
     const leftType = inferTermType(left, env.vars, typesFor(env));
     const rightType = inferTermType(right, env.vars, typesFor(env));
@@ -344,37 +385,37 @@ function evalBinary(
     }
     const result = asNumber(l) + asNumber(r);
     return leftType === "integer" && rightType === "integer"
-      ? safeIntegerOrNull(result)
-      : finiteOrNull(result);
+      ? safeIntegerOrUndef(result)
+      : finiteOrUndef(result);
   }
   if (op === "-" || op === "*") {
     const result = op === "-" ? asNumber(l) - asNumber(r) : asNumber(l) * asNumber(r);
     const leftType = inferTermType(left, env.vars, typesFor(env));
     const rightType = inferTermType(right, env.vars, typesFor(env));
     return leftType === "integer" && rightType === "integer"
-      ? safeIntegerOrNull(result)
-      : finiteOrNull(result);
+      ? safeIntegerOrUndef(result)
+      : finiteOrUndef(result);
   }
   if (op === "/") {
     const rn = asNumber(r);
-    if (rn === 0) return null;
+    if (rn === 0) return undefined;
     const ln = asNumber(l);
     const leftType = inferTermType(left, env.vars, typesFor(env));
     const rightType = inferTermType(right, env.vars, typesFor(env));
     if (leftType === "integer" && rightType === "integer") {
-      return safeIntegerOrNull(Math.trunc(ln / rn));
+      return safeIntegerOrUndef(Math.trunc(ln / rn));
     }
-    return finiteOrNull(ln / rn);
+    return finiteOrUndef(ln / rn);
   }
   if (op === "%") {
     const rn = asNumber(r);
-    if (rn === 0) return null;
+    if (rn === 0) return undefined;
     const result = asNumber(l) % rn;
     const leftType = inferTermType(left, env.vars, typesFor(env));
     const rightType = inferTermType(right, env.vars, typesFor(env));
     return leftType === "integer" && rightType === "integer"
-      ? safeIntegerOrNull(result)
-      : finiteOrNull(result);
+      ? safeIntegerOrUndef(result)
+      : finiteOrUndef(result);
   }
   // Bitwise / shift ops on 32-bit signed integers. JS bit operators already
   // coerce operands to int32 and mask the shift count mod 32 (Java/JS
@@ -417,9 +458,9 @@ function evalBinary(
  * across overloads (`abs.integer` and `abs.float`) reuse the same
  * function value.
  */
-type NativeImpl = (args: Value[]) => Value;
+type NativeImpl = (args: Value[]) => EvalResult;
 
-const callAbs: NativeImpl = (args) => finiteOrNull(Math.abs(asNumber(args[0])));
+const callAbs: NativeImpl = (args) => finiteOrUndef(Math.abs(asNumber(args[0])));
 
 /**
  * Round half away from zero. JS `Math.round` rounds half toward +Infinity
@@ -439,14 +480,14 @@ function asciiLower(s: string): string {
   return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
-const callRound1: NativeImpl = (args) => finiteOrNull(roundHalfAwayFromZero(asNumber(args[0])));
-function roundToScale(x: number, n: number): number | null {
-  if (!Number.isFinite(x) || !Number.isFinite(n)) return null;
+const callRound1: NativeImpl = (args) => finiteOrUndef(roundHalfAwayFromZero(asNumber(args[0])));
+function roundToScale(x: number, n: number): number | undefined {
+  if (!Number.isFinite(x) || !Number.isFinite(n)) return undefined;
   const factor = 10 ** n;
   if (factor === 0) return 0;
   if (!Number.isFinite(factor)) return x;
   const rounded = roundHalfAwayFromZero(x * factor) / factor;
-  return Number.isFinite(rounded) ? rounded : null;
+  return Number.isFinite(rounded) ? rounded : undefined;
 }
 const callRound2: NativeImpl = (args) => {
   return roundToScale(asNumber(args[0]), asNumber(args[1]));
@@ -495,20 +536,20 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
   ["round.float", callRound1],
   ["round.integer_integer", callRoundInteger2],
   ["round.float_integer", callRound2],
-  ["floor.float", (args) => finiteOrNull(Math.floor(asNumber(args[0])))],
-  ["ceil.float", (args) => finiteOrNull(Math.ceil(asNumber(args[0])))],
+  ["floor.float", (args) => finiteOrUndef(Math.floor(asNumber(args[0])))],
+  ["ceil.float", (args) => finiteOrUndef(Math.ceil(asNumber(args[0])))],
   [
     "sqrt.float",
     (args) => {
       const x = asNumber(args[0]);
-      return x < 0 ? null : Math.sqrt(x);
+      return x < 0 ? undefined : Math.sqrt(x);
     },
   ],
   [
     "ln.float",
     (args) => {
       const x = asNumber(args[0]);
-      return x <= 0 ? null : Math.log(x);
+      return x <= 0 ? undefined : Math.log(x);
     },
   ],
   [
@@ -522,13 +563,13 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       // overflow surfaces as NULL explicitly at the operation, not as
       // hidden corruption further down the pipeline.
       const v = Math.exp(asNumber(args[0]));
-      return Number.isFinite(v) ? v : null;
+      return Number.isFinite(v) ? v : undefined;
     },
   ],
 
   // JSON coercion: type-strict, NULL on shape mismatch, no implicit
   // conversion. Mirrors the per-dialect SQL emission.
-  ["as_string.value", (args) => (typeof args[0] === "string" ? args[0] : null)],
+  ["as_string.value", (args) => (typeof args[0] === "string" ? args[0] : undefined)],
   [
     "as_integer.value",
     (args) => {
@@ -537,17 +578,17 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       // so they don't fall through. Integer-valued reals (1.0, -3.0)
       // qualify; out-of-range values fail the safe-integer check and
       // yield NULL.
-      if (typeof v !== "number") return null;
-      if (!Number.isFinite(v) || v !== Math.trunc(v)) return null;
-      if (v < Number.MIN_SAFE_INTEGER || v > Number.MAX_SAFE_INTEGER) return null;
+      if (typeof v !== "number") return undefined;
+      if (!Number.isFinite(v) || v !== Math.trunc(v)) return undefined;
+      if (v < Number.MIN_SAFE_INTEGER || v > Number.MAX_SAFE_INTEGER) return undefined;
       return v;
     },
   ],
   [
     "as_float.value",
-    (args) => (typeof args[0] === "number" && Number.isFinite(args[0]) ? args[0] : null),
+    (args) => (typeof args[0] === "number" && Number.isFinite(args[0]) ? args[0] : undefined),
   ],
-  ["as_boolean.value", (args) => (typeof args[0] === "boolean" ? args[0] : null)],
+  ["as_boolean.value", (args) => (typeof args[0] === "boolean" ? args[0] : undefined)],
   [
     "length.value",
     (args) => {
@@ -555,7 +596,7 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       if (Array.isArray(v)) return v.length;
       if (typeof v === "string") return [...v].length;
       if (v !== null && typeof v === "object") return Object.keys(v).length;
-      return null;
+      return undefined;
     },
   ],
   ["length.string", stringLength],
@@ -569,7 +610,7 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       if (typeof v === "string") return "string";
       if (Array.isArray(v)) return "array";
       if (typeof v === "object") return "object";
-      return null;
+      return undefined;
     },
   ],
   [
@@ -585,7 +626,7 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
     "keys.value",
     (args) => {
       const v = args[0]!;
-      if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+      if (v === null || typeof v !== "object" || Array.isArray(v)) return undefined;
       return Object.keys(v).sort(compareStrings);
     },
   ],
@@ -593,7 +634,7 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
     "values.value",
     (args) => {
       const v = args[0]!;
-      if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+      if (v === null || typeof v !== "object" || Array.isArray(v)) return undefined;
       return Object.keys(v)
         .sort(compareStrings)
         .map((k) => (v as Record<string, JsonValue>)[k] as JsonValue);
@@ -628,9 +669,9 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       const s = asString(args[0]);
       // Canonical form: `0`, or `-?[1-9][0-9]*`, inside the JS
       // safe-integer range.
-      if (!/^(0|-?[1-9][0-9]*)$/.test(s)) return null;
+      if (!/^(0|-?[1-9][0-9]*)$/.test(s)) return undefined;
       const value = Number(s);
-      return Number.isSafeInteger(value) ? value : null;
+      return Number.isSafeInteger(value) ? value : undefined;
     },
   ],
   [
@@ -639,9 +680,9 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       const s = asString(args[0]);
       // Same canonical form as the SQL dialect parsers — see
       // `parseStringAsFloat` for the parallel regex / GLOB chain.
-      if (!/^((0|-?[1-9][0-9]*)(\.[0-9]+)?|-0\.[0-9]+)$/.test(s)) return null;
+      if (!/^((0|-?[1-9][0-9]*)(\.[0-9]+)?|-0\.[0-9]+)$/.test(s)) return undefined;
       const n = Number.parseFloat(s);
-      return Number.isFinite(n) ? n : null;
+      return Number.isFinite(n) ? n : undefined;
     },
   ],
   [
@@ -650,7 +691,7 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       const s = asString(args[0]);
       if (s === "true") return true;
       if (s === "false") return false;
-      return null;
+      return undefined;
     },
   ],
 
@@ -666,10 +707,10 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       const s = asString(args[0]);
       try {
         const parsed = JSON.parse(s) as JsonValue;
-        if (!isJsonValue(parsed)) return null;
+        if (!isJsonValue(parsed)) return undefined;
         return JSON.parse(canonicalizeJson(parsed)) as Value;
       } catch {
-        return null;
+        return undefined;
       }
     },
   ],
@@ -693,7 +734,7 @@ const INTEGER_RESULT_GUARDS = new Set([
   "ceil.float",
 ]);
 
-function evalCall(call: FunctionCall, args: Value[], env: TypeEnv): Value {
+function evalCall(call: FunctionCall, args: Value[], env: TypeEnv): EvalResult {
   // Most calls are pre-resolved by type inference; the fallback covers
   // explicit `null`-literal arguments where overloads disagreed on
   // result type. Both overloads of `abs`/`round` etc. have the same
@@ -715,14 +756,32 @@ function evalCall(call: FunctionCall, args: Value[], env: TypeEnv): Value {
     overload.params[i] === "value" && arg !== null ? (scrubNonFiniteForJson(arg) as Value) : arg,
   );
 
-  // NULL-propagating arity-agnostic guard: any null arg → null. This runs
-  // after primitive-to-value scrubbing so non-finite floats lifted into a
+  // NULL propagation, for the builtins that propagate. Two things narrow it,
+  // both from §8.
+  //
+  // The overload's own `strict` bit, rather than a blanket rule, because a
+  // non-strict builtin has something to say about a null: `type_of(null)` is
+  // `"null"`, not null.
+  //
+  // And only for a *primitive* parameter. A `value` slot accepts null as one of
+  // the shapes it holds, so a null there is an argument rather than an absence,
+  // and propagating it would disagree with the SQL backends, which lift it to a
+  // JSON null and hand it to the function. That divergence is what
+  // `has_key(null, "x")` exposed: sqlite answered false while the interpreter
+  // propagated.
+  //
+  // Runs after primitive-to-value scrubbing so non-finite floats lifted into a
   // value slot collapse the same way they do on SQL backends.
-  if (liftedArgs.some((a) => a === null)) return null;
+  if (
+    overload.nulls.strict &&
+    liftedArgs.some((a, i) => a === null && overload.params[i] !== "value")
+  ) {
+    return null;
+  }
 
   const result = impl(liftedArgs);
   return INTEGER_RESULT_GUARDS.has(overload.key) && typeof result === "number"
-    ? safeIntegerOrNull(result)
+    ? safeIntegerOrUndef(result)
     : result;
 }
 

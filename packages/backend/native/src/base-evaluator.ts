@@ -324,7 +324,13 @@ export abstract class BaseDatalogEvaluator {
   protected enumerateRule(rule: Rule, plan: RulePlan): Value[][] {
     const out: Value[][] = [];
     for (const sub of enumerate(plan.steps, 0, new Map(), plan.env, this.relations)) {
-      out.push(rule.head.args.map((arg) => evalTerm(arg, sub, plan.env)));
+      const tuple = rule.head.args.map((arg) => evalTerm(arg, sub, plan.env));
+      // A tuple is derived only where every head expression has a value. The
+      // runtime marker decides it, so the static position list this used to
+      // compute is gone: `undefined` is undefined and `null` is the null value,
+      // with no need to ask which one a NULL was meant to be.
+      if (tuple.some((v) => v === undefined)) continue;
+      out.push(tuple as Value[]);
     }
     return out;
   }
@@ -337,11 +343,20 @@ export abstract class BaseDatalogEvaluator {
     const groups = new Map<string, { key: Value[]; subs: Substitution[] }>();
     for (const sub of enumerate(plan.steps, 0, new Map(), plan.env, this.relations)) {
       const key: Value[] = [];
+      // A grouping position with no value cannot key a group, so the row does
+      // not reach one.
+      let keyed = true;
       for (const arg of rule.head.args) {
         if (!containsAggregate(arg)) {
-          key.push(evalTerm(arg, sub, plan.env));
+          const v = evalTerm(arg, sub, plan.env);
+          if (v === undefined) {
+            keyed = false;
+            break;
+          }
+          key.push(v);
         }
       }
+      if (!keyed) continue;
       const k = rowKey(key);
       const g = groups.get(k);
       if (g) {
@@ -367,35 +382,46 @@ export abstract class BaseDatalogEvaluator {
       // `total(G, count(*)) :- p(_), G = "hello".`
       const sub: Substitution = new Map();
       for (const [name, expr] of literalBindings(rule)) {
-        sub.set(name, evalTerm(expr, new Map(), env));
+        const v = evalTerm(expr, new Map(), env);
+        if (v === undefined) return [];
+        sub.set(name, v);
       }
       const tuple = rule.head.args.map((arg) =>
         containsAggregate(arg)
           ? evalTerm(arg, sub, env, (agg) => evalAggregate(agg, [], env))
           : evalTerm(arg, sub, env),
       );
-      return [tuple];
+      // An empty-group row is still a row, so it too needs every position to
+      // have a value.
+      if (tuple.some((v) => v === undefined)) return [];
+      return [tuple as Value[]];
     }
 
     const results: Value[][] = [];
     for (const { key, subs } of groups.values()) {
       const tuple: Value[] = [];
       let keyIdx = 0;
+      // An aggregate position with no value withholds *this* group's row, not
+      // every group's.
+      let complete = true;
       for (const arg of rule.head.args) {
         if (containsAggregate(arg)) {
           // Ordinary variables inside an aggregate expression are grouping
           // variables (the analyzer enforces it), so they hold one value
           // across the group and `subs[0]` speaks for all of them.
-          tuple.push(
-            evalTerm(arg, subs[0] ?? new Map(), plan.env, (agg) =>
-              evalAggregate(agg, subs, plan.env),
-            ),
+          const v = evalTerm(arg, subs[0] ?? new Map(), plan.env, (agg) =>
+            evalAggregate(agg, subs, plan.env),
           );
+          if (v === undefined) {
+            complete = false;
+            break;
+          }
+          tuple.push(v);
         } else {
           tuple.push(key[keyIdx++]!);
         }
       }
-      results.push(tuple);
+      if (complete) results.push(tuple);
     }
     return results;
   }

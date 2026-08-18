@@ -154,10 +154,11 @@ describe("translator", () => {
     expect(sql).toContain('GROUP BY __b0."g"');
   });
 
-  test("a join against an ungrouped aggregate stays null-aware", () => {
-    // `sum` over an empty relation is NULL even though `v` is non-null, because
-    // an ungrouped aggregate emits a row regardless. Taking the plain `=` here
-    // dropped the NULL-NULL match. See doc/design/nullness-tracking.md §8.
+  test("a join against an ungrouped aggregate takes the plain `=`", () => {
+    // An ungrouped aggregate emits its row over an empty relation, but `sum`
+    // folds that group to 0 rather than NULL (null-as-a-value.md §7), so the
+    // column is non-null. One non-null side is enough: a NULL on the other side
+    // matches nothing under either spelling.
     const result = translateSource(`
       input predicate s(v: integer).
       input predicate other(k: string, w: integer?).
@@ -165,7 +166,8 @@ describe("translator", () => {
       j(K) :- tot(X), other(K, X).
     `);
     const sql = norm(result.createViews.find((v) => v.includes('VIEW "j"'))!);
-    expect(sql).toContain('__b0."col1" IS NOT DISTINCT FROM __b1."w"');
+    expect(sql).toContain('__b0."col1" = __b1."w"');
+    expect(sql).not.toContain("IS NOT DISTINCT FROM");
   });
 
   test("generates WHERE for constants in rule body", () => {
@@ -730,7 +732,13 @@ describe("translator", () => {
     expect(sql).toContain("- 1");
     // P groups; the aggregate expression must not appear in GROUP BY.
     expect(sql).toContain("GROUP BY");
-    expect(sql.slice(sql.indexOf("GROUP BY"))).not.toContain("COUNT(");
+    // Only the GROUP BY *list*, not everything after it: a head argument
+    // containing an aggregate now also carries a HAVING definedness guard, and
+    // `count(*) - 1` can leave the integer domain, so COUNT legitimately appears
+    // there. What this pins is that the aggregate is not a grouping key.
+    const afterGroupBy = sql.slice(sql.indexOf("GROUP BY"));
+    const groupByList = afterGroupBy.split(" HAVING ")[0]!;
+    expect(groupByList).not.toContain("COUNT(");
   });
 
   test("an ungrouped aggregate expression emits no GROUP BY", () => {
@@ -743,14 +751,33 @@ describe("translator", () => {
     expect(sql).not.toContain("GROUP BY");
   });
 
-  test("treats count(_0) as a normal user variable aggregate", () => {
+  test("count over a variable emits COUNT(*), the answers coinciding", () => {
+    // `_0` is an ordinary user variable, not the `count(*)` wildcard, and this
+    // used to be pinned by the emitted SQL differing. It no longer differs, and
+    // that is correct rather than a regression: a variable always has a value, so
+    // counting the rows where it does is counting the rows, and §11.2 counts a
+    // null among them. `COUNT(col)` would have skipped the nulls.
     const result = translateSource(`
       input predicate parent(name: string, child: string).
       total(count(_0)) :- parent(_0, _).
     `);
     const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("COUNT(");
+    expect(sql).toContain("COUNT(*)");
+    expect(sql).not.toContain("GROUP BY");
+  });
+
+  test("but count over a partial expression emits COUNT(expr), skipping the absences", () => {
+    // Where the distinction is observable. The partial expression sits *inside*
+    // the aggregate: binding it first (`Z = 10 / X, count(Z)`) would attract the
+    // rule-level definedness guard, and by the time the aggregate ran the
+    // undefined rows would already be gone, making `COUNT(*)` right again.
+    const result = translateSource(`
+      input predicate n(x: integer).
+      total(count(10 / X)) :- n(X).
+    `);
+    const sql = norm(result.createViews[0]!);
     expect(sql).not.toContain("COUNT(*)");
+    expect(sql).toContain("COUNT(");
   });
 
   test("generates SUM aggregate", () => {
@@ -1391,20 +1418,23 @@ path(X, Y) :- path(X, Z), path(Z, Y).
     expect(err.end).toBeGreaterThan(ruleStart);
   });
 
-  test("function call with a `null` arg falls back to a first-arity-match overload", () => {
-    // `null` has no static type, so `resolveCall` can't pick a unique
-    // overload during type inference (for `abs`, the integer and float
-    // overloads disagree on result type). The translator's fallback
-    // path then picks the first arity-matching overload off the
-    // registry and emits its SQL — every viable overload produces
-    // semantically-equivalent SQL on a NULL input, so the choice is
-    // safe. Confirms that path doesn't crash and produces ABS(NULL).
-    const result = translateSource(`
-      input predicate p(x: integer).
-      r(X) :- p(X), X = abs(null).
-    `);
-    const sql = norm(result.createViews[0]!);
-    expect(sql).toContain("ABS(NULL)");
+  test("a `null` argument to a numeric builtin is a type error, not a fallback", () => {
+    // This used to reach a fallback: `null` had no static type, so `resolveCall`
+    // could not pick a unique overload for `abs`, and the translator emitted the
+    // first arity match. `null` has a type now, so resolution simply fails and
+    // says why.
+    //
+    // That is §5's hybrid position arriving for free: arithmetic on a nullable
+    // operand wants narrowing, and a *statically* null operand can never be
+    // narrowed, so rejecting it is the whole of the rule at that end. It also
+    // retires the unresolved-overload branch that made `canBeUndefined`
+    // conservative and split the backends (§15.9).
+    expect(() =>
+      translateSource(`
+        input predicate p(x: integer).
+        r(X) :- p(X), X = abs(null).
+      `),
+    ).toThrow(/Function 'abs' expects argument 1 to have type float or integer; got 'null'/);
   });
 
   test("to_string emits CAST AS TEXT for numeric inputs", () => {
@@ -1491,7 +1521,7 @@ path(X, Y) :- path(X, Z), path(Z, Y).
     expect(sql).toContain("AS jsonb");
   });
 
-  test("Regression: Postgres parse_json rejects JSON null and non-finite numeric leaves", () => {
+  test("Regression: Postgres parse_json rejects non-finite numeric leaves but keeps a JSON null", () => {
     // Spec §2.9 collapses JSON null leaves to SQL NULL and rejects JSON
     // numbers that cannot round-trip through Datamog's finite JS-number
     // runtime. Postgres jsonb accepts both `null` and huge numeric leaves
@@ -1502,17 +1532,22 @@ path(X, Y) :- path(X, Z), path(Z, Y).
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("WITH RECURSIVE __datamog_parse_json");
-    expect(sql).toContain("jsonb_typeof(j) <> 'null'");
+    // No longer excluded: a top-level JSON null parses to the null value and
+    // derives a row carrying it, so only malformed input and non-finite leaves
+    // are rejected. See doc/design/null-as-a-value.md §8.
+    expect(sql).not.toContain("jsonb_typeof(j) <> 'null'");
     expect(sql).toContain("jsonb_array_elements");
     expect(sql).toContain("jsonb_each");
     expect(sql).toContain("pg_input_is_valid(v #>> '{}', 'double precision')");
   });
 
-  test("Regression: Postgres value extraction collapses JSON null leaves", () => {
-    // JSON null is preserved inside compound values, but once a subscript
-    // or iterator exposes that leaf as a value expression it must become
-    // SQL NULL. Otherwise equality/function calls observe a Postgres-only
-    // jsonb null value that native and SQLite have already collapsed.
+  test("Postgres value extraction preserves JSON null leaves", () => {
+    // The inverse of what this used to pin. A subscript or iterator that
+    // exposes a JSON null leaf must *keep* it as a jsonb `'null'`, because SQL
+    // NULL in a `value`-typed expression is reserved for "no value": that is what
+    // lets a missing key withhold its row while a present-but-null key derives
+    // one. Collapsing them is what made the two indistinguishable. See
+    // doc/design/null-as-a-value.md §8 and §9.3.
     const result = translateSource(`
       from_subscript(V) :- J = [null], V = J[0].
       from_iter(V) :- J = [null], array_element(J, 0, V).
@@ -1521,11 +1556,15 @@ path(X, Y) :- path(X, Z), path(Z, Y).
       present(B) :- J = [null], B = has_key(J[0], "x").
     `);
     const sql = result.createViews.map(norm).join("\n");
-    expect(sql).toContain("NULLIF((jsonb_build_array(NULL) -> CAST(0 AS INTEGER)), 'null'::jsonb)");
-    expect(sql).toMatch(/NULLIF\(__b\d+\._v, 'null'::jsonb\)/);
-    expect(sql).toContain("NULLIF(jsonb_typeof(");
-    expect(sql).toContain("WHEN jsonb_typeof(");
-    expect(sql).toContain("= 'null' THEN NULL");
+    // No collapse at the subscript, at the iterator, or in `type_of`.
+    expect(sql).not.toContain("'null'::jsonb");
+    expect(sql).not.toContain("NULLIF(jsonb_typeof(");
+    expect(sql).toContain(
+      "jsonb_typeof((CASE WHEN (0) < 0 THEN NULL ELSE (jsonb_build_array(NULL)",
+    );
+    // The subscript can still be undefined, out of range or wrong-shape, so the
+    // head carries a definedness guard.
+    expect(sql).toContain("IS NOT NULL");
   });
 
   test("parse_json on SQLite gates json() on json_valid", () => {
@@ -1840,11 +1879,12 @@ describe("translator (sqlite dialect)", () => {
     // native evaluator and Postgres's C-collated jsonb text ordering.
     expect(sql).toMatch(/ORDER BY/i);
     expect(sql).toContain("COLLATE BINARY");
-    // FILTER skips SQL NULL inputs; outer NULLIF maps an all-NULL
-    // group's `'[]'` back to SQL NULL so list returns NULL on empty
-    // groups, matching concat and the rest of the family.
+    // FILTER skips SQL NULL inputs. There is deliberately no outer NULLIF: an
+    // empty or all-null group keeps the `'[]'` that JSON_GROUP_ARRAY returns,
+    // which is append's identity (§7). The wrapper used to map it back to SQL
+    // NULL, which null.md §8 recorded as a wart.
     expect(sql).toMatch(/FILTER \(WHERE/i);
-    expect(sql).toMatch(/NULLIF\(/i);
+    expect(sql).not.toMatch(/NULLIF\(JSON_GROUP_ARRAY/i);
   });
 
   test("generates JSON_GROUP_ARRAY with json_quote for string list (sqlite)", () => {

@@ -11,6 +11,7 @@ import type {
   Filter,
   HeadTerm,
   Literal,
+  PartialityContext,
   PrimitiveType,
   Rule,
   TypedProgram,
@@ -19,14 +20,17 @@ import type {
 import {
   BUILTIN_BODY_ATOMS,
   assertNever,
+  canBeUndefined,
   allVarsBound as coreAllVarsBound,
   chooseEqualityBinding as coreChooseEqualityBinding,
   equalityBindingCandidates,
   inferTermType,
   isAnonymousVar,
+  rebuildVarTypes,
 } from "datamog-core";
 import { type JsonValue, canonicalizeJson } from "datamog-engine";
 import {
+  type EvalResult,
   type Substitution,
   type TypeEnv,
   type Value,
@@ -101,6 +105,16 @@ export type Step =
   | { kind: "bindRange"; variable: string; low: Expression; high: Expression }
   | { kind: "filterEq"; left: Expression; right: Expression }
   | { kind: "filter"; expr: Expression; negated: boolean }
+  /**
+   * `expr` must denote a value for the row to survive. Emitted wherever a
+   * conjunct *uses* an expression's value, per doc/design/null-as-a-value.md §1.
+   *
+   * A separate step rather than a flag on the using step, because at runtime the
+   * `null` value and an undefined are the same JS `null`, so which one a NULL is
+   * has to be decided statically, from the operations the expression contains.
+   * The planner knows that; the evaluator does not.
+   */
+  | { kind: "defined"; expr: Expression }
   | {
       kind: "filterRange";
       expr: Expression;
@@ -150,6 +164,17 @@ export function planRule(rule: Rule, analyzed: TypedProgram): RulePlan {
   const steps: Step[] = [];
   const bound = new Set<string>();
   const body = hoistAtomArgs(rule.body);
+  // Definedness is decided statically (see the `defined` step), so the planner
+  // needs the same overload and type information the translator uses.
+  const varTypes = rebuildVarTypes(rule.body, analyzed.columnTypes);
+  const undefCtx: PartialityContext = {
+    overloads: analyzed.functionOverloads,
+    typeOf: (e) => inferTermType(e, varTypes, analyzed.columnTypes),
+  };
+  /** Guard `expr` if it can fail to denote a value. */
+  const guard = (expr: Expression): void => {
+    if (canBeUndefined(expr, undefCtx)) steps.push({ kind: "defined", expr });
+  };
 
   for (const elem of body) {
     if (elem.$type === "Literal" && !elem.negated && !BUILTIN_BODY_ATOMS.has(elem.predicate)) {
@@ -174,6 +199,10 @@ export function planRule(rule: Rule, analyzed: TypedProgram): RulePlan {
       if (elem.$type === "Equality") {
         const binding = chooseEqualityBinding(elem, bound);
         if (binding) {
+          // `Y = 10 / X` is a conjunct: it does not hold where the right side
+          // has no value, so the row leaves before `Y` is bound to a NULL that
+          // means "undefined" rather than "the null value".
+          guard(binding.expr);
           steps.push({ kind: "bindEq", variable: binding.variable, expr: binding.expr });
           bound.add(binding.variable);
           pending.splice(p, 1);
@@ -244,6 +273,10 @@ export function planRule(rule: Rule, analyzed: TypedProgram): RulePlan {
         steps.push({ kind: "filterNot", atom: elem });
         break;
       case "Equality":
+        // Equality holds only of two defined values, which is also what makes a
+        // hoisted atom argument match nothing when it is undefined.
+        guard(elem.left);
+        guard(elem.expr);
         steps.push({ kind: "filterEq", left: elem.left, right: elem.expr });
         break;
       case "Filter":
@@ -301,7 +334,7 @@ export function matchAtom(
       // computed arg, but negation safety guarantees its variables are
       // already bound, so evaluating left to right is sufficient.
       const expected = evalTerm(arg, next, env);
-      if (!logicalEq(expected, val)) return null;
+      if (expected === undefined || !logicalEq(expected, val)) return null;
     }
   }
   return next;
@@ -482,15 +515,25 @@ function joinTypesWithValueLift(a: PrimitiveType, b: PrimitiveType): PrimitiveTy
 }
 
 /** Apply an aggregate across the group of substitutions that share a key. */
-export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: TypeEnv): Value {
+export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: TypeEnv): EvalResult {
   // `count(*)` matches SQL's `COUNT(*)`: counts rows regardless of value.
   if (agg.func === "count" && agg.arg.$type === "Wildcard") {
     return subs.length;
   }
-  const values: Value[] = subs.map((s) => evalTerm(agg.arg, s, env));
+  // A row whose aggregate argument has no value contributes to no aggregate
+  // mentioning it, and still counts for `count(*)` above. Same disposition the
+  // NULL filtering below gives, and stated separately because the two markers
+  // mean different things (§7).
+  const values: Value[] = subs
+    .map((s) => evalTerm(agg.arg, s, env))
+    .filter((v): v is Value => v !== undefined);
   switch (agg.func) {
     case "count":
-      return values.filter((v) => v !== null).length;
+      // §11.2: `count` counts values, and `null` is a value. `values` has already
+      // had the rows whose argument had *no* value filtered out, so this is
+      // exactly "rows where the argument is defined". Diverges from SQL's
+      // COUNT(col) deliberately; the emit compensates.
+      return values.length;
     case "sum": {
       if (inferTermType(agg.arg, env.vars, env.columns) === "integer") {
         let positive = 0n;
@@ -503,8 +546,11 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
           else negative -= n;
           hasAny = true;
         }
-        if (!hasAny) return null;
-        if (positive > 9007199254740991n || negative > 9007199254740991n) return null;
+        // `+`'s identity, per §7: an empty sum is 0, not an absence.
+        if (!hasAny) return 0;
+        // Leaving the integer domain has no value, so the tuple is withheld. The
+        // SQL side says the same thing with a HAVING guard (§15.12).
+        if (positive > 9007199254740991n || negative > 9007199254740991n) return undefined;
         return Number(positive - negative);
       }
       let total = 0;
@@ -514,7 +560,7 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
         total += v as number;
         hasAny = true;
       }
-      return hasAny ? total : null;
+      return hasAny ? total : 0;
     }
     case "avg": {
       let total = 0;
@@ -524,21 +570,25 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
         total += v as number;
         n++;
       }
-      return n === 0 ? null : total / n;
+      // An average over nothing would be 0/0, so there is no value and the tuple
+      // is withheld (§7).
+      return n === 0 ? undefined : total / n;
     }
     case "min": {
-      let best: Value = null;
+      // No identity: a minimum over nothing would need an infinity, which is not
+      // a value here, so the tuple is withheld (§7).
+      let best: Value | undefined;
       for (const v of values) {
         if (v === null) continue;
-        if (best === null || comparePrimitive(v, best) < 0) best = v;
+        if (best === undefined || comparePrimitive(v, best) < 0) best = v;
       }
       return best;
     }
     case "max": {
-      let best: Value = null;
+      let best: Value | undefined;
       for (const v of values) {
         if (v === null) continue;
-        if (best === null || comparePrimitive(v, best) > 0) best = v;
+        if (best === undefined || comparePrimitive(v, best) > 0) best = v;
       }
       return best;
     }
@@ -549,7 +599,8 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
       // primitive `<`/`>` comparator picks the natural order: numeric
       // for numbers, lex for strings, false-before-true for booleans.
       const nonNull = values.filter((v) => v !== null);
-      if (nonNull.length === 0) return null;
+      // Concatenation's identity, per §7.
+      if (nonNull.length === 0) return "";
       // For value args, render each value as canonical JSON text so
       // the per-element string matches what the SQL backends emit
       // (their GROUP_CONCAT / STRING_AGG cast already sees canonical
@@ -566,9 +617,10 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
       return sorted.map((v) => String(v)).join(",");
     }
     case "list": {
-      // `list` collects values into a json array. Skip SQL NULLs and
-      // return null on an all-null / empty group to match `concat`
-      // and the SQL FILTER + NULLIF pair.
+      // `list` collects values into a json array. Skip SQL NULLs; an empty or
+      // all-null group yields `[]`, append's identity, per §7. It used to yield
+      // null, which null.md §8 recorded as a wart: `[]` is what a reader expects
+      // and what makes `length(list(V))` mean something over an empty group.
       //
       // Sort key depends on argument shape:
       //   - For value arguments (objects / arrays), sort by
@@ -582,7 +634,7 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
       //     strings get lex, booleans get false-before-true. Same
       //     convention as `concat`.
       const nonNull = values.filter((v) => v !== null);
-      if (nonNull.length === 0) return null;
+      if (nonNull.length === 0) return [];
       const argType = inferTermType(agg.arg, env.vars, env.columns);
       let sorted: Value[];
       if (argType === "value") {
@@ -649,8 +701,16 @@ export function* enumerate(
       }
       return;
     }
+    case "defined": {
+      if (evalTerm(step.expr, sub, env) === undefined) return;
+      yield* enumerate(steps, i + 1, sub, env, relations, deltaOverride);
+      return;
+    }
     case "bindEq": {
       const val = evalTerm(step.expr, sub, env);
+      // `Y = e` is a conjunct, and it does not hold where `e` has no value, so
+      // the row leaves rather than binding `Y` to an absence.
+      if (val === undefined) return;
       const next = new Map(sub);
       next.set(step.variable, val);
       yield* enumerate(steps, i + 1, next, env, relations, deltaOverride);
@@ -659,7 +719,7 @@ export function* enumerate(
     case "bindRange": {
       const lo = evalTerm(step.low, sub, env);
       const hi = evalTerm(step.high, sub, env);
-      if (lo === null || hi === null) return;
+      if (lo === undefined || hi === undefined || lo === null || hi === null) return;
       const loN = lo as number;
       const hiN = hi as number;
       if (!Number.isInteger(loN) || !Number.isInteger(hiN)) return;
@@ -689,7 +749,7 @@ export function* enumerate(
       // repeated variable and a spelled-out `=` denote the same join.
       const l = evalTerm(step.left, sub, env);
       const r = evalTerm(step.right, sub, env);
-      if (!logicalEq(l, r)) return;
+      if (l === undefined || r === undefined || !logicalEq(l, r)) return;
       yield* enumerate(steps, i + 1, sub, env, relations, deltaOverride);
       return;
     }
@@ -796,5 +856,8 @@ function bindJsonSlot(
     return logicalEq(prev, value) ? sub : null;
   }
   const expected = evalTerm(arg, sub, env);
+  // An atom argument with no value matches nothing, so `p(1 / 0)` never holds
+  // whatever `p` contains (§1).
+  if (expected === undefined) return null;
   return logicalEq(expected, value) ? sub : null;
 }

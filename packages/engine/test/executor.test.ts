@@ -255,16 +255,19 @@ describe("DatamogExecutor", () => {
     const backend = await createSqlite();
     const executor = new DatamogExecutor(backend);
     try {
+      // The nulls come from the literal, not from `1 / X`. A partial operation
+      // no longer produces one: it produces no value, so the row is withheld
+      // (doc/design/null-as-a-value.md §1). These facts are exactly what
+      // `Y = 1 / X` used to yield for `t = {0, 1, 2}`.
       const results = await executor.execute(`
-        t(0). t(1). t(2).
+        nullable(0, null). nullable(1, 1). nullable(2, 0).
         maybe_null(X, Y, IsNull, Below) :-
-          t(X),
-          Y = 1 / X,
+          nullable(X, Y),
           IsNull = (Y = null),
           Below = (Y < 1).
 
-        filter_logical(X) :- t(X), Y = 1 / X, Y = null.
-        neq_logical(X)    :- t(X), Y = 1 / X, Y <> null.
+        filter_logical(X) :- nullable(X, Y), Y = null.
+        neq_logical(X)    :- nullable(X, Y), Y <> null.
         ?- maybe_null(X, Y, IsNull, Below).
         output predicate fl(X) :- filter_logical(X).
         output predicate nl(X) :- neq_logical(X).
@@ -287,9 +290,7 @@ describe("DatamogExecutor", () => {
     // variable joins NULL to NULL, both agreeing with the `=` operator.
     // See doc/design/null.md §4.
     const program = `
-      source(0).
-      source(1).
-      maybe(X, Y) :- source(X), Y = 1 / X.
+      maybe(0, null). maybe(1, 1).
       literal_match(X) :- maybe(X, null).
       self_join(X1, X2) :- maybe(X1, Y), maybe(X2, Y).
       spelled(X1, X2) :- maybe(X1, Y1), maybe(X2, Y2), Y1 = Y2.
@@ -314,20 +315,27 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("all-NULL aggregate groups still emit SQL aggregate results", async () => {
+  test("an aggregate whose argument is never defined still emits its group", async () => {
+    // The group exists because `vals` has a row; the aggregate argument has no
+    // value on any of them. A row whose aggregate argument is undefined
+    // contributes to no aggregate that mentions it and still counts for
+    // `count(*)`, which is what this pins. Previously spelled with a NULL
+    // argument, which a partial operation no longer produces.
     const program = `
       g(1).
       g(2).
-      vals(G, X) :- g(G), X = 1 / 0.
-      agg(G, sum(X), avg(X), min(X), max(X), concat(X), count(X), count(*)) :- vals(G, X).
+      vals(G, 1) :- g(G).
+      agg(G, sum(X / 0), avg(X / 0), min(X / 0), max(X / 0), concat(X / 0), count(X / 0), count(*))
+        :- vals(G, X).
       ?- agg(G, S, A, Mi, Ma, C, Cn, Star).
     `;
 
     for (const results of await executeOnSqliteAndNative(program)) {
-      expect(sortRows(results[0]!)).toEqual([
-        { G: 1, S: null, A: null, Mi: null, Ma: null, C: null, Cn: 0, Star: 1 },
-        { G: 2, S: null, A: null, Mi: null, Ma: null, C: null, Cn: 0, Star: 1 },
-      ]);
+      // The head mixes aggregates that have an identity with ones that do not, so
+      // §7 withholds the whole tuple: `avg`, `min` and `max` have no value over a
+      // group with no defined contributions, and one undefined head expression is
+      // enough. The identity cases are checked on their own below.
+      expect(results[0]!).toEqual([]);
     }
   });
 
@@ -344,13 +352,14 @@ describe("DatamogExecutor", () => {
   });
 
   test("an inferred-nullable join still matches NULL to NULL across backends", async () => {
-    // null.md §4's own example. Both columns get their NULL from a division,
-    // not from a declaration, so the join lowering has to be driven by the
-    // inferred nullness. If it were not, the plain `=` would drop the NULL row
-    // on SQLite and disagree with the interpreter.
+    // null.md §4's own example, with the nulls now written as literals: a
+    // division no longer produces one. The join lowering still has to be driven
+    // by the inferred nullness, since neither column is declared. If it were
+    // not, the plain `=` would drop the NULL row on SQLite and disagree with the
+    // interpreter.
     const program = `
-      p(1). p(X) :- X = 1 / 0.
-      q(2). q(X) :- X = 1 / 0.
+      p(1). p(null).
+      q(2). q(null).
       output predicate shared(X) :- p(X), q(X).
       ?- shared(X).
     `;
@@ -364,8 +373,8 @@ describe("DatamogExecutor", () => {
     // either way, so the guarded program agrees with what the null-aware form
     // would have produced.
     const program = `
-      p(1). p(2). p(X) :- X = 1 / 0.
-      q(2). q(3). q(X) :- X = 1 / 0.
+      p(1). p(2). p(null).
+      q(2). q(3). q(null).
       output predicate shared(X) :- p(X), q(X), X <> null.
       ?- shared(X).
     `;
@@ -380,7 +389,7 @@ describe("DatamogExecutor", () => {
     // facts, which is enough to exercise the lowering choice.
     const program = `
       input predicate t(a: integer?).
-      p(1). p(X) :- X = 1 / 0.
+      p(1). p(null).
       output predicate both(X) :- p(X), not t(X).
       ?- both(X).
     `;
@@ -439,7 +448,7 @@ describe("DatamogExecutor", () => {
         "obj": {"x": 1},
         "n": null
       }.
-      result(S, I, F, B, LenArr, LenObj, LenStr, Ts, Ti, Tf, Tb, Ta, To, Tn, BadS, BadLen) :-
+      result(S, I, F, B, LenArr, LenObj, LenStr, Ts, Ti, Tf, Tb, Ta, To, Tn) :-
         data(J),
         S = as_string(J["s"]),
         I = as_integer(J["i"]),
@@ -454,10 +463,12 @@ describe("DatamogExecutor", () => {
         Tb = type_of(J["b"]),
         Ta = type_of(J["arr"]),
         To = type_of(J["obj"]),
-        Tn = type_of(J["n"]),
-        BadS = as_string(J["i"]),
-        BadLen = length(J["i"]).
-      ?- result(S, I, F, B, LenArr, LenObj, LenStr, Ts, Ti, Tf, Tb, Ta, To, Tn, BadS, BadLen).
+        Tn = type_of(J["n"]).
+      bad_s(X) :- data(J), X = as_string(J["i"]).
+      bad_len(X) :- data(J), X = length(J["i"]).
+      ?- result(S, I, F, B, LenArr, LenObj, LenStr, Ts, Ti, Tf, Tb, Ta, To, Tn).
+      output predicate bs(X) :- bad_s(X).
+      output predicate bl(X) :- bad_len(X).
     `;
 
     for (const results of await executeOnSqliteAndNative(program)) {
@@ -476,11 +487,16 @@ describe("DatamogExecutor", () => {
           Tb: "boolean",
           Ta: "array",
           To: "object",
-          Tn: null,
-          BadS: null,
-          BadLen: null,
+          // `"n"` is present and holds a JSON null, so `type_of` reports its
+          // type rather than collapsing to NULL. This read `null` before §8.
+          Tn: "null",
         },
       ]);
+      // A wrong-shape projection and a wrong-shape `length` have no value, so
+      // their rules derive nothing. Split out of the rule above, whose fourteen
+      // sound columns would otherwise be withheld along with them.
+      expect(results[1]!).toEqual([]);
+      expect(results[2]!).toEqual([]);
     }
   });
 
@@ -524,7 +540,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("Regression: NULL subscript / slice indices propagate to NULL on SQL backends", async () => {
+  test("Regression: an undefined subscript / slice index withholds the row on SQL backends", async () => {
     // §5.4 of the spec promises NULL propagation through subscript and
     // slice — `S[NULL]`, `S[NULL:j]`, `S[i:NULL]` all yield NULL. The
     // native evaluator already did this. The translator wraps every
@@ -546,9 +562,11 @@ describe("DatamogExecutor", () => {
         output predicate ss(W, S) :- slice_start(W, S).
         output predicate se(W, S) :- slice_end(W, S).
       `);
-      expect(results[0]!.rows).toEqual([{ W: "hello", S: null }]);
-      expect(results[1]!.rows).toEqual([{ W: "hello", S: null }]);
-      expect(results[2]!.rows).toEqual([{ W: "hello", S: null }]);
+      // `I = 1 / 0` is a conjunct over an expression with no value, so it does
+      // not hold and no row reaches the subscript at all.
+      expect(results[0]!.rows).toEqual([]);
+      expect(results[1]!.rows).toEqual([]);
+      expect(results[2]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -621,7 +639,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("Regression: negative integer index on an array `value` yields NULL on every backend", async () => {
+  test("Regression: a negative integer index on an array `value` withholds the row on every backend", async () => {
     // The SQLite dialect's `jsonSubscript` builds a JSON path by
     // string-concatenating the integer index — `'$[' || CAST(idx AS
     // TEXT) || ']'`. A runtime `-1` therefore produces the literal
@@ -650,7 +668,9 @@ describe("DatamogExecutor", () => {
         result(V) :- arr(J), idx(I), V = J[I].
         ?- result(V).
       `);
-      expect(results[0]!.rows).toEqual([{ V: null }]);
+      // Out of range on a `value`, so the subscript has no value and the head
+      // cannot be completed. Previously a NULL row.
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -848,21 +868,31 @@ describe("DatamogExecutor", () => {
     `;
 
     for (const rows of await executeOnSqliteAndNative(program)) {
-      expect(rows[0]).toEqual([{ V: null }]);
+      // `list` folds with `[]`, so a group with no contributions is `[]` (§7).
+      expect(rows[0]).toEqual([{ V: [] }]);
     }
   });
 
   test("integer arithmetic and conversion stay inside the safe-integer range", async () => {
+    // Split per position: the safe result still has to be checked, and one
+    // undefined head expression withholds the whole tuple, so putting them in
+    // one rule would only ever assert emptiness.
     const arithmetic = `
-      arithmetic(Safe, Add, Sub, Mul) :-
-        Safe = 9007199254740990 + 1,
-        Add = 9007199254740991 + 1,
-        Sub = -9007199254740991 - 1,
-        Mul = 94906266 * 94906266.
-      ?- arithmetic(Safe, Add, Sub, Mul).
+      safe(Safe) :- Safe = 9007199254740990 + 1.
+      over_add(X) :- X = 9007199254740991 + 1.
+      over_sub(X) :- X = -9007199254740991 - 1.
+      over_mul(X) :- X = 94906266 * 94906266.
+      ?- safe(Safe).
+      output predicate a(X) :- over_add(X).
+      output predicate b(X) :- over_sub(X).
+      output predicate c(X) :- over_mul(X).
     `;
     for (const rows of await executeOnSqliteAndNative(arithmetic)) {
-      expect(rows[0]).toEqual([{ Safe: Number.MAX_SAFE_INTEGER, Add: null, Sub: null, Mul: null }]);
+      expect(rows[0]).toEqual([{ Safe: Number.MAX_SAFE_INTEGER }]);
+      // Each leaves the integer domain, so each derives nothing.
+      expect(rows[1]).toEqual([]);
+      expect(rows[2]).toEqual([]);
+      expect(rows[3]).toEqual([]);
     }
 
     const intermediate = `
@@ -870,17 +900,23 @@ describe("DatamogExecutor", () => {
       ?- result(X).
     `;
     for (const rows of await executeOnSqliteAndNative(intermediate)) {
-      expect(rows[0]).toEqual([{ X: null }]);
+      // The intermediate leaves the integer domain, so the whole expression has
+      // no value and no row is derived. Previously a NULL row.
+      expect(rows[0]).toEqual([]);
     }
 
+    // Split per position, since one undefined head expression withholds the whole
+    // tuple and the sound conversion still has to be checked.
     const conversion = `
-      converted(Safe, Overflow) :-
-        Safe = to_integer("9007199254740991"),
-        Overflow = to_integer("9007199254740992").
-      ?- converted(Safe, Overflow).
+      converted(Safe) :- Safe = to_integer("9007199254740991").
+      over(X) :- X = to_integer("9007199254740992").
+      ?- converted(Safe).
+      output predicate o(X) :- over(X).
     `;
     for (const rows of await executeOnSqliteAndNative(conversion)) {
-      expect(rows[0]).toEqual([{ Safe: Number.MAX_SAFE_INTEGER, Overflow: null }]);
+      expect(rows[0]).toEqual([{ Safe: Number.MAX_SAFE_INTEGER }]);
+      // Outside the integer domain, so no value and no row.
+      expect(rows[1]).toEqual([]);
     }
   });
 
@@ -899,7 +935,10 @@ describe("DatamogExecutor", () => {
       `,
     ]) {
       for (const rows of await executeOnSqliteAndNative(program)) {
-        expect(rows[0]).toEqual([{ Sum: null }]);
+        // An overflowing sum has no value, so the tuple is withheld, via a HAVING
+        // guard on the SQL side. Distinct from an *empty* sum, which is 0: the
+        // emit tells those apart deliberately (§9.4).
+        expect(rows[0]).toEqual([]);
       }
     }
 
@@ -914,7 +953,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("integer-returning builtins reject unsafe results", async () => {
+  test("integer-returning builtins withhold the row on an unsafe result", async () => {
     const program = `
       result(R, F, C, S) :-
         R = round(9007199254740992.0),
@@ -925,7 +964,9 @@ describe("DatamogExecutor", () => {
     `;
 
     for (const rows of await executeOnSqliteAndNative(program)) {
-      expect(rows[0]).toEqual([{ R: null, F: null, C: null, S: null }]);
+      // Each of the four leaves the integer domain, so each is undefined and
+      // the rule derives nothing. Previously one row of four NULLs.
+      expect(rows[0]).toEqual([]);
     }
   });
 
@@ -964,19 +1005,25 @@ describe("DatamogExecutor", () => {
 
   test("primitive values embed into value function arguments across backends", async () => {
     const program = `
-      r(T, I, S, B, J, L) :-
+      r(T, I, S, B, J) :-
         T = type_of(5),
         I = as_integer(5),
         S = as_string("hi"),
         B = as_boolean(true),
-        J = to_json("hi"),
-        L = length(5).
-      ?- r(T, I, S, B, J, L).
+        J = to_json("hi").
+      bad(L) :- L = length(5).
+      ?- r(T, I, S, B, J).
+      output predicate l(L) :- bad(L).
     `;
     const [sqliteRows, nativeRows] = await executeOnSqliteAndNative(program);
-    const expected = [{ T: "number", I: 5, S: "hi", B: true, J: '"hi"', L: null }];
+    const expected = [{ T: "number", I: 5, S: "hi", B: true, J: '"hi"' }];
     expect(sqliteRows[0]).toEqual(expected);
     expect(nativeRows[0]).toEqual(expected);
+    // `length` of a number is a wrong-shape access, so it has no value and its
+    // rule derives nothing. Split out because it would otherwise withhold the
+    // row the five good columns are being checked on.
+    expect(sqliteRows[1]).toEqual([]);
+    expect(nativeRows[1]).toEqual([]);
   });
 
   test("Regression: non-finite floats scrub when auto-lifted into value calls", async () => {
@@ -1009,7 +1056,8 @@ describe("DatamogExecutor", () => {
       ]);
       try {
         const results = await executor.execute(program);
-        expect(results[0]!.rows).toEqual([{ T: null, S: null }]);
+        // The expression has no value, so no row is derived to carry it (§1).
+        expect(results[0]!.rows).toEqual([]);
       } finally {
         await backend.close();
       }
@@ -1077,18 +1125,22 @@ describe("DatamogExecutor", () => {
   test("has_key distinguishes missing object keys from null-valued keys", async () => {
     const program = `
       data(J) :- J = {"present": 1, "nil": null, "arr": [1]}.
-      result(Present, Nil, Missing, ArrayKey, ScalarKey, NullArg) :-
+      result(Present, Nil, Missing, ArrayKey, ScalarKey) :-
         data(J),
         Present = has_key(J, "present"),
         Nil = has_key(J, "nil"),
         Missing = has_key(J, "missing"),
         ArrayKey = has_key(J["arr"], "0"),
-        ScalarKey = has_key(J["present"], "x"),
-        NullArg = has_key(null, "x").
-      ?- result(Present, Nil, Missing, ArrayKey, ScalarKey, NullArg).
+        ScalarKey = has_key(J["present"], "x").
+      null_arg(B) :- B = has_key(null, "x").
+      ?- result(Present, Nil, Missing, ArrayKey, ScalarKey).
+      output predicate na(B) :- null_arg(B).
     `;
 
     for (const results of await executeOnSqliteAndNative(program)) {
+      // `Nil` is the case this test is named for: the key is present and holds a
+      // JSON null, so `has_key` says true, where `Missing` says false. Those two
+      // were indistinguishable before §8.
       expect(results[0]!).toEqual([
         {
           Present: true,
@@ -1096,9 +1148,14 @@ describe("DatamogExecutor", () => {
           Missing: false,
           ArrayKey: false,
           ScalarKey: false,
-          NullArg: null,
         },
       ]);
+      // A bare `null` receiver answers false rather than propagating: a `value`
+      // parameter accepts null as one of the shapes it holds, so it is an
+      // argument rather than an absence. This case had to be dropped while a bare
+      // `null` was untyped, because the unresolved overload made the translator
+      // guard where the interpreter did not; both now agree. See §15.10.
+      expect(results[1]!).toEqual([{ B: false }]);
     }
   });
 
@@ -1170,7 +1227,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("keys / values return NULL on non-object input across backends", async () => {
+  test("keys / values withhold the row on non-object input across backends", async () => {
     const program = `
       arr(P) :- P = parse_json("[1, 2, 3]").
       ks(K) :- arr(P), K = keys(P).
@@ -1182,8 +1239,9 @@ describe("DatamogExecutor", () => {
     const sqlite = await createSqlite();
     try {
       const r = await new DatamogExecutor(sqlite).execute(program);
-      expect(r[0]!.rows).toEqual([{ K: null }]);
-      expect(r[1]!.rows).toEqual([{ V: null }]);
+      // A non-object has no keys, so the expression has no value (§1).
+      expect(r[0]!.rows).toEqual([]);
+      expect(r[1]!.rows).toEqual([]);
     } finally {
       await sqlite.close();
     }
@@ -1192,8 +1250,10 @@ describe("DatamogExecutor", () => {
     const native = await createNative();
     try {
       const r = await new DatamogExecutor(native).execute(program);
-      expect(r[0]!.rows).toEqual([{ K: null }]);
-      expect(r[1]!.rows).toEqual([{ V: null }]);
+      // A non-object has no keys and no values, so neither expression has a
+      // value and neither rule derives a row (§1).
+      expect(r[0]!.rows).toEqual([]);
+      expect(r[1]!.rows).toEqual([]);
     } finally {
       await native.close();
     }
@@ -1226,7 +1286,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("parse_json on SQLite parses valid JSON and NULLs malformed input", async () => {
+  test("parse_json on SQLite parses valid JSON and withholds the row on malformed input", async () => {
     // End-to-end: a string column flows through `parse_json`, the
     // result reaches the consumer as a parsed JS value (well-formed
     // input) or NULL (malformed). The executor's `coerceJsonColumns`
@@ -1250,8 +1310,12 @@ describe("DatamogExecutor", () => {
       const byInput = new Map(results[0]!.rows.map((r) => [r.S, r.J]));
       expect(byInput.get('{"a":1,"b":2}')).toEqual({ a: 1, b: 2 });
       expect(byInput.get("[1,2,3]")).toEqual([1, 2, 3]);
+      // A bare `null` parses to the null value, so its row is present and
+      // carries null. Malformed input has no value, so its row is absent from
+      // the result and `get` returns JS undefined rather than null. The two used
+      // to be indistinguishable here, which is §8's whole point.
       expect(byInput.get("null")).toBe(null);
-      expect(byInput.get("not json")).toBe(null);
+      expect(byInput.has("not json")).toBe(false);
     } finally {
       await backend.close();
     }
@@ -1303,8 +1367,9 @@ describe("DatamogExecutor", () => {
         ?- parsed(S, J).
       `);
       const byInput = new Map(results[0]!.rows.map((r) => [r.S, r.J]));
-      expect(byInput.get("9e999")).toBe(null);
-      expect(byInput.get("[1,9e999]")).toBe(null);
+      // A non-finite numeric leaf has no value, so the row is withheld.
+      expect(byInput.has("9e999")).toBe(false);
+      expect(byInput.has("[1,9e999]")).toBe(false);
       expect(byInput.get('{"ok":1}')).toEqual({ ok: 1 });
     } finally {
       await backend.close();
@@ -1466,7 +1531,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("Regression: value slice on a NULL receiver returns NULL, not []", async () => {
+  test("Regression: value slice on a NULL receiver has no value, so withholds the row", async () => {
     // The translator dispatches json slices straight to
     // `dialect.jsonSlice(obj, s, e)` without an `IS NULL` guard on the
     // receiver. Both SQL implementations reaggregate via
@@ -1496,7 +1561,8 @@ describe("DatamogExecutor", () => {
         r(S) :- things(T), S = T["missing"][0:5].
         ?- r(S).
       `);
-      expect(results[0]!.rows).toEqual([{ S: null }]);
+      // The expression has no value, so no row is derived to carry it (§1).
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -1526,7 +1592,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("Regression: value slice on a non-array receiver returns NULL, not []", async () => {
+  test("Regression: value slice on a non-array receiver has no value, so withholds the row", async () => {
     // Native returns NULL immediately when slicing a `value` that is not
     // an array. SQLite's `json_each` also iterates object entries; the
     // old slice implementation would reaggregate zero or more object
@@ -1541,7 +1607,8 @@ describe("DatamogExecutor", () => {
         result(V) :- data(J), V = J[0:2].
         ?- result(V).
       `);
-      expect(results[0]!.rows).toEqual([{ V: null }]);
+      // The expression has no value, so no row is derived to carry it (§1).
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -1571,16 +1638,12 @@ describe("DatamogExecutor", () => {
       const sorted = [...results[0]!.rows].sort((a, b) =>
         JSON.stringify(a).localeCompare(JSON.stringify(b)),
       );
-      // Non-canonical forms must produce NULL on SQLite, matching
-      // Postgres and the native evaluator.
+      // A non-canonical form has no value on any backend, so its row is
+      // withheld rather than carrying a NULL. Only the canonical forms survive,
+      // which is still what this pins: SQLite must reject exactly what Postgres
+      // and the native evaluator reject.
       expect(sorted).toEqual(
         [
-          { R: "01", N: null },
-          { R: "00", N: null },
-          { R: "09", N: null },
-          { R: "-01", N: null },
-          { R: "-00", N: null },
-          { R: "-09", N: null },
           { R: "-1", N: -1 },
           { R: "0", N: 0 },
           { R: "1", N: 1 },
@@ -1609,7 +1672,8 @@ describe("DatamogExecutor", () => {
     try {
       const results = await new DatamogExecutor(sqlite).execute(program);
       const byInput = new Map(results[0]!.rows.map((r) => [r.R, r.N]));
-      expect(byInput.get(huge)).toBe(null);
+      // Outside the integer domain, so no value and no row.
+      expect(byInput.has(huge)).toBe(false);
       expect(byInput.get("1.5")).toBe(1.5);
     } finally {
       await sqlite.close();
@@ -1620,7 +1684,8 @@ describe("DatamogExecutor", () => {
     try {
       const results = await new DatamogExecutor(native).execute(program);
       const byInput = new Map(results[0]!.rows.map((r) => [r.R, r.N]));
-      expect(byInput.get(huge)).toBe(null);
+      // Outside the finite float range, so no value and no row.
+      expect(byInput.has(huge)).toBe(false);
       expect(byInput.get("1.5")).toBe(1.5);
     } finally {
       await native.close();
@@ -1692,7 +1757,7 @@ describe("DatamogExecutor", () => {
     }
   });
 
-  test("Regression: as_integer of a JSON integer outside JS safe range returns NULL on every backend", async () => {
+  test("Regression: as_integer of a JSON integer outside JS safe range withholds the row on every backend", async () => {
     // Native `as_integer.value` (`packages/backend/native/src/values.ts`)
     // rejects values outside `Number.MIN_SAFE_INTEGER` /
     // `MAX_SAFE_INTEGER` (±2^53 - 1), returning NULL — beyond that
@@ -1712,7 +1777,8 @@ describe("DatamogExecutor", () => {
         r(I) :- I = as_integer(parse_json("99999999999999999999")).
         ?- r(I).
       `);
-      expect(results[0]!.rows).toEqual([{ I: null }]);
+      // The expression has no value, so no row is derived to carry it (§1).
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -1738,11 +1804,12 @@ describe("DatamogExecutor", () => {
       output predicate ob(N) :- bad(N).
     `)) {
       expect((rows[0] as { N: number }[]).map((r) => r.N).sort((a, b) => a - b)).toEqual([-7, 3]);
-      expect(rows[1]).toEqual([{ N: null }]);
+      // round/2 out of the integer domain: undefined, so no row.
+      expect(rows[1]).toEqual([]);
     }
   });
 
-  test("Regression: as_float of a stored SQLite JSON Infinity returns NULL", async () => {
+  test("Regression: as_float of a stored SQLite JSON Infinity withholds the row", async () => {
     // Native `as_float.value` (in `packages/backend/native/src/values.ts`)
     // gates on `Number.isFinite(args[0])`, so a JSON value carrying
     // IEEE Infinity or NaN coerces to NULL. SQLite's `jsonAsFloat`
@@ -1761,13 +1828,14 @@ describe("DatamogExecutor", () => {
         r(F) :- raw(J), F = as_float(J).
         ?- r(F).
       `);
-      expect(results[0]!.rows).toEqual([{ F: null }]);
+      // The expression has no value, so no row is derived to carry it (§1).
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
   });
 
-  test("Regression: arithmetic overflow inside an array literal is NULL before construction", async () => {
+  test("Regression: arithmetic overflow inside an array literal withholds the row before construction", async () => {
     // Chained multiplications like `1e9 * 1e9 * ... * 1e9` exceed the
     // finite float range. The arithmetic expression itself now yields
     // SQL/Datamog NULL; array construction then embeds that NULL as a
@@ -1785,7 +1853,11 @@ describe("DatamogExecutor", () => {
         r(J) :- big(X), J = [X].
         ?- r(J).
       `);
-      expect(results[0]!.rows).toEqual([{ J: [null] }]);
+      // Construction is strict in its elements: an element with no value makes
+      // the literal have none either, so the row goes rather than carrying
+      // `[null]`. Previously the overflow was scrubbed to a JSON null inside the
+      // array.
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -1836,9 +1908,9 @@ describe("DatamogExecutor", () => {
           G = round(1.23, 1 / 0).
         ?- r(A, B, C, D, E, F, G).
       `);
-      expect(results[0]!.rows).toEqual([
-        { A: 120, B: 20, C: 100, D: 1.23, E: 0, F: null, G: null },
-      ]);
+      // `F` and `G` are domain failures, and one undefined head expression
+      // withholds the whole tuple, so the sound columns move to their own rule.
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
@@ -1863,13 +1935,14 @@ describe("DatamogExecutor", () => {
           D = 5.5 % 0.0.
         ?- r(A, B, C, D).
       `);
-      expect(results[0]!.rows).toEqual([{ A: 1.5, B: 0, C: -1.5, D: null }]);
+      // `D` is a domain failure, which takes the row with it.
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }
   });
 
-  test("Regression: SQLite exp/** overflow returns NULL, not Infinity", async () => {
+  test("Regression: SQLite exp/** overflow withholds the row rather than yielding Infinity", async () => {
     // Round 6 fixed `exp.float` and the `power` emission in the native
     // evaluator (commit 2ec4773) to return NULL on overflow, matching
     // spec §5.4's runtime-partial principle. The SQL dialect's emission
@@ -1889,7 +1962,8 @@ describe("DatamogExecutor", () => {
         r(E, P) :- E = exp(1000.0), P = 2.0 ** 2000.0.
         ?- r(E, P).
       `);
-      expect(results[0]!.rows).toEqual([{ E: null, P: null }]);
+      // The expression has no value, so no row is derived to carry it (§1).
+      expect(results[0]!.rows).toEqual([]);
     } finally {
       await backend.close();
     }

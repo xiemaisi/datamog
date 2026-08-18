@@ -22,7 +22,7 @@ program through the EDB as a `value` and gets read, projected,
 and coerced down to primitives. Construction is also supported:
 primitives auto-lift wherever a `value` is expected (so
 `r(J) :- t(J), J = 5` "just works"), `parse_json` parses a
-string into a value (or `NULL`, on malformed input), and array
+string into a value (or no value, on malformed input), and array
 / object literals (`[1, 2, X]`, `{"k": V}`) build composites
 directly. The finiteness checker (Chapter 5's lens, formalised
 in spec §5.8) flags the recursive-loop patterns that would
@@ -92,25 +92,37 @@ request(Id, Method, Path, Status) :-
 ```
 
 `E` has type `value`. The expressions `E["id"]`, `E["method"]`,
-... return `value`s of whatever shape sits at that key — always
+... return `value`s of whatever shape sits at that key: always
 `value`, regardless of whether the underlying contents are a
-number, a string, an object, or null. A missing key produces SQL
-`NULL`, which the equality binds like any other value, so the row
-still appears with a `NULL` in that column. Add `<> null` to drop it.
+number, a string, an object, or null.
 
-Indexing rules:
+**A missing key and a `null`-valued key are different things**, and this is
+the distinction to have straight before reading further:
 
-- `J[I]` with `I : integer` looks up an array element. Out-of-
-  range → `NULL`.
-- `J["key"]` (string index) looks up an object entry. Missing key
-  → `NULL`.
+```prolog
+d(J) :- J = {"present": null}.
+a(V) :- d(J), V = J["present"].   # one row, V is the null value
+b(V) :- d(J), V = J["absent"].    # no rows at all
+```
+
+`J["present"]` **has a value**, namely `null`, so it binds and the row is
+derived. `J["absent"]` has **no value**, so the conjunct does not hold and
+there is no row to put anything in. `type_of` tells them apart too:
+`type_of(J["present"])` is the string `"null"`.
+
+Indexing rules, where "no value" means the row is not derived:
+
+- `J[I]` with `I : integer` looks up an array element. Out-of-range → no
+  value.
+- `J["key"]` (string index) looks up an object entry. Missing key → no
+  value; a key present with a JSON `null` → the `null` value.
 - `J[I:J]` slices an array `value` (string-style slice doesn't
   apply here). Empty / reversed range → `[]`. Slicing a non-array
-  → `NULL`.
+  → no value.
 
 A wrong-shape access (object indexed with an integer, primitive
-leaf indexed at all) returns SQL `NULL`. There is no error to
-catch and no exception to recover from — bad accesses just drop
+leaf indexed at all) has no value either. There is no error to
+catch and no exception to recover from: bad accesses just drop
 their row.
 
 ## Coercing leaves to primitive types
@@ -119,23 +131,25 @@ The values you get out of subscripts are always `value` — even
 when the underlying leaf is a string or a number. To work with
 primitives you need an explicit coercion:
 
-| Function         | Returns   | NULL when                                               |
+| Function         | Returns   | has no value when                                       |
 |------------------|-----------|---------------------------------------------------------|
 | `as_string(V)`   | `string`  | `V` is not a string leaf                                |
 | `as_integer(V)`  | `integer` | not an integer-valued numeric leaf, or out of int range |
 | `as_float(V)`    | `float`   | `V` is not a numeric leaf                               |
 | `as_boolean(V)`  | `boolean` | `V` is not a boolean leaf                               |
 | `length(V)`      | `integer` | `V` is not an array, object, or string                  |
-| `type_of(V)`     | `string`  | (always returns one of `"object"`, `"array"`, `"string"`, `"number"`, `"boolean"`, `"null"`) |
+| `type_of(V)`     | `string`  | never: always one of `"object"`, `"array"`, `"string"`, `"number"`, `"boolean"`, `"null"` |
 
-`as_integer` is strict about integer-ness: `as_integer(1.5)` → `NULL`,
-not `1`. If you want truncation, do it explicitly with
+Each of these is a **projection**, and a projection that does not apply has
+no result, so the row goes. That includes the `null` leaf: a `null` is not a
+string, so `as_string` of one has no value, and it is not a thing with a
+length either. `type_of` is the exception, and deliberately so: reporting
+that a value is `null` is the question it exists to answer.
+
+`as_integer` is strict about integer-ness: `as_integer(1.5)` has no value
+rather than yielding `1`. If you want truncation, do it explicitly with
 `as_float` and `floor`. (Datamog won't smuggle silent precision
 loss past you.)
-
-`length` is overloaded across strings and the three "container-shaped"
-value forms. For `value`s, wrong-shaped leaves return SQL NULL:
-`length` of the `null` leaf returns SQL NULL.
 
 ## Object projection and serialisation
 
@@ -144,15 +158,15 @@ relational destructuring doesn't already give you for free:
 
 | Function       | Returns  | Behaviour                                                  |
 |----------------|----------|------------------------------------------------------------|
-| `keys(V)`      | `value`  | sorted array of the object's keys; `NULL` on non-object    |
-| `values(V)`    | `value`  | array of the object's values, ordered by key; `NULL` on non-object |
+| `keys(V)`      | `value`  | sorted array of the object's keys; no value on non-object   |
+| `values(V)`    | `value`  | array of the object's values, ordered by key; no value on non-object |
 | `to_json(V)`   | `string` | canonical JSON text for canonical values — keys sorted, no whitespace |
 
 `keys` and `values` give you a one-step "what's inside this
 object?" projection without having to write the
-`object_entry` + `list` round-trip. They return `NULL` on
-non-object inputs (arrays, primitives, the `null` leaf) so
-downstream rules can pattern-match on shape.
+`object_entry` + `list` round-trip. They have no value on
+non-object inputs (arrays, primitives, the `null` leaf), so a rule that asks
+for the keys of a non-object simply derives nothing for that row.
 
 `to_json` returns a value's canonical JSON text, which makes it
 useful as a hash key, a dedup key, or a stable identifier for
@@ -256,9 +270,10 @@ Three routes move primitives *into* the `value` type:
   `value`, the source of `object_entry` /
   `array_element`, ordering comparisons).
 - `parse_json(s)` parses a string as JSON syntax and returns
-  the parsed value. Malformed input becomes `NULL` rather than
+  the parsed value. Malformed input has no value rather than
   raising, matching the rest of the parsing family
-  (`to_integer` / `to_float` / `to_boolean`).
+  (`to_integer` / `to_float` / `to_boolean`). A bare `"null"` parses
+  successfully, to the `null` value.
 - **Array and object literals** — `[e1, e2, ...]` produces an
   array; `{"k1": v1, "k2": v2, ...}` produces an object.
   Element / value expressions are auto-lifted, so primitives,
@@ -384,14 +399,16 @@ bun run datamog doc/walkthrough/code/ch14/events.dl
   objects. Datamog reads them with subscript / iteration /
   coercion, and constructs new ones via auto-lift (anywhere a
   `value` slot meets a primitive), `parse_json(s)` (parse a
-  string, NULL on malformed input), and array / object
+  string, no value on malformed input), and array / object
   literals (`[e1, e2, ...]` and `{"k1": v1, "k2": v2, ...}`).
 - Two loaders feed value columns: JSONL with a single-`value`
   column declaration, and a standalone `<predicate>.json` file.
 - Read fields with `J["key"]` / `J[i]`; iterate with
   `object_entry` / `array_element`; coerce leaves with `as_string`,
   `as_integer`, `as_float`, `as_boolean`; introspect with `length` and
-  `type_of`. Wrong-shape access is always `NULL`, never an error.
+  `type_of`. Wrong-shape access and a missing key have no value, never an
+  error, so the row is withheld; a key present with a JSON `null` yields the
+  `null` value and keeps its row.
 - Equality is structural and works across backends thanks to
   canonicalisation on insert. Ordering on `json` is rejected.
 

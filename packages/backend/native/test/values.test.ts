@@ -10,6 +10,12 @@ import { type Substitution, type TypeEnv, compareOp, evalTerm } from "datamog-ba
 import type { HeadTerm } from "datamog-core";
 
 const env: TypeEnv = { vars: new Map(), columns: new Map(), functionOverloads: new Map() };
+/** Like `env`, but with `J` typed `value` so the accessor takes its JSON path. */
+const jsonEnv: TypeEnv = {
+  vars: new Map([["J", "value" as const]]),
+  columns: new Map(),
+  functionOverloads: new Map(),
+};
 
 // Minimal AST node builders. Langium-generated types carry $container,
 // $cstNode etc. that the runtime evaluator never reads, so an `unknown`
@@ -214,13 +220,21 @@ describe("evalTerm — boolean operators (3VL)", () => {
 });
 
 describe("evalTerm — safe integer arithmetic", () => {
-  test("keeps safe results and maps overflow to NULL", () => {
+  test("keeps safe results and maps overflow to no value", () => {
+    // Leaving the integer domain is a domain failure, so the result is
+    // `undefined` (no value) rather than `null` (the null value). The two are
+    // different markers and the accessor in §8 is why: see
+    // doc/design/null-as-a-value.md §15.5.
     expect(evalTerm(binary("+", num(Number.MAX_SAFE_INTEGER), num(0)), new Map(), env)).toBe(
       Number.MAX_SAFE_INTEGER,
     );
-    expect(evalTerm(binary("+", num(Number.MAX_SAFE_INTEGER), num(1)), new Map(), env)).toBe(null);
-    expect(evalTerm(binary("-", num(Number.MIN_SAFE_INTEGER), num(1)), new Map(), env)).toBe(null);
-    expect(evalTerm(binary("*", num(94_906_266), num(94_906_266)), new Map(), env)).toBe(null);
+    expect(
+      evalTerm(binary("+", num(Number.MAX_SAFE_INTEGER), num(1)), new Map(), env),
+    ).toBeUndefined();
+    expect(
+      evalTerm(binary("-", num(Number.MIN_SAFE_INTEGER), num(1)), new Map(), env),
+    ).toBeUndefined();
+    expect(evalTerm(binary("*", num(94_906_266), num(94_906_266)), new Map(), env)).toBeUndefined();
   });
 });
 
@@ -262,7 +276,11 @@ describe("evalTerm — NULL propagation through non-boolean expressions", () => 
 
   test("string functions: length/upper/lower/trim/replace propagate NULL", () => {
     const sub = nullSub();
-    expect(evalTerm(call("length", [variable("N")]), sub, env)).toBe(null);
+    // `length` takes a `value` parameter, so the null is an argument rather than
+    // an absence and reaches the function, which has no answer for it: undefined.
+    // The string-typed functions above still propagate, their parameter being a
+    // primitive. See doc/design/null-as-a-value.md §15.10.
+    expect(evalTerm(call("length", [variable("N")]), sub, env)).toBeUndefined();
     expect(evalTerm(call("upper", [variable("N")]), sub, env)).toBe(null);
     expect(evalTerm(call("lower", [variable("N")]), sub, env)).toBe(null);
     expect(evalTerm(call("trim", [variable("N")]), sub, env)).toBe(null);
@@ -281,17 +299,28 @@ describe("evalTerm — NULL propagation through non-boolean expressions", () => 
     expect(evalTerm(call("exp", [variable("N")]), sub, env)).toBe(null);
   });
 
-  test("subscript: NULL object or NULL index produces NULL", () => {
+  test("subscript: a null receiver or index has no result, so no value", () => {
+    // Accessing into a null, or at a null index, is a shape the operation has no
+    // answer for, so it is undefined rather than null. That distinction is what
+    // §8 needs: it leaves SQL NULL, and JS `null`, free to mean the null *value*
+    // a present-but-null key holds. See doc/design/null-as-a-value.md §15.5.
     const sub = nullSub();
-    expect(evalTerm(subscript(variable("N"), num(0)), sub, env)).toBe(null);
-    expect(evalTerm(subscript(variable("S"), variable("N")), sub, env)).toBe(null);
+    expect(evalTerm(subscript(variable("N"), num(0)), sub, env)).toBeUndefined();
+    expect(evalTerm(subscript(variable("S"), variable("N")), sub, env)).toBeUndefined();
   });
 
-  test("slice: NULL object or NULL bound produces NULL", () => {
+  test("slice: a null receiver or bound has no result, so no value", () => {
     const sub = nullSub();
-    expect(evalTerm(slice(variable("N"), num(0), num(2)), sub, env)).toBe(null);
-    expect(evalTerm(slice(variable("S"), variable("N"), num(2)), sub, env)).toBe(null);
-    expect(evalTerm(slice(variable("S"), num(0), variable("N")), sub, env)).toBe(null);
+    expect(evalTerm(slice(variable("N"), num(0), num(2)), sub, env)).toBeUndefined();
+    expect(evalTerm(slice(variable("S"), variable("N"), num(2)), sub, env)).toBeUndefined();
+    expect(evalTerm(slice(variable("S"), num(0), variable("N")), sub, env)).toBeUndefined();
+  });
+
+  test("but a present-but-null key yields the null value, not an absence", () => {
+    // The pair this whole distinction exists for.
+    const withObj = new Map([["J", { k: null } as unknown as Value]]);
+    expect(evalTerm(subscript(variable("J"), str("k")), withObj, jsonEnv)).toBe(null);
+    expect(evalTerm(subscript(variable("J"), str("missing")), withObj, jsonEnv)).toBeUndefined();
   });
 });
 

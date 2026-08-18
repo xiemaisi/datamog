@@ -240,7 +240,12 @@ export class SemiNaiveEvaluator extends BaseDatalogEvaluator {
         stepIndex: pos,
         relations: delta,
       })) {
-        out.push(rule.head.args.map((arg) => evalTerm(arg, sub, plan.env)));
+        const tuple = rule.head.args.map((arg) => evalTerm(arg, sub, plan.env));
+        // Same rule as the naive driver's projection: a head expression with no
+        // value derives no tuple. Stated here too because the delta driver
+        // projects its own rows rather than going through `enumerateRule`.
+        if (tuple.some((v) => v === undefined)) continue;
+        out.push(tuple as Value[]);
       }
     }
     return out;

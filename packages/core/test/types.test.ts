@@ -399,12 +399,14 @@ describe("type inference", () => {
     // variable 'X'" where native returns no rows. The binding-equality path
     // already declines in the same situation, so the two must agree.
     //
-    // The bound is a literal here because that is what still reaches this
-    // path. Routing the untyped bound through a variable
-    // (`N = null, X in [1 .. N]`) is caught earlier, by safety: a bare `null`
-    // does not ground `N`.
+    // A null bound is now rejected by the range's own type rule rather than by
+    // safety: `null` has a type, so it grounds a variable and reaches here, and
+    // the range says what is wrong with it. Both spellings agree.
     expect(() => getTypes("q(X) :- X in [1 .. null].")).toThrow(
-      /Cannot infer type of column 1 of predicate 'q'/,
+      /Range upper bound has non-numeric type 'null'/,
+    );
+    expect(() => getTypes("q(X) :- N = null, X in [1 .. N].")).toThrow(
+      /Range upper bound has non-numeric type 'null'/,
     );
   });
 
@@ -885,24 +887,33 @@ describe("type inference validation errors", () => {
       );
     });
 
-    test("a column that no rule constrains the type of is rejected", () => {
-      // The null literal is polymorphic, so `r(null).` contributes nothing to
-      // the column's type. The fixed-point iteration converges with it still
-      // undefined; the finalisation pass catches that explicitly.
-      expect(() =>
-        getTypes(`
-          r(null).
-        `),
-      ).toThrow(/Cannot infer type of column 1 of predicate 'r'/);
+    test("a bare `null` types the column, since `null` is a type", () => {
+      // This used to be the rejection case, on the grounds that the null
+      // literal was polymorphic and constrained nothing. It has a type now: the
+      // `null` type, whose base component is empty and whose only value is null.
+      // See doc/design/null-as-a-value.md §2 and §3.
+      expect(() => getTypes("r(null).")).not.toThrow();
+      // Joined with a sibling that does constrain the base, the column takes
+      // that base and carries the null alongside it.
+      expect(getTypes("r(null). r(1).").columnTypes.get("r")).toEqual(["integer"]);
+    });
+
+    test("a column no rule constrains at all is still rejected", () => {
+      // What is left of the rejection case: a recursive predicate with no base
+      // case for the column contributes nothing on any round, so the fixed point
+      // converges with it still at bottom and finalisation catches it.
+      expect(() => getTypes("p(X) :- p(X).")).toThrow(
+        /Cannot infer type of column 1 of predicate 'p'/,
+      );
     });
 
     test("Regression: 'Cannot infer type of column' carries the rule's head-arg position", () => {
-      // The finalisation throw at types.ts:119 used to emit an
-      // AnalyzerError with no offset/end, so the playground's lint
-      // squiggly underlined position 0–1 instead of the offending
-      // head argument. Verify the error now points at the first
-      // rule's head arg for the unconstrained column.
-      const source = "r(null).";
+      // The finalisation throw used to emit an AnalyzerError with no
+      // offset/end, so the playground's lint squiggly underlined position 0-1
+      // instead of the offending head argument. Verify the error still points at
+      // the first rule's head arg for the unconstrained column. Retargeted from
+      // `r(null).`, which types now that `null` is a type.
+      const source = "p(X) :- p(X).";
       let caught: unknown;
       try {
         getTypes(source);
@@ -911,9 +922,9 @@ describe("type inference validation errors", () => {
       }
       expect(caught).toBeInstanceOf(AnalyzerError);
       const err = caught as AnalyzerError;
-      const argOffset = source.indexOf("null");
+      const argOffset = source.indexOf("X");
       expect(err.offset).toBe(argOffset);
-      expect(err.end).toBe(argOffset + "null".length);
+      expect(err.end).toBe(argOffset + 1);
     });
 
     test("parse_json maps string to value", () => {

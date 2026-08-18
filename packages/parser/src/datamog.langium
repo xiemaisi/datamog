@@ -46,7 +46,7 @@ ColumnDecl:
     name=Identifier (':' type=PrimitiveType)? (nullable?='?')?;
 
 PrimitiveType returns string:
-    'string' | 'integer' | 'float' | 'boolean' | 'value';
+    'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null';
 
 // Using `':' '-'` as two tokens instead of the composite `:-` keyword so
 // that the lexer doesn't greedily munch the `:` in a slice like

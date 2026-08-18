@@ -1,15 +1,27 @@
 # Design notes: why Datamog has NULL
 
-Status: implemented. The normative rules are spec §5.4 (sources and
-propagation) and §2.6 (comparison). This note is the rationale, the
-alternatives rejected, and the costs accepted, because none of that
-survives in a rule list.
+Status: **superseded by [null-as-a-value.md](./null-as-a-value.md)**, which is
+implemented. Kept because the reasoning is why the alternatives are not
+reopened, and because two of its arguments turned out to be wrong in
+instructive ways.
 
-Two things to know before reading the rest. **Comparison in Datamog is
-total**: no comparison ever returns NULL, so the language has one
-equality rather than SQL's two, and there is no `==`. And that
-choice has a price, paid on exactly one backend: see the warning in §6
-before running a large join on Postgres.
+What changed. This doc describes a language where NULL does two jobs, marking
+an undefined operation and carrying missing data. Those are now separate: an
+undefined operation has **no value at all**, and `null` is an ordinary value
+with its own type. So `1 / 0` withholds its row rather than storing a NULL, and
+`X = null` binds rather than failing to type. The normative rules are spec §5.4,
+now titled "Partiality and NULL".
+
+What survives unchanged. Comparison is still total **over values**, there is
+still one equality, and §4's insistence that a shared variable and a spelled-out
+`=` mean the same thing still holds. §5's table is still the table. Read those
+sections as written; they are about the value half, which did not move.
+
+What was wrong. §3's dismissal of partial expressions answers a proposal nobody
+makes, and §3's rejection of option types is refuted by partiality being the
+case analysis it says a rule body has nowhere to put; both are marked in place
+below. §6's Postgres warning still applies, to genuinely nullable columns only,
+which are now rare.
 
 ## 1. The reflex, and why it misfires
 

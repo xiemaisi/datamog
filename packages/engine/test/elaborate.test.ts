@@ -180,10 +180,14 @@ describe("module binding end-to-end", () => {
     const backend = await create();
     try {
       const results = await new DatamogExecutor(backend).executeAnalyzed(program);
-      expect(byLabel(results, "got")).toEqual([
-        { x: 1, y: null },
-        { x: 6, y: 2 },
-      ]);
+      // Only the well-defined pair survives: `pr(1, 0)` divides by zero, which
+      // has no value, so the module derives no row for it (§1).
+      //
+      // The boundary still requires the `?` because ratio.dl asks for it: its
+      // head annotation widens the published contract even though inference
+      // proves the column non-null. Annotating looser than the body is allowed
+      // and is exactly what a module boundary is for.
+      expect(byLabel(results, "got")).toEqual([{ x: 6, y: 2 }]);
     } finally {
       await backend.close();
     }
@@ -194,7 +198,8 @@ describe("module binding end-to-end", () => {
     // hold NULL, and reach.dl's input does not admit one.
     expect(() =>
       DatamogExecutor.prepareElaborated(
-        `road(1, 2). road(X, Y) :- road(A, B), X = A / B, Y = B.
+        `input predicate raw(a: integer, b: integer?).
+         road(X, Y) :- raw(X, Y).
          input predicate rr(a: integer, b: integer) := reach from "reach.dl"(edge = road).`,
         resolve,
         "main.dl",

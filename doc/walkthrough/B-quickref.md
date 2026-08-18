@@ -52,8 +52,8 @@ function args, iteration sources, IDB column unification).
 | `p(X, Y)`                      | predicate atom (EDB or IDB)   |
 | `not p(X, Y)`                  | negated atom (stratified)     |
 | `X = expr`, `expr = X`         | equality (binds a bare variable or filters) |
-| `X = Y`, `X <> Y` | equality / inequality, null-aware (filter or binding); `!=` spells `<>` |
-| `X < Y`, `X <= Y`, `X > Y`, `X >= Y` | ordering comparisons (filter); total, with `null` an isolated point |
+| `X = Y`, `X <> Y` | equality / inequality over values, `null` included (filter or binding); `!=` spells `<>`. `X <> Y` needs both sides to have a value, so it is not `not (X = Y)` where one can be undefined |
+| `X < Y`, `X <= Y`, `X > Y`, `X >= Y` | ordering comparisons (filter); total over values, with `null` an isolated point |
 | `X in [lo .. hi]`              | range atom (generates integers) |
 | `object_entry(O, K, V)`        | iterate `K`/`V` over each entry of object value `O` |
 | `array_element(A, I, V)`       | iterate `I`/`V` over each element of array value `A` |
@@ -64,12 +64,12 @@ function args, iteration sources, IDB column unification).
 | -------------- | ----------------------------------------------------------- |
 | arithmetic     | `+`, `-`, `*`, `/`, `%`, `**` (exponentiation, float-valued) |
 | bitwise        | `&`, `\|`, `^`, `<<`, `>>`, `>>>` (32-bit signed integers; `>>` arithmetic, `>>>` logical; see spec §5.9) |
-| comparison     | `=`, `<>` (or `!=`), `<`, `<=`, `>`, `>=` (all total: never yield `null`) |
+| comparison     | `=`, `<>` (or `!=`), `<`, `<=`, `>`, `>=` (total over values: never yield `null`) |
 | boolean        | `&&`, `\|\|`, `!` (three-valued logic on `null`)              |
 | string         | `+` (concat), `length(W)`, `upper(W)`, `lower(W)`, `trim(W)`, `replace(W, old, new)`, `W[i]`, `W[i:j]`, `W[:j]`, `W[i:]` |
 | math           | `abs(x)`, `round(x)` / `round(x, n)`, `floor(x)`, `ceil(x)`, `sqrt(x)`, `ln(x)`, `exp(x)` (exponentiation is the `**` operator) |
-| value          | `V["key"]`, `V[i]`, `V[i:j]` (subscript / slice), `as_string(V)`, `as_integer(V)`, `as_float(V)`, `as_boolean(V)`, `length(V)` (array length / object key count / string length), `type_of(V)`, `has_key(V, K)`, `keys(V)` / `values(V)` (object projection, NULL on non-object), `to_json(V)` (canonical JSON text), array literal `[e1, ...]`, object literal `{"k": v, ...}` |
-| conversion     | `to_string(x)`, `to_integer(s)`, `to_float(s)`, `to_boolean(s)`, `parse_json(s)` (parsing variants return `NULL` on malformed input). Primitive → `value` is automatic at the unify-with-`value` boundary; no explicit lift is needed. `to_json(value)` serialises canonical JSON text, and primitive arguments embed first. |
+| value          | `V["key"]`, `V[i]`, `V[i:j]` (subscript / slice), `as_string(V)`, `as_integer(V)`, `as_float(V)`, `as_boolean(V)`, `length(V)` (array length / object key count / string length), `type_of(V)`, `has_key(V, K)`, `keys(V)` / `values(V)` (object projection, no value on non-object), `to_json(V)` (canonical JSON text), array literal `[e1, ...]`, object literal `{"k": v, ...}` |
+| conversion     | `to_string(x)`, `to_integer(s)`, `to_float(s)`, `to_boolean(s)`, `parse_json(s)` (parsing variants have no value on malformed input, so the row is withheld). Primitive → `value` is automatic at the unify-with-`value` boundary; no explicit lift is needed. `to_json(value)` serialises canonical JSON text, and primitive arguments embed first. |
 | aggregate (head-only) | `count`, `sum`, `avg`, `min`, `max`, `concat`, `list` (primitives auto-lift to a `value`; result is an array `value`) |
 
 `count(*)` means `COUNT(*)` — count all rows.
@@ -85,7 +85,8 @@ function args, iteration sources, IDB column unification).
   predicate's **published** contract: consumers are checked against them, while
   the predicate's own body still sees its inferred types.
 - Nullability is part of the annotation: `x: integer?` declares the column may
-  hold NULL, spelled the way an input column spells it.
+  hold `null`, spelled the way an input column spells it. `null` is also a type
+  in its own right, so `x: null` is a column holding nothing else.
 - No runtime effect; codegen ignores them.
 
 ## Head argument names
@@ -176,15 +177,17 @@ A file is a function: its `input predicate`s are parameters, its
 
 ## Cross-backend runtime guarantees
 
-- Division / modulo by zero → `NULL`
-- `sqrt(negative)`, `ln(≤ 0)`, `0 ** negative`, `negative ** fractional` → `NULL`
+- Division / modulo by zero → no value, so the row is withheld
+- `sqrt(negative)`, `ln(≤ 0)`, `0 ** negative`, `negative ** fractional` → no value
 - `W[i:j]` with `i >= j` → `""` (string) or `[]` (array value)
 - Wrong-shape access on a `value` (`obj[i]` where i is integer
   but `obj` is an object, missing key, out-of-range index,
-  `as_integer(string-leaf)`) → `NULL`
+  `as_integer(string-leaf)`) → no value, so the row is withheld. A key that is
+  *present* and holds a JSON `null` yields the `null` value and keeps its row
 - `value`s are canonicalised on insert (sorted keys, normalised
   numbers) so structural equality coincides with textual equality
-  on every backend; the `null` leaf collapses to SQL NULL
+  on every backend; a JSON `null` leaf stays a JSON `null`, SQL NULL inside a
+  `value` being reserved for "no value"
 - EDB queries are `DISTINCT` (set semantics)
 
 ## Restrictions

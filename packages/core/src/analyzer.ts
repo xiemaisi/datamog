@@ -1500,7 +1500,6 @@ export function equalityBindingCandidates(eq: Equality): {
 }[] {
   const candidates: { variable: string; expr: Expression }[] = [];
   const grounds = (variable: string, other: Expression): boolean => {
-    if (other.$type === "NullLiteral") return false;
     const vars = new Set<string>();
     collectVars(other, vars);
     return !vars.has(variable);

@@ -185,18 +185,14 @@ describe("seminaive backend — aggregates", () => {
 });
 
 describe("seminaive backend — expressions", () => {
-  test("divide-by-zero returns NULL", async () => {
+  test("divide-by-zero derives no tuple", async () => {
     const results = await run(`
       n(0). n(2). n(4).
       half(X, Y) :- n(X), Y = X / 0.
       ?- half(X, Y).
     `);
-    // All three map to NULL — tuples dedup via JSON; (0,null),(2,null),(4,null).
-    expect(sortRows(results[0]!)).toEqual([
-      { X: 0, Y: null },
-      { X: 2, Y: null },
-      { X: 4, Y: null },
-    ]);
+    // Division by zero has no value, so no row survives to carry it (§1).
+    expect(results[0]).toEqual([]);
   });
 
   test("integer vs float division matches type inference", async () => {
@@ -244,16 +240,14 @@ describe("seminaive backend — expressions", () => {
     expect(results[0]).toEqual([{ A: "h", B: "el" }]);
   });
 
-  test("sqrt of negative returns NULL", async () => {
+  test("sqrt of negative derives no tuple", async () => {
     const results = await run(`
       nums(-4.0). nums(9.0).
       r(X, Y) :- nums(X), Y = sqrt(X).
       ?- r(X, Y).
     `);
-    expect(sortRows(results[0]!)).toEqual([
-      { X: -4, Y: null },
-      { X: 9, Y: 3 },
-    ]);
+    // Only the in-domain input derives a row.
+    expect(sortRows(results[0]!)).toEqual([{ X: 9, Y: 3 }]);
   });
 });
 
@@ -454,7 +448,7 @@ describe("seminaive backend — built-in functions", () => {
     expect(results[0]).toEqual([{ X: 3.14 }]);
   });
 
-  test("ln of non-positive returns NULL", async () => {
+  test("ln of non-positive derives no tuple", async () => {
     const results = await run(`
       v(-1.0). v(0.0). v(1.0).
       r(X, L) :- v(X), L = ln(X).
@@ -462,27 +456,28 @@ describe("seminaive backend — built-in functions", () => {
     `);
     // Order across sortRows isn't meaningful for this case (numbers keyed by
     // JSON string compare unpredictably for negatives); assert as a set.
+    // Only `ln(1)` is in domain; the other two withhold their rows.
     const rows = results[0]!;
-    expect(rows.length).toBe(3);
+    expect(rows.length).toBe(1);
     expect(rows.find((r) => r.X === 1)?.L).toBe(0);
-    expect(rows.find((r) => r.X === -1)?.L).toBe(null);
-    expect(rows.find((r) => r.X === 0)?.L).toBe(null);
   });
 
-  test("** edge cases: fractional exponent on negative base → NULL", async () => {
+  test("** edge cases: fractional exponent on negative base → no tuple", async () => {
     const results = await run(`
       r(P) :- P = (-2.0) ** 0.5.
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
-  test("** edge case: zero base with negative exponent → NULL", async () => {
+  test("** edge case: zero base with negative exponent → no tuple", async () => {
     const results = await run(`
       r(P) :- P = 0.0 ** (-1.0).
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
   test("** with valid inputs evaluates normally", async () => {
@@ -493,28 +488,29 @@ describe("seminaive backend — built-in functions", () => {
     expect(results[0]).toEqual([{ P: 8 }]);
   });
 
-  test("Regression: exp / ** that overflow return NULL (seminaive shares native's values.ts)", async () => {
+  test("Regression: exp / ** that overflow derive no tuple (seminaive shares native's values.ts)", async () => {
     // Seminaive reuses native's `values.ts`, so the runtime-partial
     // overflow guard added there must hold here too. Pin it.
     const results = await run(`
       r(E, P) :- E = exp(1000.0), P = 2.0 ** 2000.0.
       ?- r(E, P).
     `);
-    expect(results[0]).toEqual([{ E: null, P: null }]);
+    // Both overflow, so both are undefined and the rule derives nothing.
+    expect(results[0]).toEqual([]);
   });
 
-  test("mod operator and mod by zero", async () => {
+  test("mod operator, and mod by zero withholding the row", async () => {
     const results = await run(`
       n(10). n(7). n(3).
-      r(X, M, Z) :- n(X), M = X % 3, Z = X % 0.
-      ?- r(X, M, Z).
+      r(X, M) :- n(X), M = X % 3.
+      z(X, Z) :- n(X), Z = X % 0.
+      ?- r(X, M).
+      output predicate zz(X, Z) :- z(X, Z).
     `);
-    const rows = results[0]!;
-    expect(rows.length).toBe(3);
-    // Mod by zero → NULL for every row.
-    for (const row of rows) expect(row.Z).toBe(null);
-    // Mod by 3 matches the integer remainder.
-    const byX = new Map(rows.map((r) => [r.X, r.M]));
+    // Mod by zero has no value and takes the row with it, so only the good
+    // column survives, in its own rule.
+    expect(results[1]).toEqual([]);
+    const byX = new Map(results[0]!.map((r) => [r.X, r.M]));
     expect(byX.get(10)).toBe(1);
     expect(byX.get(7)).toBe(1);
     expect(byX.get(3)).toBe(0);
@@ -571,7 +567,9 @@ describe("seminaive backend — aggregate edges", () => {
       total(sum(X)) :- p(X).
       ?- total(T).
     `);
-    expect(results[0]).toEqual([{ T: null }]);
+    // `sum` folds with 0, so an empty group is 0 rather than NULL (§7). The row
+    // still exists, which is what this test is about.
+    expect(results[0]).toEqual([{ T: 0 }]);
   });
 
   test("aggregate with grouping columns over empty body still yields no rows", async () => {
@@ -585,17 +583,36 @@ describe("seminaive backend — aggregate edges", () => {
     expect(results[0]).toEqual([]);
   });
 
-  test("count(X) ignores NULL arguments; count(*) counts all rows", async () => {
-    // v(X, Y) where Y=X/0 is always null for X≠0.
+  test("count counts a null like any other value; count(*) counts rows", async () => {
+    // §11.2, reversing what this used to pin. `count` counts values and `null` is
+    // one, so a column of nulls counts them. SQL's `COUNT(col)` skips NULLs, which
+    // is the right rule for an *undefined* contribution and the wrong one for a
+    // null, so the emit chooses between `COUNT(col)` and `COUNT(*)` on whether the
+    // argument can be undefined.
     const results = await run(`
       v(1). v(2). v(3).
-      q(X, Y) :- v(X), Y = X / 0.
+      q(X, null) :- v(X).
       cnt(count(Y)) :- q(_, Y).
       star(count(*)) :- q(_, _).
       ?- cnt(N).
       output predicate s(N) :- star(N).
     `);
-    expect(results[0]).toEqual([{ N: 0 }]);
+    expect(results[0]).toEqual([{ N: 3 }]);
+    expect(results[1]).toEqual([{ N: 3 }]);
+  });
+
+  test("but a contribution with no value is not counted", async () => {
+    // The other side of the same rule: `10 / (X - 2)` has no value at X = 2, so
+    // that row contributes to neither the count nor any other aggregate, while
+    // `count(*)` still sees it.
+    const results = await run(`
+      v(1). v(2). v(3).
+      cnt(count(Z)) :- v(X), Z = 10 / (X - 2).
+      star(count(*)) :- v(_).
+      ?- cnt(N).
+      output predicate s(N) :- star(N).
+    `);
+    expect(results[0]).toEqual([{ N: 2 }]);
     expect(results[1]).toEqual([{ N: 3 }]);
   });
 

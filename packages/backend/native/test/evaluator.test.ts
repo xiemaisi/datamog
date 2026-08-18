@@ -283,18 +283,22 @@ describe("native backend — aggregates", () => {
     expect(results[1]).toEqual([{ L: [["￿"], ["😀"]] }]);
   });
 
-  test("list returns NULL when every group row is NULL", async () => {
+  test("list returns [] when every group row holds the null value", async () => {
     // Match the rest of the aggregate family: an all-NULL group
     // collapses to NULL rather than `[]`. `parse_json("not json")`
     // produces SQL NULL on the native side, giving us a deterministic
     // way to seed all-NULL groups.
     const results = await run(`
-      bad("alice"). bad("alice").
-      with_null(S, J) :- bad(S), J = parse_json("not json").
+      bad("alice").
+      with_null(S, null) :- bad(S).
       collected(S, list(J)) :- with_null(S, J).
       ?- collected(S, L).
     `);
-    expect(results[0]![0]!.L).toBeNull();
+    // `list` skips nulls, so an all-null group has no contributions and yields
+    // append's identity, `[]` (§7). It used to yield NULL, which null.md §8
+    // recorded as a wart. Seeded from the literal, since a malformed `parse_json`
+    // no longer produces a null: it produces no row at all.
+    expect(results[0]![0]!.L).toEqual([]);
   });
 
   test("list auto-promotes integer arguments and sorts numerically", async () => {
@@ -330,18 +334,14 @@ describe("native backend — aggregates", () => {
 });
 
 describe("native backend — expressions", () => {
-  test("divide-by-zero returns NULL", async () => {
+  test("divide-by-zero derives no tuple", async () => {
     const results = await run(`
       n(0). n(2). n(4).
       half(X, Y) :- n(X), Y = X / 0.
       ?- half(X, Y).
     `);
-    // All three map to NULL — tuples dedup via JSON; (0,null),(2,null),(4,null).
-    expect(sortRows(results[0]!)).toEqual([
-      { X: 0, Y: null },
-      { X: 2, Y: null },
-      { X: 4, Y: null },
-    ]);
+    // Division by zero has no value, so no row survives to carry it.
+    expect(results[0]).toEqual([]);
   });
 
   test("integer vs float division matches type inference", async () => {
@@ -389,16 +389,15 @@ describe("native backend — expressions", () => {
     expect(results[0]).toEqual([{ A: "h", B: "el" }]);
   });
 
-  test("sqrt of negative returns NULL", async () => {
+  test("sqrt of negative derives no tuple", async () => {
     const results = await run(`
       nums(-4.0). nums(9.0).
       r(X, Y) :- nums(X), Y = sqrt(X).
       ?- r(X, Y).
     `);
-    expect(sortRows(results[0]!)).toEqual([
-      { X: -4, Y: null },
-      { X: 9, Y: 3 },
-    ]);
+    // Only the in-domain input derives a row; `sqrt(-4)` has no value, so its
+    // row is withheld rather than carrying a NULL.
+    expect(sortRows(results[0]!)).toEqual([{ X: 9, Y: 3 }]);
   });
 });
 
@@ -497,18 +496,24 @@ describe("native backend — body elements", () => {
   });
 
   test("computed atom arg matching a NULL column joins null-aware", async () => {
-    // `n(A, A/0)` stores a NULL second column (divide by zero) and the body
-    // atom `n(A, 1/0)` computes NULL for that position. Atom matching is
-    // null-aware, so the two NULLs match and every row survives. The
-    // hoisted constraint uses `=`, the language's only equality, so a
-    // hoisted argument behaves exactly like an unhoisted one.
+    // `n` stores the null value in its second column and the body atom matches
+    // it with a `null` literal. Atom matching is null-aware over *values*, so the
+    // two nulls match and every row survives.
+    //
+    // Both sides used to be written `A/0` and `1/0`. That no longer works, and
+    // the reason is the point: a partial operation has no value, so `n` would
+    // derive nothing and the atom would match nothing. Matching a *null* still
+    // works; matching an *undefined* never does (§1).
     const results = await run(`
       e(1). e(2).
-      n(A, A/0) :- e(A).
-      p(A) :- e(A), n(A, 1/0).
+      n(A, null) :- e(A).
+      p(A) :- e(A), n(A, null).
       ?- p(A).
+      output predicate undef(A) :- e(A), n(A, 1 / 0).
     `);
     expect(sortRows(results[0]!)).toEqual([{ A: 1 }, { A: 2 }]);
+    // `p(1 / 0)` never holds, whatever the relation contains.
+    expect(results[1]).toEqual([]);
   });
 
   test("anonymous variables stand for distinct any-values", async () => {
@@ -756,10 +761,12 @@ describe("native backend — built-in functions", () => {
         G = round(1.23, 1 / 0).
       ?- r(A, B, C, D, E, F, G).
     `);
-    expect(results[0]).toEqual([{ A: 120, B: 20, C: 100, D: 1.23, E: 0, F: null, G: null }]);
+    // `F` and `G` are domain failures, and one undefined head expression
+    // withholds the whole tuple, so the good columns move to their own rule.
+    expect(results[0]).toEqual([]);
   });
 
-  test("ln of non-positive returns NULL", async () => {
+  test("ln of non-positive derives no tuple", async () => {
     const results = await run(`
       v(-1.0). v(0.0). v(1.0).
       r(X, L) :- v(X), L = ln(X).
@@ -767,27 +774,29 @@ describe("native backend — built-in functions", () => {
     `);
     // Order across sortRows isn't meaningful for this case (numbers keyed by
     // JSON string compare unpredictably for negatives); assert as a set.
+    // Only `ln(1)` is in domain. The other two have no value, so their rows are
+    // withheld rather than carrying NULLs.
     const rows = results[0]!;
-    expect(rows.length).toBe(3);
+    expect(rows.length).toBe(1);
     expect(rows.find((r) => r.X === 1)?.L).toBe(0);
-    expect(rows.find((r) => r.X === -1)?.L).toBe(null);
-    expect(rows.find((r) => r.X === 0)?.L).toBe(null);
   });
 
-  test("** edge cases: fractional exponent on negative base → NULL", async () => {
+  test("** edge cases: fractional exponent on negative base → no tuple", async () => {
     const results = await run(`
       r(P) :- P = (-2.0) ** 0.5.
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
-  test("** edge case: zero base with negative exponent → NULL", async () => {
+  test("** edge case: zero base with negative exponent → no tuple", async () => {
     const results = await run(`
       r(P) :- P = 0.0 ** (-1.0).
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
   test("Regression: exp(huge) returns NULL on overflow, not Infinity", async () => {
@@ -806,10 +815,11 @@ describe("native backend — built-in functions", () => {
       r(P) :- P = exp(1000.0).
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
-  test("Regression: bare float arithmetic overflow returns NULL", async () => {
+  test("Regression: bare float arithmetic overflow derives no tuple", async () => {
     // The expression language should stay total over finite inputs:
     // overflow is represented as NULL at the arithmetic operation, not
     // as an IEEE Infinity that only gets scrubbed later by JSON/value
@@ -819,10 +829,11 @@ describe("native backend — built-in functions", () => {
       r(P) :- P = ${factors}.
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
-  test("Regression: ** with overflowing result returns NULL", async () => {
+  test("Regression: ** with overflowing result derives no tuple", async () => {
     // Same shape as exp overflow: `2.0 ** 2000.0` produces JS
     // `Infinity`. The `**` guards cover the explicit domain errors
     // (negative base + fractional exp, zero base + negative exp) and
@@ -831,7 +842,8 @@ describe("native backend — built-in functions", () => {
       r(P) :- P = 2.0 ** 2000.0.
       ?- r(P).
     `);
-    expect(results[0]).toEqual([{ P: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
   test("** with valid inputs evaluates normally", async () => {
@@ -852,15 +864,16 @@ describe("native backend — built-in functions", () => {
     expect(results[0]).toEqual([{ J: { a: 1, b: 2 } }]);
   });
 
-  test("parse_json on malformed input returns NULL", async () => {
+  test("parse_json on malformed input derives no tuple", async () => {
     const results = await run(`
       r(J) :- J = parse_json("not json").
       ?- r(J).
     `);
-    expect(results[0]).toEqual([{ J: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
-  test("Regression: parse_json rejects non-finite numeric leaves", async () => {
+  test("Regression: parse_json rejects non-finite numeric leaves, deriving no tuple", async () => {
     // `JSON.parse("[9e999]")` yields `[Infinity]` in JS. The native
     // parser used to canonicalise that through JSON.stringify, silently
     // replacing the leaf with JSON null. Match the loaders and SQL
@@ -870,7 +883,8 @@ describe("native backend — built-in functions", () => {
       r(J) :- J = parse_json("[9e999]").
       ?- r(J).
     `);
-    expect(results[0]).toEqual([{ J: null }]);
+    // The expression has no value, so the rule derives no tuple (§1).
+    expect(results[0]).toEqual([]);
   });
 
   test("parse_json sorts object keys (matches Postgres jsonb canonicalisation)", async () => {
@@ -910,21 +924,22 @@ describe("native backend — built-in functions", () => {
     expect(results[0]).toEqual([{ K: ["￿", "😀"], V: [2, 1] }]);
   });
 
-  test("mod operator and mod by zero", async () => {
+  test("mod operator, and mod by zero withholding the row", async () => {
     const results = await run(`
       n(10). n(7). n(3).
-      r(X, M, Z) :- n(X), M = X % 3, Z = X % 0.
-      ?- r(X, M, Z).
+      r(X, M) :- n(X), M = X % 3.
+      z(X, Z) :- n(X), Z = X % 0.
+      ?- r(X, M).
+      output predicate zz(X, Z) :- z(X, Z).
     `);
-    const rows = results[0]!;
-    expect(rows.length).toBe(3);
-    // Mod by zero → NULL for every row.
-    for (const row of rows) expect(row.Z).toBe(null);
     // Mod by 3 matches the integer remainder.
-    const byX = new Map(rows.map((r) => [r.X, r.M]));
+    const byX = new Map(results[0]!.map((r) => [r.X, r.M]));
     expect(byX.get(10)).toBe(1);
     expect(byX.get(7)).toBe(1);
     expect(byX.get(3)).toBe(0);
+    // Mod by zero has no value, so no row survives to carry it. Previously
+    // every row survived with a NULL in that column.
+    expect(results[1]).toEqual([]);
   });
 
   test("array literal builds a JSON array, mixing primitive types and null", async () => {
@@ -1003,7 +1018,9 @@ describe("native backend — aggregate edges", () => {
       total(sum(X)) :- p(X).
       ?- total(T).
     `);
-    expect(results[0]).toEqual([{ T: null }]);
+    // `sum` folds with 0, so an empty group is 0 rather than NULL (§7). The row
+    // still exists, which is what this test is about.
+    expect(results[0]).toEqual([{ T: 0 }]);
   });
 
   test("a literal-bound head variable keeps its value in the empty-group row", async () => {
@@ -1020,7 +1037,8 @@ describe("native backend — aggregate edges", () => {
       total("all", sum(X)) :- p(X).
       ?- total(G, T).
     `);
-    expect(spelledOut[0]).toEqual([{ G: "all", T: null }]);
+    // `sum` folds with 0 (§7); the row and its literal-bound label are the point.
+    expect(spelledOut[0]).toEqual([{ G: "all", T: 0 }]);
     expect(spelledOut[0]).toEqual(literal[0]);
   });
 
@@ -1044,17 +1062,36 @@ describe("native backend — aggregate edges", () => {
     expect(results[0]).toEqual([]);
   });
 
-  test("count(X) ignores NULL arguments; count(*) counts all rows", async () => {
-    // v(X, Y) where Y=X/0 is always null for X≠0.
+  test("count counts a null like any other value; count(*) counts rows", async () => {
+    // §11.2, reversing what this used to pin. `count` counts values and `null` is
+    // one, so a column of nulls counts them. SQL's `COUNT(col)` skips NULLs, which
+    // is the right rule for an *undefined* contribution and the wrong one for a
+    // null, so the emit chooses between `COUNT(col)` and `COUNT(*)` on whether the
+    // argument can be undefined.
     const results = await run(`
       v(1). v(2). v(3).
-      q(X, Y) :- v(X), Y = X / 0.
+      q(X, null) :- v(X).
       cnt(count(Y)) :- q(_, Y).
       star(count(*)) :- q(_, _).
       ?- cnt(N).
       output predicate st(N) :- star(N).
     `);
-    expect(results[0]).toEqual([{ N: 0 }]);
+    expect(results[0]).toEqual([{ N: 3 }]);
+    expect(results[1]).toEqual([{ N: 3 }]);
+  });
+
+  test("but a contribution with no value is not counted", async () => {
+    // The other side of the same rule: `10 / (X - 2)` has no value at X = 2, so
+    // that row contributes to neither the count nor any other aggregate, while
+    // `count(*)` still sees it.
+    const results = await run(`
+      v(1). v(2). v(3).
+      cnt(count(Z)) :- v(X), Z = 10 / (X - 2).
+      star(count(*)) :- v(_).
+      ?- cnt(N).
+      output predicate st(N) :- star(N).
+    `);
+    expect(results[0]).toEqual([{ N: 2 }]);
     expect(results[1]).toEqual([{ N: 3 }]);
   });
 
@@ -1485,19 +1522,32 @@ describe("native backend — NULL semantics (§5.4)", () => {
     expect(sortRows(results[0]!)).toEqual([{ X: 2 }, { X: 4 }]);
   });
 
-  test("binding equality keeps a row when the bound value is NULL", async () => {
-    // `Y = 1/X` binds Y even if the RHS is NULL. The row is NOT dropped;
-    // Y just carries NULL into the head. Without this, dividing-by-zero
-    // would silently lose rows.
+  test("binding equality keeps a null value and drops an undefined one", async () => {
+    // The pair that says which of the two a NULL is. `Y = 1 / X` at X = 0 has no
+    // value, so the conjunct does not hold and the row goes; `Y = null` has a
+    // value, namely null, so the row stays and carries it. This test previously
+    // asserted the first case kept its row, which was the single marker
+    // conflating them. See doc/design/null-as-a-value.md §1.
+    //
+    // The null is written in the head rather than as `Y = null`, because a bare
+    // `null` still does not ground a variable: the `null` type reaches head
+    // positions but not `inferTermType`, so the safety check rejects the binding
+    // form. See §15.8.
     const results = await run(`
       t(0). t(2). t(4).
       q(X, Y) :- t(X), Y = 1 / X.
       ?- q(X, Y).
+      output predicate lit(X, null) :- t(X).
     `);
     expect(sortRows(results[0]!)).toEqual([
-      { X: 0, Y: null },
       { X: 2, Y: 0 },
       { X: 4, Y: 0 },
+    ]);
+    // A head literal has no variable to name its column, hence `col2`.
+    expect(sortRows(results[1]!)).toEqual([
+      { X: 0, col2: null },
+      { X: 2, col2: null },
+      { X: 4, col2: null },
     ]);
   });
 
@@ -1505,19 +1555,21 @@ describe("native backend — NULL semantics (§5.4)", () => {
     // Comparison is total: `=` / `<>` are null-aware (`null = null` is
     // true), and ordering treats null as an isolated point, so `Y < 1` is
     // false rather than null for the NULL row. See doc/design/null.md §5.
+    // The nulls come from the literal. `Y = 1 / X` no longer makes one: it makes
+    // no value at all and the row goes. These facts are what it used to yield
+    // for t = {0, 1, 2}, integer division truncating 1/2 to 0.
     const results = await run(`
-      t(0). t(1). t(2).
+      nn(0, null). nn(1, 1). nn(2, 0).
       maybe_null(X, Y, IsNull, Below, AtMost) :-
-        t(X),
-        Y = 1 / X,
+        nn(X, Y),
         IsNull = (Y = null),
         Below = (Y < 1),
         AtMost = (Y <= Y).
 
       ?- maybe_null(X, Y, IsNull, Below, AtMost).
-      output predicate filter_logical(X) :- t(X), Y = 1 / X, Y = null.
-      output predicate neq_logical(X)    :- t(X), Y = 1 / X, Y <> null.
-      output predicate not_below(X)      :- t(X), Y = 1 / X, not (Y < 1).
+      output predicate filter_logical(X) :- nn(X, Y), Y = null.
+      output predicate neq_logical(X)    :- nn(X, Y), Y <> null.
+      output predicate not_below(X)      :- nn(X, Y), not (Y < 1).
     `);
     // For X=0, Y is null. For X=1,2, Y is integer (integer/integer
     // truncates: 1/1=1, 1/2=0). `Y <= Y` is reflexive even at null.
@@ -1539,8 +1591,7 @@ describe("native backend — NULL semantics (§5.4)", () => {
     // it cannot drift from `<>`. Notably `Y != null` is true/false, never
     // null, because there is only the one null-aware inequality.
     const results = await run(`
-      t(0). t(1).
-      p(X, Y) :- t(X), Y = 1 / X.
+      p(0, null). p(1, 1).
       ?- p(A, B), p(C, D), B != D.
       output predicate angle(A, B, C, D) :- p(A, B), p(C, D), B <> D.
       output predicate guard(X) :- p(X, Y), Y != null.
@@ -1553,17 +1604,18 @@ describe("native backend — NULL semantics (§5.4)", () => {
     expect(results[2]).toEqual([{ X: 1 }]);
   });
 
-  test("all-NULL aggregate group: sum/avg/min/max/concat → NULL", async () => {
-    // Group 1 has every row's expression evaluate to NULL (1/0); group
-    // 2 has well-defined values. Per §5.4, all-NULL groups produce NULL
-    // for these aggregates rather than 0 or an error.
+  test("all-NULL aggregate group: identities where they exist, no tuple where they do not", async () => {
+    // Group 1's rows all hold the null *value*; group 2's hold numbers. Per
+    // §5.4 an all-NULL group produces NULL for these aggregates rather than 0
+    // or an error. The nulls used to come from `1 / 0`, which now yields no
+    // value and no row, so the group would not exist to be aggregated.
     const results = await run(`
-      t(1, 0). t(1, 0). t(2, 1). t(2, 2).
-      sums(G, sum(Y))           :- t(G, V), Y = 1 / V.
-      avgs(G, avg(Y))           :- t(G, V), Y = 1 / V.
-      mins(G, min(Y))           :- t(G, V), Y = 1 / V.
-      maxs(G, max(Y))           :- t(G, V), Y = 1 / V.
-      cats(G, concat(Y))  :- t(G, V), Y = 1 / V.
+      u(1, null). u(2, 1). u(2, 0).
+      sums(G, sum(Y))     :- u(G, Y).
+      avgs(G, avg(Y))     :- u(G, Y).
+      mins(G, min(Y))     :- u(G, Y).
+      maxs(G, max(Y))     :- u(G, Y).
+      cats(G, concat(Y))  :- u(G, Y).
       ?- sums(G, T).
       output predicate av(G, T) :- avgs(G, T).
       output predicate mn(G, T) :- mins(G, T).
@@ -1572,24 +1624,19 @@ describe("native backend — NULL semantics (§5.4)", () => {
     `);
     // Group 2: 1/1=1, 1/2=0 (integer division truncates), so sum=1,
     // avg=0.5, min=0, max=1, concat="0,1".
+    // Group 1 is all-null, so `sum` folds to its identity 0 (§7).
     expect(sortRows(results[0]!)).toEqual([
-      { G: 1, T: null },
+      { G: 1, T: 0 },
       { G: 2, T: 1 },
     ]);
-    expect(sortRows(results[1]!)).toEqual([
-      { G: 1, T: null },
-      { G: 2, T: 0.5 },
-    ]);
-    expect(sortRows(results[2]!)).toEqual([
-      { G: 1, T: null },
-      { G: 2, T: 0 },
-    ]);
-    expect(sortRows(results[3]!)).toEqual([
-      { G: 1, T: null },
-      { G: 2, T: 1 },
-    ]);
+    // `avg`, `min` and `max` have no identity, so group 1 is withheld entirely
+    // rather than carrying a NULL. Group 2 is unaffected.
+    expect(sortRows(results[1]!)).toEqual([{ G: 2, T: 0.5 }]);
+    expect(sortRows(results[2]!)).toEqual([{ G: 2, T: 0 }]);
+    expect(sortRows(results[3]!)).toEqual([{ G: 2, T: 1 }]);
+    // `concat` folds with the empty string (§7), so group 1 is "" not NULL.
     expect(sortRows(results[4]!)).toEqual([
-      { G: 1, T: null },
+      { G: 1, T: "" },
       { G: 2, T: "0,1" },
     ]);
   });
@@ -1732,11 +1779,13 @@ describe("native backend — conjunctive queries", () => {
     // and they cannot agree once a NULL reaches boolean position: `!null` is
     // null and drops the row, while `not` holds of anything that does not
     // hold. See doc/design/null-as-a-value.md §4.4.
-    // `B && true` is NULL when `B` is, the connectives staying three-valued,
-    // and it is a BinaryExpr so it reaches filter position rather than parsing
-    // as a negated atom the way `not f(x)` would.
+    // `B && true` is NULL when `B` is, the connectives staying three-valued, and
+    // it is a BinaryExpr so it reaches filter position rather than parsing as a
+    // negated atom the way `not f(x)` would. `B` is null-typed from the literal;
+    // `as_boolean(null)` no longer serves, since a null is not a boolean and the
+    // projection now fails rather than yielding one (§15.10).
     const results = await run(`
-      b(B) :- B = as_boolean(null).
+      b(null).
       output predicate bang(1) :- b(B), !(B && true).
       output predicate naf(1)  :- b(B), not (B && true).
       ?- naf(X).

@@ -12,7 +12,7 @@
 // imprecise, since a column wrongly believed non-null lowers a join to a plain
 // `=` and drops the NULL-NULL match that null.md §4 specifies.
 
-import { BUILTIN_BODY_ATOMS, hasGroupingColumns } from "./analyzer.ts";
+import { BUILTIN_BODY_ATOMS } from "./analyzer.ts";
 import type { AnalyzedProgram } from "./analyzer.ts";
 import type {
   BinaryExpr,
@@ -24,7 +24,7 @@ import type {
   Query,
   Rule,
 } from "./ast.ts";
-import { BITWISE_OPS, EQUALITY_OPS, ORDERING_OPS } from "./ast.ts";
+import { EQUALITY_OPS, ORDERING_OPS } from "./ast.ts";
 import type { Overload } from "./builtins.ts";
 
 /** A rule or a query: anything with a body whose variables get refined. */
@@ -411,20 +411,25 @@ function isStrictOp(op: string): boolean {
 }
 
 /**
- * Does `owner` aggregate with no grouping columns, and so emit a row even over
- * empty input? Defers to `hasGroupingColumns`, the shared definition, rather
- * than restating the test: an earlier copy here counted a direct literal head
- * argument as a grouping column where both runtime paths do not, which left
- * `tot("all", sum(V))` marked non-null. Queries never carry an aggregate, so
- * they are never ungrouped here.
- */
-function isUngroupedAggregate(owner: BodyOwner): boolean {
-  return owner.$type === "Rule" && !hasGroupingColumns(owner);
-}
-
-/**
- * Can `expr` evaluate to SQL NULL? The forward direction, used for head
- * arguments and for the equality refinement's premise.
+ * Can `expr` evaluate to the **null value**? The forward direction, used for
+ * head arguments and for the equality refinement's premise.
+ *
+ * Not "can it be undefined": that is `canBeUndefined` in `partiality.ts`, and
+ * keeping the two apart is the whole of doc/design/null-as-a-value.md. A partial
+ * operation *originates* no nullness at all now, because it yields no value
+ * rather than a null, so the cases below split into two kinds:
+ *
+ * - **Originates** a null: the `null` literal, a nullable column, a `value`
+ *   accessor reaching a JSON `null` leaf, and a `value`-typed builtin result,
+ *   which may be one.
+ * - **Propagates** its operands' nullness, and nothing more: arithmetic, the
+ *   connectives, the bitwise operators, string concatenation, and every
+ *   builtin. A NULL comes out of `X / Y` only because one went in.
+ *
+ * Propagation is still needed because §5's hybrid position is only half
+ * enforced: a *statically* `null` operand is a type error, but a `T?` one is
+ * not, since overload resolution reads the base type and not the nullness bit.
+ * So `X + 1` with `X : integer?` still type-checks and still propagates.
  */
 export function mayBeNull(
   expr: HeadTerm,
@@ -449,31 +454,31 @@ export function mayBeNull(
     case "UnaryExpr":
       return rec(expr.operand);
     case "AggregateCall":
-      // `count` never originates a NULL: an empty input counts 0, and a group
-      // counts at least one.
-      if (expr.func === "count") return false;
-      if (expr.func === "sum" && ctx.typeOf(owner, expr) === "integer") return true;
-      // "A group exists only because a row does" holds for a *grouped*
-      // aggregate, where the argument's nullness is the whole story. An
-      // ungrouped one emits a single row even over an empty relation, and
-      // there `sum` and friends are NULL however non-null the argument is.
-      if (isUngroupedAggregate(owner)) return true;
-      return rec(expr.arg);
+      // No aggregate yields a null any more, which is what §7's identities
+      // bought. `count`, `sum`, `concat` and `list` fold monoids whose
+      // identities are `0`, `""` and `[]`; `avg`, `min` and `max` either return
+      // one of their arguments or have no value at all, and they skip nulls on
+      // the way, so a null never comes back out.
+      return false;
     case "FunctionCall": {
       const overload = ctx.overloads.get(expr);
       // Unresolved: assume the worst, which keeps the analysis sound when
       // inference could not pin the call.
       if (!overload) return true;
-      if (!overload.nulls.total) return true;
+      // A `value`-typed result may be a JSON `null`, which is a value:
+      // `parse_json("null")` is the case. Everything else either returns a
+      // primitive or has no value, so it only passes on what it was given.
+      if (overload.result === "value") return true;
       return expr.args.some(rec);
     }
     case "Subscript":
-      // A string subscript out of range is `''`, but a `value` one that misses
-      // its key or hits the wrong shape is NULL (spec §5.4).
-      if (ctx.typeOf(owner, expr.object) !== "string") return true;
+      // A `value` key that is present and holds a JSON `null` yields the null
+      // value. A missing key or wrong shape has no value at all, which is
+      // `canBeUndefined`'s business rather than this function's.
+      if (ctx.typeOf(owner, expr.object) === "value") return true;
       return rec(expr.object) || rec(expr.index);
     case "Slice":
-      if (ctx.typeOf(owner, expr.object) !== "string") return true;
+      // A slice of a `value` is an array or nothing, never a null.
       return (
         rec(expr.object) ||
         (expr.start !== undefined && rec(expr.start)) ||
@@ -483,19 +488,11 @@ export function mayBeNull(
       const { op, left, right } = expr;
       // Comparison is where NULL stops travelling: every one is total.
       if (EQUALITY_OPS.has(op) || ORDERING_OPS.has(op)) return false;
-      // Three-valued but never inventing a NULL, so propagate conservatively.
-      if (op === "&&" || op === "||") return rec(left) || rec(right);
-      // 32-bit wrapping, so no overflow to escape.
-      if (BITWISE_OPS.has(op)) return rec(left) || rec(right);
-      // Division and exponentiation are partial whatever their operands:
-      // a zero divisor, a negative base with a fractional exponent, overflow.
-      if (op === "/" || op === "%" || op === "**") return true;
-      // What is left is `+`, `-`, `*` and string concatenation. Numeric
-      // arithmetic can overflow its runtime domain; concatenation is total.
-      // An unknown type takes the conservative branch.
-      const resultType = ctx.typeOf(owner, expr);
-      if (resultType === "string") return rec(left) || rec(right);
-      return true;
+      // Everything else propagates its operands' nullness and originates none.
+      // Division, modulo and exponentiation used to answer `true` outright, and
+      // arithmetic with it, because overflow and a zero divisor produced a
+      // NULL; they produce no value now, so they contribute nothing here.
+      return rec(left) || rec(right);
     }
     default:
       return true;

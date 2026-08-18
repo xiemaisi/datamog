@@ -453,7 +453,7 @@ export function isObjectLiteral(item: unknown): item is ObjectLiteral {
     return reflection.isInstance(item, ObjectLiteral.$type);
 }
 
-export type PrimitiveType = 'boolean' | 'float' | 'integer' | 'string' | 'value';
+export type PrimitiveType = 'boolean' | 'float' | 'integer' | 'null' | 'string' | 'value';
 
 export function isPrimitiveType(item: unknown): item is PrimitiveType {
     return item === 'string' || item === 'integer' || item === 'float' || item === 'boolean' || item === 'value';

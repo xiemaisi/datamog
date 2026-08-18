@@ -68,26 +68,30 @@ describe("propagation into intensional columns", () => {
 });
 
 describe("operations", () => {
-  test("division is partial whatever its operands", () => {
+  test("a partial operation originates no nullness, because it yields no value", () => {
+    // These three used to be nullable, and the reason they are not is the point
+    // of doc/design/null-as-a-value.md: a zero divisor, an integer overflow and
+    // a non-finite float each leave the expression with *no value*, so the row
+    // is withheld rather than kept with a NULL in it. Nothing null-valued ever
+    // reaches the column.
     const source = `
-      input predicate p(a: integer, b: integer).
-      q(X) :- p(A, B), X = A / B.
+      input predicate p(a: integer, b: integer, f: float).
+      divided(X) :- p(A, B, _), X = A / B.
+      overflowed(X) :- p(A, _, _), X = A + 1.
+      unfinite(X) :- p(_, _, F), X = F * 2.0.
     `;
-    expect(cols(source, "q")).toEqual([true]);
+    expect(cols(source, "divided")).toEqual([false]);
+    expect(cols(source, "overflowed")).toEqual([false]);
+    expect(cols(source, "unfinite")).toEqual([false]);
   });
 
-  test("integer arithmetic can overflow the safe-integer range", () => {
+  test("but it still propagates a null it was given", () => {
+    // The other half, and why the propagation cases are not deleted along with
+    // the origination ones: §5's hybrid position is only half enforced, so a
+    // `T?` operand still type-checks into arithmetic and still comes out null.
     const source = `
-      input predicate p(a: integer).
+      input predicate p(a: integer?).
       q(X) :- p(A), X = A + 1.
-    `;
-    expect(cols(source, "q")).toEqual([true]);
-  });
-
-  test("float arithmetic can overflow to non-finite", () => {
-    const source = `
-      input predicate p(a: float).
-      q(X) :- p(A), X = A * 2.0.
     `;
     expect(cols(source, "q")).toEqual([true]);
   });
@@ -100,14 +104,19 @@ describe("operations", () => {
     expect(cols(source, "q")).toEqual([false]);
   });
 
-  test("a partial builtin originates nullness, a total one does not", () => {
+  test("no builtin originates nullness unless its result can be a JSON null", () => {
+    // A failed `to_integer` has no value rather than a null, so it originates
+    // nothing. `parse_json` is the exception, and for a real reason: its result
+    // is `value`-typed and `parse_json("null")` is the null value.
     const source = `
       input predicate p(a: string).
       parsed(X) :- p(A), X = to_integer(A).
       upped(X) :- p(A), X = upper(A).
+      jsonified(X) :- p(A), X = parse_json(A).
     `;
-    expect(cols(source, "parsed")).toEqual([true]);
+    expect(cols(source, "parsed")).toEqual([false]);
     expect(cols(source, "upped")).toEqual([false]);
+    expect(cols(source, "jsonified")).toEqual([true]);
   });
 
   test("comparison is total, so a comparison result is never null", () => {
@@ -218,6 +227,14 @@ describe("refinement from body constraints", () => {
   });
 });
 
+// No aggregate is nullable, whatever it aggregates and whether or not it groups.
+// §7 of null-as-a-value.md is why: an aggregate with a monoid identity folds an
+// empty group to that identity (`sum` to 0, `concat` to "", `list` to `[]`), and
+// one without an identity (`avg`, `min`, `max`) is undefined there, so the row is
+// withheld instead of emitted with a NULL in it. Nulls among the inputs are
+// skipped by the fold. This is why the grouping analysis no longer bears on
+// nullness at all: `isGroupingArg` decides whether the empty-group row exists,
+// not what is in it. Its own tests live with the translator and the interpreters.
 describe("aggregates", () => {
   test("count is never null, even over a nullable column", () => {
     const source = `
@@ -227,79 +244,37 @@ describe("aggregates", () => {
     expect(cols(source, "q")).toEqual([false]);
   });
 
-  // An ungrouped aggregate emits one row per predicate, including over an empty
-  // relation, where `sum` is NULL however non-null its argument. Believing it
-  // non-null lowered a join against it to a plain `=`, dropping the NULL-NULL
-  // match null.md §4 specifies. See nullness-tracking.md §8.
-  test("an ungrouped sum is nullable even over a non-null column", () => {
+  test("nor is an ungrouped sum, which folds an empty group to 0", () => {
     const source = `
       input predicate p(a: integer).
       q(sum(X)) :- p(X).
     `;
-    expect(cols(source, "q")).toEqual([true]);
+    expect(cols(source, "q")).toEqual([false]);
   });
 
-  test("a grouped integer sum can overflow", () => {
-    const nullable = `
+  test("nor is one over a nullable column, grouped or not", () => {
+    const grouped = `
       input predicate p(g: string, a: integer?).
       q(G, sum(X)) :- p(G, X).
     `;
-    const nonNull = `
-      input predicate p(g: string, a: integer).
-      q(G, sum(X)) :- p(G, X).
+    const ungrouped = `
+      input predicate p(g: string, a: integer?).
+      q(sum(X)) :- p(_, X).
     `;
-    expect(cols(nullable, "q")).toEqual([false, true]);
-    expect(cols(nonNull, "q")).toEqual([false, true]);
+    expect(cols(grouped, "q")).toEqual([false, false]);
+    expect(cols(ungrouped, "q")).toEqual([false]);
   });
 
-  // A direct literal head argument is not a grouping column: both runtime paths
-  // omit one from GROUP BY, so the rule still emits its row over empty input and
-  // the sum is still NULL. The first fix here restated the grouping test instead
-  // of sharing it and counted the literal as grouping, so this shape stayed
-  // wrong. See nullness-tracking.md §8.
-  test("a literal head argument does not make an aggregate grouped", () => {
+  test("nor min or max, which withhold the row rather than yield a null", () => {
     const source = `
-      input predicate p(a: integer).
-      q("all", sum(X)) :- p(X).
+      input predicate p(a: integer?).
+      lo(min(X)) :- p(X).
+      hi(max(X)) :- p(X).
+      mean(avg(X)) :- p(X).
     `;
-    expect(cols(source, "q")).toEqual([false, true]);
-  });
-
-  // A variable the body binds to a literal is constant too, so it groups no more
-  // than the literal does. null.md §4 makes the two spellings interchangeable, so
-  // they have to agree here as well.
-  test("a literal-bound grouping variable does not make an aggregate grouped", () => {
-    const spelledOut = `
-      input predicate p(a: integer).
-      q(G, sum(X)) :- p(X), G = "all".
-    `;
-    const literal = `
-      input predicate p(a: integer).
-      q("all", sum(X)) :- p(X).
-    `;
-    expect(cols(spelledOut, "q")).toEqual(cols(literal, "q"));
-    expect(cols(spelledOut, "q")).toEqual([false, true]);
-  });
-
-  test("a chain of literal bindings is constant all the way down", () => {
-    const chained = `
-      input predicate p(a: integer).
-      q(A, B, sum(X)) :- p(X), A = 1, B = A.
-    `;
-    const direct = `
-      input predicate p(a: integer).
-      q(1, 1, sum(X)) :- p(X).
-    `;
-    expect(cols(chained, "q")).toEqual(cols(direct, "q"));
-    expect(cols(chained, "q")).toEqual([false, false, true]);
-  });
-
-  test("a genuine grouping variable still groups", () => {
-    const source = `
-      input predicate p(g: string, a: integer).
-      q(G, sum(X)) :- p(G, X), G <> "skip".
-    `;
-    expect(cols(source, "q")).toEqual([false, true]);
+    expect(cols(source, "lo")).toEqual([false]);
+    expect(cols(source, "hi")).toEqual([false]);
+    expect(cols(source, "mean")).toEqual([false]);
   });
 });
 
@@ -325,9 +300,19 @@ describe("recursion", () => {
   test("nullness introduced only in the recursive step still reaches the column", () => {
     const source = `
       input predicate edge(a: integer, b: integer).
+      input predicate weight(w: integer?).
+      path(X, Y) :- edge(X, Y).
+      path(X, Z) :- path(X, Y), edge(Y, _), weight(Z).
+    `;
+    expect(cols(source, "path")).toEqual([false, true]);
+  });
+
+  test("a partial operation in the recursive step introduces none", () => {
+    const source = `
+      input predicate edge(a: integer, b: integer).
       path(X, Y) :- edge(X, Y).
       path(X, Z) :- path(X, Y), edge(Y, W), Z = W / 2.
     `;
-    expect(cols(source, "path")).toEqual([false, true]);
+    expect(cols(source, "path")).toEqual([false, false]);
   });
 });

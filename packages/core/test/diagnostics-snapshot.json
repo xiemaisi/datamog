@@ -358,15 +358,13 @@
     }
   },
   "eq-arith/null": {
-    "ok": true,
-    "types": {
-      "q": [
-        "integer"
-      ],
-      "t": [
-        "integer"
-      ]
-    }
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '+' requires numeric or string operands; got 'null'",
+    "span": [
+      43,
+      51
+    ]
   },
   "eq-arith/string": {
     "ok": true,
@@ -504,13 +502,15 @@
     }
   },
   "eq-lhs/null": {
-    "ok": false,
-    "error": "AnalyzerError",
-    "message": "Unsafe variable 'X' in left-hand side of equality",
-    "span": [
-      39,
-      40
-    ]
+    "ok": true,
+    "types": {
+      "q": [
+        "null"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
   },
   "eq-lhs/string": {
     "ok": true,
@@ -575,13 +575,15 @@
     }
   },
   "eq-rhs/null": {
-    "ok": false,
-    "error": "AnalyzerError",
-    "message": "Unsafe variable 'X' in right-hand side of equality",
-    "span": [
-      46,
-      47
-    ]
+    "ok": true,
+    "types": {
+      "q": [
+        "null"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
   },
   "eq-rhs/string": {
     "ok": true,
@@ -3578,13 +3580,15 @@
     }
   },
   "head-arg/null": {
-    "ok": false,
-    "error": "AnalyzerError",
-    "message": "Cannot infer type of column 1 of predicate 'q'",
-    "span": [
-      33,
-      37
-    ]
+    "ok": true,
+    "types": {
+      "q": [
+        "string"
+      ],
+      "t": [
+        "integer"
+      ]
+    }
   },
   "head-arg/string": {
     "ok": true,
@@ -3647,15 +3651,13 @@
     }
   },
   "head-arith/null": {
-    "ok": true,
-    "types": {
-      "q": [
-        "integer"
-      ],
-      "t": [
-        "integer"
-      ]
-    }
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '+' requires numeric or string operands; got 'null'",
+    "span": [
+      49,
+      57
+    ]
   },
   "head-arith/string": {
     "ok": true,
@@ -3874,21 +3876,21 @@
     ]
   },
   "null-arith-typed": {
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Operator '+' requires numeric or string operands; got 'null'",
+    "span": [
+      12,
+      20
+    ]
+  },
+  "null-binds-nothing": {
     "ok": true,
     "types": {
       "q": [
-        "integer"
+        "null"
       ]
     }
-  },
-  "null-binds-nothing": {
-    "ok": false,
-    "error": "AnalyzerError",
-    "message": "Unsafe variable 'X' in left-hand side of equality",
-    "span": [
-      8,
-      9
-    ]
   },
   "null-filter-on-ground": {
     "ok": true,
@@ -3912,29 +3914,28 @@
   "null-range-bound": {
     "ok": false,
     "error": "AnalyzerError",
-    "message": "Unsafe variable 'N' in left-hand side of equality",
+    "message": "Range upper bound has non-numeric type 'null'",
     "span": [
-      8,
-      9
+      29,
+      30
     ]
   },
   "null-range-literal-bound": {
     "ok": false,
     "error": "AnalyzerError",
-    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "message": "Range upper bound has non-numeric type 'null'",
     "span": [
-      2,
-      3
+      19,
+      23
     ]
   },
   "null-sibling-rule": {
-    "ok": false,
-    "error": "AnalyzerError",
-    "message": "Unsafe variable 'X' in left-hand side of equality",
-    "span": [
-      14,
-      15
-    ]
+    "ok": true,
+    "types": {
+      "q": [
+        "integer"
+      ]
+    }
   },
   "null-typed-integer": {
     "ok": true,
@@ -3993,15 +3994,13 @@
     }
   },
   "range-filter/null": {
-    "ok": true,
-    "types": {
-      "q": [
-        "integer"
-      ],
-      "t": [
-        "integer"
-      ]
-    }
+    "ok": false,
+    "error": "AnalyzerError",
+    "message": "Range upper bound has non-numeric type 'null'",
+    "span": [
+      63,
+      67
+    ]
   },
   "range-filter/string": {
     "ok": false,
@@ -4093,10 +4092,10 @@
   "range-hi/null": {
     "ok": false,
     "error": "AnalyzerError",
-    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "message": "Range upper bound has non-numeric type 'null'",
     "span": [
-      33,
-      34
+      50,
+      54
     ]
   },
   "range-hi/string": {
@@ -4166,10 +4165,10 @@
   "range-lo/null": {
     "ok": false,
     "error": "AnalyzerError",
-    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "message": "Range lower bound has non-numeric type 'null'",
     "span": [
-      33,
-      34
+      45,
+      49
     ]
   },
   "range-lo/string": {
@@ -4266,10 +4265,10 @@
   "slice/null": {
     "ok": false,
     "error": "AnalyzerError",
-    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "message": "Slice requires a string or value operand, got 'null'",
     "span": [
-      33,
-      34
+      43,
+      52
     ]
   },
   "slice/string": {
@@ -4349,10 +4348,10 @@
   "subscript/null": {
     "ok": false,
     "error": "AnalyzerError",
-    "message": "Cannot infer type of column 1 of predicate 'q'",
+    "message": "Subscript requires a string or value operand, got 'null'",
     "span": [
-      33,
-      34
+      43,
+      50
     ]
   },
   "subscript/string": {

@@ -115,46 +115,56 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     ]);
   });
 
-  test("Regression: a bare `null` in a value-typed slot carries the slot's type", async () => {
-    // `as_*` takes a `value`, so a bare `null` argument reaches a jsonb slot.
-    // Without a cast it arrives as an untyped NULL and postgres cannot resolve
-    // the jsonb operators against it ("operator is not unique: unknown #>>
-    // unknown"), where the SQLite family is dynamically typed and does not
-    // care. This is also the idiom for writing a typed NULL, since a bare
-    // `null` cannot ground a variable on its own.
+  test("Regression: a bare `null` reaching a typed slot is cast, not left unknown", async () => {
+    // Postgres types a bare `NULL` as `unknown` and then refuses to resolve
+    // anything polymorphic against it, where the SQLite family is dynamically
+    // typed and does not care. Two places have to cast, and both are only
+    // reachable now that `null` is a value with a type of its own:
+    //
+    // - a `null`-typed view column, or `SELECT DISTINCT` from the view fails
+    //   with "could not determine polymorphic type because input has type
+    //   unknown";
+    // - the lift into a `value` slot, where `to_jsonb(anyelement)` fails the
+    //   same way, so the dialect emits the jsonb null literal instead.
+    //
+    // What the query returns matters less here than that it runs at all: a
+    // missing cast raises rather than returning the wrong rows.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
+      lit(X) :- X = null.
+      lifted(J) :- J = to_json(null).
       i(X) :- X = as_integer(null).
       s(X) :- X = as_string(null).
-      f(X) :- X = as_float(null).
-      b(X) :- X = as_boolean(null).
-      ?- i(X).
+      ?- lit(X).
+      output predicate ol(J) :- lifted(J).
+      output predicate oi(X) :- i(X).
       output predicate os(X) :- s(X).
-      output predicate of(X) :- f(X).
-      output predicate ob(X) :- b(X).
     `);
-    for (const result of results) {
-      expect(result.rows).toEqual([{ X: null }]);
-    }
+    expect(results[0]!.rows).toEqual([{ X: null }]);
+    expect(results[1]!.rows).toEqual([{ J: "null" }]);
+    // `as_integer` of a null has no value, so these derive nothing.
+    expect(results[2]!.rows).toEqual([]);
+    expect(results[3]!.rows).toEqual([]);
   });
 
   test("`null` literal, null-aware `=` / `<>`, and total ordering", async () => {
-    // Cross-backend invariant from §5.4 of the spec: divide-by-zero yields
-    // NULL, `=`/`<>` are null-aware (IS NOT DISTINCT FROM on Postgres), and
-    // ordering is total. Same shape as the SQLite version.
+    // Cross-backend invariant from §5.4 of the spec: `=`/`<>` are null-aware
+    // (IS NOT DISTINCT FROM on Postgres) and ordering is total. Same shape as
+    // the SQLite version, including where the nulls come from: the literal, not
+    // `1 / X`, which now has no value rather than a null one, so its row is
+    // withheld. These facts are what `Y = 1 / X` used to yield for `{0, 1, 2}`.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
-      t(0). t(1). t(2).
+      t(0, null). t(1, 1). t(2, 0).
       maybe_null(X, Y, IsNull, Below, AtMost) :-
-        t(X),
-        Y = 1 / X,
+        t(X, Y),
         IsNull = (Y = null),
         Below = (Y < 1),
         AtMost = (Y <= Y).
 
-      filter_logical(X) :- t(X), Y = 1 / X, Y = null.
-      neq_logical(X)    :- t(X), Y = 1 / X, Y <> null.
-      not_below(X)      :- t(X), Y = 1 / X, not (Y < 1).
+      filter_logical(X) :- t(X, Y), Y = null.
+      neq_logical(X)    :- t(X, Y), Y <> null.
+      not_below(X)      :- t(X, Y), not (Y < 1).
       ?- maybe_null(X, Y, IsNull, Below, AtMost).
       output predicate fl(X) :- filter_logical(X).
       output predicate nl(X) :- neq_logical(X).
@@ -172,13 +182,18 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(sorted(results[3]!.rows)).toEqual([{ X: 0 }, { X: 1 }]);
   });
 
-  test("primitive conversions: parse string → integer / float / boolean (NULL on bad input)", async () => {
+  test("primitive conversions: parse string → integer / float / boolean (no row on bad input)", async () => {
     // Pins the strict-canonical parsing rule on Postgres. The sqlite
     // backend exercises the same set via the example suite (which
     // requires cross-backend agreement) — this test confirms the
-    // Postgres regex emit produces identical NULL-on-failure behaviour
-    // when run against a float Postgres engine, where the regex
-    // operator (`~`) and BIGINT/DOUBLE PRECISION casts come into play.
+    // Postgres regex emit produces identical behaviour when run against a
+    // float Postgres engine, where the regex operator (`~`) and
+    // BIGINT/DOUBLE PRECISION casts come into play.
+    //
+    // A failed conversion has no value, so its rule derives no row for that
+    // input: the rejected strings are the ones absent below, not the ones
+    // paired with NULL. Which is also the point of the "without aborting"
+    // tests further down, since a raise would take the whole query with it.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
       raw_int("42").  raw_int("-7").  raw_int("0").
@@ -193,44 +208,39 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     `);
     const sorted = (rows: Record<string, unknown>[]) =>
       [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    // `01`, `-0`, `1.5` and `bad` are rejected, so they get no row.
     expect(sorted(results[0]!.rows)).toEqual(
       sorted([
         { R: "42", N: 42 },
         { R: "-7", N: -7 },
         { R: "0", N: 0 },
-        { R: "01", N: null },
-        { R: "-0", N: null },
-        { R: "1.5", N: null },
-        { R: "bad", N: null },
       ]),
     );
+    // `01.5` and `1.` are not canonical decimals, nor is `bad` one at all.
     expect(sorted(results[1]!.rows)).toEqual(
       sorted([
         { R: "3.14", N: 3.14 },
         { R: "-0.5", N: -0.5 },
         { R: "1.0", N: 1 },
         { R: "1", N: 1 },
-        { R: "01.5", N: null },
-        { R: "1.", N: null },
-        { R: "bad", N: null },
       ]),
     );
+    // The two boolean spellings are exactly `true` and `false`.
     expect(sorted(results[2]!.rows)).toEqual(
       sorted([
         { R: "true", B: true },
         { R: "false", B: false },
-        { R: "True", B: null },
-        { R: "yes", B: null },
       ]),
     );
   });
 
   test("to_float rejects out-of-range decimals without aborting the query", async () => {
     // Postgres checks the canonical decimal shape before casting, but a
-    // syntactically-valid decimal can still be outside double
-    // precision's range. A plain CAST would raise and abort the whole
-    // query; it should instead produce NULL, matching the native
-    // evaluator's finite-result gate.
+    // syntactically-valid decimal can still be outside double precision's
+    // range. A plain CAST would raise and abort the whole query; the guard
+    // makes the expression undefined instead, so the row is dropped and the
+    // sound one still comes back. That surviving row is what the test turns
+    // on: a raise would leave nothing at all.
     const huge = "9".repeat(400);
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
@@ -239,9 +249,7 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
       parsed(R, N) :- raw(R), N = to_float(R).
       ?- parsed(R, N).
     `);
-    const byInput = new Map(results[0]!.rows.map((r) => [r.R, r.N]));
-    expect(byInput.get(huge)).toBe(null);
-    expect(byInput.get("1.5")).toBe(1.5);
+    expect(results[0]!.rows).toEqual([{ R: "1.5", N: 1.5 }]);
   });
 
   test("guarded conversions on literals do not abort the query", async () => {
@@ -252,37 +260,51 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     const huge = "9".repeat(400);
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
-      r(I, F, J) :- I = to_integer("bad"), F = to_float("${huge}"), J = parse_json("not json").
-      ?- r(I, F, J).
+      bad(I, F, J) :- I = to_integer("bad"), F = to_float("${huge}"), J = parse_json("not json").
+      good(I) :- I = to_integer("42").
+      ?- bad(I, F, J).
+      output predicate ok(I) :- good(I).
     `);
-    expect(results[0]!.rows).toEqual([{ I: null, F: null, J: null }]);
+    // Each conversion fails, so the rule derives nothing. The companion rule
+    // is what distinguishes that from a query the planner aborted.
+    expect(results[0]!.rows).toEqual([]);
+    expect(results[1]!.rows).toEqual([{ I: 42 }]);
   });
 
   test("math overflow guards do not abort the query", async () => {
-    // Postgres raises on EXP / POWER overflow. The SQL emitter must
-    // prove the result is in range before evaluating the function,
-    // returning NULL for the same inputs that native maps to NULL.
+    // Postgres raises on EXP / POWER overflow. The SQL emitter must prove the
+    // result is in range before evaluating the function, leaving the same
+    // inputs undefined that native leaves undefined.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
-      r(E, P) :- E = exp(1000.0), P = 10.0 ** 400.0.
-      ?- r(E, P).
+      over(E, P) :- E = exp(1000.0), P = 10.0 ** 400.0.
+      under(E) :- E = exp(1.0).
+      ?- over(E, P).
+      output predicate ok(E) :- under(E).
     `);
-    expect(results[0]!.rows).toEqual([{ E: null, P: null }]);
+    expect(results[0]!.rows).toEqual([]);
+    expect(results[1]!.rows).toEqual([{ E: Math.E }]);
   });
 
-  test("integer arithmetic overflow returns NULL", async () => {
+  test("integer arithmetic overflow leaves the tuple underived", async () => {
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
-      r(Safe, Add, Sub, Mul) :-
-        Safe = 9007199254740990 + 1,
-        Add = 9007199254740991 + 1,
-        Sub = -9007199254740991 - 1,
-        Mul = 94906266 * 94906266.
-      ?- r(Safe, Add, Sub, Mul).
+      safe(X) :- X = 9007199254740990 + 1.
+      add(X)  :- X = 9007199254740991 + 1.
+      sub(X)  :- X = -9007199254740991 - 1.
+      mul(X)  :- X = 94906266 * 94906266.
+      ?- safe(X).
+      output predicate oa(X) :- add(X).
+      output predicate osu(X) :- sub(X).
+      output predicate om(X) :- mul(X).
     `);
-    expect(results[0]!.rows).toEqual([
-      { Safe: Number.MAX_SAFE_INTEGER, Add: null, Sub: null, Mul: null },
-    ]);
+    // One rule per case rather than one rule with four columns: a single
+    // overflowing column now withholds the whole tuple, which would hide the
+    // three sound ones.
+    expect(results[0]!.rows).toEqual([{ X: Number.MAX_SAFE_INTEGER }]);
+    expect(results[1]!.rows).toEqual([]);
+    expect(results[2]!.rows).toEqual([]);
+    expect(results[3]!.rows).toEqual([]);
   });
 
   test("primitive auto-lift round-trips through as_* on Postgres", async () => {
@@ -303,12 +325,12 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(results[0]!.rows).toEqual([{ R2: 2.5, B2: true, S2: "hello" }]);
   });
 
-  test("parse_json: valid JSON parses, malformed → NULL (no query abort)", async () => {
+  test("parse_json: valid JSON parses, malformed derives nothing (no query abort)", async () => {
     // The Postgres dialect routes parse_json through
-    // `pg_input_is_valid(text, 'jsonb')` to convert malformed input into
-    // NULL. It also filters JSON null and non-finite numeric leaves after
-    // parsing: jsonb accepts `null` and numerics like `9e999`, but native
-    // and SQLite collapse those cases to SQL NULL per spec §2.9.
+    // `pg_input_is_valid(text, 'jsonb')`, so malformed input leaves the call
+    // undefined rather than raising. `"null"` parses to the JSON null *value*,
+    // and a non-finite numeric leaf is still rejected, jsonb accepting `9e999`
+    // where no backend can represent it (spec §2.9).
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
       raw("{\\"a\\":1,\\"b\\":2}").
@@ -326,16 +348,18 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(byInput.get('{"a":1,"b":2}')).toEqual({ a: 1, b: 2 });
     expect(byInput.get("[1,2,3]")).toEqual([1, 2, 3]);
     expect(byInput.get("null")).toBe(null);
-    expect(byInput.get("9e999")).toBe(null);
-    expect(byInput.get("[1,9e999]")).toBe(null);
-    expect(byInput.get("not json")).toBe(null);
+    // Absent rather than null-valued: no row was derived for these three.
+    expect(byInput.has("9e999")).toBe(false);
+    expect(byInput.has("[1,9e999]")).toBe(false);
+    expect(byInput.has("not json")).toBe(false);
   });
 
-  test("Regression: JSON null leaves collapse after value extraction", async () => {
-    // Postgres jsonb distinguishes JSON null from SQL NULL. Datamog's
-    // runtime does not, so subscript/iteration/function-call boundaries
-    // must collapse extracted JSON null leaves before downstream logic sees
-    // them.
+  test("Regression: a JSON null leaf survives value extraction as a value", async () => {
+    // Postgres jsonb distinguishes JSON null from SQL NULL, and so does
+    // Datamog now: an extracted `null` leaf is the null value, and the
+    // operations over it answer about a value rather than collapsing. The
+    // dialect used to force the collapse at every extraction boundary, which
+    // is what null-as-a-value.md §8 removes.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
       data([null]).
@@ -351,7 +375,7 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
       output predicate oiter(V, IsNull) :- iter(V, IsNull).
     `);
     expect(results[0]!.rows).toEqual([
-      { V: null, IsNull: true, Kind: null, Encoded: null, Has: null },
+      { V: null, IsNull: true, Kind: "null", Encoded: "null", Has: false },
     ]);
     expect(results[1]!.rows).toEqual([{ V: null, IsNull: true }]);
   });
@@ -383,24 +407,30 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(results[1]!.rows).toEqual([{ L: [["￿"], ["😀"]] }]);
   });
 
-  test("Regression: NULL subscript / slice indices propagate to NULL", async () => {
-    // Pins the spec §5.4 NULL-propagation behaviour for the postgres
-    // dialect's CASE-guarded SUBSTR. Vanilla Postgres SUBSTR with a
-    // negative `for` argument errors; the translator's CASE both handles
-    // negative bounds and now an explicit `IS NULL THEN NULL` branch.
+  test("Regression: an undefined subscript / slice index derives nothing", async () => {
+    // Pins the postgres dialect's CASE-guarded SUBSTR against the same program
+    // the SQLite version uses. Vanilla Postgres SUBSTR with a negative `for`
+    // argument raises, so the guard has to be there whatever the index is; what
+    // changed is that `I = 1 / 0` does not hold, so no row reaches the
+    // subscript and a raise would be the only way to fail this test.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
       words("hello").
       sub(W, S)        :- words(W), I = 1 / 0, S = W[I].
       slice_start(W, S):- words(W), I = 1 / 0, S = W[I:3].
       slice_end(W, S)  :- words(W), J = 1 / 0, S = W[1:J].
+      backwards(W, S)  :- words(W), S = W[4:1].
       ?- sub(W, S).
       output predicate ss(W, S) :- slice_start(W, S).
       output predicate se(W, S) :- slice_end(W, S).
+      output predicate bw(W, S) :- backwards(W, S).
     `);
-    expect(results[0]!.rows).toEqual([{ W: "hello", S: null }]);
-    expect(results[1]!.rows).toEqual([{ W: "hello", S: null }]);
-    expect(results[2]!.rows).toEqual([{ W: "hello", S: null }]);
+    expect(results[0]!.rows).toEqual([]);
+    expect(results[1]!.rows).toEqual([]);
+    expect(results[2]!.rows).toEqual([]);
+    // The negative-length case is still reachable, and still `''` rather than a
+    // raise, which is the half of the guard the three above no longer exercise.
+    expect(results[3]!.rows).toEqual([{ W: "hello", S: "" }]);
   });
 
   test("Regression: loader-inserted value column is structured JSONB, not a string", async () => {

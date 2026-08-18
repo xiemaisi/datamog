@@ -65,11 +65,17 @@ function i32(expr: string): string {
 }
 
 function jsonScalarAsCanonical(typeSql: string, valueSql: string): string {
+  // A JSON `null` leaf is the canonical text `'null'`, not SQL NULL. That is §8
+  // of doc/design/null-as-a-value.md and the whole reason `value` spells its null
+  // the JSON way (§9.3): SQL NULL in a `value`-typed expression has to be free to
+  // mean *undefined*, so that a missing key withholds its row while a key that is
+  // present and holds a null derives one carrying it. Collapsing the two, which
+  // this used to do, is what made them indistinguishable.
   return `(CASE
     WHEN ${typeSql} = 'text' THEN json_quote(${valueSql})
     WHEN ${typeSql} = 'true' THEN 'true'
     WHEN ${typeSql} = 'false' THEN 'false'
-    WHEN ${typeSql} = 'null' THEN NULL
+    WHEN ${typeSql} = 'null' THEN 'null'
     ELSE ${valueSql}
   END)`;
 }
@@ -174,14 +180,18 @@ export class SqliteSqlDialect implements SqlDialect {
     // evaluator's sorted output. SQLite ≥ 3.44 supports ORDER BY
     // inside GROUP_CONCAT; bun:sqlite and the modern sql.js builds
     // both ship a recent enough SQLite.
-    return `GROUP_CONCAT(${argSql}, ',' ORDER BY ${argSql})`;
+    // Concatenation's identity over an empty group, per §7.
+    return `COALESCE(GROUP_CONCAT(${argSql}, ',' ORDER BY ${argSql}), '')`;
   }
 
   integerSum(argSql: string): string {
     const positive = `TOTAL(CASE WHEN ${argSql} > 0 THEN ${argSql} ELSE 0 END)`;
     const negative = `TOTAL(CASE WHEN ${argSql} < 0 THEN -(${argSql}) ELSE 0 END)`;
-    return `(CASE WHEN COUNT(${argSql}) > 0
-      AND ${positive} <= 9007199254740991
+    // Empty group first, so it yields 0 rather than NULL: `+`'s identity, per
+    // §7. Overflow still yields NULL, which means undefined. The two have to be
+    // told apart and only this order does it (§9.4).
+    return `(CASE WHEN COUNT(${argSql}) = 0 THEN 0
+      WHEN ${positive} <= 9007199254740991
       AND ${negative} <= 9007199254740991
       THEN CAST(${positive} - ${negative} AS INTEGER) ELSE NULL END)`;
   }
@@ -207,12 +217,15 @@ export class SqliteSqlDialect implements SqlDialect {
     // filter and emit a JSON `null` entry for what was really an
     // absent value.
     //
-    // Outer `NULLIF(..., '[]')` collapses an all-NULL / empty group
+    // An all-NULL or empty group yields '[]' (§7), where it used to yield NULL
     // to SQL NULL. A legitimate non-empty group containing the JSON
     // value `[]` produces the outer result `'[[]]'`, which NULLIF
     // leaves alone.
     const orderKey = argIsJson ? this.stringOrder(argSql) : argSql;
-    return `NULLIF(JSON_GROUP_ARRAY(json(${valueSql}) ORDER BY ${orderKey}) FILTER (WHERE ${argSql} IS NOT NULL), '[]')`;
+    // `JSON_GROUP_ARRAY` already returns '[]' over an empty group, which is
+    // append's identity and what §7 wants. The `NULLIF(..., '[]')` this used to
+    // carry turned that into NULL on purpose; removing it is the whole change.
+    return `JSON_GROUP_ARRAY(json(${valueSql}) ORDER BY ${orderKey}) FILTER (WHERE ${argSql} IS NOT NULL)`;
   }
 
   logicalEq(leftSql: string, rightSql: string): string {
@@ -338,17 +351,18 @@ export class SqliteSqlDialect implements SqlDialect {
 
   jsonTypeOf(jsonSql: string): string {
     // SQLite's `json_type` distinguishes integer / floating-point numbers and
-    // true/false booleans; collapse to the spec set so output agrees
-    // across backends. JSON null collapses to SQL NULL at Datamog
-    // expression boundaries, so type_of over either SQL NULL or a
-    // raw/caller-seeded JSON 'null' returns NULL.
+    // true/false booleans; collapse to the spec set so output agrees across
+    // backends. A JSON null answers `'null'`: it is an ordinary value with an
+    // ordinary type name, and reporting it is what `type_of` is for (§8). Only a
+    // SQL NULL receiver, meaning the expression had no value at all, gives NULL,
+    // and the enclosing definedness guard withholds that row anyway.
     return `(CASE json_type(${jsonSql})
       WHEN 'true' THEN 'boolean'
       WHEN 'false' THEN 'boolean'
       WHEN 'integer' THEN 'number'
       WHEN 'real' THEN 'number'
       WHEN 'text' THEN 'string'
-      WHEN 'null' THEN NULL
+      WHEN 'null' THEN 'null'
       ELSE json_type(${jsonSql})
     END)`;
   }
@@ -489,6 +503,12 @@ export class SqliteSqlDialect implements SqlDialect {
     if (valueType === "string") {
       return `json_quote(${valueSql})`;
     }
+    // The `null` type lifts to the JSON null, spelled as canonical text rather
+    // than SQL NULL: inside a `value` a null is a value, and SQL NULL there means
+    // undefined (§8, §9.3).
+    if (valueType === "null") {
+      return "'null'";
+    }
     throw new Error(`SQLite toJson: unsupported source type '${valueType}'`);
   }
 
@@ -565,7 +585,13 @@ export class SqliteSqlDialect implements SqlDialect {
   parseJson(textSql: string): string {
     // `json_valid(text)` is silent — returns 1 for parseable JSON, 0
     // for malformed or NULL input. Gate `json()` on it so a bad parse
-    // becomes NULL rather than a runtime error.
+    // becomes NULL rather than a runtime error. That NULL is the *undefined*
+    // reading and the enclosing definedness guard withholds the row.
+    //
+    // A top-level `null` parses successfully and yields the JSON null value, so
+    // it is deliberately not excluded here: `parse_json("null")` derives a row
+    // carrying null. This used to carry `AND json_type(j) <> 'null'`, which was
+    // the same collapse §8 removes from the accessors.
     //
     // SQLite accepts numeric leaves such as `9e999` and exposes them as
     // IEEE Infinity through `json_each`/`json_tree`; JSONL/CSV loaders and
@@ -585,7 +611,6 @@ export class SqliteSqlDialect implements SqlDialect {
       SELECT CASE WHEN json_valid(${textSql}) THEN json(${textSql}) ELSE NULL END
     )
     SELECT CASE WHEN j IS NOT NULL
-      AND json_type(j) <> 'null'
       AND NOT EXISTS (
         SELECT 1 FROM json_tree(j) AS jt
         WHERE jt.type IN ('integer', 'real')

@@ -31,6 +31,14 @@ const TOTAL: NullBehaviour = { strict: true, total: true };
 const PARTIAL: NullBehaviour = { strict: true, total: false };
 
 /**
+ * Answers for a null argument instead of propagating it. `type_of` is the case:
+ * `null` is an ordinary value with an ordinary type name, so reporting it is the
+ * function's job rather than something to short-circuit. See
+ * doc/design/null-as-a-value.md §8.
+ */
+const ANSWERS_NULL: NullBehaviour = { strict: false, total: true };
+
+/**
  * One overload of a built-in function. Backends key their SQL-emit and
  * native-impl tables on `key`; the analyzer/type-inference layer cares
  * about `params` (for arity + arg-type compatibility), `result`
@@ -135,7 +143,7 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
     ov("length.value", ["value"], "integer", PARTIAL),
     ov("length.string", ["string"], "integer", TOTAL),
   ]),
-  builtin("type_of", [ov("type_of.value", ["value"], "string", TOTAL)]),
+  builtin("type_of", [ov("type_of.value", ["value"], "string", ANSWERS_NULL)]),
 
   // Object helpers. `has_key` is a boolean presence test. `keys`
   // returns a sorted array of the object's keys (as JSON strings);

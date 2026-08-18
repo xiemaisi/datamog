@@ -1,9 +1,12 @@
-// Warnings about NULL reaching a place where it is easy not to expect it.
+// Warnings about a row going missing for a reason that is easy not to expect.
 //
-// All three are the residual oddities null.md §5 and §8 name, and none is an
-// error: the behaviour is specified and sometimes wanted. What makes them
-// worth reporting is that the symptom is a missing row, so the cost of not
-// noticing is paid by reading output and counting.
+// Three are about NULL reaching somewhere surprising, the residual oddities
+// null.md §5 and §8 name. The fourth is about an expression having no value at
+// all, which withholds its row (doc/design/null-as-a-value.md §1). They sit
+// together because the symptom is the same and it is the reason any of them is
+// worth reporting: a missing row, whose cost is paid by reading output and
+// counting. None is an error; each is specified behaviour that is sometimes
+// exactly what was wanted.
 //
 // Shaped like `FinitenessDiagnostic` / `PolarityDiagnostic` and consumed the
 // same way (a pull-based call from the CLI and the playground), so no warning
@@ -13,18 +16,45 @@ import type { Expression, PrimitiveType } from "./ast.ts";
 import { ORDERING_OPS } from "./ast.ts";
 import type { BodyOwner } from "./nullness.ts";
 import { mayBeNull, refineBody } from "./nullness.ts";
+import { canBeUndefined } from "./partiality.ts";
 import type { TypedProgram } from "./types.ts";
 import { inferTermType, rebuildVarTypes } from "./types.ts";
 
 export interface NullnessDiagnostic {
   severity: "warning";
-  code: "nullable-filter" | "nullable-ordering-gap" | "nullable-negated-ordering";
+  code:
+    | "nullable-filter"
+    | "nullable-ordering-gap"
+    | "nullable-negated-ordering"
+    | "undefined-expression";
   message: string;
   offset?: number;
   end?: number;
 }
 
-export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
+export interface NullnessDiagnosticOptions {
+  /**
+   * Also report expressions that can have no value (`undefined-expression`).
+   *
+   * Off by default, and the reason is measured rather than assumed. Across
+   * `examples/` the check fires **192 times in 29 of 80 examples**, or 60 times
+   * if narrowed to head arguments alone. That is not a corpus full of bugs: a
+   * program that writes `Y = 10 / X` usually knows `X` can be zero and wants
+   * those rows gone, and one that writes `to_integer(S)` is asking a question
+   * that can fail. Partiality is pervasive and mostly intentional, so warning
+   * about all of it is the array-bounds-warning mistake.
+   *
+   * It earns its keep the other way round: as something to switch on when rows
+   * you expected are missing, which is exactly when the volume stops being
+   * noise. See doc/design/null-as-a-value.md §15.14.
+   */
+  readonly warnUndefined?: boolean;
+}
+
+export function findNullnessRisks(
+  typed: TypedProgram,
+  opts?: NullnessDiagnosticOptions,
+): NullnessDiagnostic[] {
   const diagnostics: NullnessDiagnostic[] = [];
   const varTypeCache = new Map<BodyOwner, Map<string, PrimitiveType>>();
   const ctx = {
@@ -53,6 +83,7 @@ export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
     // makes a computed column nullable.
     if ((owner as { synthetic?: boolean }).synthetic) continue;
     const nonNull = typed.nullness.nonNullVars.get(owner.body) ?? new Set<string>();
+    if (opts?.warnUndefined) collectUndefinable(owner, typed, varTypeCache, diagnostics);
     for (const elem of owner.body) {
       if (elem.$type !== "Filter") continue;
       // A NULL filter value is "does not match", so the row leaves without a
@@ -95,6 +126,62 @@ export function findNullnessRisks(typed: TypedProgram): NullnessDiagnostic[] {
 
   diagnostics.push(...orderingGaps(orderings));
   return diagnostics;
+}
+
+/**
+ * Expressions whose *value* a rule uses and which can fail to have one, so the
+ * rule derives fewer tuples than its body suggests.
+ *
+ * This is the mitigation for the one real cost of partiality
+ * (doc/design/null-as-a-value.md §14.1): the old behaviour put a visible NULL in
+ * the row, where now the row is simply absent and nothing says so. A warning at
+ * analysis time arrives before the run rather than after, which is the whole
+ * point of having it.
+ *
+ * Reported at exactly the sites the translator guards, since those are the sites
+ * where a value is used: head arguments and the sides of an equality. **Not**
+ * filters, whose NULL-drops the `nullable-filter` warning above already covers
+ * and whose whole job is to remove rows. One diagnostic per rule, naming the
+ * first offending expression: a rule that divides twice has one problem, not two.
+ */
+function collectUndefinable(
+  owner: BodyOwner,
+  typed: TypedProgram,
+  varTypeCache: Map<BodyOwner, Map<string, PrimitiveType>>,
+  into: NullnessDiagnostic[],
+): void {
+  let vars = varTypeCache.get(owner);
+  if (!vars) {
+    vars = rebuildVarTypes(owner.body, typed.columnTypes);
+    varTypeCache.set(owner, vars);
+  }
+  const pctx = {
+    overloads: typed.functionOverloads,
+    typeOf: (expr: Parameters<typeof inferTermType>[0]) =>
+      inferTermType(expr, vars!, typed.columnTypes),
+  };
+
+  const candidates: Expression[] = [];
+  const head = (owner as { head?: { args?: readonly Expression[] } }).head;
+  if (head?.args) candidates.push(...head.args);
+  for (const elem of owner.body) {
+    if (elem.$type === "Equality") candidates.push(elem.left, elem.expr);
+  }
+
+  for (const expr of candidates) {
+    if (!canBeUndefined(expr, pctx)) continue;
+    const text = expr.$cstNode?.text;
+    into.push({
+      severity: "warning",
+      code: "undefined-expression",
+      message: text
+        ? `\`${text}\` can have no value, and a rule derives no tuple where one of its expressions does not. Rows you might expect will be absent rather than carrying a NULL.`
+        : "This expression can have no value, and a rule derives no tuple where one of its expressions does not.",
+      offset: expr.$cstNode?.offset,
+      end: expr.$cstNode?.end,
+    });
+    return;
+  }
 }
 
 interface OrderingUse {

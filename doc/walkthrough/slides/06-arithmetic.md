@@ -56,18 +56,18 @@ SQLite and Postgres both truncate integer `/` natively, so Datamog emits `/` dir
 
 ---
 
-# Partial operations return `NULL`
+# Partial operations have no value
 
-Datamog normalises runtime partials to `NULL` / `""` across all backends:
+Datamog normalises partial operations across all backends. "No value" means the row is not derived:
 
 | | |
 | --- | --- |
-| `a / 0`, `a % 0` | `NULL` |
-| `sqrt(-x)`, `ln(0)`, `ln(-x)` | `NULL` |
-| `0 ** -n`, `-x ** fractional` | `NULL` |
+| `a / 0`, `a % 0` | no value |
+| `sqrt(-x)`, `ln(0)`, `ln(-x)` | no value |
+| `0 ** -n`, `-x ** fractional` | no value |
 | `W[5:2]` (start ≥ end) | `""` |
 
-`NULL` flows on through the rule rather than killing it: `Y = 10 / X` with `X = 0` binds `Y` to `NULL` and the row still appears. Filter with `Y <> null`.
+The conjunct does not hold, so the row goes: `Y = 10 / X` with `X = 0` derives nothing. Distinct from `null`, which is an ordinary value and keeps its row.
 
 ---
 
@@ -195,7 +195,7 @@ Datalog states the bound and the condition; the engine figures out the iteration
 
 - **Arithmetic** and **comparisons** in bodies and heads. Equality binds, comparison filters.
 - **Range atoms** `N in [lo..hi]` generate integers — the canonical "values not in any EDB" entry point.
-- **Strings** — `+`, `length`, indexing, slicing. Out-of-range / wrong-way slices return `""`; `NULL` only enters via a `NULL` operand.
+- **Strings**: `+`, `length`, indexing, slicing. Out-of-range / wrong-way slices return `""`, which is a value.
 - These features can break finite-active-domain — recursive programs that use them need a user-supplied termination bound.
 
 ---

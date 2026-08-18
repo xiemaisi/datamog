@@ -1,10 +1,37 @@
 # Design notes: tracking nullness in the type system
 
-Status: implemented through stage 2 (§6); stage 3 declined (§7). The grouping
-corrections found after stage 0 shipped are fixed and recorded below, along with
-the reading of "grouping column" they settled. The normative rules are spec §5.4
-(tracking and refinement), §5.10 (annotations) and §9.3 (boundaries). This note is
-the rationale and the alternatives rejected.
+Status: **partly superseded by [null-as-a-value.md](./null-as-a-value.md)**,
+which is implemented. The machinery here still runs: nullness is still a bit
+beside the base type, still inferred per column, still checked at annotations and
+module boundaries, and still selects between the two equality lowerings. The
+normative rules are spec §5.4 ("Nullness") and §5.10.
+
+Two things about it have moved.
+
+**`null` is now also a type**, sitting beside the primitives, so the bit is no
+longer the only way the language talks about nullness. §7's rejection of adding
+`null` to `PrimitiveType` was measured against a *ten-member* union and is
+correct about that; the single atom that shipped costs one compile error, and
+null-as-a-value.md §15.10 records the mis-pricing.
+
+**Inference now splits originating a null from propagating one.** A partial
+operation does neither on its own account: it yields no value rather than a null
+one, so `X = A / B` leaves `X` non-null and overflow, a zero divisor and a failed
+`to_integer` are none of this analysis's business. Nullness originates at a `null`
+literal, a `?` extensional column, and a `value` result that may be a JSON null;
+everything else passes on what it was given, and comparison stops it dead. No
+aggregate is nullable either, since null-as-a-value.md §7 gives the empty group an
+identity or withholds the row. Spec §5.4 states the rules.
+
+The practical effect is that nullability no longer spreads through every dividing
+rule, which is most of what made it feel infectious. Two cases this note treats at
+length go with it: an ungrouped `sum` is non-null (it folds an empty group to 0),
+so the join against it takes the plain `=` after all, and with that the grouping
+analysis stops bearing on nullness at all.
+
+Stage 3 remains declined (§7), and for a better reason than it had: requiring `?`
+would now cost far less, since nullability no longer spreads through every
+dividing rule, but nothing has asked for it.
 
 [null.md](./null.md) §7 records that nullness stays out of the type system, and
 §6 records the one analysis that would have needed it as designed but
@@ -258,9 +285,13 @@ Worked, with the last one being the case refinement-annotations.md §4.4 needs:
 q(X) :- p(X), X <> null.                    % X non-null, so q's column is too
 q(X) :- p(X), X < 100.                      % same, via the strict comparison
 q(X) :- p(Y), Y <> null, X = Y & 1.         % Y non-null, wrapping bitwise op total, so X
-q(X) :- p(Y), X = Y / 2.                    % nothing: `/` is partial, X maybenull
+q(X) :- p(Y), Y <> null, X = Y / 2.         % Y non-null and `/` propagates, so X
 q(X) :- p(X), X <= 100.                     % nothing: `<=` admits the NULL row
 ```
+
+The division row read `q(X) :- p(Y), X = Y / 2.` and proved nothing, on the
+grounds that `/` is partial. Partiality is no longer nullness (see the status
+note), so the guard on `Y` is what the row now turns on.
 
 Order independence comes from running it as a fixed point over the conjuncts,
 descending from maybenull to nonnull until nothing changes. This is the shape the
@@ -276,13 +307,13 @@ in it is non-null and every operation in it is total on non-null arguments. A
 bare `null` head argument is maybenull, and it is the one source that needs no
 expression walk.
 
-Aggregates mostly propagate rather than originate: a group exists only because
-a row exists, so `count(*)` and `count(e)` are always non-null (an empty count is
-`0`, not NULL), while `sum`, `avg`, `min`, `max`, `concat` and `list` are
-nullable when their argument is, since only an all-NULL group yields NULL. Two
-cases originate anyway, which §6 works through and null.md §6 gets wrong: an
-integer `sum`, which can overflow, and *any* ungrouped aggregate, whose
-empty-group row is NULL for everything but `count`.
+No aggregate is nullable. Each one either folds a monoid, whose identity covers
+the empty group (`count` and `sum` → 0, `concat` → `""`, `list` → `[]`), or has no
+identity and withholds its row instead (`avg`, `min`, `max`); nulls among the
+inputs are skipped on the way. As designed here two cases originated a null, an
+integer `sum` and *any* ungrouped aggregate, and both went with the empty-group
+identities (null-as-a-value.md §7). One consequence: whether an argument is a
+grouping column no longer bears on nullness at all.
 
 Across rules, join. Over the dependency graph, take the least fixed point seeded
 with every IDB column at **non-null**, rising to maybenull. Same shape as
@@ -554,7 +585,8 @@ null.md §8 refuses and spec §2.9 already collapses.
   ⊤ is never materialised, so the fixed point in §4.3 is unaffected.
 - **`?` on a query or constraint** has nowhere to go and should stay
   unparseable. Both are checked, neither publishes a contract.
-- **Integer overflow follows the ordinary partial-operation path.** Arithmetic,
-  integer-returning math builtins, and integer `sum` can originate NULL at the
-  safe-integer boundary. The fixed-point design needs no special case beyond
-  their totality metadata and `mayBeNull` branches.
+- **Integer overflow is no longer a nullness question.** Leaving the safe-integer
+  domain leaves the expression with no value, so arithmetic, the integer-returning
+  math builtins and integer `sum` originate nothing here. What they need is
+  `canBeUndefined` in `partiality.ts`, which is a separate analysis, and their
+  `strict`/`total` metadata still drives the refinement side below.

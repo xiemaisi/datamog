@@ -13,6 +13,10 @@ function risks(source: string) {
   return findNullnessRisks(inferTypes(analyze(parse(source))));
 }
 
+function undefinedRisks(source: string) {
+  return findNullnessRisks(inferTypes(analyze(parse(source))), { warnUndefined: true });
+}
+
 function codes(source: string): string[] {
   return risks(source).map((d) => d.code);
 }
@@ -37,15 +41,22 @@ describe("nullable filter", () => {
     expect(codes(source)).toEqual([]);
   });
 
-  test("a partial projection into boolean position warns", () => {
-    // Written `!as_boolean(V)` rather than bare: a body element of the shape
-    // `name(args)` parses as an atom, so the bare call would be read as a
+  test("a partial projection into boolean position warns about nothing", () => {
+    // `as_boolean` of a non-boolean has no value rather than a null one, so this
+    // no longer reaches boolean position at all. Nor is it the undefined-expression
+    // warning's business: that one exists because an undefined *value* leaves the
+    // row absent with nothing to say so, whereas an undefined filter drops its row
+    // exactly as the old NULL did, which is a filter's job either way.
+    //
+    // Written `!as_boolean(V)` rather than bare because a body element of the
+    // shape `name(args)` parses as an atom, so the bare call would be read as a
     // reference to an undefined predicate.
     const source = `
       input predicate p(v: value).
       q(V) :- p(V), !as_boolean(V).
     `;
-    expect(codes(source)).toEqual(["nullable-filter"]);
+    expect(codes(source)).toEqual([]);
+    expect(undefinedRisks(source)).toEqual([]);
   });
 
   test("a guarded nullable boolean does not warn", () => {
@@ -192,5 +203,67 @@ describe("negated ordering", () => {
       "nullable-negated-ordering",
       "nullable-negated-ordering",
     ]);
+  });
+});
+
+describe("undefined expressions (opt-in)", () => {
+  // The mitigation for partiality's one real cost: a rule can derive fewer
+  // tuples than its body suggests and nothing in the output says so.
+  // See doc/design/null-as-a-value.md §14.1 and §15.14.
+
+  test("a partial expression in a binding equality warns, naming it", () => {
+    const source = `
+      input predicate n(x: integer).
+      q(X, Y) :- n(X), Y = 10 / X.
+    `;
+    const ds = undefinedRisks(source);
+    expect(ds.map((d) => d.code)).toEqual(["undefined-expression"]);
+    expect(ds[0]!.message).toContain("10 / X");
+    expect(ds[0]!.severity).toBe("warning");
+  });
+
+  test("a partial expression in a head argument warns too", () => {
+    const source = `
+      input predicate n(x: integer).
+      q(10 / X) :- n(X).
+    `;
+    expect(undefinedRisks(source).map((d) => d.code)).toEqual(["undefined-expression"]);
+  });
+
+  test("it is off unless asked for", () => {
+    // Measured, not assumed: on by default this fires 192 times across
+    // `examples/`, because partial operations are pervasive and usually
+    // deliberate. §15.14 records the measurement and the decision.
+    const source = `
+      input predicate n(x: integer).
+      q(X, Y) :- n(X), Y = 10 / X.
+    `;
+    expect(codes(source)).toEqual([]);
+  });
+
+  test("a total expression does not warn", () => {
+    const source = `
+      input predicate n(x: integer).
+      q(X, Y) :- n(X), Y = X & 1.
+    `;
+    expect(undefinedRisks(source)).toEqual([]);
+  });
+
+  test("one warning per rule, not one per partial operation", () => {
+    // A rule that divides twice has one problem, not two.
+    const source = `
+      input predicate n(x: integer, y: integer).
+      q(A, B) :- n(X, Y), A = 10 / X, B = 10 / Y.
+    `;
+    expect(undefinedRisks(source)).toHaveLength(1);
+  });
+
+  test("a null literal is not undefined, so it does not warn", () => {
+    // The distinction the whole design rests on: a `null` is a value.
+    const source = `
+      input predicate n(x: integer).
+      q(X, null) :- n(X).
+    `;
+    expect(undefinedRisks(source)).toEqual([]);
   });
 });

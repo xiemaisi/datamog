@@ -37,9 +37,12 @@ describe("the script", () => {
 describe("the encoding does not delegate to the solver", () => {
   test("an ordering is false at NULL rather than SMT-LIB's", () => {
     // `<` requires both sides non-null; the pair encoding is what makes that
-    // expressible at all. `Y` is nullable because integer arithmetic can leave
-    // the domain.
-    const out = script("p(1).\nr(X, Y, _: Y > X) :- p(X), Y = X + 1.");
+    // expressible at all. `Y` is nullable because its column is declared so,
+    // which since null-as-a-value.md is the only way a variable becomes nullable.
+    const out = script(`
+      input predicate p(a: integer?).
+      r(X, Y, _: Y > X) :- p(Y), X = 0.
+    `);
     expect(out).toContain("Y$null");
     expect(out).toContain("(not Y$null)");
   });

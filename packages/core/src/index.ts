@@ -107,11 +107,18 @@ export { findInertPolarity, type PolarityDiagnostic } from "./polarity.ts";
 export {
   inferNullness,
   mayBeNull,
-  type BodyOwner,
-  type NullnessContext,
-  type NullnessInfo,
 } from "./nullness.ts";
-export { findNullnessRisks, type NullnessDiagnostic } from "./nullness-diagnostics.ts";
+export { canBeUndefined, type PartialityContext } from "./partiality.ts";
+export type {
+  BodyOwner,
+  NullnessContext,
+  NullnessInfo,
+} from "./nullness.ts";
+export {
+  findNullnessRisks,
+  type NullnessDiagnostic,
+  type NullnessDiagnosticOptions,
+} from "./nullness-diagnostics.ts";
 export { findRecursiveCalls, type RecursiveCall } from "./recursion.ts";
 export { findPredicateReferences, type PredicateReference } from "./references.ts";
 export {

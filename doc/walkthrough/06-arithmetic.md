@@ -56,43 +56,93 @@ decimal point works): `P / 10.0`. SQLite and Postgres both truncate
 integer `/` natively, so Datamog emits `/` directly on every
 backend it ships.
 
-### Divisions and domain errors return `NULL`
+### Divisions and domain errors have no value
 
 Datamog is careful to make partial operations consistent across
-backends:
+backends. Each of these has **no value** at all, rather than raising, or
+producing an IEEE special value, or yielding `null`:
 
-- `a / 0` and `a % 0` return `NULL` everywhere (SQLite's natural
-  behaviour; Postgres would raise without the `NULLIF` wrapper).
-- `sqrt(-x)`, `ln(0)` or `ln(-x)`, `0 ** -n`, `-x ** fractional`
-  also return `NULL` (wrapped in a `CASE` in the generated SQL).
-- **Integer arithmetic that leaves the integer domain** returns
-  `NULL` too. That domain is `[-(2^53 - 1), 2^53 - 1]`, the range
-  JavaScript numbers represent exactly, and it is the same on every
-  backend rather than whatever width the database happens to use.
-  So `X + 1` is a partial operation like the others: exact while the
-  answer fits, `NULL` when it does not.
+- `a / 0` and `a % 0`, on every backend.
+- `sqrt(-x)`, `ln(0)` or `ln(-x)`, `0 ** -n`, `-x ** fractional`.
+- **Integer arithmetic that leaves the integer domain.** That domain is
+  `[-(2^53 - 1), 2^53 - 1]`, the range JavaScript numbers represent
+  exactly, and it is the same on every backend rather than whatever
+  width the database happens to use. So `X + 1` is a partial operation
+  like the others: exact while the answer fits, and no value when it
+  does not.
 - Slice bounds going the wrong way (`W[5:2]`) return the empty
-  string.
+  string, which *is* a value.
 
-A `NULL` from one of these flows on through the rule rather than
-killing it: `Y = 10 / X` with `X = 0` binds `Y` to `NULL`, and the
-row still appears with the `NULL` in it. Add `Y <> null` if you want
-badly computed rows gone.
+"No value" is the important phrase, and it is stronger than it sounds. An
+expression with no value cannot be stored, compared or bound, so the
+conjunct mentioning it does not hold and **the row is not derived**:
 
-Overflow is worth a second look, because it is the one that surprises.
-Every arithmetic column is potentially nullable for this reason, even
-one built only from non-null inputs, which is why a guard sometimes
-looks redundant and is not:
+```prolog
+n(0). n(2). n(4).
+half(X, Y) :- n(X), Y = 10 / X.     # two rows, not three: X = 0 has no Y
+```
+
+That is the thing to internalise before writing much arithmetic. A rule can
+derive fewer tuples than its input suggests, and nothing in the output says
+so. This is the one real cost of the design: the old behaviour put a visible
+`NULL` in the row, which was at least loud.
+
+Run with `--warn-undefined` and Datamog names every expression that can fail:
+
+```
+warning: `10 / X` can have no value, and a rule derives no tuple where one of
+its expressions does not.
+```
+
+It is off by default because most partial operations are deliberate, so the
+warning is noisy on a working program. Reach for it when rows you expected are
+missing.
+
+To see which rows went, ask for the ones whose expression has no value.
+`not (e = e)` holds exactly when `e` is undefined, since an equality needs
+both sides to have a value:
+
+```prolog
+lost(X) :- n(X), not (10 / X = 10 / X).   # {0}
+```
+
+Overflow is worth a second look, because it is the one that surprises:
 
 ```prolog
 big(9007199254740991).
-step(N + 1) :- big(N).      # derives NULL, not 9007199254740992
+step(N + 1) :- big(N).      # derives nothing, not 9007199254740992
 ```
 
 The alternative would be to pick a width and let each backend disagree
-at the edges, or to raise. Returning `NULL` keeps the same program
+at the edges, or to raise. Having no value keeps the same program
 meaning the same thing everywhere, which is the trade the whole
 chapter has been making.
+
+### `null` is a different thing entirely
+
+Worth saying plainly here, because the two are easy to run together.
+`null` is an ordinary **value**. It has its own type, it binds a variable,
+it sits in a column, and comparisons compare it:
+
+```prolog
+maybe(1, null). maybe(2, 7).
+absent(X)  :- maybe(X, Y), Y = null.        # {1}
+present(X) :- maybe(X, Y), Y <> null.       # {2}
+```
+
+None of those rows is withheld: a `null` is something, where an undefined
+expression is nothing. The guard `Y <> null` asks about a value; it has no
+bearing on whether an expression had one.
+
+One consequence catches people out. Because `<>` needs both sides to have a
+value, it is *not* the negation of `=` when an operand can be undefined:
+
+```prolog
+ne(X)    :- n(X), X <> 10 / X.        # X = 0 excluded: the right side has no value
+negeq(X) :- n(X), not (X = 10 / X).   # X = 0 included, for the same reason
+```
+
+Both readings are useful; write the one you mean.
 
 ## Range atoms: generating values
 
@@ -257,12 +307,12 @@ yellow squiggle.
   predicate.
 - **Strings** have concat (`+`), `length`, indexing, and slicing.
   Out-of-bounds indexing and "wrong-way" slices return `""`
-  consistently across backends; `NULL` only enters when an operand
-  is itself `NULL`.
+  consistently across backends; a partial one has no value, and the row
+  goes with it.
 - These features can break the finite-active-domain guarantee;
   recursive programs that use them need a user-supplied termination
   bound. Runtime partials (`/0`, `sqrt(-)`, bad slice) are
-  normalised to `NULL`/`""` everywhere.
+  normalised to "no value" or `""` everywhere.
 
 ## Exercises
 

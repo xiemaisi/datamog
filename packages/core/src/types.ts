@@ -57,6 +57,14 @@ export function inferTypes(analyzed: AnalyzedProgram): TypedProgram {
 function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
   // Internal representation allows undefined for unknown positions
   const types = new Map<string, (PrimitiveType | undefined)[]>();
+  /**
+   * Positions where some rule writes a bare `null`. Such a position has the
+   * `null` type, whose base component is empty, and a `PrimitiveType[]` has no
+   * spelling for that. What matters downstream is only that the position is
+   * *typed* rather than uninferrable, and that it is nullable, which
+   * `inferNullness` already concludes from the same literal.
+   */
+  const nullOnly = new Map<string, Set<number>>();
 
   // Seed EDB types from declarations
   for (const [predicate, decl] of analyzed.extDecls) {
@@ -107,6 +115,16 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
           // Infer head argument types
           for (let i = 0; i < rule.head.args.length; i++) {
             const arg = rule.head.args[i]!;
+            // A bare `null` contributes the `null` type: no base values, plus
+            // null. There is nowhere to put "no base" in a `PrimitiveType[]`,
+            // so it is recorded here and resolved below once every rule has
+            // had its say. See doc/design/null-as-a-value.md §3 and §6.
+            if (arg.$type === "NullLiteral") {
+              (nullOnly.get(predicate) ?? nullOnly.set(predicate, new Set()).get(predicate)!).add(
+                i,
+              );
+              continue;
+            }
             const argType = inferTermType(arg, varTypes, types);
             if (argType) {
               newTypes[i] = unifyColumnType(newTypes[i], argType);
@@ -169,6 +187,15 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     const pub = published.get(pred) ?? predTypes;
     for (let i = 0; i < predTypes.length; i++) {
       const t = predTypes[i];
+      if (t === undefined && nullOnly.get(pred)?.has(i)) {
+        // The `null` type: every rule writes a bare `null` here, so the column
+        // holds nulls and nothing else. Which base type carries them is
+        // unobservable, no non-null value ever being stored, so pick the one
+        // whose storage is widest and move on.
+        finalTypes.push("string");
+        pubTypes.push(pub[i] ?? "string");
+        continue;
+      }
       if (t === undefined) {
         // EDB column types are seeded from declarations and never
         // undefined here, so this only fires for IDBs. Pick the first
@@ -1017,12 +1044,12 @@ export function inferTermType(
     case "BooleanLiteral":
       return "boolean";
     case "NullLiteral":
-      // Polymorphic: null doesn't anchor a type. Treated by downstream
-      // checks the same way as a variable whose type couldn't yet be
-      // inferred — it composes with anything via `=`/`<>`, propagates
-      // through arithmetic and other comparisons, and (per §5.4) makes
-      // its expression NULL at runtime.
-      return undefined;
+      // `null` has a type: the `null` type, whose single value is null and which
+      // sits beside the primitives under `value` rather than below them. That
+      // placement is what keeps `string` meet `integer` empty while making
+      // `string?` meet `integer?` inhabited. See
+      // doc/design/null-as-a-value.md §2 and §3.
+      return "null";
     case "Variable":
       return varTypes.get(term.name);
     case "BinaryExpr": {
@@ -1135,6 +1162,13 @@ function numericResultType(
 function joinTypes(a: PrimitiveType | undefined, b: PrimitiveType): PrimitiveType | null {
   if (!a) return b;
   if (a === b) return a;
+  // `null` is a base atom with no non-null values, so joining it contributes
+  // nothing to the base: `null ⊔ integer` is `integer` carrying a null, and the
+  // null half is what `inferNullness` records. Keeping it out of the base is what
+  // lets §6's pair representation stand, with one atom added rather than five
+  // nullable twins. See doc/design/null-as-a-value.md §3.
+  if (a === "null") return b;
+  if (b === "null") return a;
   if ((a === "float" && b === "integer") || (a === "integer" && b === "float")) return "float";
   return null;
 }
@@ -1155,6 +1189,10 @@ function joinTypesWithJsonLift(
   a: PrimitiveType | undefined,
   b: PrimitiveType,
 ): PrimitiveType | null {
+  // `X <> null` is the guard the language recommends, so the null atom composes
+  // with every type rather than conflicting with it.
+  if (a === "null") return b;
+  if (b === "null") return a ?? b;
   const direct = joinTypes(a, b);
   if (direct !== null) return direct;
   if (a === "value" && b !== "value") return "value";
@@ -1176,6 +1214,12 @@ function joinTypesWithJsonLift(
 export function meetTypes(a: PrimitiveType | undefined, b: PrimitiveType): PrimitiveType | null {
   if (!a) return b;
   if (a === b) return a;
+  // As in `joinTypes`, the null atom constrains no base. §3's precise answer here
+  // is that `string? ⊓ integer?` is the `null` type, which needs the pair at
+  // every meet site rather than only at the literal; until then this is as
+  // permissive as it was for `undefined`, which is the safe direction.
+  if (a === "null") return b;
+  if (b === "null") return a;
   if ((a === "float" && b === "integer") || (a === "integer" && b === "float")) return "integer";
   if (a === "value") return b;
   if (b === "value") return a;

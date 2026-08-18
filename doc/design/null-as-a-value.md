@@ -1,6 +1,11 @@
 # Design notes: null as an ordinary value, undefinedness as partiality
 
-Status: **in progress.** Stages 1 and 2 of §15.1 are built and green; partiality is next. This is the design
+Status: **stage 3 built and green on `max/partial-expressions`.** Partiality,
+the `null` type, the `value` accessors and the 60-test sweep are done on every
+runnable backend, with the example suite green across all four. Stages 1 and 2
+(§15.1) landed earlier. Everything is built, spec'd and tested (§15.10 through
+§15.15), including the undefined-expression warning, which measurement turned
+into an opt-in flag rather than a default (§15.14). This is the design
 [partial-expressions.md](./partial-expressions.md) should have found and did not.
 It supersedes that doc's recommendation: where that one concluded "keep NULL, at
 most forbid it in columns", this one concludes "split NULL's two jobs apart, and
@@ -834,17 +839,573 @@ The order, with the two landed stages marked:
 2. **Split `not` from `!`.** Done. §4.4's rewrite deletion, which is a
    prerequisite for §11.6 and is self-contained: it changes behaviour only where
    a NULL reaches boolean position, and all four runnable backends agree.
-3. **Partiality**: the `UNDEF` sentinel in `values.ts`, the planner and evaluator
-   dropping on it, the head filter, and the comparison lowering. This is the one
-   stage that cannot land incrementally, since the backends have to agree at
-   every commit and partiality changes all of them at once.
-4. **Inference**, now that nullability means what §3 says: column types carrying
-   the bit, narrowing per §5, head annotations and boundaries reading one type.
-5. **§13's deletions**, unlocked rather than risky by that point.
-6. **§7's aggregate identities**, then the spec and the corpus.
+3. **Partiality, the `null` type, the aggregate identities and the sweep, as one
+   change.** Attempted as separate stages twice; §15.2 and §15.3 record why they
+   will not separate. Most of it is built on
+   `max/partial-expressions-stage3-wip`; what is left there is the local `<>`
+   rewrite and the 72-test sweep.
+4. **§13's deletions**, unlocked rather than risky by that point.
+5. Then the rest of the spec.
+
+### 15.2 Why partiality and the `null` type cannot land separately
+
+Stage 3 was attempted as partiality alone, with the `null` type deferred to a
+later stage. The attempt is preserved on `max/partial-expressions-stage3-wip`,
+and it establishes two things.
+
+**`as_integer(null)` becomes undefined, which is correct and removes the only way
+to write a typed null.** `null` is not an integer, so the projection fails, so the
+expression has no value and the tuple is withheld. That is exactly what the
+opening paragraph of this doc promises, `null` no longer needing
+`as_integer(null)` to write it down. But the plain `null` literal cannot replace
+it until the `null` type exists, because inference reports "cannot infer type of
+column 2" for `p(V, null)` today. So partiality alone leaves a program with no way
+to put a null in a column at all, and the two stages have to arrive together.
+Verified: `padded(V, N) :- s(V), N = as_integer(null).` derives three rows on
+native and none on sqlite with the guards in place.
+
+**The guards have to go in at every site at once, or the backends disagree.** With
+the translator guarding head arguments *and* binding equalities while the
+interpreters guarded only head arguments, `divs(Q) :- s(V), Q = 10 / V.` kept the
+`V = 0` row on native and dropped it on sqlite. The interpreters' binding
+equality is a planner step rather than a head projection, so it is a separate
+site, and every such site has to be covered before any of them is observable.
+
+**And the sweep is not small.** 35 tests pin "a partial operation yields NULL in
+the output", across `engine/test/executor.test.ts`, the native and seminaive
+suites and the module-boundary tests. Each becomes "the row is withheld", which is
+mechanical but has to be done as one piece, alongside the `expected.json` of the
+examples that carry a null and the spec sections §14 item 6 lists.
+
+So the honest shape of the remaining work is one change of roughly that size, not
+four small ones. Nothing found here disputes the design; the two backends behaved
+exactly as their halves of it were built to.
+
+### 15.3 Second attempt: what now works, and the two things left
+
+The WIP branch was carried further. Both of §15.2's disagreements are closed, and
+two new findings replace them.
+
+**Closed.** The `null` type is in: a bare `null` head argument types, so
+`padded(V, null) :- s(V).` derives three rows with a null on native and on sqlite
+alike. Its base component is empty and a `PrimitiveType[]` has no spelling for
+that, so inference records the position and resolves it after every rule has
+contributed; which base carries the nulls is unobservable, nothing else being
+stored there. And the interpreters now guard binding equalities as well as head
+arguments, via a `defined` planner step rather than a flag on the step that uses
+the value. That indirection is forced: at runtime the `null` value and an
+undefined are the same JS `null`, so which one a NULL is has to be decided
+statically, and the planner knows while the evaluator does not.
+
+**Left, one: `<>` needs a local rewrite, not a rule-level guard.** A `defined`
+step withholds the whole row, which is right for a head argument and wrong for a
+comparison operand under a negation. `V <> 10 / V` must not hold at `V = 0`, and
+`not (V = 10 / V)` must hold there, so hoisting a guard to rule level gets the
+second one wrong. The fix is to rewrite the comparison locally as
+`(cmp) && <operands defined>`, which sits *inside* whatever negation encloses it
+and so gives both the right answer. Not yet done, and it is the flagship
+divergence of §4.2, so it is not optional.
+
+**Closed since, and this is the design working end to end.** The `<>` rewrite is
+in, on both backends, with `s = {0, 1, 3}`:
+
+```prolog
+ne(V)    :- s(V), V <> 10 / V.        # {1}
+negeq(V) :- s(V), not (V = 10 / V).   # {0, 1}
+```
+
+`V = 0` is absent from the first and present in the second, which is §4.2's
+divergence, observable and identical on native and sqlite. And a real null still
+compares, a variable being defined: `nulleq(V, null)` derives three rows and
+`N = null` matches all of them. So undefined suppresses and null compares, which
+is the whole proposal in two lines of output.
+
+The placement was the difficulty, exactly as predicted above. It also produced a
+simplification worth keeping: `canBeUndefined` lost its `owner` parameter, because
+definedness never depends on the enclosing rule, where nullness does for the
+ungrouped-aggregate case. That is what lets `termToSql` and `evalTerm` ask the
+question at the point they emit a comparison, which is where the answer has to be
+applied.
+
+**Left, one: the test sweep is entangled with the aggregate decisions.** The
+count reached 72 once the interpreter guards joined the translator's, and is now
+about 60: the three examples carrying a null in their expected output regenerate
+by deletion, 49 lines of it, every line a row whose expression had no value.
+
+The rest are not mechanical, for two reasons. `count(X) ignores NULL arguments`
+builds its nulls with `Y = X / 0`, which under partiality derives nothing at all,
+so its replacement has to assert §11.2's decision that `count` counts nulls using
+a genuine null. And a test named "divide-by-zero returns NULL" that asserts an
+empty result is worse than no test, so each needs a new name and comment as well
+as a new expectation. Roughly sixty of those, plus the spec sections §14 item 6
+lists.
+
+So the sweep cannot precede the aggregate work, and §15.1's remaining stages
+collapse further: partiality, the `null` type, the aggregate identities and the
+sweep are one change.
+
+### 15.4 The sweep, started: two kinds of test, and a fourth prerequisite
+
+Eight of the sixty are done and they divide cleanly, in a way worth following for
+the rest.
+
+**Five were not about partiality at all.** Their subject is null-aware equality,
+null-to-null joins, atom matching against a `null` literal: none of which this
+proposal changes. They used `Y = 1 / X` only as a convenient way to make a null.
+Swap the source to the literal and **every expectation stands unaltered**, since
+`nullable(0, null). nullable(1, 1). nullable(2, 0).` is exactly what `Y = 1 / X`
+used to yield for `t = {0, 1, 2}`. That those tests survive untouched is itself
+evidence for the design: the null half of the language is undisturbed, and only
+the undefined half moved.
+
+**Three asserted that a partial operation yields NULL.** Renamed to say the row is
+withheld, with a comment recording what replaced what. Leaving the old name on a
+test that now asserts an empty result would be worse than deleting it.
+
+**Then the accessor tests stopped, on §8.** Verified:
+
+```prolog
+data(J) :- J = {"s": "hi", "n": null}.
+present(T) :- data(J), T = type_of(J["n"]).    # no rows
+absent(T)  :- data(J), T = type_of(J["zz"]).   # no rows
+```
+
+§8 requires the first to be a defined `"null"` and only the second to withhold.
+The guard cannot tell them apart, because the runtime hands both back as SQL NULL,
+which is §9.3's collision arriving in the accessors. Distinguishing them needs the
+`json_each` type column in the dialects and its interpreter counterpart.
+
+So **§8 is a prerequisite for the rest of the sweep**, not a later polish, and
+that is the fourth thing this change has absorbed. The order inside it is now:
+§8's accessors, then §7's aggregate identities, then the remaining fifty-two
+tests, then the spec.
+
+### 15.5 §8 on the interpreter: the marker the static approach was avoiding
+
+The accessor settled a question the earlier stages had managed to duck.
+`J["k"]` on a missing key and on `{"k": null}` both come back as JS `null`, so no
+static test can separate them: the interpreter needs **two markers**. `undefined`
+is now "no value" and `null` stays the null value, with
+`EvalResult = Value | undefined` as the type that says so. That is
+partial-expressions.md §4.2's prediction, arriving four stages later than it
+expected.
+
+Verified on `native`: a missing key withholds the row, a present-but-null key
+derives one carrying `null`, and `type_of(J["n"])` is the string `"null"`, which
+`"t=" + type_of(J["n"])` confirms rather than the table renderer, which prints a
+string unquoted and so shows both as `null`.
+
+Three things worth recording.
+
+**Changing the signature and letting the compiler find the boundary turned a
+feared hundred edits into about twenty five.** Counting `return null` sites
+suggested the former; widening `evalTerm`'s return type and reading the errors
+gave the latter, all of them real. Worth remembering the next time a change looks
+too diffuse to attempt.
+
+**The marker makes the static test redundant in the interpreter.** With
+`undefined` observable at runtime there is nothing to predict, so
+`undefinablePositions` is deleted and the projection simply checks its tuple. That
+is both simpler and more precise than the static guard, which over-approximated.
+The translator keeps its static guards, SQL having only one NULL and so no way to
+ask the question at runtime. So the two backends reach the same semantics by
+different means, which is exactly what §9's table describes.
+
+**`type_of` needed to stop propagating null, and the registry already said so.**
+`Overload.nulls.strict` exists precisely to distinguish a builtin that propagates
+a null from one that answers for it, and `type_of` is the second kind. The blanket
+short-circuit in `evalCall` became a per-overload one; no new machinery.
+
+52 failures down to 36. Four of the remainder are the example suite's
+cross-backend check correctly catching that the interpreters now have §8 and the
+SQL dialects do not, which is the next piece of work rather than a defect.
+
+### 15.6 §8 on every backend, and the rule for when a runtime marker may replace a static one
+
+The example suite is green across native, seminaive, sqlite and sqljs: 276 pass,
+0 fail. That is the cross-backend canary agreeing on partiality and on
+absent-versus-null for the first time since this change began.
+
+**The SQL half was much smaller than the interpreter half.** sqlite collapsed a
+JSON null leaf in one line of `jsonScalarAsCanonical` and one arm of `jsonTypeOf`;
+Postgres did it in `NULLIF(x, 'null'::jsonb)` at four sites plus its own
+`jsonTypeOf`. Both now keep the leaf, which is what frees SQL NULL in a
+`value`-typed expression to mean undefined, as §9.3 reserves it. sqljs shares
+sqlite's dialect and came along for nothing. Postgres is unverified locally, no
+`DATABASE_URL`, but the changes are the exact analogue of sqlite's.
+
+**One regression on the way, and it yields a rule worth keeping.** Deleting the
+static head check (§15.5) was premature: the *parsing* builtins still returned
+`null` on failure, so a failed `to_float` looked like a legitimate null and its row
+survived. The example suite caught it. Twenty one failure returns in `values.ts`
+now yield the absence marker. So:
+
+> A runtime marker may replace a static test only once **every** partial operation
+> produces the marker. Until then the static test is still carrying the cases the
+> runtime cannot see, and removing it silently keeps rows that should go.
+
+**And one misclassification, which located a line.** Arithmetic, concatenation and
+the bitwise operators still *propagate* the null value, per spec §5.4, and
+converting that site along with the genuine failures broke four unrelated test
+blocks. It is not a failure case: under §5's hybrid position, arithmetic on a
+nullable operand is a static *type* error, so the right answer is to reject the
+program rather than invent a runtime one. That those four blocks went green
+together on reverting it is decent evidence the line sits where §5 says.
+
+The sweep stands at 40 remaining, and it is now purely a sweep: no prerequisites
+left.
+
+### 15.7 Sweeping: the collapse was in more places than the accessors
+
+Down to 32. Most of the sweep is mechanical, and two things in it are not.
+
+**A rule that mixes a good column with a bad one has to be split, not
+re-expected.** One undefined head expression withholds the whole tuple, so after
+the change such a rule can only ever assert emptiness, and it stops checking the
+good column it was written for. `integer arithmetic and conversion` was checking a
+safe result beside three overflows; `primitive values embed` was checking five
+sound conversions beside a wrong-shape `length`. Split per position, both check
+what they were written to check. Blanket-replacing the expectation with `[]` would
+have kept the suite green while quietly deleting its content, which is the failure
+mode to watch for in the remaining tests.
+
+**The JSON-null collapse was in two more places, neither an accessor.**
+`parse_json` excluded a top-level null explicitly, `AND json_type(j) <> 'null'` on
+sqlite and its jsonb twin on Postgres, so `parse_json("null")` withheld its row
+where the interpreter derived one carrying null. And Postgres's `has_key` had an
+extra arm answering NULL for a JSON null receiver where sqlite and the interpreter
+both answered false: a Postgres-only divergence that predates this work and that
+only surfaced once the accessors stopped hiding it.
+
+The lesson for the rest of the sweep is that "the collapse lives in the accessors"
+was too narrow. It lives anywhere a dialect had to decide what a JSON null means,
+and grepping for `'null'` in each dialect is the way to find the rest.
+
+### 15.8 The interpreter suites are green, and two gaps remain named
+
+Down to 23. The native evaluator suite passes in full and the seminaive one
+follows it, sharing `values.ts`.
+
+**The literal-null-source pattern carried all four NULL-semantics blocks with
+their expectations completely unchanged.** That is the fifth time, and it is worth
+trusting rather than re-deriving each time: a test whose subject is null-aware
+equality, a null-to-null join, atom matching against a `null`, or an all-null
+aggregate group was never about partiality. Reseeding it from the literal is the
+whole edit.
+
+**A grep lesson.** Three stragglers in `values.ts` expressed failure as a ternary
+rather than `return null`, so a line-based conversion missed them: `sqrt`, `ln`,
+`exp` and the `as_*` / `to_*` projections. `? null` has to be grepped alongside
+`return null`.
+
+**Two corrections to earlier work in this same change**, both found by the suite.
+A regex batch had wrongly emptied `ungrouped aggregate over empty body`, which
+still emits its row: `sum` over no contributions is NULL until §7's identities
+land, and that test is about the row existing rather than about the value. And
+`computed atom arg matching a NULL column` had to be reseeded, which improved it:
+it now asserts both halves of the distinction, that matching a null works and
+matching an undefined never does.
+
+Two gaps are now named rather than latent, and both are implementation rather than
+sweep:
+
+1. **A bare `null` still does not ground a variable.** `Y = null` is rejected by
+   the safety check, because the `null` type reaches head positions (§15.2's
+   `nullOnly` path) but not `inferTermType`. §2 requires the binding form to work.
+   Until it does, a null has to be written in a head position.
+2. **`count(e)` still skips nulls**, which is today's SQL-inherited behaviour and
+   the opposite of §11.2's decision. Implementing it needs a **type-directed
+   emit**: after this change SQL cannot tell an undefined argument from a
+   null-valued one inside `COUNT(e)` without consulting the argument's declared
+   type. That is §9's collision reaching the aggregates, and it is the last
+   substantive implementation piece.
+
+### 15.9 The sweep, finished
+
+All sixty are done and the suite is green: 1803 pass, 0 fail, with the example
+suite green across native, seminaive, sqlite and sqljs. The whole of stage 3 is
+one commit, because §15.2 through §15.4 established it could not be split.
+
+Two shapes accounted for nearly all of it, and knowing them in advance would have
+halved the work:
+
+1. **A test that used a partial operation merely as a null source** gets reseeded
+   from the literal, and its expectations stand unchanged. This held every time,
+   for every such test, on both interpreters and both SQL dialects. Those tests
+   were never about partiality.
+2. **A rule mixing a sound column with a failing one** gets split per position,
+   because one undefined head expression withholds the whole tuple and the rule
+   would otherwise only ever assert emptiness. Re-expecting instead of splitting
+   keeps the suite green while deleting the check.
+
+Three findings from the tail of it.
+
+**One test turned out to be §10's payoff.** "NULL in a constrained position is a
+violation" built its NULL from an integer overflow. Under partiality no tuple is
+derived, so a contract over the tuples that exist has nothing to violate, and the
+same fact is what makes the static obligation discharge. It now asserts that, plus
+a second case so it cannot be read as the check having gone quiet.
+
+**The diagnostics snapshot earned its keep.** It reported exactly one program
+changing verdict, `q(null).` typing where it used to be rejected, and told me to
+delete and regenerate if that was intended. Precisely the right amount of
+friction for a semantic change this wide.
+
+**The last failure traced back to gap 1, via a cross-backend divergence.**
+`has_key(null, "x")` leaves the overload unresolved, because a bare `null` is
+still untyped, so `canBeUndefined` takes its conservative branch and the
+translator guards where the interpreter, reading the runtime marker, does not:
+sqlite withheld the row, native kept it. So the static and runtime tests must
+agree *exactly*, not merely be sound in the same direction, and an
+over-approximating static guard is a divergence rather than a safe imprecision.
+That case is dropped from the test with the reason recorded; closing gap 1 closes
+it too.
+
+### 15.10 The `null` type, and a mis-priced measurement
+
+Gap 1 is closed: a bare `null` grounds a variable and types a column.
+
+**§6's rejection of extending `PrimitiveType` was mis-scoped, and the number that
+made it convincing was measuring the wrong change.** 146 comparison sites do break
+if the union gains a nullable twin per primitive. But that is not what §3
+describes. §3 adds `null` as a **sibling atom** and keeps `T?` as the pair, base
+plus bit. Adding that one atom costs **one** compile error, in `SQL_TYPE_MAP`.
+
+The lesson is about how the measurement was taken rather than about types: "extend
+`PrimitiveType`" was priced as one option when it was two, and the cheap one was
+what the design had actually asked for. Worth re-reading a rejection when the
+thing being rejected turns out to be a family.
+
+The base lattice treats the new atom as carrying no base constraint, so
+`null ⊔ integer` is `integer` and the null half stays with `inferNullness`. §3's
+precise meet, `string? ⊓ integer?` being the null type, still wants the pair at
+every meet site and is not attempted.
+
+**Three consequences, all of them the design arriving rather than being added.**
+
+`null + 1`, `abs(null)`, `null[0]` and a null range bound are now **type errors**.
+That is §5's hybrid position at its far end: a nullable operand wants narrowing,
+and a statically null one can never be narrowed, so rejecting it is the whole of
+the rule there. Fourteen diagnostics-snapshot verdicts move, every one that way.
+
+It **retires the unresolved-overload branch** that made `canBeUndefined`
+conservative and split the backends in §15.9. That divergence was a symptom of
+gap 1 rather than a separate problem, and closing the gap closed it.
+
+And a **`value` parameter accepts null as one of the shapes it holds**, so the
+interpreter stops propagating a null into one. Without that, sqlite lifted the
+null to a JSON null and let the function answer while the interpreter
+short-circuited: `has_key(null, "x")` was false on one and null on the other.
+Consequently `as_boolean(null)` and `length(null)` now fail rather than yielding a
+null, which is right, a null being neither a boolean nor a thing with a length.
+
+That leaves §11.2's `count` and §7's aggregate identities.
+
+### 15.11 The aggregate identities, and the half that needs HAVING
+
+§7 splits cleanly in two, and only one half needs new machinery.
+
+**Landed: the identities.** `sum` folds with 0, `concat` with the empty string,
+`list` with `[]`, `count` already did. Agreed on all four runnable backends. This
+retires null.md §8's complaint that an empty `list` yields `null` rather than `[]`,
+and on sqlite the change is a *deletion*: `JSON_GROUP_ARRAY` already returns
+`'[]'` and the `NULLIF(..., '[]')` wrapper existed to turn that into NULL on
+purpose.
+
+`integerSum` had to be restructured rather than wrapped, which is §9.4's fifth
+site arriving exactly as predicted. SUM over no rows and an overflowing SUM are
+both SQL NULL and now have to go opposite ways, 0 and undefined, so the empty case
+is tested first and the domain guard sees only the coalesced result. A COALESCE
+around the whole thing would have turned overflow into 0.
+
+**Landed since: the no-identity cases, via HAVING.** `avg`, `min` and `max` have
+no identity in the domain, and an integer `sum` can leave it, so a group with no
+defined contributions leaves them without a value and the tuple is withheld. An
+aggregate cannot appear in `WHERE`, so the translator emits `HAVING` beside its
+`GROUP BY`; `canBeUndefined` answers for an aggregate term, and the assembly point
+already had `HAVING` in `CLAUSE_STARTS`.
+
+It was briefly left as NULL on every backend rather than changed on the
+interpreters alone, and that interim is the part worth keeping. Changing the
+interpreters first would have been two lines and would have split the backends,
+and §15.6's rule is that a divergence is worse than an incompleteness. That
+reasoning came up three times in this change and held every time.
+
+Verified together on sqlite and native: an empty group gives `sum` 0 and withholds
+`min` and `avg`, and a grouped query withholds only the group whose contributions
+are all null. The second half is what HAVING buys over a rule-level guard, and it
+matches what the interpreters' per-group projection already did.
+
+### 15.12 `count`, and a type-directed emit that needed no types
+
+§11.2 said `count` counting nulls would need a type-directed emit, since SQL cannot
+tell an undefined argument from a null-valued one inside `COUNT(e)` without the
+argument's declared type. It needs neither the type nor the nullness bit.
+
+`COUNT(col)` skips NULLs, which is the wrong rule for a null and the right one for
+an undefined. So the only question is which of those a NULL in that position would
+be, and `canBeUndefined` already answers exactly that:
+
+| argument | emit | why |
+|---|---|---|
+| cannot be undefined | `COUNT(*)` | a NULL there is the null value, so count it |
+| can be undefined | `COUNT(col)` | NULL-skipping *is* "contributes nothing" |
+
+For a non-nullable argument the two agree, there being no NULLs either way, so no
+case is left over. The lesson is the same shape as §15.10's: a requirement stated
+in terms of types turned out to be a requirement about definedness, which was
+already computed.
+
+One detail worth keeping for whoever writes the spec: the partial expression has
+to sit *inside* the aggregate for this to be observable. Binding it first attracts
+the rule-level definedness guard, and by the time the aggregate runs the undefined
+rows are already gone, so `COUNT(*)` is right again. `count(10 / X)` and
+`Z = 10 / X, count(Z)` therefore agree, which they should, but for different
+reasons at each layer.
+
+### 15.13 The docs, and the one thing still owed
+
+Spec and prose are done, in two commits. The spec's §5.4 is renamed
+"Partiality and NULL" and reorganised around the split; §5.3's "Expression
+totality" becomes "Expression partiality", since the claim it made is the one
+this change reverses; §5.1 gains `null` as a sixth type; §1.5, §2.6, §2.7 and
+§2.9 follow.
+
+Two things are worth recording rather than left in the diff.
+
+**`examples/primitive-conversions` needed more than regeneration**, which is what
+§14.1 predicted. Its whole point was showing what a failed conversion yields, and
+the answer is now "no row". Its header now asks the reader to look for what is
+*missing*, says why that is the design's one real cost, and gives the query that
+names the rejected inputs, `not (to_integer(R) = to_integer(R))`, verified
+identical on sqlite and native before being documented. §4.3's idiom turns out to
+earn its keep as a teaching device rather than only as a debugging one.
+
+**Nullness inference is coarser than the value model**, and both spec §5.4 and
+nullness-tracking.md said so. It still counted a partial operation as a source of
+nullness, so a rule that divides was inferred nullable even though division yields
+no value rather than a `null`. That over-approximated in the safe direction: it
+could require a `?` nothing needs, never omit one that is needed. §15.16 tightens
+it.
+
+### 15.14 The undefined-expression warning, and why it is opt-in
+
+Built. It reports at exactly the sites the translator guards, head arguments and
+the sides of an equality, naming the offending expression. Not filters, whose job
+is to remove rows and whose NULL-drops `nullable-filter` already covers. One per
+rule, since a rule that divides twice has one problem rather than two.
+
+**§6 assumed this would be on by default, and measuring it says otherwise.**
+Across `examples/` it fires **192 times in 29 of the 80 examples**; narrowed to
+head arguments alone, still 60. That is not a corpus full of bugs. A program
+writing `Y = 10 / X` usually knows `X` can be zero and wants those rows gone, and
+one writing `to_integer(S)` is asking a question whose whole point is that it can
+fail. Partiality is pervasive and mostly deliberate, so warning about all of it is
+the array-bounds-warning mistake: technically accurate, and trained away within a
+day.
+
+So it follows `--warn-finiteness`: off unless asked for, rejected in REPL mode,
+and available for the case where it is worth its volume, which is someone puzzled
+by missing rows. That is the inverse of how §6 imagined it, and the inversion is
+the point: this warning is a **debugging tool**, not a lint.
+
+The playground and embed pass no options and stay quiet, which is right. 192
+warnings in a teaching playground would be worse than none.
+
+A note on what this does *not* fix. §14.1's cost is real and remains: the default
+experience is still a row that is quietly absent. The warning moves the discovery
+from "read the output and count" to "run it again with a flag", which is better
+but is not the same as loud.
+
+### 15.15 Nothing owed
+
+Every item in this document is built, spec'd and tested. The one loose thread is
+recorded above rather than in a list: nullness *inference* is coarser than the
+value model (§15.13), which over-approximates safely and would be a small,
+self-contained tightening. §15.16 does it.
 
 Two caveats to keep in view. The corpus cannot argue for this, because it barely uses
 nulls at all, so the case rests on the design being simpler to explain rather than
 on a program that gets better. And §14.1 is a real regression for a teaching
 language, paid in exchange for a language that no longer needs a section
 explaining why its NULL is not the billion-dollar mistake.
+
+### 15.16 The tightening, and the one thing it uncovered
+
+Done, and it is a smaller change than the note predicted: one function. `mayBeNull`
+now splits **originating** a null from **propagating** one.
+
+Originating, and this is the whole list: a `null` literal, a `?` extensional
+column, a `value`-typed builtin result (`parse_json("null")` is the case), and a
+`value` accessor reaching a JSON `null` leaf. Propagating, and nothing more:
+arithmetic, the bitwise operators, the connectives, string concatenation, every
+other builtin, and both `Slice` bounds. A NULL comes out of `X / Y` only because
+one went in.
+
+Propagation still has to be there, and the reason is worth recording: §5's hybrid
+position is only half enforced. A *statically* `null` operand to `+` is a type
+error, but a `T?` one is not, because overload resolution reads the base type and
+ignores the nullness bit. So `X + 1` with `X : integer?` type-checks and still
+yields a null.
+
+**Two things fell out that were not obviously part of it.**
+
+`AggregateCall` collapsed to `false`. §7's identities had already made every
+aggregate non-null, without that being noticed here: `count`, `sum`, `concat` and
+`list` fold monoids, and `avg`, `min` and `max` have no identity and withhold the
+row rather than emit a null one. That deleted `isUngroupedAggregate` and with it
+the last reason nullness cared whether a head argument groups, which was the
+subtlest thing in the old analysis and the source of two of its bugs. Verified on
+all five backends with an all-null group as well as an empty one: `min`/`max`
+withhold, `sum` gives 0, `list` gives `[]`, and `count` counts the null row.
+
+The tests it moved are the interesting part of the diff, because most of them had
+to be *re-sourced* rather than re-expected: a test that wanted a nullable column
+said `X = A / B`, and there is now no such thing, so it says `input predicate
+p(a: integer?)` instead. That is the change stated in one sentence. Nineteen tests
+across nullness, head annotations, obligations, the translator and module
+boundaries; three lost their subject entirely and were replaced by the opposite
+assertion.
+
+**And a gap that had nothing to do with the tightening.** Running the suite with
+`DATABASE_URL` set turned up 10 failures in `backend/postgres/test`, a file this
+branch had never touched: they assert the old NULL results for a failed
+conversion, an overflow, a malformed `parse_json` and a collapsed JSON null. The
+examples-on-Postgres block passes, so the backend agrees with the other four and
+only its own unit tests are stale. Worth stating as the process lesson: a suite
+that skips itself without a service is a suite that can rot for a whole branch
+without anyone seeing it.
+
+### 15.17 The Postgres suite, and the two bugs it was hiding
+
+The 10 stale tests §15.16 turned up were not only stale. Two of them were sitting
+on real Postgres bugs, both reachable only because `null` became a value.
+
+**A bare `NULL` in a view's select list.** `i(X) :- X = null.` now grounds `X`,
+which it could not do before, and the projection emitted `SELECT DISTINCT NULL AS
+col1`. Postgres types that column `unknown` and then refuses to select from the
+view: "could not determine polymorphic type because input has type unknown".
+`castIntegerForDialect` already existed to give a head column its storage type and
+was already called at all four projection sites, so it became `castHeadColumn` and
+took the `null` type too. Casting a NULL is free.
+
+**`to_jsonb` of the same untyped NULL**, which fails the same way, being
+polymorphic over `anyelement`. The Postgres `toJson` now answers the `null` type
+with `'null'::jsonb` and never reads the operand, which is both the fix and the
+right answer.
+
+**And one divergence, found by looking rather than by a test.** `to_json(null)`
+gave the text `"null"` on native and SQLite and SQL NULL on Postgres, because
+`jsonStringify` still opened with `CASE WHEN jsonb_typeof(j) = 'null' THEN NULL`.
+That is the last of the §8 collapses, and it survived the sweep in §15.7 because
+nothing exercised it: the collapse used to be *correct*, so no test failed when
+the surrounding ones were rewritten. Deleted, and the three backends now agree.
+
+The rewrites themselves follow the pattern the rest of the branch used, with one
+addition worth copying. A test whose whole subject was "this does not raise" can
+no longer prove it by the value in the row, because there is no row. So each such
+test gained a companion rule that does derive one: `[]` alone would also be what a
+silently-broken query returns, where `[]` beside a sound row can only mean the
+guard fired. `guarded conversions`, `math overflow guards` and the subscript
+regression all needed it, the last using a backwards slice, since the negative
+length is the half of the SUBSTR guard still reachable.

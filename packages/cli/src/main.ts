@@ -83,6 +83,10 @@ function usage(exitCode = 1): never {
   console.error("  --strict-contracts         Treat refinement-contract advisories as errors");
   console.error("  --warn-finiteness          Print a warning for each predicate column whose");
   console.error("                             values may grow unboundedly across iterations");
+  console.error(
+    "  --warn-undefined           Print a warning for each expression that can have no",
+  );
+  console.error("                             value, whose rows are withheld rather than kept");
   console.error("  --max-iterations <n>       Cap fixed-point passes per stratum and stop with a");
   console.error("                             note instead of looping (native/seminaive only)");
   console.error("  --csv-no-header            CSV inputs have no header row");
@@ -618,8 +622,16 @@ function emitPolarityWarnings(analyzed: Parameters<typeof findInertPolarity>[0])
 // Also always reported, and for the same reason: the symptom of both is a row
 // that quietly is not there. Neither fires unless a NULL can actually reach the
 // place in question, so a program with no nullable columns never sees these.
-function emitNullnessWarnings(typed: Parameters<typeof findNullnessRisks>[0]): void {
-  for (const d of findNullnessRisks(typed)) {
+//
+// `--warn-undefined` adds the partiality check, which is opt-in because it is
+// noisy by nature rather than by accident: partial operations are pervasive and
+// usually deliberate. It is the flag to reach for when rows you expected are
+// missing. See doc/design/null-as-a-value.md §15.14.
+function emitNullnessWarnings(
+  typed: Parameters<typeof findNullnessRisks>[0],
+  warnUndefined: boolean,
+): void {
+  for (const d of findNullnessRisks(typed, { warnUndefined })) {
     console.error(`warning: ${d.message}`);
   }
 }
@@ -642,6 +654,7 @@ async function main() {
   let dryRun = false;
   let csvNoHeader = false;
   let warnFiniteness = false;
+  let warnUndefined = false;
   let strictContracts = false;
   let obligations = false;
   let verify = false;
@@ -669,6 +682,7 @@ async function main() {
     if (arg === "--dry-run") dryRun = true;
     else if (arg === "--csv-no-header") csvNoHeader = true;
     else if (arg === "--warn-finiteness") warnFiniteness = true;
+    else if (arg === "--warn-undefined") warnUndefined = true;
     else if (arg === "--strict-contracts") strictContracts = true;
     else if (arg === "--obligations") obligations = true;
     else if (arg === "--verify") verify = true;
@@ -725,9 +739,9 @@ async function main() {
       console.error("--repl does not take a program file");
       process.exit(1);
     }
-    if (dryRun || warnFiniteness || allOutputs || outputFormat !== "table") {
+    if (dryRun || warnFiniteness || warnUndefined || allOutputs || outputFormat !== "table") {
       console.error(
-        "REPL mode is incompatible with --dry-run / --warn-finiteness / --all / --output-format",
+        "REPL mode is incompatible with --dry-run / --warn-finiteness / --warn-undefined / --all / --output-format",
       );
       process.exit(1);
     }
@@ -860,7 +874,7 @@ async function main() {
   const analyzed = inferTypes(analyze(program, programPath));
   checkModuleBoundaries(analyzed, boundaries);
   emitPolarityWarnings(analyzed);
-  emitNullnessWarnings(analyzed);
+  emitNullnessWarnings(analyzed, warnUndefined);
   if (emitContractDiagnostics(analyzed, strictContracts) && strictContracts) {
     process.exitCode = 1;
     return;

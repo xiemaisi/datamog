@@ -20,8 +20,19 @@ function finiteOrNull(floatSql: string): string {
   return `(CASE WHEN ABS(${floatSql}) > 1.7976931348623157e308 THEN NULL ELSE ${floatSql} END)`;
 }
 
-function jsonNullToSqlNull(jsonSql: string): string {
-  return `NULLIF(${jsonSql}, 'null'::jsonb)`;
+/**
+ * A JSON `null` leaf stays a JSONB `'null'` rather than becoming SQL NULL.
+ *
+ * This used to be `NULLIF(x, 'null'::jsonb)`, collapsing the two. §8 of
+ * doc/design/null-as-a-value.md needs them apart: SQL NULL in a `value`-typed
+ * expression means *undefined*, so a missing key withholds its row while a key
+ * that is present and holds a null derives one carrying it. Kept as a named
+ * identity rather than deleted at its four call sites, so the places that
+ * deliberately do *not* collapse stay visible next to sqlite's matching
+ * `jsonScalarAsCanonical`.
+ */
+function jsonNullPreserved(jsonSql: string): string {
+  return jsonSql;
 }
 
 /** Reinterpret the low 32 bits of an integer expression as signed int32. */
@@ -63,11 +74,11 @@ export class PostgresSqlDialect implements SqlDialect {
     // jsonb's `->` operator handles both forms: string → object key, integer
     // → array element. Force the index expression's SQL type so that mixed
     // JSON shapes (object indexed with integer, array indexed with string)
-    // return NULL rather than raising. Collapse JSON null leaves to SQL NULL
-    // at the expression boundary, matching the native runtime's single
-    // representation for both.
+    // return NULL rather than raising, which is the *undefined* reading and
+    // withholds the row. A present key holding a JSON null keeps its `'null'`
+    // and derives a row (§8).
     const cast = indexIsString ? "TEXT" : "INTEGER";
-    return jsonNullToSqlNull(`(${receiverSql} -> CAST(${indexSql} AS ${cast}))`);
+    return jsonNullPreserved(`(${receiverSql} -> CAST(${indexSql} AS ${cast}))`);
   }
 
   jsonSlice(receiverSql: string, startSql: string | null, endSql: string | null): string {
@@ -103,23 +114,23 @@ export class PostgresSqlDialect implements SqlDialect {
       return {
         fromSql: `LATERAL jsonb_each(${guarded}) AS ${alias}(_k, _v)`,
         keySql: `${alias}._k`,
-        valueSql: jsonNullToSqlNull(`${alias}._v`),
+        valueSql: jsonNullPreserved(`${alias}._v`),
       };
     }
     const guarded = `CASE WHEN jsonb_typeof(${sourceSql}) = 'array' THEN ${sourceSql} ELSE NULL END`;
     return {
       fromSql: `LATERAL jsonb_array_elements(${guarded}) WITH ORDINALITY AS ${alias}(_v, _o)`,
       keySql: `(${alias}._o - 1)::INTEGER`,
-      valueSql: jsonNullToSqlNull(`${alias}._v`),
+      valueSql: jsonNullPreserved(`${alias}._v`),
     };
   }
 
   jsonTypeOf(jsonSql: string): string {
     // jsonb_typeof already returns the canonical spec strings
-    // ('object' | 'array' | 'string' | 'number' | 'boolean' | 'null').
-    // Datamog collapses JSON null leaves to SQL NULL at expression
-    // boundaries, so hide jsonb's separate 'null' tag here too.
-    return `NULLIF(jsonb_typeof(${jsonSql}), 'null')`;
+    // ('object' | 'array' | 'string' | 'number' | 'boolean' | 'null'), and
+    // `'null'` is now among the answers rather than hidden: a JSON null is an
+    // ordinary value and reporting its type is what `type_of` is for (§8).
+    return `jsonb_typeof(${jsonSql})`;
   }
 
   jsonAsString(jsonSql: string): string {
@@ -178,9 +189,12 @@ export class PostgresSqlDialect implements SqlDialect {
   }
 
   jsonHasKey(jsonSql: string, keySql: string): string {
+    // A JSON null receiver falls through to FALSE rather than NULL: `has_key`
+    // answers a yes/no question and a null has no keys. sqlite and the
+    // interpreter already answered FALSE here, so the extra `'null'` arm this
+    // used to carry was a Postgres-only divergence (§8).
     return `(CASE
       WHEN ${jsonSql} IS NULL OR ${keySql} IS NULL THEN NULL
-      WHEN jsonb_typeof(${jsonSql}) = 'null' THEN NULL
       WHEN jsonb_typeof(${jsonSql}) = 'object' THEN (${jsonSql} ? ${keySql})
       ELSE FALSE
     END)`;
@@ -230,8 +244,12 @@ export class PostgresSqlDialect implements SqlDialect {
     //                          escape lead-in)
     //   (,) [space]          — comma followed by a space
     //   (:) [space]          — colon followed by a space
-    return `(CASE WHEN jsonb_typeof(${jsonSql}) = 'null' THEN NULL
-      ELSE regexp_replace((${jsonSql})::text, '("(?:[^"\\\\]|\\\\.)*")|(,) |(:) ', '\\1\\2\\3', 'g') END)`;
+    //
+    // A JSON `null` leaf serialises to the four characters `null`, like every
+    // other leaf. It used to collapse to SQL NULL here, which is the last of
+    // the collapses null-as-a-value.md §8 removes: a JSON null is a value now,
+    // and its serialisation is a string.
+    return `regexp_replace((${jsonSql})::text, '("(?:[^"\\\\]|\\\\.)*")|(,) |(:) ', '\\1\\2\\3', 'g')`;
   }
 
   createView(name: string, body: string): string {
@@ -371,10 +389,16 @@ export class PostgresSqlDialect implements SqlDialect {
     return `(CASE WHEN ABS(${candidate}) <= 9007199254740991 THEN ${candidate} ELSE NULL END)`;
   }
 
-  toJson(valueSql: string, _valueType: PrimitiveType): string {
-    // `to_jsonb` accepts any primitive type and produces the matching
-    // jsonb leaf — the `_valueType` discriminator only matters on
-    // SQLite, where text storage forces per-type emission.
+  toJson(valueSql: string, valueType: PrimitiveType): string {
+    // The `null` type has one value, so the answer is the jsonb null literal
+    // and the operand need not be read at all. Emitting it is also the only
+    // option: `to_jsonb` is polymorphic over `anyelement`, and a bare `NULL`
+    // arrives untyped, which Postgres rejects with "could not determine
+    // polymorphic type because input has type unknown".
+    if (valueType === "null") return "'null'::jsonb";
+    // `to_jsonb` accepts any other primitive type and produces the matching
+    // jsonb leaf — the discriminator otherwise only matters on SQLite, where
+    // text storage forces per-type emission.
     return `to_jsonb(${valueSql})`;
   }
 
@@ -444,8 +468,9 @@ export class PostgresSqlDialect implements SqlDialect {
         )
       ) AS child(value)
     )
+    -- A top-level JSON null parses to the null value and is deliberately not
+    -- excluded here, so parse_json of it derives a row carrying null (see §8).
     SELECT CASE WHEN j IS NOT NULL
-      AND jsonb_typeof(j) <> 'null'
       AND NOT EXISTS (
         SELECT 1 FROM __datamog_json_walk
         WHERE jsonb_typeof(v) = 'number'
@@ -486,8 +511,10 @@ export class PostgresSqlDialect implements SqlDialect {
     const value = `(${argSql})::numeric`;
     const positive = `SUM(CASE WHEN ${value} > 0 THEN ${value} ELSE 0 END)`;
     const negative = `SUM(CASE WHEN ${value} < 0 THEN -${value} ELSE 0 END)`;
-    return `(CASE WHEN COUNT(${argSql}) > 0
-      AND ${positive} <= 9007199254740991
+    // Empty group first, so it yields 0 rather than NULL (§7); overflow still
+    // yields NULL, meaning undefined. Only this order tells them apart (§9.4).
+    return `(CASE WHEN COUNT(${argSql}) = 0 THEN 0
+      WHEN ${positive} <= 9007199254740991
       AND ${negative} <= 9007199254740991
       THEN ${positive} - ${negative} ELSE NULL END)`;
   }
@@ -507,6 +534,8 @@ export class PostgresSqlDialect implements SqlDialect {
     // so we skip rows that were SQL-NULL on input rather than rows whose
     // lifted form happens to be a JSON `null` string.
     const orderKey = argIsJson ? this.stringOrder(`(${argSql})::TEXT`) : argSql;
-    return `JSONB_AGG(${valueSql} ORDER BY ${orderKey}) FILTER (WHERE ${argSql} IS NOT NULL)`;
+    // `JSONB_AGG` returns NULL over an empty group, so coalesce to append's
+    // identity, which is what §7 wants and what sqlite gives for free.
+    return `COALESCE(JSONB_AGG(${valueSql} ORDER BY ${orderKey}) FILTER (WHERE ${argSql} IS NOT NULL), '[]'::jsonb)`;
   }
 }

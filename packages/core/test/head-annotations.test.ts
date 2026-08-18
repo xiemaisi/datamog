@@ -206,24 +206,34 @@ describe("head nullness annotations", () => {
     ]);
   });
 
+  // A NULL has to come from a null value, not from a partial operation: a zero
+  // divisor leaves the expression with no value, so the row is withheld rather
+  // than kept with a NULL in it (null-as-a-value.md §13). So these use a nullable
+  // input column, which arithmetic propagates.
   test("`?` is accepted where the rule can produce a NULL", () => {
-    // Integer division truncates, so the type stays integer; what the `?`
-    // records is the zero divisor.
     const typed = check(`
-      input predicate p(a: integer, b: integer).
-      ratio(X: integer?) :- p(A, B), X = A / B.
+      input predicate p(a: integer?, b: integer).
+      total(X: integer?) :- p(A, B), X = A + B.
     `);
-    expect(typed.columnTypes.get("ratio")).toEqual(["integer"]);
-    expect(typed.nullness.columnNullness.get("ratio")).toEqual([true]);
+    expect(typed.columnTypes.get("total")).toEqual(["integer"]);
+    expect(typed.nullness.columnNullness.get("total")).toEqual([true]);
   });
 
   test("omitting `?` where the rule can produce a NULL is rejected", () => {
     expect(() =>
       check(`
-        input predicate p(a: integer, b: integer).
-        ratio(X: integer) :- p(A, B), X = A / B.
+        input predicate p(a: integer?, b: integer).
+        total(X: integer) :- p(A, B), X = A + B.
       `),
     ).toThrow(/column 1 is annotated 'integer' but this rule can produce NULL/);
+  });
+
+  test("a partial operation is not a reason to annotate `?`", () => {
+    const typed = check(`
+      input predicate p(a: integer, b: integer).
+      ratio(X: integer) :- p(A, B), X = A / B.
+    `);
+    expect(typed.nullness.columnNullness.get("ratio")).toEqual([false]);
   });
 
   test("`?` on a provably non-null column is allowed and documents looseness", () => {
@@ -248,19 +258,22 @@ describe("head nullness annotations", () => {
 
   test("annotations are per rule, so siblings may disagree", () => {
     const typed = check(`
-      input predicate p(a: integer, b: integer).
+      input predicate p(a: integer, b: integer?).
       q(X: integer) :- p(X, _).
-      q(X: integer?) :- p(A, B), X = A / B.
+      q(X: integer?) :- p(_, X).
     `);
     expect(typed.nullness.columnNullness.get("q")).toEqual([true]);
   });
 
   test("an aggregate position takes the annotation too", () => {
-    expect(() =>
-      check(`
-        input predicate p(a: integer?).
-        total(sum(X): integer) :- p(X).
-      `),
-    ).toThrow(/column 1 is annotated 'integer' but this rule can produce NULL/);
+    // No aggregate can produce a NULL (§7 gives the empty group an identity and
+    // withholds the row where there is none), so the only direction left to
+    // exercise here is the widening one.
+    const typed = check(`
+      input predicate p(a: integer?).
+      total(sum(X): integer?) :- p(X).
+    `);
+    expect(typed.nullness.columnNullness.get("total")).toEqual([false]);
+    expect(typed.nullness.publishedNullness.get("total")).toEqual([true]);
   });
 });

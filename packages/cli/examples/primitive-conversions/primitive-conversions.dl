@@ -1,16 +1,29 @@
-# Primitive conversions: parse a string into integer / float / boolean
-# (NULL on malformed input), and format primitive values back to a string.
+# Primitive conversions: parse a string into integer / float / boolean, and
+# format primitive values back to a string.
 #
 # Demonstrates the strict canonical-form parsing rule: leading zeros,
-# non-numeric junk, and out-of-range cases all produce NULL rather
-# than implicitly truncating or coercing. Round-trip examples in the
-# `formatted` predicate exercise the inverse direction.
+# non-numeric junk, and out-of-range cases are all rejected rather than
+# implicitly truncated or coerced. Round-trip examples in the `formatted`
+# predicate exercise the inverse direction.
+#
+# Read the output for what is *missing*. A failed parse has no value, so its
+# whole row is absent rather than present with a NULL in the parsed column:
+# `parsed_int` has a row for every input it could parse and none for the rest.
+# That is the point worth taking away, and the thing to watch for in your own
+# programs, since a rule that quietly derives fewer tuples than its input
+# suggests looks the same as one that derives none for a different reason.
+#
+# To see which inputs were rejected, ask for the ones whose conversion has no
+# value. `not (e = e)` holds exactly when `e` is undefined, since an equality
+# needs both sides to have a value:
+#
+#     rejected(R) :- inputs("int", R), not (to_integer(R) = to_integer(R)).
 
 input predicate inputs(kind: string, raw: string).
 input predicate formats(name: string, i: integer, r: float, b: boolean).
 
-# Parse the string into the target type. Failed parses surface as NULL and
-# propagate naturally through the rest of the rule body.
+# Parse the string into the target type. A failed parse has no value, so the
+# conjunct does not hold and the row is not derived at all.
 parsed_int(R, N)  :- inputs("int",  R), N = to_integer(R).
 output predicate parsed_float(R, N) :- inputs("float", R), N = to_float(R).
 output predicate parsed_bool(R, B) :- inputs("bool", R), B = to_boolean(R).
