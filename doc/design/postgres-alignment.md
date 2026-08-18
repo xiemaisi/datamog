@@ -256,6 +256,28 @@ where the canonical form is `1`, and one value with two spellings defeats dedup.
 (so it's safe as a hash / dedup key)", so this contradicts a stated contract rather
 than an assumption.
 
+**It reaches proof terms, which is where it stops being cosmetic.** A proof term is
+stored in the implicit `value` proof column, so a `float`-typed argument is spelled by
+the same canonicalisation. A proof therefore does not equal the canonical JSON it *is*
+on the SQLite family:
+
+```prolog
+f(1.0).
+box() :: Wrap :- f(X).
+?- P : box, P = parse_json("{\"args\":[1],\"$proof\":\"box::Wrap\"}").
+```
+
+derives `Wrap(1)` on native, seminaive and Postgres, and nothing on SQLite and sql.js,
+whose stored spelling is `{"args":[1.0],...}`. Integer and string arguments agree;
+only `float` diverges. Since proof terms are the language's ADT values and the
+canonical text is advertised as a dedup key, this is a matching failure in a language
+feature rather than a difference in printed output.
+
+Bounded, though: dedup *within* one backend is safe, because a constructor belongs to
+exactly one rule, so two derivations of the same proof come from the same rule and the
+same storage class. `packages/cli/test/equivalences.test.ts` records the divergence as
+`test.failing`, so a fix forces the entry's removal.
+
 There is no SQL-level fix. SQLite's printf cannot express shortest-round-trip:
 `format('%!g', x)` is lossy in the same way `CAST(x AS TEXT)` is, and
 `format('%!.17g', x)` round-trips but is not shortest, giving `0.10000000000000001`

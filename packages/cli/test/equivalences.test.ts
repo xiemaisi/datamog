@@ -276,3 +276,64 @@ describe("a rule and its inlined body agree", () => {
     );
   });
 });
+
+describe("a proof term is a value, so the value rules apply to it", () => {
+  // Proof terms lower onto the implicit `value` proof column, which is §9.2's one row
+  // where the static type does not decide what a NULL means. So the ADT feature
+  // inherits every question this branch changed, and nothing had made it the subject.
+  // These are the answers, checked across engines.
+  const PAIR = "num(1). num(2).\npair() :: Two :- num(A), num(B), A < B.\n";
+  const BOXED = "f(null).\nf(7).\nbox() :: Wrap :- f(X).\n";
+
+  test("a null existential witness survives as the null value", async () => {
+    // Reaching the arg through the accessor and comparing it to `null` must agree
+    // with asking `type_of`, on every engine.
+    await equivalent(
+      `${BOXED}output predicate r(P) :- P : box, P["args"][0] = null.`,
+      `${BOXED}output predicate r(P) :- P : box, type_of(P["args"][0]) = "null".`,
+    );
+  });
+
+  test("an accessor past the end withholds its row", async () => {
+    await equivalent(
+      `${PAIR}output predicate r(P) :- P : pair, not defined(P["args"][9]).`,
+      `${PAIR}output predicate r(P) :- P : pair.`,
+    );
+  });
+
+  test("a missing key withholds its row", async () => {
+    await equivalent(
+      `${PAIR}output predicate r(V) :- P : pair, V = P["nope"].`,
+      `${PAIR}output predicate r(V) :- P : pair, V = P["args"][9].`,
+    );
+  });
+
+  test("count over proofs equals count of star", async () => {
+    await equivalent(
+      `${PAIR}output predicate r(count(P)) :- P : pair.`,
+      `${PAIR}output predicate r(count(*)) :- P : pair.`,
+    );
+  });
+
+  // Known open, and `test.failing` so a fix forces this entry's removal, matching how
+  // the example suite records its Postgres gaps.
+  //
+  // A proof term must equal the canonical JSON it *is*: `jsonStringify` documents its
+  // output as identical across every backend and safe as a dedup key. It is not, for a
+  // `float`-typed argument. SQLite and sql.js spell an integral float `1.0` where
+  // `canonicalizeJson`, the interpreters and Postgres give `1`, so the proof matches
+  // its own written-down form on three engines and not on the other two. Integer and
+  // string arguments agree; only `float` diverges.
+  //
+  // Same root cause as the open item in postgres-alignment.md, which has no SQL-level
+  // fix: SQLite's printf cannot express shortest-round-trip, so closing it needs a
+  // registered SQL function. Recorded here because this is where it stops being
+  // cosmetic: it breaks matching in the ADT feature.
+  const FLOATARG = "f(1.0).\nbox() :: Wrap :- f(X).\n";
+  test.failing("a float-argument proof equals its canonical spelling", async () => {
+    await equivalent(
+      `${FLOATARG}output predicate r(P) :- P : box, P = parse_json("{\\"args\\":[1],\\"$proof\\":\\"box::Wrap\\"}").`,
+      `${FLOATARG}output predicate r(P) :- P : box.`,
+    );
+  });
+});
