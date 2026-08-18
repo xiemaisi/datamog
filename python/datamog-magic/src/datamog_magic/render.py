@@ -139,8 +139,11 @@ def _render_schema(event: Event) -> None:
         return
     lines: list[str] = []
     for p in predicates:
+        # The `?` suffix is half the declared type: it decides whether a NULL in that
+        # column is the `null` value or an absence.
         cols = ", ".join(
-            f"{c.get('name', '?')}: {c.get('type') or '?'}" for c in p.get("columns") or []
+            f"{c.get('name', '?')}: {c.get('type') or '?'}{'?' if c.get('nullable') else ''}"
+            for c in p.get("columns") or []
         )
         kind = p.get("predicateKind", "?")
         lines.append(f"{kind} {p.get('name', '?')}({cols})")

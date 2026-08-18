@@ -396,6 +396,13 @@ export class PostgresSqlDialect implements SqlDialect {
     // arrives untyped, which Postgres rejects with "could not determine
     // polymorphic type because input has type unknown".
     if (valueType === "null") return "'null'::jsonb";
+    // Same polymorphism problem as the `null` arm, one step out: a bare *string
+    // literal* is `unknown` too, so `to_jsonb('x')` fails exactly as
+    // `to_jsonb(NULL)` does. Casting to TEXT resolves the overload, and is a no-op
+    // on a string column, which already carries the type. Only `string` needs it:
+    // a numeric or boolean literal is typed, and a compound expression like
+    // `'a' || 'b'` resolves to text on its own.
+    if (valueType === "string") return `to_jsonb(CAST(${valueSql} AS TEXT))`;
     // `to_jsonb` accepts any other primitive type and produces the matching
     // jsonb leaf — the discriminator otherwise only matters on SQLite, where
     // text storage forces per-type emission.

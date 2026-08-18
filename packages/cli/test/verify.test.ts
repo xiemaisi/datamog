@@ -113,4 +113,74 @@ withSolver(`with ${solver}`, () => {
       /--solver/,
     );
   });
+
+  // One property, swept over the constructs a refinement can contain, rather
+  // than a case per construct. `discharged` and a violation are contradictory
+  // answers to the same question, and every unsoundness this encoder has had
+  // reported exactly that pair: a spelling or a literal that the encoder read
+  // one way and the synthesised `!-` read another. A construct the encoder
+  // declines is fine here — `skipped` and `counterexample` both keep the run's
+  // answer — so the assertion is one-directional on purpose.
+  describe("a discharged contract is never violated by the run", () => {
+    const cases: [name: string, source: string][] = [
+      // Both spellings of the one inequality, which must agree.
+      ["<> against null", "q(null).\nq(5).\np(A, _: A <> null) :- q(A), A <> null."],
+      ["!= against null", "q(null).\nq(5).\np(A, _: A != null) :- q(A), A <> null."],
+      ["<> between variables", "q(1, 2).\np(A, B, _: A <> B) :- q(A, B), A < B."],
+      ["!= between variables", "q(1, 2).\np(A, B, _: A != B) :- q(A, B), A < B."],
+      // An integral-valued float literal is still a float, so `/` must not be
+      // read as truncating.
+      ["integral float literal", "q(3).\np(A, _: A / 2.0 <= 1) :- q(A), A = 3."],
+      ["integer literal", "q(3).\np(A, _: A / 2 <= 1) :- q(A), A = 3."],
+      ["float literal in an ordering", "q(3).\np(A, _: A > 2.0) :- q(A), A = 3."],
+      // Truncation and sign, where the two readings differ.
+      ["negative truncating division", "q(-7).\np(A, _: A / 2 = -3) :- q(A), A = -7."],
+      ["modulo sign", "q(-7).\np(A, _: A % 3 = -1) :- q(A), A = -7."],
+      // Partiality as a hypothesis: the tuple witnesses its own definedness.
+      [
+        "division guarded by the body",
+        "q(10, 0).\nq(10, 2).\np(A, B, A / B as C, _: C >= 0) :- q(A, B), A > 0, B > 0.",
+      ],
+      [
+        "overflow on a computed position",
+        "q(9007199254740990).\np(A, A + 1 as B, _: B > A) :- q(A).",
+      ],
+      // Negation as failure, which is not the positive reading.
+      ["negated filter", "q(1).\nq(200).\np(A, _: A <= 100) :- q(A), not (A > 100)."],
+      ["negated ordering both ways", "q(1).\nq(200).\np(A, _: A < 100) :- q(A), not (A >= 100)."],
+      // The connectives, whose definedness is not their operands'.
+      ["conjunction of guards", "q(3, 4).\np(A, B, _: A < B) :- q(A, B), A > 0 && A < B."],
+      ["disjunction in the claim", "q(3).\np(A, _: A > 0 || A < 0) :- q(A), A <> 0."],
+      // A nullable operand, where `$null` must survive.
+      [
+        "nullable column proved non-null",
+        "input predicate e(x: integer, y: integer?).\np(X, Y, _: Y > X) :- e(X, Y), Y <> null, Y > X.",
+      ],
+      // The induction hypothesis at a self-reference.
+      ["self-reference", "n(0 as N, _: N >= 0).\nn(N + 1 as M, _: M >= 0) :- n(N), N <= 3."],
+    ];
+
+    for (const [name, source] of cases) {
+      test(name, async () => {
+        const verdicts = await verify(source);
+        // One-directional on purpose: declining to reason about a construct is
+        // sound, so `skipped` and `counterexample` are both fine. Only claiming
+        // a proof the run then breaks is a bug.
+        if (!verdicts.some((v) => v.status === "discharged")) return;
+        expect(await violated(source)).toBe(false);
+      });
+    }
+
+    // The guard that keeps the sweep above from going quietly vacuous: if the
+    // encoder regressed to discharging nothing, every case would return early
+    // and still pass. The exact number is not the point, so this is a floor.
+    test("the sweep discharges most of its cases", async () => {
+      const discharged = await Promise.all(
+        cases.map(async ([, source]) =>
+          (await verify(source)).some((v) => v.status === "discharged"),
+        ),
+      );
+      expect(discharged.filter(Boolean).length).toBeGreaterThanOrEqual(cases.length - 4);
+    });
+  });
 });

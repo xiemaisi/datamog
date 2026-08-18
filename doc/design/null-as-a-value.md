@@ -1,9 +1,10 @@
 # Design notes: null as an ordinary value, undefinedness as partiality
 
-Status: **stage 3 built and green on `max/partial-expressions`.** Partiality,
+Status: **all five stages built and green on `max/partial-expressions`** (§15.1;
+stage 4 turned out to be an audit rather than a build, §15.24). Partiality,
 the `null` type, the `value` accessors and the 60-test sweep are done on every
-runnable backend, with the example suite green across all five. Stages 1 and 2
-(§15.1) landed earlier, and the undefined-expression warning is in, as an opt-in
+runnable backend, with the example suite green across all five backends. The
+undefined-expression warning is in, as an opt-in
 flag rather than the default measurement said it could not be (§15.14). **§15.18 audits this
 document against the code and found seven unbuilt items; §15.19 through §15.24
 close all seven, the last of them (§13's stage-4 deletions) by finding that
@@ -19,10 +20,17 @@ strict, found by chasing a warning whose premise was stale. §15.30 records thre
 gaps left open, each a decision rather than an oversight: `X = null` composes with
 any type deliberately, a null-only column does not survive a pass-through, and
 `column-type.ts` is a reference implementation rather than the shipped
-lattice. §15.31 is a seven-way audit that found three more unsoundnesses and six
+lattice, and a fourth, `meetTypes` rejecting `string? ⊓ integer?` where §2 and §3.1
+promise the `null` type. §15.31 is a seven-way audit that found three more
+unsoundnesses and six
 more of §9.4's sites, and names what the three had in common: each lived in a file
 that shared a premise this branch changed and was not opened by the change that
-changed it.** This is the design
+changed it. §15.32 is a fourth audit, angled by premise rather than by file for that
+reason, which found four more unsoundnesses and applied §15.31's lesson to §15.31:
+the emit sites were made to share one predicate and nobody re-audited the predicate.
+It leaves five items open with reasons, and adds the three property-shaped tests
+that make a fifth audit worth less. §2, §4.4, §5, §6, §9.4, §10 and §14 carry its
+corrections in place.** This is the design
 [partial-expressions.md](./partial-expressions.md) should have found and did not.
 It supersedes that doc's recommendation: where that one concluded "keep NULL, at
 most forbid it in columns", this one concludes "split NULL's two jobs apart, and
@@ -94,9 +102,13 @@ null.md §7 records, at length and with instructions not to re-derive it, why
 The whole argument rests on that first premise, and this proposal removes it.
 `null` is a **sibling** of the primitives, not a subtype of them, so:
 
-> **One of the four claims below did not survive building it, and §15.30 says why:
-> `X = null` is *not* a static error on a type that excludes null. The rest of this
-> section holds.**
+> **Two of the four claims below did not survive building it, both recorded in
+> §15.30. `X = null` is *not* a static error on a type that excludes null, and
+> should not be: the guard is written defensively, on a column whose declaration
+> the reader has not checked. And `string? ⊓ integer?` is a *rejection* rather than
+> the `null` type, the meet seeing base types only. The other two hold, and they
+> are the ones the section exists for: nothing was added below the primitives, so
+> `string ⊓ integer` is still ⊥.**
 
 - `string ⊓ integer` is still ⊥, still a static error, for the same reason as
   today. Nothing was added below the primitives.
@@ -305,6 +317,11 @@ there, so the rule derives nothing, while `not (A = 100 / B)` holds. Formula-lev
 agree today and cannot afterwards. Programs that never put a comparison in
 expression position do not notice, which is nearly all of them.
 
+**The last sentence stopped being true when §15.26 made `!` strict at a `null`.**
+Absence is no longer the only thing they disagree about, so no compound expression
+is needed: over a `boolean?` variable, `not B` holds at `null` and `!B` has no
+value. Any program with a nullable boolean notices.
+
 **That distinction has an implementation consequence, and the implementation
 currently goes the wrong way.** `post-process.ts` desugars a negated filter by
 rewriting it into the other operator:
@@ -390,7 +407,22 @@ they were true of two nulls. A narrowing that lands on ⊥ is a static error and
 that lands on `null` is legal and worth warning about, being a rule that can only
 ever fire on nulls.
 
-## 6 Representation: do not extend `PrimitiveType`
+**The second half cannot happen, so no such warning exists.** A narrowing lands on
+`null` only where two nullable columns of different base types meet, and
+`meetTypes` *rejects* that pair rather than typing it `null` (§15.30). With no
+`null`-typed narrowing to reach, there is nothing to warn about; the rejection also
+carries the better diagnostic, naming both positions. Reinstate the warning only if
+the exact meet is ever built.
+
+## 6 Representation: do not extend `PrimitiveType` with nullable twins
+
+> **The heading was "do not extend `PrimitiveType`" and §15.10 reversed it.**
+> `PrimitiveType` is now
+> `'boolean' | 'float' | 'integer' | 'null' | 'string' | 'value'`: `null` shipped
+> as a sixth **atom**, which cost one compile error, not the 146 this section
+> prices. What is rejected is the *ten-member* union of nullable twins
+> (`integer`, `integer?`, …), and that rejection stands. Two further claims below
+> did not survive either, and carry their corrections in place.
 
 The tempting implementation is to make `PrimitiveType` a ten-member union.
 **Do not.** nullness-tracking.md §7 reasons 2 and 4 priced this and the price is
@@ -413,15 +445,32 @@ is not the shape of the representation but what the second component *means*:
 | set by | a `?` declaration, or any partial operation in a head | a `?` declaration, or an actual `null` |
 | computed by | `nullness.ts`, a second fixed point beside inference | type inference, since it is part of the type |
 
+**The last row is wrong, and §15.24 measured it.** Nullness cannot be computed by
+inference: `mayBeNull` needs the overloads `validateTypes` resolves, and
+validation needs converged types, so passing `inferNullness` an empty overload map
+breaks 21 of 276 example runs. It is a phase *after* inference, not a component of
+it. The other two rows hold.
+
 And one element changes meaning rather than being added. nullness-tracking.md §7
 reason 3 dismissed `(⊥, nullable)` as junk, "a nullness bit on an uninhabited type
 denotes nothing". Under this proposal it is exactly the `null` type: the empty
 base set plus `null`. So the product needs no new elements at all, only the
 reinterpretation of the one it already had and called junk.
 
+**Also not what shipped.** `null` is a sibling atom, so the product gained a
+member and kept the junk element rather than repurposing it;
+`column-type.ts`'s header records the choice. The point survives as an argument
+that the pair *could* carry the type without new elements, not as a description of
+the code.
+
 Practical consequence: `columnTypes` and `columnNullness` can stay two maps or
 become one map of pairs. Merging them is a mechanical refactor with no semantic
 content, worth doing for clarity, and not on the critical path.
+
+**"No semantic content" is wrong too**, and §15.30 says why: an exact
+`string? ⊓ integer?` needs the pair at all 146 comparison sites or a joint fixed
+point over both maps, so merging them changes what `meetTypes` can answer. The
+merge is still not on the critical path.
 
 ## 7 Aggregates
 
@@ -597,6 +646,14 @@ accessor emit, not a redesign.
 
 ### 9.4 So the concrete work is five places plus one lift
 
+> **Five is wrong, twice over. §15.31 counted at least eleven, and a fourth audit
+> (§15.32) enumerated 48 sites in the translator and the three dialects that emit a
+> comparison, a lift, a guard, a `FILTER`, a `COALESCE` or a `CAST`.** Of those,
+> four consult no predicate at all and are correct only because Position 3 forbids
+> the case that would break them, and two consult the syntactic proxy
+> `$type === "Variable"` because `termToSql` has no rule context. The list below is
+> the work this section foresaw, not the work there was.
+
 Every site that today reads "this is SQL NULL" has to ask the expression's type
 first. There are five:
 
@@ -648,6 +705,13 @@ artifact". Under this proposal an `integer`-typed variable structurally has no
 null case, and an `integer?`-typed one does. Since §3 makes the latter rare,
 almost no variable carries a companion, and the encoder loses its dependency on
 `nullness.ts`.
+
+**The last clause did not happen, and it matters.** `obligations.ts` still reads
+`typed.nullness.nonNullVars`: the type supplies the base answer, but the bit that
+prunes a companion is the *per-rule refinement*, so the same `integer?` column
+carries a companion in one rule and not in another that guards it. The encoder's
+soundness therefore still rests on `nullness.ts` being sound, which is how
+`has_key`'s wrong `strict` bit reached `--verify` (§15.32).
 
 **Comparison encodings simplify in the common case.** For non-nullable operands
 `<` is `(< l r)` rather than today's guarded pair. For nullable operands it is
@@ -844,8 +908,13 @@ Nothing here is fatal, and none of it is hidden.
    for a teaching implementation. Mitigations: the static
    undefined-expression warning, which arrives before the run rather than as a
    null in a table afterwards, and §4.3's definedness test for after it.
-2. **`<>` is not `not (=)`** (§4.2), and `!` is not `not` (§4.4). Both narrow to
-   compound partial expressions.
+2. **`<>` is not `not (=)`** (§4.2), and `!` is not `not` (§4.4). The first does
+   narrow to a compound partial expression. **The second does not, and this
+   understated it**: once §15.26 made `!` strict at a `null`, a bare `boolean?`
+   variable separates them, `not B` holding where `!B` has no value. So the
+   divergence reaches any program with a nullable boolean, not only one that puts a
+   comparison in expression position. The spec carried the same understatement in
+   three places (§15.32).
 3. **Two spellings of null in storage** (§9), and a new lift between them.
 4. **The Postgres join cost** persists for declared-nullable columns (§9), though
    the analysis to avoid it does not.
@@ -858,7 +927,7 @@ Nothing here is fatal, and none of it is hidden.
    nulls in `expected.json` (`json-events`, `parse-json`,
    `primitive-conversions`). **Three, not four: `relational-algebra`'s eight nulls
    are genuine `integer?` outer-join nulls and its file is untouched, as the
-   closing paragraph below and §15.4's "the three examples" both say.**
+   closing paragraph below and §15.3's "the three examples" both say.**
 
 Against that, two costs of the alternatives disappear. `examples/relational-algebra`
 keeps its outer join, `left_join(X, null)` being an ordinary tuple with an
@@ -1358,7 +1427,7 @@ the sides of an equality, naming the offending expression. Not filters, whose jo
 is to remove rows and whose NULL-drops `nullable-filter` already covers. One per
 rule, since a rule that divides twice has one problem rather than two.
 
-**§6 assumed this would be on by default, and measuring it says otherwise.**
+**§14.1 assumed this would be on by default, and measuring it says otherwise.**
 Across `examples/` it fires **192 times in 29 of the 80 examples**; narrowed to
 head arguments alone, still 60. That is not a corpus full of bugs. A program
 writing `Y = 10 / X` usually knows `X` can be zero and wants those rows gone, and
@@ -1828,8 +1897,8 @@ rather than five: §15.23 added `constant-defined` after this was written.** §1
 nullable-filter warning *replaced* by the undefined-expression warning. They are
 about different things: a `boolean?` column in filter position drops its row
 because of a value it holds, not because of a value it lacks. Replacing the first
-with the second would have deleted a live check to make a sentence tidier. All five
-warnings coexist.
+with the second would have deleted a live check to make a sentence tidier. All six
+warnings coexist (the count six lines above is the right one).
 
 **And the paragraph that started it.** §3.1 calls this the proposal's "largest
 structural win" and says the parallel structure "is not simplified, it is deleted".
@@ -2189,3 +2258,180 @@ with a message carrying no source position; the better fix is an analyzer error 
 it is not written. And bun:sqlite's parser overflows on a slice applied inline to a
 `parse_json`, which was already true at 27 KB of generated SQL before this pass and
 is 31 KB after, the definedness guards being the difference.
+
+### 15.32 The fourth audit, and the premise that had one more follower
+
+Seven parallel audits against a suite that was 1968 pass, 0 fail with a live
+Postgres. Angled by **premise rather than by file**, since §15.31 diagnosed that as
+why three unsoundnesses survived three passes: the runtime invariants on the
+interpreters, the `value`-emit sites, the static analyses, the refinement encoder,
+the untouched-but-premise-sharing files, the docs, and the proposal's own claims run
+as programs. Around forty findings.
+
+**§15.31's own lesson applied to §15.31.** It enumerated the eleven sites where a
+`value`-typed emit decides what a SQL NULL means and got them consistent — and
+nobody re-audited the predicate they now shared. Two audits working from opposite
+ends, the SQL emit sites and the static analyses, arrived at the same two words:
+`has_key` and `to_json` were registered `TOTAL`, hence `strict`, and neither is.
+`has_key(null, k)` is `false` and `to_json(null)` is the text `"null"`, both values,
+so a non-null result proves nothing about the argument. `strictVars` reads the bit
+as exactly that proof. Three symptoms, one pair of bits: a null-to-null join dropped
+on every SQL backend but kept by the interpreters, Position 3 bypassed so `A + 1` on
+an `integer?` compiled, and a head annotation bypassed so a rule declared `string`
+emitted a null. `--verify` inherited all of it, `obligations.ts` still reading
+`nonNullVars` (§10's claim to the contrary is annotated in place).
+
+The fix is `ANSWERS_NULL`, which already existed for `type_of` and `defined`. The
+test is the property rather than the case: every `value`-parameter overload in the
+registry, its `strict` bit checked against what the builtin does with a null. Only a
+`value` parameter can receive one, Position 3 rejecting a nullable primitive before
+the call, so that is where the bit has teeth.
+
+**A refinement formula is not on the container tree, and two passes did not know.**
+`extractRefinements` moves each formula off `head.args`, so a `streamAll` walk over
+the program does not reach it. The encoder reads those formulas; the synthesised
+`!-` reads a renamed clone. Two normalisations reached one and not the other, and
+each made `--verify` discharge a contract the run reported violated: `!=` was
+rewritten to `<>` only after the formula was detached, so the encoder's explicit
+`!=` arm read the null-aware operator while the runtime threw `Unknown binary
+operator`; and `rawText`, which tells `1` from `1.0`, was attached by a walk the
+clone was inside and the original was not, so the encoder read `2.0` as the numeral
+`2` and gave `/` the truncating sort. Alias rewriting now runs before anything is
+detached, the `rawText` pass names the formulas through `refinementFormulas`, and the
+encoder decides int-vs-float with `isFloatLiteral`. The test is one property over
+seventeen constructs: a discharged obligation is never violated by the run.
+
+**Nothing type-checked a constraint body.** `validateTypes` walked `queries`, and
+the analyzer keeps constraints in a separate list so positional result alignment
+holds. So `!- q(A), s(B), A > B.` compared an integer to a string and was accepted
+where the same body written `?-` is a static error — and since a refinement lowers
+to a synthesised constraint, no refinement formula was type-checked at all. That is
+how `A != B` reached the backends to be read two ways, and a bare `_: A` reached the
+encoder as ill-typed SMT. This is the enabling defect behind the paragraph above,
+found by the same audit and worth separating: the spelling bug needed the type check
+to be absent.
+
+**The ⊤ marker outlived its stratum.** `runParityStratum` marks every maximal
+relation ⊤ for round 0 and clears it in the `clearRelation` loop; the iteration cap
+breaks out *before* that loop. A capped run then threw `positive atom read it at ⊤`,
+or — worse — took the "⊤ holds of everything" branch on a negated read and answered
+the **complement** of the truth, under nothing but the ordinary "result is
+incomplete" warning, which reads as a subset. A `finally` covers every exit. Both
+existing cap tests query a minimal predicate, which is why neither saw it; the two
+added read a maximal one. The embed engine always passes `maxIterations`, so every
+tutorial embed runs capped.
+
+**`null` was not a literal to `isConstantLiteral`.** §1 makes it "an ordinary
+inhabitant, on a par with `1`, `"a"` and `true`", and `analyzer.ts` enumerated the
+other three. So a `null` head argument counted as a grouping column: the empty-group
+row was lost on four backends and **Postgres aborted the program**, reading the
+emitted bare `GROUP BY NULL` as an ordinal. spec §2.7 had the same enumeration.
+
+**Postgres cannot lift a string literal into a `value`.** `to_jsonb` is polymorphic
+over `anyelement` and a bare string literal is `unknown`, so `to_jsonb('x')` does
+not compile where `to_jsonb(1)` does. §15.17 fixed exactly the `null` arm of this and
+generalised from it wrongly. Every lift site was reachable with a string literal and
+each aborted the whole program. The translator suite covered those sites by
+asserting emitted *text*, which is how it survived: one assertion pinned SQL no
+Postgres will compile. It now executes.
+
+**Four more, each a premise with an unvisited follower.** `IncrementalSession`
+applied two of the three result coercions, so a Postgres REPL result contradicted the
+`types` reported in the same event and `datamog-magic`'s DataFrame got an object
+dtype. The undefined-expression warning stated its rule as "the sites where a value
+is used" and covered two of four, missing atom arguments and range bounds — filters
+stay out, and the reason in place was half wrong: `nullable-filter` does *not* cover
+them, firing on a null rather than an absence, but a filter genuinely tests rather
+than uses, so an absence and a `false` are indistinguishable there.
+`nullable-ordering-gap` read `mayBeNull` on its left operand only, so a partition
+written `2 > X` against `2 <= X` was silent. And the spec still described `value` as
+including `null`, promised a filter warning that does not exist, called
+`as_integer("42")` an error, and said `not` and `!` agree "everywhere the operands
+are variables or literals", which is precisely the counterexample.
+
+**What the audit confirmed rather than changed.** Of 43 concrete behavioural claims
+in this document, 41 hold on all five backends: §1's definedness table, §4.1's
+comparison table, §5's thirteen nullable-operand rejections and its narrowing table,
+§7's aggregate identities, §8's JSON table, §9.4's lift. Every `total` bit in the
+registry is right. The `negated` reads are provably complete, only `Filter` and
+`Literal` carrying the field. An independent re-derivation agreed with §15.31's
+parity-stratification argument and verified it with z3. `elaborate` carries a `T?`
+through module wiring correctly.
+
+**The loader's empty cell, settled as a decision rather than a fix.**
+`coerceColumnValue` mapped any whitespace-only cell to `null` for a nullable column,
+coherent while NULL *meant* missing and a violation of `string ⊑ string?` now that
+`null` is a value: `string?` rejected `""` and `" "`, which plain `string` accepts,
+so the same CSV loaded differently through the two declarations. `string` is now
+exempt at both spellings. The cost, taken with eyes open, is that no CSV cell puts a
+`null` in a `string?` column: the format cannot distinguish a quoted `""` from a
+bare one once `csv-parse` is done, so one reading has to lose, and the one that keeps
+the lattice wins. JSONL and JSON carry a real `null`. The other types keep the rule,
+no `integer` or `boolean` reading an empty cell.
+
+**Two renderers and the schema, closed.** Mermaid and the playground mapped the
+`null` value and the empty string both to `""`. In Mermaid that was a wrong graph
+rather than a blank cell: both sanitise to the fallback node id `n`, so a row ending
+in a `null` and one ending in `""` drew one node and the output asserted an edge that
+does not exist — the same failure the function's own comment already describes for
+compound values, one step further in. In the playground it disagreed with the CLI,
+whose table shows `null` via `console.table`, so the walkthrough and the playground
+described one program two ways. Both now render `null`. CSV keeps the blank
+deliberately: the loader reads an empty cell back as a null, so the pair round-trips.
+And `:schema` reported `integer` for a column declared `integer?`, dropping the half
+of the type that decides what a NULL there means; `SchemaPredicate` now carries
+`nullable` and both renderers spell it.
+
+**Left open, and the numeric one is a project rather than a patch.** The spelling of
+a numeric `value` leaf is decided locally at six sites and shared nowhere, and the
+divergence is worse than the integral-float case the audit named. It is a **precision
+loss**: SQLite renders a double with about 15 significant digits, so `0.1 + 0.2`
+lifted into a `value` is `0.3` there and `0.30000000000000004` on the interpreters
+and Postgres, observable through `to_json` and through array construction alike. Two
+distinct doubles can therefore canonicalise to one text, which breaks
+`jsonStringify`'s stated contract ("identical across every backend, safe as a hash /
+dedup key") more severely than a spelling difference would.
+
+It has no SQL-level fix, which is the part worth recording so nobody re-derives it.
+`canonicalizeJson` uses JS's shortest-round-trip formatting, and SQLite's printf
+cannot express that: `format('%!g', x)` is lossy in the same way `CAST` is, and
+`format('%!.17g', x)` round-trips but is not shortest, giving `0.10000000000000001`
+for `0.1`. Closing it needs a registered SQL function, which bun:sqlite can do and
+the sql.js build cannot, or a different storage decision for a float inside a
+`value`. Both are larger than this pass, and a partial fix covering only integral
+floats would read as closed while the precision case still diverged. Pre-existing on
+`main` and orthogonal to nullness, and the only item this audit leaves open.
+
+**The result event, closed too.** `ResultEvent.types` carried the base type alone, so
+the event could contradict itself: `types: ["integer"]` beside a row holding `null`.
+The translator now reports nullability per *query* rather than per column declaration,
+because a query is a body owner and the fixed point has already refined it, so
+`?- p(X, Y), Y <> null.` reports `Y` non-nullable — the true answer for the rows
+returned. Carried as a parallel `queryColumnNullable` map for the same reason §6 keeps
+two maps: no consumer of the base type changes, and `result-coerce.ts` is untouched.
+`datamog-magic` needed nothing, keeping events as plain dicts so a new field forwards
+unchanged.
+
+**One finding was in the tests rather than the code.** The `datamog-magic` REPL
+fixture pointed `data_dir` at `/tmp`, and the CLI auto-loads `<predicate>.csv` from
+there, so a stale `/tmp/s.csv` from an unrelated session failed the test that
+declares `s` with an error reading as a chunking bug. `bun test` does not cover that
+suite, which is how it sat unnoticed; it now gets a per-test directory.
+
+**One open item turned out to have a deeper cause, and closing it found a third
+defect.** The VS Code validator ran `findInfiniteRisks` alone behind a comment
+claiming playground parity, so no nullness, polarity or contract warning reached the
+editor. Adding the other three families would have looked like it worked: the
+validator starts from the Langium-parsed AST rather than from `parseRaw`, so it ran
+`postProcess` *without* the three passes `parseRaw` runs first, and was analysing a
+shape no other consumer sees. A head annotation stayed an `AnnotatedHeadTerm` inside
+`head.args`, so a declared head type was never checked and a refinement was never
+extracted — meaning `findInertContracts` had nothing to find and would have stayed
+silent behind a fix that looked complete. Both are closed.
+
+**The lesson, restated because it held for a fourth time.** Every class here was
+findable by a kind of test that did not exist: none asserted that a builtin's
+`strict` bit matches its runtime, that `--verify` and the run agree on one program,
+or that a parity stratum under a cap can be read on its maximal side. Three
+property-shaped tests now do, and they are what makes a fifth audit worth less than
+this one was.

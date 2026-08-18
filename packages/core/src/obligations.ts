@@ -30,7 +30,13 @@
 
 import type { AnalyzedProgram } from "./analyzer.ts";
 import { containsAggregate } from "./analyzer.ts";
-import type { HeadTerm, Literal, PrimitiveType, Rule } from "./ast.ts";
+import {
+  type HeadTerm,
+  type Literal,
+  type PrimitiveType,
+  type Rule,
+  isFloatLiteral,
+} from "./ast.ts";
 import type { TypedProgram } from "./types.ts";
 import { inferTermType, rebuildVarTypes } from "./types.ts";
 
@@ -144,11 +150,14 @@ function toSmt(
 ): Term {
   switch (expr.$type) {
     case "NumberLiteral":
-      // Every declared sort is `Int`, so a non-integral literal would make the
-      // goal ill-typed in QF_LIA. Report it rather than emit it. The value is
-      // what decides, not `isFloatLiteral`: a refinement formula never reaches
-      // the walker that attaches `rawText`.
-      if (!Number.isInteger(expr.value)) throw new UnsupportedTerm("a non-integer literal");
+      // Every declared sort is `Int`, so a float literal would make the goal
+      // ill-typed in QF_LIA. Report it rather than emit it. `isFloatLiteral` is
+      // what decides, not the value: `2.0` is integral and still a float, and
+      // reading it as the numeral `2` gives `/` the truncating sort, which
+      // proved contracts the run rejects.
+      if (isFloatLiteral(expr) || !Number.isInteger(expr.value)) {
+        throw new UnsupportedTerm("a non-integer literal");
+      }
       return { v: String(expr.value), isNull: NOT_NULL, def: DEFINED };
     case "BooleanLiteral":
       return { v: expr.value ? "true" : "false", isNull: NOT_NULL, def: DEFINED };

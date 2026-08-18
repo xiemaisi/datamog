@@ -468,4 +468,32 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     const names = [...results[1]!.rows].map((r) => r.Name).sort();
     expect(names).toEqual(["ok", "two"]);
   });
+
+  test("Regression: a string literal lifted into `value` compiles", async () => {
+    // `to_jsonb` is polymorphic over `anyelement` and a bare string literal is
+    // `unknown`, so `to_jsonb('x')` fails to compile where `to_jsonb(1)` and
+    // `to_jsonb(TRUE)` are fine. Every one of these lifts a string literal into a
+    // `value` position, and each aborted the whole program with "could not
+    // determine polymorphic type".
+    //
+    // The translator suite covers the same ground by asserting emitted text,
+    // which is exactly how this survived: the SQL it pinned was uncompilable.
+    // This one runs it.
+    const executor = new DatamogExecutor(backend);
+    const results = await executor.execute(`
+      s(1).
+      shape(T)   :- s(_), T = type_of("x").
+      text(S)    :- s(_), S = to_json("x").
+      joined(S)  :- s(_), S = to_json("a" + "b").
+      coll(L)    :- s(_), L = ["x"].
+      ?- shape(T).
+      output predicate otext(S) :- text(S).
+      output predicate ojoined(S) :- joined(S).
+      output predicate ocoll(L) :- coll(L).
+    `);
+    expect(results[0]!.rows).toEqual([{ T: "string" }]);
+    expect(results[1]!.rows).toEqual([{ S: '"x"' }]);
+    expect(results[2]!.rows).toEqual([{ S: '"ab"' }]);
+    expect(results[3]!.rows).toEqual([{ L: ["x"] }]);
+  });
 });

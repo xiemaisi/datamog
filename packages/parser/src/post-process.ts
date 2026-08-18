@@ -33,7 +33,7 @@ import {
 } from "./generated/ast.js";
 import { substituteHeadNames } from "./head-names.ts";
 import { ParseError } from "./parse-error.js";
-import { extractRefinements, synthesiseContractChecks } from "./refinements.ts";
+import { extractRefinements, refinementFormulas, synthesiseContractChecks } from "./refinements.ts";
 
 // Post-processing attaches the original source text of numeric literals on
 // `rawText` so the translator can distinguish `1` from `1.0`. Declaration
@@ -542,7 +542,11 @@ export function postProcess(program: Program): void {
     return name;
   };
 
-  for (const node of streamAll(program)) {
+  // Refinement formulas are off the container tree (`refinementFormulas`), and
+  // `rawText` is what tells `1` from `1.0`: without it the obligation encoder
+  // reads `2.0` as the integer `2` and proves a contract the run rejects.
+  const numericRoots = [program as AstNode, ...(refinementFormulas(program) as AstNode[])];
+  for (const node of numericRoots.flatMap((root) => [...streamAll(root)])) {
     if (isVariable(node) && node.name === "_") {
       node.name = freshAnon();
     }

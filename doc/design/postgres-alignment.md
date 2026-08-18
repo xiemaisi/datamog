@@ -3,7 +3,9 @@
 Status: example-suite defects fixed. Two divergences are documented as inherent,
 a last-bit float difference and `avg` over an overflowing intermediate. A
 mixed-type recursive group is now rejected with a located message rather than
-reaching Postgres as an ill-typed union.
+reaching Postgres as an ill-typed union. One divergence is **open and is not
+Postgres's**: a float lifted into a `value` loses precision on SQLite and sql.js,
+which has no SQL-level fix.
 
 Every backend is meant to compute the same answer for the same program. Running
 the example suite on Postgres (`packages/cli/test/examples.test.ts`, gated on
@@ -238,6 +240,30 @@ SQLite's `2.0403733936884967`. Floating-point addition is not associative and
 `LN` is not specified to the ulp, so a 1-ulp difference across two engines is
 expected. It stays listed rather than being hidden behind a float tolerance on
 every other example's comparison.
+
+## A float inside a `value`, where SQLite is the odd one out (open)
+
+Not a last-bit difference and not Postgres's fault. A float lifted into a `value`
+is canonicalised by the dialect, and SQLite renders a double with about 15
+significant digits where `canonicalizeJson` uses JS's shortest-round-trip
+formatting. So `0.1 + 0.2` inside a `value` is `0.3` on SQLite and sql.js and
+`0.30000000000000004` on the interpreters and Postgres, visible through `to_json`
+and through `[A + B]` alike. The bare `float` column agrees on every backend; only
+the `value` spelling diverges. An integral float differs too, SQLite giving `1.0`
+where the canonical form is `1`, and one value with two spellings defeats dedup.
+
+`SqlDialect.jsonStringify` documents its output as "identical across every backend
+(so it's safe as a hash / dedup key)", so this contradicts a stated contract rather
+than an assumption.
+
+There is no SQL-level fix. SQLite's printf cannot express shortest-round-trip:
+`format('%!g', x)` is lossy in the same way `CAST(x AS TEXT)` is, and
+`format('%!.17g', x)` round-trips but is not shortest, giving `0.10000000000000001`
+for `0.1`. Closing it needs a registered SQL function, which `bun:sqlite` supports
+and the stock sql.js build does not, or a different storage decision for a float
+inside a `value`. A partial fix covering only integral floats would read as closed
+while the precision case still diverged. Pre-existing, and independent of the
+`null`-as-a-value work.
 
 ## Not Postgres: sql.js
 

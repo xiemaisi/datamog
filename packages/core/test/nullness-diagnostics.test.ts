@@ -104,6 +104,18 @@ describe("ordering gap", () => {
     expect(codes(source)).toEqual(["nullable-ordering-gap"]);
   });
 
+  test("the nullable operand may be on either side", () => {
+    // The gap is the same whichever way round the partition is written, but the
+    // check read the left operand only, so this spelling was silent.
+    const source = `
+      input predicate p(a: integer?).
+      lo(X) :- p(X), 2 > X.
+      hi(X) :- p(X), 2 <= X.
+    `;
+    expect(codes(source)).toEqual(["nullable-ordering-gap"]);
+    expect(risks(source)[0]!.message).toContain("2 > X");
+  });
+
   test("a non-null column has no gap to warn about", () => {
     const source = `
       input predicate p(a: integer).
@@ -254,6 +266,43 @@ describe("undefined expressions (opt-in)", () => {
       q(10 / X) :- n(X).
     `;
     expect(undefinedRisks(source).map((d) => d.code)).toEqual(["undefined-expression"]);
+  });
+
+  // Every position that *uses* a value, which is the rule the warning states.
+  // An atom argument and a range bound are guarded by the translator exactly as a
+  // head argument is, so an absence withholds the row there too, and reporting
+  // only two of the four contradicted the rule.
+  test("a partial expression in an atom argument warns", () => {
+    const source = `
+      input predicate n(x: integer).
+      input predicate m(y: integer).
+      q(X) :- n(X), m(10 / X).
+    `;
+    const ds = undefinedRisks(source);
+    expect(ds.map((d) => d.code)).toEqual(["undefined-expression"]);
+    expect(ds[0]!.message).toContain("10 / X");
+  });
+
+  test("a partial expression in a range bound warns", () => {
+    const source = `
+      input predicate n(x: integer).
+      q(X, Y) :- n(X), Y in [0 .. 10 / X].
+    `;
+    const ds = undefinedRisks(source);
+    expect(ds.map((d) => d.code)).toEqual(["undefined-expression"]);
+    expect(ds[0]!.message).toContain("10 / X");
+  });
+
+  // A filter tests rather than uses: an absence and a `false` both drop the row
+  // and are indistinguishable, so nothing surprising happened. Reporting them
+  // would also warn about nearly every comparison, `canBeUndefined` answering
+  // `true` for any ordering with no nullness bit in scope.
+  test("a partial expression in a filter does not warn", () => {
+    const source = `
+      input predicate n(x: integer).
+      q(X) :- n(X), 10 / X > 1.
+    `;
+    expect(undefinedRisks(source)).toEqual([]);
   });
 
   test("it is off unless asked for", () => {

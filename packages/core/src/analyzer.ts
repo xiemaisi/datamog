@@ -936,12 +936,18 @@ function collectVarsOutsideAggregates(term: HeadTerm, into: Set<string>): void {
   for (const child of childTerms(term)) collectVarsOutsideAggregates(child, into);
 }
 
-/** A literal, or a negated numeric literal: constant, so it cannot vary per group. */
+/**
+ * A literal, or a negated numeric literal: constant, so it cannot vary per group.
+ * `null` counts, being an ordinary value written as an ordinary literal: reading it
+ * as a grouping column instead loses the empty-group row, and emits a bare
+ * `GROUP BY NULL` that Postgres rejects as an ordinal.
+ */
 function isConstantLiteral(term: HeadTerm): boolean {
   switch (term.$type) {
     case "NumberLiteral":
     case "StringLiteral":
     case "BooleanLiteral":
+    case "NullLiteral":
       return true;
     case "UnaryExpr":
       return term.op === "-" && isConstantLiteral(term.operand);

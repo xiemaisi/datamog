@@ -60,8 +60,14 @@ def test_count_blank_lines(body: str, expected: int) -> None:
 
 
 @pytest.fixture
-def proc() -> DatamogProcess:
-    p = DatamogProcess(cwd=REPO, backend="sqlite", data_dir="/tmp")
+def proc(tmp_path) -> DatamogProcess:
+    # A per-test empty directory, not `/tmp`. The CLI auto-loads `<predicate>.csv`
+    # from `data_dir`, so pointing it at `/tmp` meant any leftover file named after
+    # a predicate a test declares broke that test: a stale `/tmp/s.csv` from an
+    # unrelated session failed `test_internal_blank_lines_are_part_of_one_chunk`,
+    # which declares `s`. These tests declare no data, so the directory only needs
+    # to exist and stay empty.
+    p = DatamogProcess(cwd=REPO, backend="sqlite", data_dir=str(tmp_path))
     yield p
     p.close()
 

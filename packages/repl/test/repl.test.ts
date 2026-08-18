@@ -54,7 +54,41 @@ describe("DatamogRepl", () => {
       expect(result).toBeDefined();
       expect(result!.columns).toEqual(["X"]);
       expect(result!.types).toEqual(["integer"]);
+      expect(result!.nullable).toEqual([false]);
       expect(result!.rows).toEqual([]);
+    } finally {
+      await repl.close();
+    }
+  });
+
+  test("a result event's nullability agrees with the rows it carries", async () => {
+    // Without `nullable` the event could contradict itself: `types: ["integer"]`
+    // beside a row holding `null`. Under the value model the `?` is what says
+    // whether that NULL is the `null` value or an absence, so a client reading the
+    // types alone was told something false.
+    const repl = makeRepl();
+    try {
+      await repl.feed("p(1, null).\np(2, 7).");
+      const result = findEvent(await repl.feed("?- p(X, Y)."), "result");
+      expect(result!.types).toEqual(["integer", "integer"]);
+      expect(result!.nullable).toEqual([false, true]);
+      // The claim the pair makes about the data actually holds.
+      const ys = result!.rows.map((r) => r.Y).sort();
+      expect(ys).toEqual([7, null]);
+    } finally {
+      await repl.close();
+    }
+  });
+
+  test("a guard in the query body narrows the reported nullability", async () => {
+    // A query is a body owner, so the nullness fixed point refines it: this is the
+    // per-query answer, not the column's declaration.
+    const repl = makeRepl();
+    try {
+      await repl.feed("p(1, null).\np(2, 7).");
+      const result = findEvent(await repl.feed("?- p(X, Y), Y <> null."), "result");
+      expect(result!.nullable).toEqual([false, false]);
+      expect(result!.rows).toEqual([{ X: 2, Y: 7 }]);
     } finally {
       await repl.close();
     }
@@ -196,10 +230,37 @@ describe("DatamogRepl", () => {
       expect(names).toEqual(["p", "q"]);
       const q = sch!.predicates.find((p) => p.name === "q")!;
       expect(q.predicateKind).toBe("edb");
-      expect(q.columns).toEqual([{ name: "x", type: "integer" }]);
+      expect(q.columns).toEqual([{ name: "x", type: "integer", nullable: false }]);
       const p = sch!.predicates.find((p) => p.name === "p")!;
       expect(p.predicateKind).toBe("idb");
-      expect(p.columns).toEqual([{ name: "col1", type: "integer" }]);
+      expect(p.columns).toEqual([{ name: "col1", type: "integer", nullable: false }]);
+    } finally {
+      await repl.close();
+    }
+  });
+
+  test(":schema reports the `?` on a nullable column, declared and inferred", async () => {
+    // `nullable` is half the declared type: it decides whether a SQL NULL in that
+    // position is the `null` value or an absence, so a schema that prints the base
+    // type alone reported `integer` for a column declared `integer?`.
+    const repl = makeRepl();
+    try {
+      await repl.feed(`
+        input predicate q(x: integer, y: integer?).
+        p(X, Y) :- q(X, Y).
+      `);
+      const sch = findEvent(await repl.feed(":schema"), "schema");
+      const q = sch!.predicates.find((p) => p.name === "q")!;
+      expect(q.columns).toEqual([
+        { name: "x", type: "integer", nullable: false },
+        { name: "y", type: "integer", nullable: true },
+      ]);
+      // The IDB column inherits it through inference, not through a declaration.
+      const p = sch!.predicates.find((p) => p.name === "p")!;
+      expect(p.columns).toEqual([
+        { name: "col1", type: "integer", nullable: false },
+        { name: "col2", type: "integer", nullable: true },
+      ]);
     } finally {
       await repl.close();
     }

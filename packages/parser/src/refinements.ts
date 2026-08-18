@@ -85,6 +85,22 @@ function variableNames(node: AstNode, into: Set<string>): void {
 }
 
 /**
+ * The refinement formulas, which `extractRefinements` holds on `head.refinements`
+ * rather than in `head.args`. That is off the container tree, so a `streamAll`
+ * walk over the program does not reach them and a pass that must apply to a
+ * formula has to name them: the encoder reads these, the runtime check reads a
+ * renamed clone, and a normalisation reaching only one makes the two disagree.
+ */
+export function refinementFormulas(program: Program): Expression[] {
+  const out: Expression[] = [];
+  for (const stmt of program.statements) {
+    if (!isRule(stmt)) continue;
+    for (const r of stmt.head.refinements ?? []) out.push(r.formula);
+  }
+  return out;
+}
+
+/**
  * Pull the refinements off `head`, dropping their positions, and record the
  * name each surviving position answers to. Called from `liftHeadAnnotations`
  * with the wrappers already unwrapped, so `annotations` carries what they held.

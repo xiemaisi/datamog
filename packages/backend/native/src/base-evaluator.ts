@@ -184,52 +184,62 @@ export abstract class BaseDatalogEvaluator {
     let passes = 0;
     let round = 0;
     let previous: Set<string> | null = null;
-    for (;;) {
-      this.trace?.({ kind: "round-start", stratum: stratumIdx, round });
+    // The ⊤ marker must not outlive the stratum. A normal fixed point drops it in
+    // the `clearRelation` loop below, but a cap breaks out before that runs, and a
+    // relation still marked ⊤ then reaches queries, later strata and constraint
+    // checks: a positive read throws, and a negated read answers as though the
+    // relation held every tuple. Dropping the flag without clearing the tuples
+    // leaves the maximal side incomplete, which is what the cap warning says.
+    try {
+      for (;;) {
+        this.trace?.({ kind: "round-start", stratum: stratumIdx, round });
 
-      // Minimal side: keeps the tuples it already has. Sound because the
-      // maximal side only shrinks, so nothing derivable under the previous
-      // round's value stops being derivable under this one.
-      passes += this.runFixpoint(minimal, stratumIdx, {
-        startIteration: passes,
-        budget: this.remainingBudget(passes),
-      });
-      // Compare the stratum index rather than testing `capInfo` for presence:
-      // an earlier stratum may have capped already, and that is not a reason to
-      // abandon this one.
-      if (this.capInfo?.stratum === stratumIdx) {
-        this.reportParityCap(minimal, maximal);
-        break;
-      }
-
-      // Maximal side: rebuilt from ∅ against the minimal side just computed.
-      // Facts survive this, being rules with an empty body.
-      for (const p of maximal) {
-        const rel = this.relations.get(p)!;
-        const removed = rel.tuples.length;
-        clearRelation(rel);
-        this.trace?.({
-          kind: "relation-cleared",
-          stratum: stratumIdx,
-          round,
-          predicate: p,
-          removed,
+        // Minimal side: keeps the tuples it already has. Sound because the
+        // maximal side only shrinks, so nothing derivable under the previous
+        // round's value stops being derivable under this one.
+        passes += this.runFixpoint(minimal, stratumIdx, {
+          startIteration: passes,
+          budget: this.remainingBudget(passes),
         });
-      }
-      passes += this.runFixpoint(maximal, stratumIdx, {
-        startIteration: passes,
-        budget: this.remainingBudget(passes),
-      });
-      if (this.capInfo?.stratum === stratumIdx) {
-        this.reportParityCap(minimal, maximal);
-        break;
-      }
+        // Compare the stratum index rather than testing `capInfo` for presence:
+        // an earlier stratum may have capped already, and that is not a reason to
+        // abandon this one.
+        if (this.capInfo?.stratum === stratumIdx) {
+          this.reportParityCap(minimal, maximal);
+          break;
+        }
 
-      const current = this.snapshot(maximal);
-      this.trace?.({ kind: "round-end", stratum: stratumIdx, round });
-      if (previous && setsEqual(previous, current)) break;
-      previous = current;
-      round++;
+        // Maximal side: rebuilt from ∅ against the minimal side just computed.
+        // Facts survive this, being rules with an empty body.
+        for (const p of maximal) {
+          const rel = this.relations.get(p)!;
+          const removed = rel.tuples.length;
+          clearRelation(rel);
+          this.trace?.({
+            kind: "relation-cleared",
+            stratum: stratumIdx,
+            round,
+            predicate: p,
+            removed,
+          });
+        }
+        passes += this.runFixpoint(maximal, stratumIdx, {
+          startIteration: passes,
+          budget: this.remainingBudget(passes),
+        });
+        if (this.capInfo?.stratum === stratumIdx) {
+          this.reportParityCap(minimal, maximal);
+          break;
+        }
+
+        const current = this.snapshot(maximal);
+        this.trace?.({ kind: "round-end", stratum: stratumIdx, round });
+        if (previous && setsEqual(previous, current)) break;
+        previous = current;
+        round++;
+      }
+    } finally {
+      for (const p of maximal) this.relations.get(p)!.isTop = false;
     }
 
     return passes;

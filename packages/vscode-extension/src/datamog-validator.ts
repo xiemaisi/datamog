@@ -3,12 +3,22 @@ import {
   analyze,
   checkModuleBoundaries,
   elaborate,
+  findInertContracts,
+  findInertPolarity,
   findInfiniteRisks,
+  findNullnessRisks,
   inferTypes,
 } from "datamog-core";
 import { createNodeModuleResolver } from "datamog-engine/module-resolver";
 import type { DatamogAstType, ExtDecl, Program } from "datamog-parser";
-import { ParseError, parseRaw, postProcess } from "datamog-parser";
+import {
+  ParseError,
+  defaultColumnTypes,
+  liftHeadAnnotations,
+  normalizeOperatorAliases,
+  parseRaw,
+  postProcess,
+} from "datamog-parser";
 import type { AstNode } from "langium";
 import { AstUtils } from "langium";
 import type { ValidationAcceptor, ValidationChecks } from "langium";
@@ -36,10 +46,22 @@ function validateProgram(program: Program, accept: ValidationAcceptor): void {
     : analyzeInPlace(program, accept);
   if (!analyzed) return;
 
-  // Surface finiteness/unboundedness warnings so VS Code shows the
-  // same yellow squigglies the playground linter does (parity with
-  // `packages/playground/src/worker/executor.ts:351`).
-  for (const risk of findInfiniteRisks(analyzed)) {
+  // Surface the advisory warnings so VS Code shows the same yellow squigglies the
+  // playground linter does. All four families, matching
+  // `packages/playground/src/worker/executor.ts`: this ran `findInfiniteRisks`
+  // alone while claiming that parity, so none of the six nullness warnings and
+  // neither inert-polarity nor inert-contract reached the editor.
+  //
+  // `findNullnessRisks` is called without `warnUndefined`, matching the playground
+  // and the CLI default: that one is opt-in and noisy by nature (236 firings across
+  // the examples), which is wrong for an always-on squiggly.
+  const risks = [
+    ...findInfiniteRisks(analyzed),
+    ...findNullnessRisks(analyzed),
+    ...findInertPolarity(analyzed),
+    ...findInertContracts(analyzed),
+  ];
+  for (const risk of risks) {
     const target =
       risk.offset !== undefined ? (findNodeAtOffset(program, risk.offset) ?? program) : program;
     accept("warning", risk.message, { node: target });
@@ -52,6 +74,17 @@ function analyzeInPlace(program: Program, accept: ValidationAcceptor): Analyzed 
   // (e.g. empty `W[]`); catch it so the validator surfaces the problem
   // as a diagnostic rather than crashing the language server.
   try {
+    // The three passes `parseRaw` runs before `postProcess`, in its order. This
+    // path starts from the Langium-parsed AST rather than from `parseRaw`, so
+    // without them the editor sees a shape no other consumer ever does: a head
+    // annotation stays an `AnnotatedHeadTerm` inside `head.args`, which means a
+    // declared head type goes unchecked and a refinement is never extracted, so no
+    // contract check is synthesised and none is reported. Alias rewriting goes
+    // first for the reason `parseRaw` states: `liftHeadAnnotations` moves each
+    // refinement formula off the container tree, out of a `streamAll` walk's reach.
+    normalizeOperatorAliases(program);
+    liftHeadAnnotations(program);
+    defaultColumnTypes(program);
     postProcess(program);
   } catch (e) {
     reportError(program, accept, e);

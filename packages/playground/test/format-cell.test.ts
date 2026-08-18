@@ -46,7 +46,15 @@ describe("formatCell", () => {
     expect(formatCell("hello")).toBe("hello");
     expect(formatCell(42)).toBe("42");
     expect(formatCell(true)).toBe("true");
-    expect(formatCell(null)).toBe("");
     expect(formatCell(undefined)).toBe("");
+  });
+
+  test("a null renders as `null`, distinct from the empty string", () => {
+    // `null` is an ordinary value with a name, and this is the surface where
+    // telling it from `""` matters most: the CLI's table shows `null` via
+    // `console.table`, so a blank here made the playground and the walkthrough
+    // disagree about the same program.
+    expect(formatCell(null)).toBe("null");
+    expect(formatCell("")).toBe("");
   });
 });

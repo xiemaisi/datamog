@@ -474,8 +474,14 @@ function validateTypes(
   // a small fixed-point over the body's atoms and bindings, mirroring
   // the rule-body inference above. Queries are pure consumers, so every
   // referenced predicate shows its published type.
+  //
+  // Constraints too. The analyzer keeps them out of `queries` so positional
+  // result alignment holds, which had the side effect of exempting them from
+  // every check here: an `!-` body was accepted where the same body written `?-`
+  // was a static error, and since a refinement lowers to a synthesised
+  // constraint, no refinement formula was type-checked at all.
   const types = published;
-  for (const query of analyzed.queries) {
+  for (const query of [...analyzed.queries, ...analyzed.constraints]) {
     const varTypes = rebuildVarTypes(query.body, types);
     for (const elem of query.body) {
       switch (elem.$type) {

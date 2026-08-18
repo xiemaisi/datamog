@@ -16,7 +16,7 @@ import {
   toViolation,
 } from "./constraints.ts";
 import type { ExtensionalLoader } from "./loader.ts";
-import { coerceBooleanColumns, coerceJsonColumns } from "./result-coerce.ts";
+import { coerceBooleanColumns, coerceJsonColumns, coerceNumericColumns } from "./result-coerce.ts";
 import { translate } from "./translator.ts";
 
 export interface DeclarationApplied {
@@ -36,6 +36,10 @@ export interface QueryResultWithTypes extends QueryResult {
   /** Declared `PrimitiveType` for each result-row column, keyed by column name.
    *  Empty when the translator skipped type inference (rare; some tests do). */
   columnTypes: Record<string, PrimitiveType>;
+  /** Whether each of those columns can hold `null`, keyed the same way. The other
+   *  half of the declared type: it decides whether a NULL there is the `null` value
+   *  or an absence. Empty on the same paths `columnTypes` is. */
+  columnNullable: Record<string, boolean>;
 }
 
 export interface IncrementalResult {
@@ -271,14 +275,20 @@ export class IncrementalSession {
       const querySql = translation.queries[i]!;
       const rawRows = await this.backend.execute(querySql);
       const colTypes = translation.queryColumnTypes[i] ?? {};
+      // All three, in the same order as `executor.ts` and `constraints.ts`.
+      // Dropping the numeric one left Postgres `BIGINT`/`NUMERIC` columns as the
+      // strings `Bun.sql` returns, so a REPL result contradicted the `types` it
+      // was reported with and `datamog-magic`'s DataFrame got an object dtype.
       const boolCoerced = coerceBooleanColumns(rawRows, colTypes);
-      const rows = coerceJsonColumns(boolCoerced, colTypes);
+      const numCoerced = coerceNumericColumns(boolCoerced, colTypes);
+      const rows = coerceJsonColumns(numCoerced, colTypes);
       queries.push({
         sql: querySql,
         source: q.$cstNode?.text,
         label: name,
         rows,
         columnTypes: colTypes,
+        columnNullable: translation.queryColumnNullable[i] ?? {},
       });
     }
 
@@ -330,9 +340,9 @@ export class IncrementalSession {
       const r = allResults[i];
       // Native backends don't surface a per-query column-type map at this
       // layer — the translator does, but we don't run it for native. Emit
-      // an empty map; consumers infer from row values. `r.label` already
+      // empty maps; consumers infer from row values. `r.label` already
       // carries the output name (set by evaluateProgram).
-      if (r) queries.push({ ...r, columnTypes: {} });
+      if (r) queries.push({ ...r, columnTypes: {}, columnNullable: {} });
     }
 
     return { declarations, rules, queries };

@@ -33,7 +33,9 @@ Values are automatically coerced to match the declared column types (`string`, `
 
 ## Empty cells and `?`
 
-An empty cell is a `null`, and a column has to say it accepts one. Declare it with a `?` suffix (`age: integer?`) and the empty cell loads as the `null` value; on a non-nullable column it is a **hard load error** naming the file, line and column, not a silently missing value. The one exception is a non-nullable `string`, where an empty cell is the empty string, which is a perfectly good `string`; declare `string?` if you want the empty cell to mean `null` instead.
+An empty cell is a `null`, and a column has to say it accepts one. Declare it with a `?` suffix (`age: integer?`) and the empty cell loads as the `null` value; on a non-nullable column it is a **hard load error** naming the file, line and column, not a silently missing value.
+
+`string` is the exception, at both spellings. An empty cell is the empty string, which is a perfectly good `string` — and it stays the empty string under `string?` too, because `""` is a value of that type and a nullable type has to accept everything its base type does. So **no CSV cell puts a `null` in a `string?` column**: the format cannot tell a quoted `""` from a bare empty cell. Use the JSONL or JSON loader, which carry a real `null`, where a nullable text column needs one.
 
 ## Platform-neutral parsing
 

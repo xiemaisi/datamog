@@ -231,12 +231,14 @@ export function parseRaw(source: string, file?: string): Program {
     throw new ParseError(err.message, line, col, lineColumnToOffset(source, line, col), file);
   }
   // Normalise the tree before any consumer (elaboration, post-processing,
-  // analysis) sees it: lift head type annotations onto each head's `argTypes`
-  // (keeping AnnotatedHeadTerm out of every later stage), default unannotated
-  // input-predicate columns to `string`, and rewrite the `!=` spelling of `<>`.
+  // analysis) sees it: rewrite the `!=` spelling of `<>`, lift head type
+  // annotations onto each head's `argTypes` (keeping AnnotatedHeadTerm out of
+  // every later stage), and default unannotated input-predicate columns to
+  // `string`. Alias rewriting goes first because `liftHeadAnnotations` moves each
+  // refinement formula off the container tree, out of reach of a `streamAll` walk.
+  normalizeOperatorAliases(result.value);
   liftHeadAnnotations(result.value);
   defaultColumnTypes(result.value);
-  normalizeOperatorAliases(result.value);
   return result.value;
 }
 

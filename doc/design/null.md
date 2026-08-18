@@ -27,9 +27,13 @@ What was wrong, beyond the framing. Four things, each marked in place below:
   putting `null` *below* the primitives; the successor makes it a sibling, and
   §7's objection does not reach that design.
 - **§8's summary of what NULL does.** `count(e)` counts a `null`, `list` collects
-  one, an empty or all-null group yields the fold's identity rather than `null`, and
+  one, an **empty** group yields the fold's identity rather than `null`, and
   a JSON `null` leaf no longer collapses: `type_of` of one is `"null"`, and an
-  absent key is distinguishable from a present-but-null one.
+  absent key is distinguishable from a present-but-null one. An *all-null* group is
+  not the empty case and does not take the identity: its nulls are contributions
+  like any other, so `count` counts them and `list` collects them. For
+  `sum`/`avg`/`min`/`max`/`concat` the case cannot arise at all, a nullable operand
+  there being a static error.
 - **§3's dismissal of partial expressions**, which answers a proposal nobody makes,
   and its rejection of option types, refuted by partiality being the case analysis
   it says a rule body has nowhere to put.

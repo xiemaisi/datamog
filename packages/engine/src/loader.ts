@@ -215,14 +215,27 @@ export function coerceValue(value: string, type: PrimitiveType, context?: string
 }
 
 /**
- * Coerce a string cell for a declared extensional column. Nullable
- * columns treat an empty / whitespace-only cell as runtime NULL; all
- * other cells use the normal type-specific coercion.
+ * Coerce a string cell for a declared extensional column. A nullable column
+ * treats an empty / whitespace-only cell as the `null` value, since no other
+ * value of its type reads an empty cell; all other cells use the normal
+ * type-specific coercion.
+ *
+ * `string` is the exception, because `""` *is* a string. `null` is a value now, so
+ * mapping an empty cell to it in a `string?` column meant `string?` rejected two
+ * values that plain `string` accepts, and `string ⊑ string?` requires the nullable
+ * type to accept everything the base type does.
+ *
+ * The accepted cost is that no CSV cell can put a `null` in a `string?` column: the
+ * format cannot distinguish a quoted `""` from a bare empty cell by the time
+ * `csv-parse` is done with it, so one of the two readings has to lose, and this is
+ * the one that keeps the lattice. JSONL and JSON carry a real `null` and are
+ * unaffected.
  */
 export function coerceColumnValue(value: string, column: ColumnDecl, context?: string): unknown {
-  if (column.nullable && value.trim() === "") return null;
   // An unannotated column defaults to `string` (parseRaw already sets this).
-  return coerceValue(value, column.type ?? "string", context);
+  const type = column.type ?? "string";
+  if (column.nullable && type !== "string" && value.trim() === "") return null;
+  return coerceValue(value, type, context);
 }
 
 /**

@@ -74,6 +74,18 @@ export interface TranslationResult {
    */
   queryColumnTypes: Record<string, PrimitiveType>[];
   /**
+   * For each `queries[i]`, whether each result-row column can hold `null`. The
+   * other half of the column's declared type: it is what decides whether a NULL
+   * arriving there is the `null` value or an absence (§9.2 of
+   * doc/design/null-as-a-value.md). Kept beside `queryColumnTypes` rather than
+   * folded into it, the way `columnTypes` and `columnNullness` are kept apart
+   * everywhere else, so no consumer of the base type has to change.
+   *
+   * Not mirrored for constraints: those rows only ever become violation messages,
+   * which print the value rather than reasoning about its type.
+   */
+  queryColumnNullable: Record<string, boolean>[];
+  /**
    * One SELECT per integrity constraint (`analyzed.constraints`, same
    * length / indexing). Translated exactly like a query; the executor runs
    * these before any query and treats returned rows as counterexamples.
@@ -108,6 +120,7 @@ function translateImpl(analyzed: TypedProgram, dialect: SqlDialect): Translation
     viewSpans: viewStripped.map((v) => v.spans),
     querySpans: queryStripped.map((q) => q.spans),
     queryColumnTypes: queryResult.columnTypes,
+    queryColumnNullable: queryResult.columnNullable,
     constraints: constraintResult.sql.map((s) => stripSpanMarks(s).sql),
     constraintColumnTypes: constraintResult.columnTypes,
   };
@@ -1151,24 +1164,36 @@ function translateQueries(
   analyzed: TypedProgram,
   dialect: SqlDialect,
   queries: readonly Query[],
-): { sql: string[]; predicates: string[]; columnTypes: Record<string, PrimitiveType>[] } {
+): {
+  sql: string[];
+  predicates: string[];
+  columnTypes: Record<string, PrimitiveType>[];
+  columnNullable: Record<string, boolean>[];
+} {
   const sql: string[] = [];
   const predicates: string[] = [];
   const columnTypes: Record<string, PrimitiveType>[] = [];
+  const columnNullable: Record<string, boolean>[] = [];
   for (const query of queries) {
     const result = translateOneQuery(query, analyzed, dialect);
     sql.push(result.sql);
     predicates.push(result.predicate);
     columnTypes.push(result.columnTypes);
+    columnNullable.push(result.columnNullable);
   }
-  return { sql, predicates, columnTypes };
+  return { sql, predicates, columnTypes, columnNullable };
 }
 
 function translateOneQuery(
   query: Query,
   analyzed: TypedProgram,
   dialect: SqlDialect,
-): { sql: string; predicate: string; columnTypes: Record<string, PrimitiveType> } {
+): {
+  sql: string;
+  predicate: string;
+  columnTypes: Record<string, PrimitiveType>;
+  columnNullable: Record<string, boolean>;
+} {
   const projection = queryProjection(query);
   const isGround = projection.length === 0;
 
@@ -1207,12 +1232,28 @@ function translateOneQuery(
   // rule-side type inference does, so the result matches what
   // sibling rules with the same body would produce.
   const queryColTypes: Record<string, PrimitiveType> = {};
+  // And whether each can be `null`, which is the other half of the column's type:
+  // it decides whether a NULL arriving in that position is the `null` value or an
+  // absence (null-as-a-value.md §9.2). Reported beside the base type rather than
+  // folded into it, matching how `columnTypes` and `columnNullness` are kept apart
+  // everywhere else (§6). A consumer told `integer` for a column that yields a
+  // `null` has been told something false.
+  const queryColNullable: Record<string, boolean> = {};
   if (!isGround) {
     const varTypes = rebuildVarTypes(query.body, analyzed.columnTypes);
+    // A query is a body owner, so the fixed point has already refined it: a
+    // `Y <> null` guard in the query body makes `Y` non-null here.
+    const nonNull = analyzed.nullness.nonNullVars.get(query.body) ?? new Set<string>();
+    const nullCtx = {
+      overloads: analyzed.functionOverloads,
+      typeOf: (_owner: unknown, expr: HeadTerm) =>
+        inferTermType(expr, varTypes, analyzed.columnTypes),
+    } as Parameters<typeof mayBeNull>[3];
     for (const v of projection) {
       if (v.$type === "Variable") {
         const t = varTypes.get(v.name);
         if (t) queryColTypes[v.name] = t;
+        queryColNullable[v.name] = mayBeNull(v, nonNull, query, nullCtx);
       }
     }
   }
@@ -1235,6 +1276,7 @@ function translateOneQuery(
     sql: markSpan(query, outerSql),
     predicate: QUERY_PRED,
     columnTypes: queryColTypes,
+    columnNullable: queryColNullable,
   };
 }
 

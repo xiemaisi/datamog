@@ -69,8 +69,16 @@ export function rowsToMermaid(rows: Record<string, unknown>[]): string {
 // `bigintSafeReplacer` survives BigInt cells (Postgres BIGINT columns
 // arrive as JS BigInt via `Bun.sql`) — bare `JSON.stringify` throws
 // on those.
+//
+// A `null` renders as the text `null` for the same reason, one step further in:
+// it is an ordinary value with a name, and mapping it to `""` collapsed it onto
+// the empty string. Both then sanitised to the fallback id `n`, so a row ending
+// in a `null` and one ending in `""` drew *one* node and the graph asserted an
+// edge that does not exist. No absence can reach a cell (no column holds one), so
+// `undefined` here is defensive only.
 function cellToString(value: unknown): string {
-  if (value === null || value === undefined) return "";
+  if (value === null) return "null";
+  if (value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value, bigintSafeReplacer);
   return String(value);
 }

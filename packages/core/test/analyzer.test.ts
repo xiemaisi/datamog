@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { parse } from "datamog-parser";
-import { type AnalyzerError, analyze } from "../src/analyzer.ts";
+import {
+  type AnalyzerError,
+  analyze,
+  hasGroupingColumns,
+  isGroupingArg,
+  literalBindings,
+} from "../src/analyzer.ts";
 import { inferTypes } from "../src/types.ts";
 
 describe("analyzer", () => {
@@ -526,6 +532,35 @@ describe("analyzer", () => {
   test("rejects aggregate in a fact (empty body)", () => {
     const program = parse("total(count(*)).");
     expect(() => analyze(program)).toThrow(/cannot contain an aggregate/);
+  });
+
+  // `null` is an ordinary value written as an ordinary literal, so it is a
+  // constant and never a grouping column. Reading it as one loses the
+  // empty-group row on every backend and emits a bare `GROUP BY NULL`, which
+  // Postgres rejects outright as an ordinal. Every literal kind is checked
+  // together because the omission was of one case from a list of the others.
+  test("every literal kind counts as constant beside an aggregate", () => {
+    for (const literal of ['"x"', "7", "-7", "true", "null"]) {
+      const program = parse(`
+        input predicate s(a: integer).
+        agg(${literal}, count(*)) :- s(_).
+      `);
+      const analyzed = analyze(program);
+      const rule = analyzed.rules.get("agg")![0]!;
+      expect(isGroupingArg(rule.head.args[0]!, literalBindings(rule))).toBe(false);
+      expect(hasGroupingColumns(rule)).toBe(false);
+    }
+  });
+
+  test("a variable the body binds to any literal kind is constant too", () => {
+    for (const literal of ['"x"', "7", "true", "null"]) {
+      const program = parse(`
+        input predicate s(a: integer).
+        agg(X, count(*)) :- s(_), X = ${literal}.
+      `);
+      const rule = analyze(program).rules.get("agg")![0]!;
+      expect(isGroupingArg(rule.head.args[0]!, literalBindings(rule))).toBe(false);
+    }
   });
 
   test("rejects list(_) — only count(*) is special-cased", () => {

@@ -981,6 +981,47 @@ describe("type inference validation errors", () => {
     ).toThrow(/Filter expression must be boolean.*'integer'/);
   });
 
+  // A constraint body is a query-shaped conjunction, but the analyzer keeps it
+  // out of `queries` so positional result alignment holds. That had the side
+  // effect of exempting it from every check here, so an `!-` accepted what the
+  // same body written `?-` rejected — and since a refinement lowers to a
+  // synthesised constraint, no refinement formula was checked at all.
+  test("an anonymous constraint body is type-checked like a query", () => {
+    expect(() =>
+      getTypes(`
+        q(1).
+        s("x").
+        !- q(A), s(B), A > B.
+      `),
+    ).toThrow(/Cannot compare 'integer' and 'string'/);
+
+    expect(() =>
+      getTypes(`
+        q(1).
+        !- q(A), A.
+      `),
+    ).toThrow(/Filter expression must be boolean.*'integer'/);
+  });
+
+  test("a refinement formula is type-checked through its synthesised check", () => {
+    expect(() =>
+      getTypes(`
+        q(1).
+        p(A, _: A) :- q(A).
+      `),
+    ).toThrow(/Filter expression must be boolean.*'integer'/);
+  });
+
+  test("a named error predicate body is type-checked too", () => {
+    expect(() =>
+      getTypes(`
+        q(1).
+        s("x").
+        error predicate bad(A) :- q(A), s(B), A > B.
+      `),
+    ).toThrow(/Cannot compare 'integer' and 'string'/);
+  });
+
   test("rejects ordering comparison on booleans", () => {
     expect(() =>
       getTypes(`

@@ -159,16 +159,23 @@ export class DatamogRepl {
       predicates.push({
         name,
         predicateKind: "edb",
-        columns: decl.columns.map((c) => ({ name: c.name, type: c.type })),
+        columns: decl.columns.map((c) => ({
+          name: c.name,
+          type: c.type,
+          nullable: c.nullable ?? false,
+        })),
       });
     }
 
     for (const [name, _rules] of typed.rules) {
       const arity = typed.arities.get(name) ?? 0;
       const types = typed.columnTypes.get(name) ?? [];
-      const cols: { name: string; type: PrimitiveType | undefined }[] = [];
+      // Published rather than inferred, since that is what a consumer of this
+      // predicate sees: a `?` head annotation widens the contract (spec §5.10).
+      const nullness = typed.nullness.publishedNullness.get(name) ?? [];
+      const cols: { name: string; type: PrimitiveType | undefined; nullable: boolean }[] = [];
       for (let i = 0; i < arity; i++) {
-        cols.push({ name: `col${i + 1}`, type: types[i] });
+        cols.push({ name: `col${i + 1}`, type: types[i], nullable: nullness[i] ?? false });
       }
       predicates.push({ name, predicateKind: "idb", columns: cols });
     }
@@ -243,10 +250,12 @@ function toResultEvent(r: QueryResultWithTypes): ReplEvent {
         ? Object.keys(r.rows[0]!)
         : [];
   const types: (PrimitiveType | undefined)[] = columns.map((c) => r.columnTypes[c]);
+  const nullable: boolean[] = columns.map((c) => r.columnNullable[c] ?? false);
   return {
     kind: "result",
     columns,
     types,
+    nullable,
     rows: r.rows,
     sql: r.sql,
     source: r.source,

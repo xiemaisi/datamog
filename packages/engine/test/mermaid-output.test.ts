@@ -97,11 +97,22 @@ describe("rowsToMermaid", () => {
     );
   });
 
-  test("missing or null cells stringify to empty (no edge-id explosion)", () => {
-    // A row whose source/target column was projected as NULL (e.g. from
-    // a JSON `as_*` coercion that returned no match) shouldn't crash —
-    // we render `""` and let the user notice the broken edge.
-    expect(rowsToMermaid([{ src: "a", dst: null }])).toBe('graph TD\n    a --> n[""]');
+  test("a null cell renders as `null`, distinct from the empty string", () => {
+    // The old reading was "projected as NULL, e.g. a JSON `as_*` that matched
+    // nothing", rendered `""` so the user could notice the broken edge. That
+    // scenario cannot arise: a failed `as_*` has no value, so the row is withheld
+    // and never reaches output. A `null` in a cell is now the `null` *value*, and
+    // rendering it as `""` collapsed it onto the empty string — both sanitised to
+    // the fallback id `n`, so these two rows drew one node and the graph asserted
+    // an edge that does not exist.
+    expect(rowsToMermaid([{ src: "a", dst: null }])).toBe("graph TD\n    a --> null");
+    expect(rowsToMermaid([{ src: "a", dst: "" }])).toBe('graph TD\n    a --> n[""]');
+    expect(
+      rowsToMermaid([
+        { src: "x", dst: null },
+        { src: "y", dst: "" },
+      ]),
+    ).toBe('graph TD\n    x --> null\n    y --> n[""]');
   });
 
   test("Regression: value-typed columns render as JSON text, not '[object Object]'", () => {

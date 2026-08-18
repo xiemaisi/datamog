@@ -136,6 +136,29 @@ describe("CsvLoader", () => {
     ]);
   });
 
+  test("a `string?` cell keeps an empty string rather than becoming null", async () => {
+    // `""` is a string, so `string?` has to accept it: `string ⊑ string?` means the
+    // nullable type accepts everything the base type does, and mapping the cell to
+    // `null` made `string?` reject two values plain `string` takes. The accepted
+    // cost is that no CSV cell can put a `null` in a `string?` column — the format
+    // cannot tell a quoted `""` from a bare empty cell once `csv-parse` is done, so
+    // one reading has to lose. JSONL carries a real `null` and is unaffected.
+    await Bun.write(join(tempDir, "t.csv"), 'a,b\nplain,\nspace," "\nword,hi\n');
+    const loader = new CsvLoader({ directory: tempDir });
+    const decl = getExtDecl("input predicate t(a: string, b: string?).");
+    const rows = await loader.readRows(decl);
+    expect(rows).toEqual([
+      { a: "plain", b: "" },
+      { a: "space", b: " " },
+      { a: "word", b: "hi" },
+    ]);
+
+    // And identical to the same data through a non-nullable declaration, which is
+    // the property that was broken.
+    const plain = getExtDecl("input predicate t(a: string, b: string).");
+    expect(await loader.readRows(plain)).toEqual(rows);
+  });
+
   test("boolean coercion accepts various values", async () => {
     await Bun.write(join(tempDir, "t.csv"), "x\ntrue\nfalse\n1\n0\nyes\nno\n");
     const loader = new CsvLoader({ directory: tempDir });

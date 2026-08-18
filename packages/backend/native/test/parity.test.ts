@@ -265,4 +265,54 @@ describe("native backend — parity strata and the iteration cap", () => {
       await backend.close();
     }
   });
+
+  // The ⊤ marker is scoped to the stratum, and a cap is the exit that skips the
+  // `clearRelation` loop which normally drops it. A leaked marker is not a
+  // near-miss: a positive read of the relation throws an internal error, and a
+  // negated read takes the "⊤ holds of everything" branch and answers the
+  // complement of the truth under nothing but the ordinary cap warning. Both
+  // need a *maximal* predicate to be read after the cap, which is what the two
+  // cap tests above never do.
+  //
+  // `reach` needs more passes than the cap allows, so the cap lands in the
+  // minimal phase of round 0, before any clear has run.
+  const CAP_IN_MINIMAL_PHASE = `
+    n(0). n(1). n(2). n(3). n(4).
+    start(0).
+    special(9).
+    reach(X) :- start(X).
+    reach(Y) :- reach(X), Y = X + 1, Y <= 4.
+    reach(X) :- special(X), not ok^(X).
+    ok^(X) :- n(X), not reach(X).
+  `;
+
+  test("a cap in the minimal phase leaves no maximal relation at ⊤", async () => {
+    const backend = await create({ maxIterations: 3 });
+    try {
+      // Querying the maximal predicate positively: at ⊤ this throws
+      // `positive atom on 'ok' read it at ⊤` instead of returning rows.
+      const results = await new DatamogExecutor(backend).execute(
+        `${CAP_IN_MINIMAL_PHASE}\n?- ok^(X).`,
+      );
+      expect(results[0]!.rows).toEqual([]);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  test("a negated read after a cap does not answer as though ⊤ held", async () => {
+    const source = `${CAP_IN_MINIMAL_PHASE}\noutput predicate not_ok(X) :- n(X), not ok^(X).`;
+    const capped = await create({ maxIterations: 3 });
+    let cappedRows: unknown[];
+    try {
+      const results = await new DatamogExecutor(capped).execute(source);
+      cappedRows = results.find((r) => r.label === "not_ok")!.rows;
+    } finally {
+      await capped.close();
+    }
+    // A leaked ⊤ makes `not ok^(X)` fail for every `X`, so the answer collapses
+    // to nothing — the complement of what the partial relations hold.
+    expect(cappedRows.length).toBeGreaterThan(0);
+    expect(col(cappedRows as Record<string, unknown>[], "X")).toEqual([0, 1, 2, 3, 4]);
+  });
 });

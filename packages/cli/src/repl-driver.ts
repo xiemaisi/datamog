@@ -184,7 +184,12 @@ function renderEventsInteractive(events: ReplEvent[]): void {
           break;
         }
         for (const p of ev.predicates) {
-          const cols = p.columns.map((c) => `${c.name}: ${c.type ?? "?"}`).join(", ");
+          // `?` for a nullable column, spelled as the declaration spells it. An
+          // unknown base type is `?` on its own, which is unambiguous: it sits where
+          // a type name goes, not after one.
+          const cols = p.columns
+            .map((c) => `${c.name}: ${c.type ?? "?"}${c.nullable ? "?" : ""}`)
+            .join(", ");
           console.log(`${p.predicateKind} ${p.name}(${cols})`);
         }
         break;

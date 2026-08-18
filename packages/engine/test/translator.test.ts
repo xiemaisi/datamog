@@ -1055,7 +1055,12 @@ describe("translator", () => {
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("jsonb_typeof(to_jsonb(5))");
-    expect(sql).toContain("regexp_replace((to_jsonb('hi'))::text");
+    // The string arm carries a `CAST(... AS TEXT)` and the numeric one does not,
+    // because a bare string literal is `unknown` to Postgres and `to_jsonb` is
+    // polymorphic over `anyelement`. This assertion used to expect
+    // `to_jsonb('hi')`, which no Postgres will compile: the test checks emitted
+    // text and never ran it.
+    expect(sql).toContain("regexp_replace((to_jsonb(CAST('hi' AS TEXT)))::text");
     expect(sql).toContain("jsonb_typeof(to_jsonb(5)) = 'number'");
   });
 

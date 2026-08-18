@@ -84,6 +84,54 @@ describe("datamog-validator", () => {
     expect(warnings.length).toBeGreaterThan(0);
   });
 
+  // The comment above claimed parity while only the finiteness family ran, so the
+  // six nullness warnings and the two inert-declaration ones never reached the
+  // editor. One case per remaining family, since the failure was per-family.
+  test("Regression: a nullness warning is surfaced", () => {
+    const source = `
+      input predicate p(a: integer, ok: boolean?).
+      q(X) :- p(X, B), B.
+      ?- q(X).
+    `;
+    const warnings = runValidator(source).filter((d) => d.severity === "warning");
+    expect(warnings.map((w) => w.message).join("\n")).toMatch(/its operand is null/);
+  });
+
+  test("Regression: an inert polarity sigil is surfaced", () => {
+    const source = `
+      p^(0).
+      p^(X: integer) :- p^(X).
+      ?- p^(X).
+    `;
+    const warnings = runValidator(source).filter((d) => d.severity === "warning");
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
+  // The same missing passes: an annotation left inside an `AnnotatedHeadTerm` is
+  // never compared against what inference proved, so a wrong one was accepted.
+  test("Regression: a head type annotation is checked", () => {
+    const source = `
+      input predicate p(a: string).
+      q(X: integer) :- p(X).
+      ?- q(Y).
+    `;
+    const errors = runValidator(source).filter((d) => d.severity === "error");
+    expect(errors.map((e) => e.message).join("\n")).toMatch(/annotated 'integer'/);
+  });
+
+  test("Regression: an inert contract is surfaced", () => {
+    // One unannotated sibling makes the disjunction vacuous, so the contract
+    // claims nothing.
+    const source = `
+      q(1).
+      p(A, _: A > 0) :- q(A).
+      p(A) :- q(A).
+      ?- p(A).
+    `;
+    const warnings = runValidator(source).filter((d) => d.severity === "warning");
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
   test("a data-file binding validates cleanly (no 'not yet supported' error)", () => {
     // Before module wiring, any `:=` binding tripped the analyzer's
     // "not yet supported" rejection. A data-file binding needs no module

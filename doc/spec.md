@@ -348,9 +348,10 @@ doubled(N, A * 2) :- survey(N, A), A <> null.   # fine: narrowed first
 ```
 
 A column without `?` is emitted `NOT NULL`, and a `null` in its data is a load
-error rather than a silently missing value (§7). `null` is itself declarable as a
-column type (§1.5), which is only useful with a `?`, that being the one value it
-admits.
+error rather than a silently missing value (§7). The one exception is the `null`
+type itself, which is declarable as a column type (§1.5) and needs no `?`: `null`
+is the only value it admits, so a `NOT NULL` there would leave the column
+uninhabited. `null` and `null?` are the same type.
 
 An input predicate may be **bound** to a source with `:=` — a specific data file
 or an instance of another module (§9). An unbound input is a free parameter. In
@@ -543,12 +544,16 @@ wherever `e` does not, including where `e` has no value. It carries no
 stratification obligation, since built-ins do not recurse.
 
 It is **not** the filter `!(e)`, which is the boolean operator and propagates
-undefinedness (§5.4). The two agree wherever the operand is defined, which is
-everywhere the operands are variables or literals.
+undefinedness (§5.4). The two agree wherever the operand has a value that is not
+`null`, and diverge at both of the other cases: `!` is strict at a `null` and at
+an absence, `not` is strict at neither. A bare `boolean?` variable is enough to
+tell them apart, so the divergence does not need a compound expression.
 
 ```
 not X = Y                # holds unless X = Y holds
 not Age < 18             # holds unless Age < 18 holds, Age null included
+not B                    # over `B: boolean?`, holds at `false` and at `null`
+!B                       # holds at `false` only: no value at `null`
 ```
 
 #### Equalities
@@ -628,8 +633,9 @@ A leading `not` negates the filter. The predicate-literal alternative is tried
 first, so `not p(X)` stays a negated predicate literal while `not X = Y` is a
 negated comparison. It is negation as failure over the expression and **not** the
 filter `!(e)`: `not e` holds wherever `e` does not hold, an absence included,
-while `!e` propagates the absence (§5.4). The two agree wherever the operand is
-defined, which is everywhere the operands are variables or literals. This is the
+while `!e` propagates the absence (§5.4). The two agree wherever the operand has
+a value that is not `null`, and diverge at both of the other cases: `!` is strict
+at a `null` as well as at an absence, `not` is strict at neither. This is the
 negation referred to under *Literals* above.
 
 ```prolog
@@ -650,8 +656,12 @@ A filter expression must have type `boolean` — non-boolean filters
 it is `true`: one that has no value, and one whose value is `null`, both drop
 their row, same as SQL's `WHERE`. No comparison returns a `null` (§2.6), so a
 `null` in filter position arrives only from a nullable `boolean?` column, and an
-absence arrives from any partial expression (§5.4). Both are warned about, the
-first by default.
+absence arrives from any partial expression (§5.4). The `null` case is warned
+about by default (`nullable-filter`, §5.4); the absence is not, and deliberately
+so. A filter *tests* rather than uses a value, so an absence and a `false` are
+indistinguishable there and dropping the row is the filter doing its job. The
+undefined-expression warning reports the positions that *use* a value instead
+(§5.4).
 
 ### 2.6 Expressions
 
@@ -961,10 +971,12 @@ head an aggregate may sit anywhere inside an argument's expression, so a head
 argument is a **grouping column** when it contains no aggregate *and* is not
 constant. Grouping columns become the GROUP BY columns of the generated SQL.
 
-An argument is **constant** when it is a string, number or boolean literal, a
-negated numeric literal, or a variable the body binds to one of those with an
-equality. A constant does not vary per group, so it is not grouped by, and the
-two spellings mean the same thing:
+An argument is **constant** when it is a literal of any kind — string, number,
+boolean or `null` — or a negated numeric literal, or a variable the body binds to
+one of those with an equality. `null` is included for the same reason as the
+others: it is an ordinary value written as an ordinary literal, and it does not
+vary per group. A constant is not grouped by, so the two spellings mean the same
+thing:
 
 ```
 totals("all", sum(V)) :- s(V).
@@ -1116,10 +1128,13 @@ record_count(count(*)) :- scores(_, _, _).   # four independent _'s
 
 ### 2.9 Value Operations
 
-Datamog has a `value` column type — the union of every kind a
-column can carry: primitive leaves (`null`, `boolean`,
-`integer`, `float`, `string`) plus the two structured shapes
-(arrays and objects). When persisted, `value` columns are
+Datamog has a `value` column type — every JSON shape a column
+can carry: primitive leaves (`boolean`, `integer`, `float`,
+`string`) plus the two structured shapes (arrays and objects).
+A `null` may appear anywhere *inside* one; a `value` that is
+itself a bare `null` needs the nullable spelling `value?`,
+`?` meaning the same on `value` as on any other base type
+(§1.5). When persisted, `value` columns are
 stored as JSONB (Postgres) or canonical JSON text (SQLite /
 sql.js); when constructed in a program, the array and object
 literal forms `[e1, e2, ...]` and `{"k1": v1, "k2": v2, ...}`
@@ -1665,7 +1680,8 @@ Datamog has six basic types:
 | `float`    | Floating-point numbers| `DOUBLE PRECISION` (Postgres) / `REAL` (SQLite/sql.js, 8-byte) |
 | `boolean` | True/false values     | `BOOLEAN`                                 |
 | `null`    | the single value `null` | `TEXT` (unobservable: only `NULL` is stored) |
-| `value`   | union of `null` / `boolean` / `integer` / `float` / `string` / array / object | `JSONB` (Postgres) / `TEXT` (SQLite/sql.js) |
+| `value`   | any JSON shape except a bare `null`: `boolean` / `integer` / `float` / `string` / array / object, with `null` allowed *inside* one | `JSONB` (Postgres) / `TEXT` (SQLite/sql.js) |
+| `value?`  | the same, and a bare `null` as well | as `value` |
 
 `null` is a type like any other. It sits **beside** the primitives rather
 than below them, so `string` and `integer` still have no common value and a
@@ -1678,6 +1694,18 @@ A column that can hold `null` **as well as** other values is written with a
 `?` suffix (`age: integer?`, §2.2). That is not a sixth kind of type but the
 union of the base type and `null`, so `integer?` accepts an integer or a
 `null` and `integer` accepts neither `null` nor anything else.
+
+`?` means the same thing on `value` as on every other base type, so `value` is
+any JSON shape but not a bare `null`, and a column that can carry one must say
+`value?`:
+
+```prolog
+doc(J: value)  :- J = {"k": null}.   # fine: the null is inside the object
+top(J: value?) :- J = null.          # `value` here is an error, naming `value?`
+```
+
+The distinction is between the JSON document `null` and a document that merely
+contains one. Only the first needs the `?`.
 
 SQLite and sql.js have no native `BOOLEAN` storage type — they round-
 trip `TRUE`/`FALSE` and comparison results as `0` / `1`. The executor
@@ -1887,8 +1915,10 @@ Consequences worth stating outright:
   has no value. It is the only built-in function with that reading; every other
   one has to appear inside an expression.
 - **`not` and `!` differ.** `not` is negation as failure over a body element;
-  `!` is the boolean operator and propagates undefinedness. They agree
-  wherever the operand is defined.
+  `!` is the boolean operator and propagates undefinedness *and* is strict at a
+  `null`. So they agree wherever the operand has a value that is not `null`, and
+  differ at both of the other cases: over a `boolean?` variable holding `null`,
+  `not B` holds and `!B` has no value.
 
 #### Propagation
 
@@ -2021,7 +2051,39 @@ expression can be both undefined and `null`-valued, so SQL `NULL` there is
 reserved for undefined and the JSON spelling carries the value.
 
 Non-`?` extensional columns are emitted `NOT NULL`, so a loader cannot
-introduce a `null` through them; coercion failures raise at load time.
+introduce a `null` through them; coercion failures raise at load time. A
+`null`-typed column is the exception and carries no `NOT NULL`, `null` being the
+only value it holds (§2.2).
+
+#### Diagnostics
+
+Six warnings, none of them an error: each reports specified behaviour that is
+sometimes exactly what was wanted. The symptom they share is a row that quietly
+is not there, whose cost is otherwise paid by reading output and counting.
+
+| code | reports | default |
+|---|---|---|
+| `nullable-filter` | a filter whose operand can be `null`, which never holds (§2.5) | on |
+| `nullable-ordering-gap` | two complementary orderings over the same operands, which partition the non-null rows and silently drop the `null` ones | on |
+| `nullable-negated-ordering` | `not` over an ordering, which *keeps* the `null` row, the ordering having no value there | on |
+| `partial-inequality` | `<>` over an operand that can have no value, where `not (a = b)` is the other reading (§2.6) | on |
+| `constant-defined` | `defined(X)` on a bare variable, which is constantly true and is not `X <> null` | on |
+| `undefined-expression` | an expression that can have no value, in a position that *uses* one | off |
+
+The last is opt-in, behind the CLI flag `--warn-undefined`, and is the mitigation
+for partiality's one real cost: where a `NULL` used to appear in the output, the
+row is now simply absent and nothing says so, so a warning before the run beats
+counting rows after it. It is off by default because partial operations are
+pervasive and usually deliberate — a program writing `Y = 10 / X` generally knows
+`X` can be zero and wants those rows gone — and it fires 236 times across the
+single-file examples. It is the flag to reach for when rows you expected are
+missing.
+
+It reports the positions that use a value: head arguments, both sides of an
+equality, atom arguments, and range bounds. Not filters, which test rather than
+use; there an absence and a `false` both drop the row and are indistinguishable,
+so nothing surprising has happened. One diagnostic per rule, naming the first
+offending expression.
 
 ### 5.5 Aggregate Typing Rules
 
@@ -2125,13 +2187,19 @@ X in [1 .. 10]            # OK: integer bounds
 X in ["a" .. "z"]         # ERROR: non-numeric bounds
 -"hello"                  # ERROR: unary minus on string
 42[0]                     # ERROR: subscript on integer
-length(42)                # ERROR: length expects string or value
 sqrt("hello")             # ERROR: sqrt expects numeric
 X > "5"                   # ERROR: comparing integer with string (if X : integer)
 B > true                  # ERROR: '>' does not order booleans
 J > J2                    # ERROR: '>' does not order `value` (if J, J2 : value)
-as_integer("42")              # ERROR: as_integer expects value, got string
-length(42)                # ERROR: length expects string or value
+```
+
+A `value` parameter is the one place where a primitive argument is not a type
+error, the auto-lift (§2.9) turning it into a `value`. Such a call type-checks and
+then simply has no value, which is a different outcome from being rejected:
+
+```
+as_integer("42")          # OK, and no value: a string leaf is no numeric leaf
+length(42)                # OK, and no value: an integer has no length
 ```
 
 ### 5.8 Finiteness analysis (warnings)
@@ -2633,8 +2701,15 @@ Loads data from a file named `{predicate}.csv` in a configured directory.
   rather than silently coercing.
 - A `value` column accepts any JSON text; the contents are parsed
   with `JSON.parse` and canonicalised on insert.
-- For nullable columns (`type?`), an empty or whitespace-only cell is loaded
-  as runtime `NULL`.
+- For a nullable column (`type?`), an empty or whitespace-only cell is loaded as
+  the `null` value, since no other value of its type reads an empty cell.
+  **`string?` is the exception**: `""` is a string, and `string ⊑ string?` requires
+  the nullable type to accept everything the base type does, so an empty cell in a
+  `string?` column is the empty string exactly as it is in a `string` column. The
+  consequence is that **no CSV cell can put a `null` in a `string?` column** — the
+  format cannot distinguish a quoted `""` from a bare empty cell, so one of the two
+  readings has to lose. Use JSONL or JSON, which carry a real `null`, where a
+  nullable text column needs one.
 - Without a header row, every record's field count must match the predicate
   arity. With a header row, every declared column must appear in the
   header (matched by exact name per the §7 intro); extra header

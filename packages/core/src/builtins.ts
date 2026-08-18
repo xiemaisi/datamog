@@ -179,7 +179,10 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   // for cross-backend determinism.
   // `has_key` is total: a missing key or non-object receiver is `false`. `keys` /
   // `values` are partial, non-object input having no value at all.
-  builtin("has_key", [ov("has_key.value_string", ["value", "string"], "boolean", TOTAL)]),
+  //
+  // `ANSWERS_NULL` rather than `TOTAL`: `has_key(null, k)` is `false`, a value,
+  // so a non-null result does not prove the receiver non-null.
+  builtin("has_key", [ov("has_key.value_string", ["value", "string"], "boolean", ANSWERS_NULL)]),
   builtin("keys", [ov("keys.value", ["value"], "value", PARTIAL)]),
   builtin("values", [ov("values.value", ["value"], "value", PARTIAL)]),
 
@@ -187,7 +190,10 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   // `parse_json`. Object keys are sorted, numbers normalised, no
   // whitespace inserted; the result is identical across every
   // backend so it's safe as a hash / dedup key.
-  builtin("to_json", [ov("to_json.value", ["value"], "string", TOTAL)]),
+  //
+  // `ANSWERS_NULL` rather than `TOTAL`: `to_json(null)` is the text `"null"`, a
+  // value, so a non-null result does not prove the argument non-null.
+  builtin("to_json", [ov("to_json.value", ["value"], "string", ANSWERS_NULL)]),
 
   // Primitive conversions. `to_string` is polymorphic over numeric and
   // boolean inputs; the parsing variants (`to_integer`/`to_float`/

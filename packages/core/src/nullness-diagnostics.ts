@@ -42,13 +42,14 @@ export interface NullnessDiagnosticOptions {
   /**
    * Also report expressions that can have no value (`undefined-expression`).
    *
-   * Off by default, and the reason is measured rather than assumed. Across
-   * `examples/` the check fires **192 times in 29 of 80 examples**, or 60 times
-   * if narrowed to head arguments alone. That is not a corpus full of bugs: a
-   * program that writes `Y = 10 / X` usually knows `X` can be zero and wants
-   * those rows gone, and one that writes `to_integer(S)` is asking a question
-   * that can fail. Partiality is pervasive and mostly intentional, so warning
-   * about all of it is the array-bounds-warning mistake.
+   * Off by default, and the reason is measured rather than assumed. Across the
+   * single-file `examples/` the check fires **236 times in 51 of 79**, or 199 if
+   * narrowed to head arguments and equality sides alone, leaving out the atom
+   * arguments and range bounds that use a value just as much. That is not a corpus
+   * full of bugs: a program that writes `Y = 10 / X` usually knows `X` can be zero
+   * and wants those rows gone, and one that writes `to_integer(S)` is asking a
+   * question that can fail. Partiality is pervasive and mostly intentional, so
+   * warning about all of it is the array-bounds-warning mistake.
    *
    * It earns its keep the other way round: as something to switch on when rows
    * you expected are missing, which is exactly when the volume stops being
@@ -296,9 +297,12 @@ function collectPartialInequalities(
  * point of having it.
  *
  * Reported at exactly the sites the translator guards, since those are the sites
- * where a value is used: head arguments and the sides of an equality. **Not**
- * filters, whose NULL-drops the `nullable-filter` warning above already covers
- * and whose whole job is to remove rows. One diagnostic per rule, naming the
+ * where a value is *used*: head arguments, the sides of an equality, atom
+ * arguments and range bounds. **Not** filters, which test rather than use. There
+ * an absence and a `false` both simply drop the row and are indistinguishable
+ * (§4.1), so nothing surprising happened; and `canBeUndefined` answers `true` for
+ * any ordering, having no nullness bit in scope, so reporting them would warn
+ * about nearly every comparison in the corpus. One diagnostic per rule, naming the
  * first offending expression: a rule that divides twice has one problem, not two.
  */
 function collectUndefinable(
@@ -323,6 +327,14 @@ function collectUndefinable(
   if (head?.args) candidates.push(...head.args);
   for (const elem of owner.body) {
     if (elem.$type === "Equality") candidates.push(elem.left, elem.expr);
+    // An atom argument and a range bound use their value the way a head argument
+    // does, and the translator guards them for the same reason, so an absence
+    // withholds a row there too. Still not a filter: a filter *tests* rather than
+    // uses, an absence and a `false` are indistinguishable in that position
+    // (§4.1), and `canBeUndefined` answers `true` for any ordering, so reporting
+    // them would warn about nearly every comparison in the corpus.
+    else if (elem.$type === "Literal") candidates.push(...elem.args);
+    else if (elem.$type === "RangeAtom") candidates.push(elem.expr, elem.low, elem.high);
   }
 
   for (const expr of candidates) {
@@ -376,8 +388,13 @@ function collectOrderings(
     return;
   }
   if (!ORDERING_OPS.has(expr.op)) return;
-  // Only an operand that can actually be NULL leaves a gap.
-  if (!mayBeNull(expr.left, nonNull, owner, ctx)) return;
+  // Only an operand that can actually be NULL leaves a gap — but *either* one
+  // does. Reading the left alone silenced the whole warning for a partition
+  // written with the nullable side on the right (`2 > X` against `2 <= X`), which
+  // has exactly the same gap. `collectNegatedOrderings` reads both.
+  if (!mayBeNull(expr.left, nonNull, owner, ctx) && !mayBeNull(expr.right, nonNull, owner, ctx)) {
+    return;
+  }
   const left = expr.left.$cstNode?.text;
   const right = expr.right.$cstNode?.text;
   if (left === undefined || right === undefined) return;
