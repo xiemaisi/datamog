@@ -71,9 +71,27 @@ describe("the encoding does not delegate to the solver", () => {
     expect(script("p(1, 2).\nr(X, Y, _: Y > X) :- p(X, Y).")).toContain("(set-logic QF_LIA)");
   });
 
-  test("arithmetic carries the integer domain, since leaving it is NULL", () => {
+  test("a head expression's definedness is a hypothesis, not a null case", () => {
+    // A derived tuple witnesses its own definedness (§10): `X + 1` outside the
+    // integer domain has no value, so no tuple carries it and the contract says
+    // nothing about that case. Asserting the domain as a *hypothesis* is what
+    // says so. Modelling the overflow as a NULL instead is what used to falsify
+    // every plausible invariant over a computed position, `fibonacci`'s
+    // `Curr <= Next` among them.
     const out = script("p(1).\nr(X, X + 1 as K, _: K > X) :- p(X).");
-    expect(out).toContain("9007199254740991");
+    const domain = "(and (<= (- 9007199254740991) (+ X 1)) (<= (+ X 1) 9007199254740991))";
+    expect(out).toContain(`(assert ${domain})`);
+    // And the goal is about the values alone: no domain condition rides along
+    // inside it, which is what an `isNull` disjunct would have put there.
+    const goal = out.split("\n").find((l) => l.startsWith("(assert (not "))!;
+    expect(goal).not.toContain("9007199254740991");
+  });
+
+  test("division by zero is undefinedness too, not a null", () => {
+    const out = script("p(4).\nr(X, Y, X / Y as H, _: H >= 0) :- p(X), q(Y).\nq(2).");
+    // The divisor being non-zero is a hypothesis about which tuples exist, so it
+    // is asserted rather than folded into a null condition on the quotient.
+    expect(out).toContain("(not (= Y 0))");
   });
 
   test("division truncates rather than flooring", () => {

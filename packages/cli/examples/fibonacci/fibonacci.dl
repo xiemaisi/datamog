@@ -40,11 +40,14 @@ fib_step(1, 0 as P0, 1 as C0, _: 0 <= P0, _: P0 <= C0).
 fib_step(I + 1, Curr, Prev + Curr as Next, _: 0 <= Curr, _: Curr <= Next) :-
   fib_step(I, Prev, Curr), I < 10.
 
-# `--verify` discharges three of these four with an SMT solver. The fourth,
-# `Curr <= Next`, is not a theorem: `Prev + Curr` can leave the integer domain,
-# and then `Next` is NULL, which no ordering satisfies. Bounding the values
-# would need the invariant to relate them to `I`, which this formulation does
-# not. Checking and proving are different things, and the gap is the point.
+# `--verify` discharges all four with an SMT solver, and `Curr <= Next` is the
+# one worth understanding. `Prev + Curr` can leave the integer domain, and there
+# it has no value, so the rule derives no tuple. A contract is a claim about the
+# tuples that exist, so the overflow is not a case it has to answer for, and the
+# solver is told as much: the definedness of every head expression is one of the
+# hypotheses. Under the older reading, where an overflow produced NULL and the
+# tuple survived carrying it, this claim was false and no strengthening of the
+# invariant could have saved it.
 
 # Extract the sequence: the I-th Fibonacci number is V.
 fibonacci(I, V) :- fib_step(I, _, V).

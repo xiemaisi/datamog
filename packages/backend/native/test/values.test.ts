@@ -55,15 +55,16 @@ describe("compareOp — runtime type assertions", () => {
     expect(() => compareOp(">", true, false)).toThrow(/expected number or string/);
   });
 
-  test("comparison is total: a null operand never yields null, and never throws", () => {
-    // Null is an isolated point in the order: `<` / `>` are false whenever a
-    // side is null, `<=` / `>=` are true only when both are. Equality is
-    // null-aware. See doc/design/null.md §5.
-    expect(compareOp("<", null, 1)).toBe(false);
-    expect(compareOp("<", null, null)).toBe(false);
-    expect(compareOp(">=", "a", null)).toBe(false);
-    expect(compareOp("<=", null, null)).toBe(true);
-    expect(compareOp(">=", null, null)).toBe(true);
+  test("a null operand never yields null, and never throws", () => {
+    // Equality answers, `null` being a value. An ordering does not: `null` is
+    // outside the order, so there is no answer to give and none is invented.
+    // See doc/design/null-as-a-value.md §4.1. Agrees with `evalTerm`, which
+    // decides these cases itself rather than calling here.
+    expect(compareOp("<", null, 1)).toBeUndefined();
+    expect(compareOp("<", null, null)).toBeUndefined();
+    expect(compareOp(">=", "a", null)).toBeUndefined();
+    expect(compareOp("<=", null, null)).toBeUndefined();
+    expect(compareOp(">=", null, null)).toBeUndefined();
     expect(compareOp("=", null, null)).toBe(true);
     expect(compareOp("<>", null, null)).toBe(false);
     expect(compareOp("<>", 1, null)).toBe(true);
@@ -152,14 +153,22 @@ describe("evalTerm — runtime type assertions", () => {
   });
 });
 
-describe("evalTerm — boolean operators (3VL)", () => {
-  // Coverage matrix mirrors SQL's three-valued logic: NULL is the
-  // "unknown" element, false dominates &&, true dominates ||.
+describe("evalTerm — boolean operators", () => {
+  // The connectives are non-strict at their absorbing value and strict
+  // otherwise: `false` dominates `&&` and `true` dominates `||`, whatever the
+  // other operand is, and past that an operand must be a truth value. A `null`
+  // is not one, so it leaves the connective with no value (`undefined`) rather
+  // than yielding SQL's "unknown". Same argument as the orderings' strictness,
+  // and it is what keeps a connective's result non-nullable so that a SQL NULL
+  // in one reads as undefined. See doc/design/null-as-a-value.md §15.26.
+  //
+  // The absorbing rows are the ones that matter for the guard idiom, and they
+  // are exactly the rows that did not move.
   const cases: {
     op: "&&" | "||";
     l: boolean | null;
     r: boolean | null;
-    expected: boolean | null;
+    expected: boolean | undefined;
   }[] = [
     // && — false dominates
     { op: "&&", l: false, r: false, expected: false },
@@ -168,9 +177,9 @@ describe("evalTerm — boolean operators (3VL)", () => {
     { op: "&&", l: true, r: true, expected: true },
     { op: "&&", l: false, r: null, expected: false },
     { op: "&&", l: null, r: false, expected: false },
-    { op: "&&", l: true, r: null, expected: null },
-    { op: "&&", l: null, r: true, expected: null },
-    { op: "&&", l: null, r: null, expected: null },
+    { op: "&&", l: true, r: null, expected: undefined },
+    { op: "&&", l: null, r: true, expected: undefined },
+    { op: "&&", l: null, r: null, expected: undefined },
     // || — true dominates
     { op: "||", l: false, r: false, expected: false },
     { op: "||", l: false, r: true, expected: true },
@@ -178,9 +187,9 @@ describe("evalTerm — boolean operators (3VL)", () => {
     { op: "||", l: true, r: true, expected: true },
     { op: "||", l: true, r: null, expected: true },
     { op: "||", l: null, r: true, expected: true },
-    { op: "||", l: false, r: null, expected: null },
-    { op: "||", l: null, r: false, expected: null },
-    { op: "||", l: null, r: null, expected: null },
+    { op: "||", l: false, r: null, expected: undefined },
+    { op: "||", l: null, r: false, expected: undefined },
+    { op: "||", l: null, r: null, expected: undefined },
   ];
   for (const c of cases) {
     test(`${c.op}: ${c.l} ${c.op} ${c.r} = ${c.expected}`, () => {
@@ -192,7 +201,8 @@ describe("evalTerm — boolean operators (3VL)", () => {
     });
   }
 
-  test("! true = false; ! false = true; ! null = null", () => {
+  test("! true = false; ! false = true; ! null has no value", () => {
+    // `!` has no absorbing operand, so it is strict at a null outright.
     const sub: Substitution = new Map<string, boolean | null>([
       ["T", true],
       ["F", false],
@@ -200,7 +210,7 @@ describe("evalTerm — boolean operators (3VL)", () => {
     ]);
     expect(evalTerm(unary("!", variable("T")), sub, env)).toBe(false);
     expect(evalTerm(unary("!", variable("F")), sub, env)).toBe(true);
-    expect(evalTerm(unary("!", variable("N")), sub, env)).toBe(null);
+    expect(evalTerm(unary("!", variable("N")), sub, env)).toBeUndefined();
   });
 
   test("&& on a non-boolean operand throws", () => {
@@ -263,13 +273,18 @@ describe("evalTerm — NULL propagation through non-boolean expressions", () => 
     expect(evalTerm(binary("+", str("x"), variable("N")), sub, env)).toBe(null);
   });
 
-  test("comparisons absorb NULL rather than propagating it", () => {
-    // The one place NULL stops travelling: comparison is total, so no
-    // operand combination yields null. See doc/design/null.md §5.
+  test("equality answers at NULL and the orderings have no answer", () => {
+    // NULL stops travelling at a comparison either way: no comparison ever
+    // *yields* a null. They part on what they do instead. Equality is total over
+    // values, `null` being one, so it answers. An ordering needs an order and
+    // `null` is not in one, so it has no value (null-as-a-value.md §4.1). In
+    // condition position both readings drop the row, which is why so little
+    // observes this; `null <= null` is the case that moved, from true by
+    // convention to no answer at all.
     const sub = nullSub();
-    expect(evalTerm(binary("<", variable("N"), num(1)), sub, env)).toBe(false);
-    expect(evalTerm(binary(">=", num(1), variable("N")), sub, env)).toBe(false);
-    expect(evalTerm(binary("<=", variable("N"), variable("N")), sub, env)).toBe(true);
+    expect(evalTerm(binary("<", variable("N"), num(1)), sub, env)).toBeUndefined();
+    expect(evalTerm(binary(">=", num(1), variable("N")), sub, env)).toBeUndefined();
+    expect(evalTerm(binary("<=", variable("N"), variable("N")), sub, env)).toBeUndefined();
     expect(evalTerm(binary("=", variable("N"), num(1)), sub, env)).toBe(false);
     expect(evalTerm(binary("<>", num(1), variable("N")), sub, env)).toBe(true);
   });

@@ -198,9 +198,10 @@ Separators:    ,  :  .
 ```
 
 `=`/`<>` are the language's only equality and inequality, and they are
-null-aware: `null = null` is true. Every comparison is total, so none of
-them ever returns NULL (§5.4). Body-level Equality reuses the same
-operator and can bind an unbound bare variable on either side.
+null-aware: `null = null` is true. No comparison ever *returns* `null`, but the
+orderings are strict at one and have no value there, while `=`/`<>` answer for it
+(§2.6, §5.4). Body-level Equality reuses the same operator and can bind an unbound
+bare variable on either side.
 
 `!=` is an accepted spelling of `<>`, for programmers who reach for it
 first. It is normalised during parsing, so the two are the same operator
@@ -524,13 +525,17 @@ single (empty) row when `p` holds and none otherwise.
 
 Built-in atoms (comparisons such as `X = Y` or `Age < 18`) may equally be
 negated — any atom can be negated, not only predicate calls. A negated
-built-in atom `not e` is logical negation of the comparison and is
-exactly equivalent to the filter `!(e)` (see *Filters* below); it carries
-no stratification obligation, since built-ins do not recurse.
+built-in atom `not e` is negation as failure over the comparison: it holds
+wherever `e` does not, including where `e` has no value. It carries no
+stratification obligation, since built-ins do not recurse.
+
+It is **not** the filter `!(e)`, which is the boolean operator and propagates
+undefinedness (§5.4). The two agree wherever the operand is defined, which is
+everywhere the operands are variables or literals.
 
 ```
-not X = Y                # equivalent to the filter !(X = Y)
-not Age < 18             # equivalent to !(Age < 18)
+not X = Y                # holds unless X = Y holds
+not Age < 18             # holds unless Age < 18 holds, Age null included
 ```
 
 #### Equalities
@@ -546,10 +551,9 @@ it has two roles:
   bound, and the other side is safe. The equality introduces that
   variable and sets it to the value of the other side. `X = Y + 1`
   and `Y + 1 = X` are therefore equivalent when `Y` is safe.
-  A bare `null` literal is the exception: it names no type (Section
-  1.5), so `X = null` cannot introduce `X`, which stays unsafe. To
-  bind a NULL, name the type: the `as_*` projections give the four
-  primitives, `parse_json("null")` gives a `value`.
+  A bare `null` literal binds like any other, `null` being an ordinary value
+  with its own type (Section 5.1): `X = null` introduces `X` and binds it to
+  the null.
 - **Constraint** — both sides are already bound expressions. Both
   sides are evaluated and compared with logical equality; the rule
   fires when they match (including the case where both are NULL).
@@ -559,12 +563,13 @@ D = S * 2          # binding: D := S * 2
 C = X + Y + 1      # binding: C := X + Y + 1
 X + 1 = Y          # binding: Y := X + 1 when X is safe
 length(W) = 3      # constraint
-N = null           # constraint when N is bound (matches null rows);
-                   # unsafe when N is unbound: `null` names no type
-N = as_integer(null)     # binding: N := an integer NULL
-S = as_string(null)      # binding: S := a string NULL
-V = parse_json("null")   # binding: V := a value NULL
+N = null           # binding when N is unbound: N := the null value;
+                   # constraint when N is bound (matches null rows)
+V = parse_json("null")   # binding: V := a JSON null, inside a value
 ```
+
+The `as_*` projections do *not* serve here: `as_integer(null)` has no value, a
+null being no integer, so a rule using it derives nothing (§5.7).
 
 `=` is also a Cmp-level operator at expression level (Section 2.6),
 so `B = (X = null)` parses as a binding equality whose RHS is a
@@ -619,11 +624,12 @@ X <> Y                             # single comparison
 ```
 
 A filter expression must have type `boolean` — non-boolean filters
-(`X + 1`, `length(S)`) are rejected at analysis time. A NULL filter
-value is treated as "doesn't match", same as SQL's `WHERE`, so the row
-is dropped. Comparisons are total (§2.6) and never produce that NULL;
-it can only arrive from a nullable `boolean?` column or an expression
-that propagates one into boolean position.
+(`X + 1`, `length(S)`) are rejected at analysis time. A filter holds only where
+it is `true`: one that has no value, and one whose value is `null`, both drop
+their row, same as SQL's `WHERE`. No comparison returns a `null` (§2.6), so a
+`null` in filter position arrives only from a nullable `boolean?` column, and an
+absence arrives from any partial expression (§5.4). Both are warned about, the
+first by default.
 
 ### 2.6 Expressions
 
@@ -691,36 +697,51 @@ sees the two characters distinctly.)
 must be of type `boolean`; the result is also `boolean`. The
 translator emits `AND`, `OR`, and `NOT` respectively.
 
-NULL operands extend these via SQL three-valued logic — see
-Section 5.4 for the truth tables and short-circuit rules.
+A `null` is no truth value, so a connective handed one has **no value**, except
+where the other operand dominates: `false && e` is `false` and `true || e` is
+`true` whatever `e` is. Section 5.4 has the rule and its reason.
 
 #### Comparison Operators
 
-The comparison operators all produce `boolean`. Over **values** they are
-total: no combination of values yields `null`. There is one equality,
-`=` / `<>`, which compares `null` like any other value, and ordering treats
-`null` as an isolated point in the order, comparable only to itself.
+No comparison operator ever *yields* `null`. What each does when handed one
+differs, and the difference is the value/order distinction. There is one
+equality, `=` / `<>`, which is total over values and compares `null` like any
+other. The orderings need an order and `null` is not in one, so they are
+**strict** at it: no value, hence no tuple derived where the result is used
+(§5.4).
 
 | operator | meaning | `null` behaviour | SQL emit |
 |----------|---------|----------------|----------|
 | `=` | equality | `null = null` is true; `null = X` is false | `IS NOT DISTINCT FROM` (Postgres), `IS` (SQLite / sql.js) |
 | `<>` (also `!=`) | inequality | inverse of `=` **over values** | `IS DISTINCT FROM` / `IS NOT` |
-| `<` `>` | strict ordering | false whenever either side is null | `COALESCE(a < b, FALSE)` |
-| `<=` `>=` | ordering | true when both sides are null, otherwise false if either is | `COALESCE(a <= b, (a IS NULL AND b IS NULL))` |
+| `<` `>` `<=` `>=` | ordering | no value whenever either side is null | the bare operator; SQL's own NULL propagation is this rule |
+
+In condition position a strict ordering is indistinguishable from a false one:
+both drop the row, and `not` holds of both. So a filter or a negation over an
+ordering behaves the same whether or not its operands can be null. Two things do
+differ. `null <= null` has no value, where a total reading would have to pick
+`true` or `false` and either is arbitrary. And an ordering **bound to a
+variable** derives no tuple at a null, rather than binding a boolean.
+
+Because a true ordering therefore has non-null operands, it proves them non-null,
+which nullness inference uses (§5.4) and `<=` / `>=` could not do under a total
+reading.
 
 The full table, with `5` standing for any non-null value:
 
 | left | right | `=` | `<>` | `<` | `<=` | `>` | `>=` |
 |--------|--------|-------|-------|-------|-------|-------|-------|
 | `5` | `5` | true | false | false | true | false | true |
-| `5` | `null` | false | true | false | false | false | false |
-| `null` | `5` | false | true | false | false | false | false |
-| `null` | `null` | true | false | false | true | false | true |
+| `5` | `null` | false | true | — | — | — | — |
+| `null` | `5` | false | true | — | — | — | — |
+| `null` | `null` | true | false | — | — | — | — |
 
-This is a partial order: `<=` is reflexive, antisymmetric and
-transitive, and `a < b` is equivalent to `a <= b && a <> b`. It is not
-total: `null` and `5` are incomparable, so neither `X < 2` nor
-`X >= 2` holds of a `null` `X`. Guard with `<> null` where that matters.
+A dash is "no value", not a third truth value: the ordering has no answer, so
+whatever uses it derives nothing. `null` is simply outside the order, so neither
+`X < 2` nor `X >= 2` holds of a `null` `X`, and neither does their conjunction or
+disjunction. Guard with `<> null` where that matters. Over non-null values the
+order is total and `a < b` is equivalent to `a <= b && a <> b`.
+
 There is no three-valued comparison family; a second equality would be
 indistinguishable from `=`.
 
@@ -796,9 +817,9 @@ Index conventions:
   rejected by the analyser. Variable-valued indices pass through —
   the analyser can't prove them non-negative statically.
 - Indices beyond the receiver length produce `""` / `[]` for string /
-  array-`value` slices, `""` for string subscripts (the receiver's
-  empty value), and `NULL` for `value` subscripts that fall out of
-  range.
+  array-`value` slices and `""` for string subscripts (the receiver's
+  empty value). A `value` subscript that falls out of range has **no
+  value**, exactly as a missing key does (§5.4).
 
 > **Cross-backend variance.** Strings containing an embedded NUL
 > character (`U+0000`, reachable via `parse_json("\"\\u0000\"")`) are
@@ -857,10 +878,10 @@ contribution(C, X) :- prob(C, P), X = -1.0 * P * ln(P) / ln(2).
 | Datamog              | Argument types          | Return type | Notes                                      |
 |----------------------|-------------------------|-------------|--------------------------------------------|
 | `to_string(x)`       | `integer`/`float`/`boolean` | `string`   | Decimal string for numbers; `'true'`/`'false'` for booleans. |
-| `to_integer(s)`      | `string`                  | `integer`   | Strict canonical decimal. NULL on parse failure. |
-| `to_float(s)`         | `string`                  | `float`      | Strict canonical decimal (no exponent). NULL on parse failure. |
-| `to_boolean(s)`      | `string`                  | `boolean`   | Accepts exactly `'true'` / `'false'`. NULL otherwise. |
-| `parse_json(s)`      | `string`                  | `value`     | Parse `s` as JSON syntax. NULL on malformed input. |
+| `to_integer(s)`      | `string`                  | `integer`   | Strict canonical decimal. No value on parse failure. |
+| `to_float(s)`         | `string`                  | `float`      | Strict canonical decimal (no exponent). No value on parse failure. |
+| `to_boolean(s)`      | `string`                  | `boolean`   | Accepts exactly `'true'` / `'false'`. No value otherwise. |
+| `parse_json(s)`      | `string`                  | `value`     | Parse `s` as JSON syntax. No value on malformed input. |
 
 The string → number parsers accept only canonical decimal form: optional
 `-`, no leading zeros (except plain `0`), no leading `+`, no whitespace.
@@ -1039,9 +1060,11 @@ Per-element order depends on the argument's type:
   cross-backend choice.
 
 In both cases the same program produces the same array on every
-backend. `null` inputs are skipped, and a group with nothing left to collect
-yields `[]`, append's identity, rather than a null. `null` sorts before every
-other value.
+backend. A `null` input is collected like any other value and sorts before all
+of them, whatever the argument's type; the array therefore has one element per
+row whose argument is defined, so `length(list(V))` equals `count(V)`. Only an
+*undefined* contribution is left out, and a group with none left to collect
+yields `[]`, append's identity, rather than a null.
 
 `list` is the closest the language gets to a list comprehension:
 build a per-row value in a non-aggregate rule (a primitive
@@ -1179,6 +1202,7 @@ parsing a bare `null` to the `null` value.
 | `length(V)`      | `integer` | Array length / object key count / string length; non-collection, `null` included → no value. |
 | `type_of(V)`     | `string`  | One of `"object"`, `"array"`, `"string"`, `"number"`, `"boolean"`, `"null"`. Answers for a `null` rather than propagating it, that being the question it exists to answer. No value only where `V` has none. |
 | `has_key(V, K)`  | `boolean` | Object has own string key `K` → `true`; missing key or non-object `V`, `null` included → `false`. |
+| `defined(E)`     | `boolean` | `true` where `E` has a value, no value where it does not, never `false`. Takes any base type, and takes a nullable operand where other operations reject one. Usable as a bare body condition, `not defined(E)` included. `defined(X)` on a bare variable is always `true`, not `X <> null`. See §5.4. |
 | `keys(V)`        | `value`   | Sorted array of the object's keys (each as a string; Unicode-code-point order); empty object → `[]`; non-object → no value. |
 | `values(V)`      | `value`   | Array of the object's values, ordered by key in Unicode-code-point order; empty object → `[]`; non-object → no value. |
 | `to_json(V)`     | `string`  | Canonical JSON text for canonical `value`s (object keys in canonical JSON order, no whitespace), safe as a hash / dedup key. |
@@ -1708,6 +1732,7 @@ It is an error if a column's type cannot be inferred from its context.
 | `as_boolean(j)`              | `boolean`                                  |
 | `length(j)` / `length(s)` | `integer`                                  |
 | `type_of(j)`              | `string`                                     |
+| `defined(x)`              | `boolean`                                    |
 | `has_key(j, s)`           | `boolean`                                  |
 | `to_string(x)`            | `string`                                     |
 | `to_integer(s)`           | `integer`                                  |
@@ -1721,8 +1746,8 @@ returns the sign of the dividend: `-7 % 2 = -1`. When either
 operand is `float`, `/` is true floating-point division.
 
 The `integer` domain is `[-(2^53 - 1), 2^53 - 1]`. Integer arithmetic is
-exact when its mathematical result is in that range and yields `NULL`
-otherwise. Integer inputs from literals, loaders, conversions and direct
+exact when its mathematical result is in that range and has **no value**
+otherwise, so a rule computing one derives no tuple there (§5.4). Integer inputs from literals, loaders, conversions and direct
 insertion obey the same bound. Bitwise operators are the exception described
 in Section 5.9: they deliberately coerce to and wrap within signed 32 bits.
 
@@ -1819,10 +1844,26 @@ Consequences worth stating outright:
   contains.
 - **`e <> f` is not `not (e = f)`.** Both sides of `<>` must be defined for
   it to hold, while `not (e = f)` holds precisely when `e = f` does not,
-  undefinedness included. Where an operand can be undefined, prefer whichever
-  you mean and expect a warning on the other.
-- `not (e = e)` holds exactly when `e` is undefined, which is the language's
-  definedness test.
+  undefinedness included. A `<>` whose operand can be undefined draws a warning
+  naming the other reading; it is reported by default, the two spellings being
+  one rewrite apart and the difference invisible in the output, which is simply a
+  shorter table. Writing whichever is meant silences it, since only `<>` warns.
+- **`defined(e)` is the definedness test.** It is `true` where `e` has a value
+  and *undefined* where it does not, never `false`, so `not (defined(e))` is how
+  you ask for the rows an expression lost. `not (e = e)` says the same thing
+  without the builtin, an equality needing both sides to have a value.
+
+  Two things to know about it. It takes an operand every other computing
+  operation would reject, asking whether there is a value not being able to
+  require one. And `defined(X)` on a bare **variable** is always `true`, a
+  variable being bound to a value and `null` being one; it is not `X <> null`,
+  and writing it draws a warning saying so.
+
+  A body element shaped `name(args)` parses as an atom, so `defined(e)` in body
+  position is rewritten into a condition during parsing, negation included:
+  `not defined(e)` is negation as failure over it and holds exactly where `e`
+  has no value. It is the only built-in function with that reading; every other
+  one has to appear inside an expression.
 - **`not` and `!` differ.** `not` is negation as failure over a body element;
   `!` is the boolean operator and propagates undefinedness. They agree
   wherever the operand is defined.
@@ -1837,27 +1878,58 @@ undefined operand makes the whole expression undefined.
 `false && e` is `false` and `true || e` is `true` even where `e` is
 undefined. That is what makes `X <> 0 && 10 / X > 0` usable as a guard.
 
-The `null` *value* propagates separately, per SQL's three-valued logic, and
-is documented under each operator. Applying arithmetic or a string operation
-to a statically `null` operand is a **type error**, not a runtime
-propagation: `null + 1` is rejected (§5.3).
+The `null` *value* is a different matter, and mostly it cannot arise: **an
+operation that computes requires a non-null operand.** Arithmetic, negation, the
+bitwise operators, string concatenation, a subscript or slice index, a range
+bound, a builtin with a primitive parameter, and the aggregates `sum`, `avg`,
+`min`, `max` and `concat` all reject one statically. So does a statically `null`
+operand, the same rule at its far end: `null + 1` is rejected (§5.3).
+
+Narrow first, with any of the conjuncts §5.4's "Nullness" lists — `X <> null` is
+the direct one — and the narrowing is per rule and order-independent, a body being
+a conjunction. Three positions are exempt:
+
+- **Comparisons.** They take a `null` on either side. `=` answers, and an
+  ordering is strict at it and simply does not hold, which is a guard doing its
+  job rather than a bug to prevent.
+- **The connectives.** `&&`, `||` and `!` take one too, and are strict at it for
+  the ordering's reason: a null is no truth value, so `null && true`,
+  `null || false` and `!null` have no value, while `null && false` is still
+  `false` by dominance. So a connective, like a comparison, never *returns* a
+  null, which is what keeps the rule below true of it.
+- **`value` operands.** A `value` spells its null inside the value (as JSON
+  `null`), so nothing is ambiguous about it and it propagates: `V["k"]` on a
+  `null` leaf is a `null`, and `type_of` of one is `"null"`. `count` and `list`
+  are exempt for a related reason: `count` counts a `null` and `list` collects
+  one, so neither has to compute with it.
+
+The point of the rule is to keep a SQL NULL single-valued. A `T?`-typed
+expression is therefore never undefined, so a NULL in a `T?` context means the
+`null` value and nothing else; let arithmetic take a `T?` and that stops being
+true, `X + 1` being a `T?`-typed expression with no value at the top of the
+integer domain.
 
 #### Comparisons
 
 `=` and `<>` compare values, `null` included, and never yield `null`:
-`null = null` is `true` and `null = 1` is `false`. Ordering treats `null` as
-an isolated point, comparable only to itself.
+`null = null` is `true` and `null = 1` is `false`. The orderings are strict at
+`null`, which is outside the order: no value at all.
 
 | left   | right  | `=`    | `<>`   | `<`   | `<=`  |
 |--------|--------|--------|--------|-------|-------|
 | `5`    | `5`    | true   | false  | false | true  |
 | `5`    | `6`    | false  | true   | true  | true  |
-| `5`    | `null` | false  | true   | false | false |
-| `null` | `null` | true   | false  | false | true  |
+| `5`    | `null` | false  | true   | —     | —     |
+| `null` | `null` | true   | false  | —     | —     |
 
 A comparison whose operand is *undefined* does not hold, by the table above
 in "Where definedness is required", and so drops its row in filter position
-and satisfies `not`.
+and satisfies `not`. An ordering over a `null` behaves the same way, for the
+same reason: it has no value either.
+
+Because a true ordering therefore has non-null operands, it refines them to
+non-null for the rest of the rule. All four orderings do; under a total reading
+`<=` and `>=` could not, being true of two nulls.
 
 Atom matching uses the same value equality: a `null` argument matches a
 `null` column, and a shared variable joins `null` to `null`. `p(X), q(X)`
@@ -1881,7 +1953,9 @@ undefined contributes to no aggregate mentioning it and still counts for
 `count(*)`; a group with no defined contributions yields each aggregate's
 identity where one exists (`count` and `sum` → `0`, `concat` → `""`,
 `list` → `[]`) and is undefined otherwise (`avg`, `min`, `max`), withholding
-the tuple. `count` counts a `null` like any other value.
+the tuple. `count` counts a `null` like any other value and `list` collects one,
+so the two agree on how many; `sum`, `avg`, `min`, `max` and `concat` skip nulls,
+having nothing to do with one.
 
 #### Nullness
 
@@ -1898,8 +1972,10 @@ whatever `A` and `B` are, and a column receiving it needs no `?`. Nullness
 originates only where an actual `null` can appear: a `null` literal, a `?`
 extensional column, and a `value` expression whose result may be a JSON `null`
 (`parse_json`, or an accessor reaching a `null` leaf). Every other operation
-merely propagates its operands' nullness, and comparison stops it entirely,
-being total (§5.4). No aggregate is nullable, per the empty-group rules above.
+merely propagates its operands' nullness. The comparisons and the connectives
+stop it entirely, neither returning a `null`: `=` answers for one, and an ordering
+or a connective is strict at one and has no value there. No aggregate is nullable,
+per the empty-group rules above.
 
 #### Storage
 
@@ -1983,8 +2059,8 @@ The following type constraints are enforced after type inference:
   `integer`/`float`/`boolean` and rejects `string` (no identity
   overload). The string → number/boolean parsers accept exactly
   `string` and reject identity inputs of the target type.
-  `parse_json` accepts exactly `string` (NULL on malformed input).
-  Failed string parses produce `NULL` rather than raising.
+  `parse_json` accepts exactly `string`. A failed parse, of JSON or of a
+  number or boolean, has **no value** rather than raising (§5.4).
 - **Iteration primitives** (`object_entry`, `array_element`): the
   source argument (position 0) must have type `value`; the bound
   positions are typed per §2.9.
@@ -2084,7 +2160,8 @@ The bitwise / shift operators `&`, `|`, `^`, `<<`, `>>`, `>>>` operate on
 **32-bit signed two's-complement integers**, matching Java/JavaScript `int`
 semantics. Both operands and the result are `integer`; a non-integer
 operand (`float`, `string`, `boolean`, `value`) is a compile-time type
-error (§5.7). A `NULL` operand propagates to `NULL` (§5.4).
+error (§5.7), and so is a nullable one: these compute, so they require a value
+(§5.4).
 
 | Operator | Meaning                                                        |
 |----------|----------------------------------------------------------------|
@@ -2169,10 +2246,7 @@ declared-must-equal-or-widen-inferred.
 - A `?` where the contribution cannot be NULL is accepted, and documents
   looseness the way annotating `value` on an integer column does.
 - Nullness is inferred whether or not anything is annotated (§5.4, "Nullness"),
-  so the annotation adds a check and never an inference input. Note the
-  over-approximation recorded there: a rule that divides is inferred nullable
-  even though division yields no value rather than a `null`, so a `?` can be
-  required where the value model would not need one.
+  so the annotation adds a check and never an inference input.
 - The published contract widens by `?` exactly as it widens by type, so
   consumers and module boundaries (§9.3) see the declared nullness while the
   predicate's own body sees the inferred one.
@@ -2233,10 +2307,18 @@ per refinement, where `unsat` discharges the obligation. The logic is `QF_LIA`,
 widening to `QF_NIA` if the program multiplies or divides by a variable. No
 solver ships with Datamog; the script is the deliverable, so that any solver can
 consume it. The encoding writes out what SMT-LIB spells differently: division
-and modulo truncate toward zero (§5.3) rather than being Euclidean, `integer` is
-bounded (§5.1) so arithmetic carries an overflow condition, and NULL is modelled
-as a value paired with a null-condition so the null-aware comparisons of §5.4
-hold.
+and modulo truncate toward zero (§5.3) rather than being Euclidean, `null` is
+modelled as a value paired with a null-condition so the null-aware comparisons of
+§5.4 hold, and partiality is modelled separately from that, as a definedness
+condition.
+
+Definedness enters as a **hypothesis**: a rule derives a tuple only where every
+head expression has a value (§5.4), so a contract makes no claim about the cases
+where one does not, and the encoding says so. An `integer` head expression is
+therefore assumed to be inside the bounded domain of §5.1, and a division's
+divisor assumed non-zero. A *free variable* is confined to the domain instead,
+by a constraint: an unbounded SMT `Int` is otherwise falsified with a value no
+column can hold.
 
 A rule may assume the contract of any predicate it calls positively. Where the
 call is to the rule's own predicate that is an induction hypothesis, sound
@@ -2253,9 +2335,9 @@ obligation is discharged.
 
 A contract that cannot be discharged is not thereby false. It may be a property
 of the data rather than a theorem, or it may need a bound the program has not
-stated: `X + 1` is NULL at the top of the integer domain (§5.1), so an ordering
-over a computed column is provable only where the inputs are bounded. Bounding
-them is itself a refinement.
+stated: nothing says an input column is non-negative unless a refinement on it
+does, and a claim that depends on it is then declined with that as the
+counterexample. Bounding the inputs is itself a refinement.
 
 ## 6 SQL Translation
 

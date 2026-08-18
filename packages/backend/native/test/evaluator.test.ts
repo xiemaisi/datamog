@@ -283,22 +283,33 @@ describe("native backend — aggregates", () => {
     expect(results[1]).toEqual([{ L: [["￿"], ["😀"]] }]);
   });
 
-  test("list returns [] when every group row holds the null value", async () => {
-    // Match the rest of the aggregate family: an all-NULL group
-    // collapses to NULL rather than `[]`. `parse_json("not json")`
-    // produces SQL NULL on the native side, giving us a deterministic
-    // way to seed all-NULL groups.
+  test("list collects the null value and sorts it first", async () => {
+    // `null` is a value and an array can hold it, so `list` collects it like any
+    // other. Skipping it would make `length(list(V))` disagree with `count(V)`,
+    // which counts it (§7, §11.2). Only an *undefined* contribution is dropped,
+    // which is what the `partial` rule below has.
     const results = await run(`
-      bad("alice").
-      with_null(S, null) :- bad(S).
-      collected(S, list(J)) :- with_null(S, J).
+      g("a", null). g("a", 3). g("a", 2).
+      g("b", null).
+      z("c", 0).
+      collected(S, list(V)) :- g(S, V).
+      partial(S, list(10 / V)) :- z(S, V).
+      counted(S, count(V)) :- g(S, V).
       ?- collected(S, L).
+      output predicate op(S, L) :- partial(S, L).
+      output predicate oc(S, N) :- counted(S, N).
     `);
-    // `list` skips nulls, so an all-null group has no contributions and yields
-    // append's identity, `[]` (§7). It used to yield NULL, which null.md §8
-    // recorded as a wart. Seeded from the literal, since a malformed `parse_json`
-    // no longer produces a null: it produces no row at all.
-    expect(results[0]![0]!.L).toEqual([]);
+    const lists = new Map(results[0]!.map((r) => [r.S, r.L]));
+    expect(lists.get("a")).toEqual([null, 2, 3]);
+    // An all-null group is not an empty one: it has a contribution per row.
+    expect(lists.get("b")).toEqual([null]);
+    // A group whose every contribution is undefined *is* empty, so append's
+    // identity is what comes back.
+    expect(results[1]![0]!.L).toEqual([]);
+    // The property §7 promises: as many elements as `count` counts.
+    const counts = new Map(results[2]!.map((r) => [r.S, r.N]));
+    expect(counts.get("a")).toBe(3);
+    expect((lists.get("a") as unknown[]).length).toBe(3);
   });
 
   test("list auto-promotes integer arguments and sorts numerically", async () => {
@@ -1551,39 +1562,46 @@ describe("native backend — NULL semantics (§5.4)", () => {
     ]);
   });
 
-  test("`null` literal, null-aware `=` / `<>`, and total ordering", async () => {
-    // Comparison is total: `=` / `<>` are null-aware (`null = null` is
-    // true), and ordering treats null as an isolated point, so `Y < 1` is
-    // false rather than null for the NULL row. See doc/design/null.md §5.
+  test("`null` literal, null-aware `=` / `<>`, and strict ordering", async () => {
+    // The two halves of comparison at a null, and they answer differently.
+    // `=` / `<>` are total over values, `null` being one, so `null = null` is
+    // true. An ordering needs an order and `null` is not in one, so it has no
+    // value: no `false` picked by convention, and no `null` either. See
+    // doc/design/null-as-a-value.md §4.1.
+    //
     // The nulls come from the literal. `Y = 1 / X` no longer makes one: it makes
     // no value at all and the row goes. These facts are what it used to yield
     // for t = {0, 1, 2}, integer division truncating 1/2 to 0.
     const results = await run(`
       nn(0, null). nn(1, 1). nn(2, 0).
-      maybe_null(X, Y, IsNull, Below, AtMost) :-
-        nn(X, Y),
-        IsNull = (Y = null),
-        Below = (Y < 1),
-        AtMost = (Y <= Y).
-
-      ?- maybe_null(X, Y, IsNull, Below, AtMost).
+      maybe_null(X, Y, IsNull) :- nn(X, Y), IsNull = (Y = null).
+      ?- maybe_null(X, Y, IsNull).
+      output predicate ordered(X, Below, AtMost) :-
+        nn(X, Y), Below = (Y < 1), AtMost = (Y <= Y).
       output predicate filter_logical(X) :- nn(X, Y), Y = null.
       output predicate neq_logical(X)    :- nn(X, Y), Y <> null.
       output predicate not_below(X)      :- nn(X, Y), not (Y < 1).
     `);
-    // For X=0, Y is null. For X=1,2, Y is integer (integer/integer
-    // truncates: 1/1=1, 1/2=0). `Y <= Y` is reflexive even at null.
     expect(sortRows(results[0]!)).toEqual([
-      { X: 0, Y: null, IsNull: true, Below: false, AtMost: true },
-      { X: 1, Y: 1, IsNull: false, Below: false, AtMost: true },
-      { X: 2, Y: 0, IsNull: false, Below: true, AtMost: true },
+      { X: 0, Y: null, IsNull: true },
+      { X: 1, Y: 1, IsNull: false },
+      { X: 2, Y: 0, IsNull: false },
+    ]);
+    // The X=0 row is absent: both orderings over its null have no value, so
+    // there is nothing to bind. `Y <= Y` used to be reflexive even at a null,
+    // which is the wart §4.1 deletes.
+    expect(sortRows(results[1]!)).toEqual([
+      { X: 1, Below: false, AtMost: true },
+      { X: 2, Below: true, AtMost: true },
     ]);
     // `Y = null` keeps the X=0 row, drops the others.
-    expect(results[1]).toEqual([{ X: 0 }]);
+    expect(results[2]).toEqual([{ X: 0 }]);
     // `Y <> null` is the inverse of `Y = null`.
-    expect(sortRows(results[2]!)).toEqual([{ X: 1 }, { X: 2 }]);
-    // `not (Y < 1)` complements `Y < 1`, the NULL row included.
-    expect(sortRows(results[3]!)).toEqual([{ X: 0 }, { X: 1 }]);
+    expect(sortRows(results[3]!)).toEqual([{ X: 1 }, { X: 2 }]);
+    // `not (Y < 1)` keeps the NULL row, and for the same reason as before: the
+    // ordering does not hold there, whether by being false or by having no
+    // value. Condition position is where nothing moved.
+    expect(sortRows(results[4]!)).toEqual([{ X: 0 }, { X: 1 }]);
   });
 
   test("`!=` is the same operator as `<>`, null-awareness included", async () => {
@@ -1604,27 +1622,29 @@ describe("native backend — NULL semantics (§5.4)", () => {
     expect(results[2]).toEqual([{ X: 1 }]);
   });
 
-  test("all-NULL aggregate group: identities where they exist, no tuple where they do not", async () => {
-    // Group 1's rows all hold the null *value*; group 2's hold numbers. Per
-    // §5.4 an all-NULL group produces NULL for these aggregates rather than 0
-    // or an error. The nulls used to come from `1 / 0`, which now yields no
-    // value and no row, so the group would not exist to be aggregated.
+  test("a group with no defined contributions: identities where they exist, no tuple where they do not", async () => {
+    // Group 1 contributes nothing, every `10 / Y` in it having no value; group 2
+    // contributes two numbers. This used to be written with the null *value*
+    // instead, which a value aggregate now rejects outright: `sum` needs a value
+    // and a nullable argument has to be guarded first (§5). So the reachable
+    // version of "an empty fold" is an undefined one, and it is the same code
+    // path either way.
     const results = await run(`
-      u(1, null). u(2, 1). u(2, 0).
-      sums(G, sum(Y))     :- u(G, Y).
-      avgs(G, avg(Y))     :- u(G, Y).
-      mins(G, min(Y))     :- u(G, Y).
-      maxs(G, max(Y))     :- u(G, Y).
-      cats(G, concat(Y))  :- u(G, Y).
+      u(1, 0). u(2, 10). u(2, 20).
+      sums(G, sum(10 / Y))     :- u(G, Y).
+      avgs(G, avg(10 / Y))     :- u(G, Y).
+      mins(G, min(10 / Y))     :- u(G, Y).
+      maxs(G, max(10 / Y))     :- u(G, Y).
+      cats(G, concat(10 / Y))  :- u(G, Y).
       ?- sums(G, T).
       output predicate av(G, T) :- avgs(G, T).
       output predicate mn(G, T) :- mins(G, T).
       output predicate mx(G, T) :- maxs(G, T).
       output predicate ct(G, T) :- cats(G, T).
     `);
-    // Group 2: 1/1=1, 1/2=0 (integer division truncates), so sum=1,
+    // Group 2: 10/10=1, 10/20=0 (integer division truncates), so sum=1,
     // avg=0.5, min=0, max=1, concat="0,1".
-    // Group 1 is all-null, so `sum` folds to its identity 0 (§7).
+    // Group 1 has no contributions, so `sum` folds to its identity 0 (§7).
     expect(sortRows(results[0]!)).toEqual([
       { G: 1, T: 0 },
       { G: 2, T: 1 },
@@ -1792,5 +1812,58 @@ describe("native backend — conjunctive queries", () => {
     `);
     expect(results[0]).toEqual([]);
     expect(results[1]).toEqual([{ col1: 1 }]);
+  });
+
+  test("`!` is strict in undefinedness, and a bound comparison withholds its row", async () => {
+    // The same split as the test above, on the other half of §4.4: `!`
+    // propagates the absence of a value where `not` complements failure. Both
+    // shapes reached `asBoolean` with the absence marker and aborted the
+    // evaluator, which no test covered because every case in the suite made its
+    // NULL from a null rather than from a partial operation.
+    //
+    // `C = (V = 10 / V)` is the binding position, where §4.4 requires no tuple
+    // rather than the `false` a total comparison would have bound. `10 / 3`
+    // truncates to 3, so `V = 3` is the row the comparison excludes on its own.
+    const results = await run(`
+      s(0). s(1). s(3).
+      output predicate bang(V)    :- s(V), !(V = 10 / V).
+      output predicate naf(V)     :- s(V), not (V = 10 / V).
+      output predicate bind(V, C) :- s(V), C = (V = 10 / V).
+      ?- bang(V).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ V: 1 }]);
+    expect(sortRows(results[1]!)).toEqual([{ V: 0 }, { V: 1 }]);
+    expect(sortRows(results[2]!)).toEqual([
+      { V: 1, C: false },
+      { V: 3, C: true },
+    ]);
+  });
+
+  test("a connective is strict at a null and absorbing at false", async () => {
+    // §15.26. A null is no truth value, so it leaves a connective with no value
+    // instead of yielding SQL's "unknown", which is what keeps the result
+    // non-nullable and a SQL NULL in one unambiguous. `false` still dominates,
+    // so a `&&` survives an operand that has no value at all, which is what
+    // makes a guard usable (§4.4).
+    //
+    // Row 2 is the null operand, row 3 the absorbing case over an undefined
+    // operand, row 4 the non-absorbing one.
+    const results = await run(`
+      p(1, true, 2). p(2, null, 2). p(3, false, 0). p(4, true, 0).
+      output predicate filt(K)    :- p(K, A, B), A && (10 / B > 0).
+      output predicate bind(K, C) :- p(K, A, B), C = (A && (10 / B > 0)).
+      output predicate bang(K, C) :- p(K, A, _), C = !A.
+      ?- filt(K).
+    `);
+    expect(sortRows(results[0]!)).toEqual([{ K: 1 }]);
+    expect(sortRows(results[1]!)).toEqual([
+      { K: 1, C: true },
+      { K: 3, C: false },
+    ]);
+    expect(sortRows(results[2]!)).toEqual([
+      { K: 1, C: false },
+      { K: 3, C: true },
+      { K: 4, C: false },
+    ]);
   });
 });

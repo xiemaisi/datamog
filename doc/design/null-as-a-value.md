@@ -2,10 +2,15 @@
 
 Status: **stage 3 built and green on `max/partial-expressions`.** Partiality,
 the `null` type, the `value` accessors and the 60-test sweep are done on every
-runnable backend, with the example suite green across all four. Stages 1 and 2
-(§15.1) landed earlier. Everything is built, spec'd and tested (§15.10 through
-§15.15), including the undefined-expression warning, which measurement turned
-into an opt-in flag rather than a default (§15.14). This is the design
+runnable backend, with the example suite green across all five. Stages 1 and 2
+(§15.1) landed earlier, and the undefined-expression warning is in, as an opt-in
+flag rather than the default measurement said it could not be (§15.14). **§15.18 audits this
+document against the code and found seven unbuilt items; §15.19 through §15.24
+close all seven, the last of them (§13's stage-4 deletions) by finding that
+two-thirds of it was mistaken. §13 and §3.1 carry the corrections in place.
+§15.25 closes three cross-backend divergences a second review found, all of them
+one placement decision, and §15.26 closes the one shape that falsified §9.2 by
+making the connectives strict at a `null`.** This is the design
 [partial-expressions.md](./partial-expressions.md) should have found and did not.
 It supersedes that doc's recommendation: where that one concluded "keep NULL, at
 most forbid it in columns", this one concludes "split NULL's two jobs apart, and
@@ -179,6 +184,15 @@ doc's componentwise meet, componentwise join, `publishedNullness` beside
 type checks. The parallel structure the user objects to is not simplified, it is
 deleted, and this is the proposal's largest structural win.
 
+**This paragraph is wrong, and §15.24 records why.** It presupposes that
+`columnTypes` holds pairs, which §6 measures as costing 146 comparison sites and
+rejects, and §15.10 confirms is right about that variant. Keeping two maps means
+there is no "ordinary meet" for the nullness half to fold into. What the paragraph
+calls the largest structural win is available only at that price, and the two
+things it names as parallel are not: the two fixed points are two phases with a
+dependency between them, and the two `check` functions already do both halves in
+one loop.
+
 **Better: nullability stops being infectious.** nullness-tracking.md §7 declined
 the Kotlin reading (requiring `?` where a column can be null) on cost:
 "every rule head containing a division, a `to_*`, an `as_*`, or a `value`
@@ -298,6 +312,13 @@ case the guard exists to exclude, and it mirrors both SQL and today's table
 (`null && false = false`). So the connectives remain non-strict in undefinedness
 exactly as they are non-strict in NULL today. The absorbing boundary moved from
 comparison outward to `not` and the connectives; it did not go away.
+
+**The second half of that sentence did not survive, and §15.26 is why.** Staying
+non-strict in NULL is what made a connective nullable *and* partial, which is the
+one shape §9.2's storage reading cannot admit. They are now strict at a `null` and
+non-strict only at their dominating operand, so `false && e` is still `false` and
+`null && true` has no value. The guard idiom, which is the whole reason for the
+non-strictness, is about undefinedness and is untouched.
 
 ## 5 The central decision: what may an operation take a `T?`?
 
@@ -748,33 +769,50 @@ second rule is the case analysis that today's implicit propagation hides. Add
 
 ## 13 What survives of `nullness.ts`
 
+**This section was written before the code existed and is the least accurate part
+of this document. §15.24 is the audit; the annotations below are its verdicts.**
+
 - **`inferNullness`'s cross-predicate fixed point: deleted.** Column nullability
   is part of the column's type, so `inferTypes` computes it. This is the parallel
   analysis the proposal is meant to remove and it goes in full.
+  **Not possible, and measured: 21 of 276 example runs break** if nullness runs
+  without the overloads `validateTypes` resolves, and validation needs converged
+  types. The two loops cannot be one loop.
 - **`computePublishedNullness`: deleted**, folded into `computePublishedTypes`,
   and with it the nullness halves of `checkHeadAnnotations` and
   `checkModuleBoundaries`.
+  **Partly done, and the rest was already done.** The two published computations
+  cannot be one call, for the ordering reason above, but they were the same walk
+  over the same annotations and now share it (`headAnnotations`). The two `check`
+  functions never had parallel halves: each does both in one loop, side by side.
 - **`refineBody` and friends: kept, repurposed** as the type narrowing Position 3
   needs (§5). It stops answering "is this variable non-null" and starts answering
   "what is this variable's type in this rule", which is the same fixed point over
   the same conjuncts.
+  **Kept, and it already serves Position 3** (§15.22 reads it directly). Restating
+  its answer as a type rather than a bit would be vocabulary, not machinery.
 - **`mayBeNull`: split.** Its "can this expression produce a NULL" question
   becomes two: "is `null` in this expression's type", answered by inference, and
   "can this expression be undefined", answered syntactically from the operators it
-  contains.
+  contains. **Done** (§15.16, and `partiality.ts` is the second half).
 - **`isUngroupedAggregate`: deleted**, §7's identities replacing the rule it
-  encoded.
+  encoded. **Done** (§15.16).
 - **`nullness-diagnostics.ts`**: the nullable-filter warning is replaced by an
   undefined-expression warning, and the complementary-ordering and negated-ordering
   warnings survive restated about undefinedness. All three currently fire nowhere
   in the corpus.
+  **Wrong about the replacement.** All three survive alongside the new one, and
+  nullable-filter still earns its keep: a `boolean?` column in filter position
+  drops its row on a null, which is about a value and not about absence. The file
+  now holds five.
 
 So the deletion is not primarily a line count, it is one of two fixed points and
-one of two parallel type-like structures. That is what makes this cleaner than
-either today's design or partial-expressions.md's Axis 1, and it is the answer to
-the objection that prompted it: there is no longer a difference in kind between
-what a column carries and what a variable carries, because `null` is a value and
-undefinedness is not.
+one of two parallel type-like structures. **The first half of that claim does not
+hold**: the two fixed points are two phases with a real dependency between them,
+not one structure duplicated. What is true is the rest: there is no longer a
+difference in kind between what a column carries and what a variable carries,
+because `null` is a value and undefinedness is not, and that is the answer to the
+objection that prompted the proposal.
 
 ## 14 What it still costs
 
@@ -1324,6 +1362,11 @@ recorded above rather than in a list: nullness *inference* is coarser than the
 value model (§15.13), which over-approximates safely and would be a small,
 self-contained tightening. §15.16 does it.
 
+**That claim was wrong, and §15.18 is the audit that says so.** Seven items are
+unbuilt, four of them stated in this document as decided. None is a defect in what
+shipped; the error was writing "nothing owed" from the state of the test suite
+rather than from a pass over the proposal.
+
 Two caveats to keep in view. The corpus cannot argue for this, because it barely uses
 nulls at all, so the case rests on the design being simpler to explain rather than
 on a program that gets better. And §14.1 is a real regression for a teaching
@@ -1409,3 +1452,563 @@ silently-broken query returns, where `[]` beside a sound row can only mean the
 guard fired. `guarded conversions`, `math overflow guards` and the subscript
 regression all needed it, the last using a backwards slice, since the negative
 length is the half of the SUBSTR guard still reachable.
+
+### 15.18 Audit against the proposal
+
+A pass over every section of this document against the code, prompted by asking
+whether §15.15's "nothing owed" was true. It was not. What shipped is coherent and
+green on five backends; what follows is the gap between it and the text above.
+
+**Built and re-verified in this pass.** The rules of §1 at every conjunct; §4.2's
+flagship divergence (`V <> 10 / V` gives `{1}` where `not (V = 10 / V)` gives
+`{0, 1}`); §4.3's definedness test; §4.4's rewrite deletion and the non-strict
+connectives; §3's twelve-element lattice with its laws; §6's pair representation;
+§7's empty-group identities on all five backends, including the accepted cost that
+`count(*)` beside `min(V)` derives nothing over empty input, and the rule that an
+undefined argument contributes to no aggregate mentioning it while still counting
+for `count(*)` (`sum(10 / X)` over `{1, 0, 2}` is 15 with a count of 3); §11.2's
+`count` counting nulls; §8's absent-versus-null distinction; §9's two spellings;
+§11.3 and §11.4; §12's decline; §15.16's tightening.
+
+**Not built, and stated above as decided.**
+
+1. **§4.1's strict orderings.** The orderings are still *total*: `null <= null` is
+   true, and `C = (A <= B)` binds `false` at a null operand rather than deriving
+   nothing. Those are precisely the two divergences §4.1 names as the only genuine
+   ones, so neither shipped. Spec §5.1 documents what was built, so spec and code
+   agree and only this document dissents. It is a coherent variant rather than a
+   bug, and the conservative one: §4.1 itself observes that filter position is
+   unaffected either way. Consequences, all consistent: §5's narrowing table row
+   for `<=` and `>=` does not apply, and `nullness.ts` correctly cites the old rule
+   where it declines to narrow on them. **Built in §15.21**, and it made three
+   things smaller rather than larger.
+2. **§5's Position 3, half enforced.** A *statically* `null` operand is a type
+   error (§15.10) but a `T?` one is not, since overload resolution reads the base
+   type and ignores the bit. So `X + 1`, `sum(X)` and `min(X)` on an `integer?`
+   all type-check. §15.16 records the half already. Worth adding: §9.2's storage
+   reading survives it, because arithmetic *propagates* the null (`null + 1` is
+   `null`, verified) rather than being undefined at it, so a `T?`-typed expression
+   is still never undefined. §9.2 gets the right answer for the wrong reason.
+   **Built in §15.22**, once the first half landed with §15.21 and made the second
+   worth having.
+3. **§7's `list` still skips nulls.** `list(V)` over `{null, 3, 2}` is `[2, 3]`,
+   where §7 promises nulls included and a null-first sort key, and §9.3 promises
+   the `FILTER` becomes type-conditional instead of unconditional. This one has a
+   visible inconsistency inside the shipped behaviour: `count(V)` counts the null
+   and `length(list(V))` does not, so the two disagree where §7 says they finally
+   agree. The narrowest of the seven to close. **Built: the filter is now
+   conditional on `canBeUndefined`, exactly as `count`'s emit is, and a null sorts
+   first on all five backends.**
+4. **§11.6's `defined(e)` builtin.** Decided and unbuilt, along with its rider
+   warning on `defined(X)` for a bare variable. The capability is not missing,
+   `not (e = e)` works and `examples/primitive-conversions` documents it; what is
+   missing is the readable spelling. **Built in §15.23.**
+
+**Not built, and stated above as a recommendation.**
+
+5. **§4.2's warning on `<>` with a partial operand**, which that section calls the
+   whole mitigation for the divergence and says should be on by default. There are
+   four diagnostic codes and this is not one of them. **Built in §15.20**, and on
+   by default: unlike the undefined-expression warning it measures quiet.
+6. **§10's refinement payoff.** "A derived tuple witnesses its own definedness, so
+   `def(head expressions)` joins the hypotheses" is not implemented, so the
+   overflow artifacts §10 predicts would go have not gone: `fibonacci`'s
+   `Curr <= Next` and `refinements`' `S < F` both still fail, each counterexample
+   still turning on the `$null` companion of an overflowing term. §10's two
+   negative predictions hold, `slot`'s `S < E` and `population-query`'s `D >= 0`
+   failing correctly. Its third case is moot: `cyk-parser` declares no contracts
+   now. This is the largest of the seven and the one with a user-visible payoff.
+   **Built in §15.19.**
+7. **§13's deletions**, which §15.1 schedules as stage 4 and never reached.
+   `mayBeNull`'s split and `isUngroupedAggregate`'s deletion are done; the
+   cross-predicate `inferNullness` fixed point, `computePublishedNullness`, and
+   `refineBody`'s repurposing as type narrowing are not, and the nullable-filter
+   warning was not replaced but survives alongside the new one, which is right:
+   a `boolean?` column in filter position still drops its row on a null. §15.10
+   records the meet half as not attempted, and §6 calls the merge a clarity
+   refactor off the critical path, so this is deferred rather than forgotten. What
+   it costs is the claim in §3.1 that the parallel structure is "not simplified, it
+   is deleted", which remains the proposal's largest unrealised win.
+   **Settled in §15.24: one part built, the rest either already true or
+   impossible, and §13 and §3.1 corrected to say so.**
+
+**The pattern across the seven** is worth more than the list. Six are additive
+polish on a semantics that is already in place, and every one of them was
+described in a section written before the code existed. What actually shipped
+diverges from the design in exactly one place that a user could observe, item 1,
+and that divergence is toward today's behaviour rather than away from it.
+
+### 15.19 §10's payoff, and the field the encoder was missing
+
+Built, and it discharges what §10 predicted. `fibonacci` goes 3/4 to **4/4** and
+`refinements`' `padded`'s `S < F` proves; `slot`'s `S < E`,
+`padded`'s `F > 0` and `population-query`'s `D >= 0` still fail, correctly, being
+claims about input data. §10's third case is moot rather than confirmed:
+`cyk-parser` declares no contracts now.
+
+**The whole change is one field on `Term`.** The encoder carried `{ v, isNull }`
+and used `isNull` for both of NULL's old jobs, so an overflowing `X + 1` was
+modelled as *null-valued* and every ordering over it was false. `Term` now carries
+`def` beside `isNull`, and the two questions separate exactly as they do in the
+language: arithmetic and division propagate nullness and originate none, while
+leaving the integer domain and dividing by zero move `def`.
+
+Then §10's sentence becomes one loop. A derived tuple witnesses its own
+definedness, so `def` of every head expression joins the hypotheses. Body
+conjuncts got the same treatment, an equality or filter holding only where its
+operands have values, which strengthens the hypotheses correctly.
+
+**The soundness rule this needs, stated because it is easy to get backwards.**
+`def` is only ever *asserted*, never assumed false. So a computed `def` must be
+implied by the thing being asserted and never stronger than it: too weak loses a
+hypothesis and only makes the goal harder, too strong proves things that are
+false. Which is why `&&` and `||` return `DEFINED` and claim nothing: `false && e`
+has a value where `e` does not, so "the conjunction is defined" does not give
+"both sides are". Comparison, being strict, does give it.
+
+**Where the domain guard falls now differs by position**, and that is the whole
+reason it stopped being fatal. On a computed head term it is a hypothesis, the
+term having no value meaning no tuple. On a *free variable* it is still a
+constraint, for refinement-annotations.md residual 8's original reason: an
+unbounded SMT `Int` is falsified with a value no column can hold.
+`examples/binary-search` still discharges 14/14, which is the check that the
+second half was left alone.
+
+Two pieces of prose were saying the old thing and are now the best short
+statement of the new one. `examples/fibonacci`'s header explained why
+`Curr <= Next` was not a theorem; it now explains why it is one, and that no
+strengthening of the invariant could have saved it under the old reading.
+`examples/population-query`'s explained a counterexample it no longer produces:
+the zero divisor is gone from it and a negative population is what remains, which
+is a better teaching case, being a bound the program really has not stated.
+
+### 15.20 The `<>` warning, and a measurement that went the other way
+
+Built, as `partial-inequality`, and **on by default**, which is what §4.2 asked
+for and what §15.14 had made me expect to have to argue against.
+
+The measurement decided it, the same one that inverted §15.14: across the 76
+single-file examples it fires **once**. The undefined-expression warning fires 192
+times in 29 examples. Same corpus, same kind of check, three orders of magnitude
+apart, and the reason is that partiality is pervasive while *writing `<>` over
+something partial* is rare. Worth keeping as the general lesson: "is this warning
+noisy" is a question about the corpus, not about the check, and the answer is not
+predictable from how fundamental the underlying phenomenon is.
+
+**The one hit is a true positive and stayed.** `examples/symbolic-differentiation`
+writes `E["kind"] = "var", E["name"] <> "x"`, and `E["name"]` has no value on a var
+node missing its `name`, so such a node gets no derivative where
+`not (E["name"] = "x")` would give it zero. Dropping a malformed node is what that
+program wants, so the operator is right and the example now says so in a comment
+rather than being rewritten to silence the warning. A warning that is read and
+answered is doing its job; one that is silenced by rewriting a correct program is
+not.
+
+Scope, and why it is narrow enough to be default-on. Only `<>` warns, never `=`,
+which has no competing reading, and never the orderings, whose own two warnings
+are about nulls rather than absence. It walks into `&&` and `||`, and `!=` warns
+too, being the same operator normalised.
+
+### 15.21 The strict orderings, which deleted more code than they added
+
+Built. `null <= null` has no value, and an ordering bound to a variable derives
+nothing at a null. Those are the two divergences §4.1 names, and they are now the
+whole of what a user can observe about this change: **six tests moved out of
+1894**, which is the measurement §4.1 predicted when it called itself "very nearly
+observationally conservative".
+
+**Every site got shorter, and one lesson is in why.** A strict ordering is what SQL
+already does, so the translator's `totalOrderingSql` is now a bare
+`(l op r)` and `cannotBeNull` is deleted with it: the wrappers existed only to
+paper over SQL's three-valued answer with a two-valued one. The interpreter drops a
+branch. The obligation encoder drops the `bothNull` disjunct from `<=` and `>=`.
+And `refineBody` merges four cases into one. Making a language *more* partial made
+its implementation smaller, because the partiality was already in the substrate and
+the code was fighting it.
+
+**What each position does with the resulting NULL was already right**, which is why
+so little moved. A WHERE conjunct drops the row. A negated filter reads it as "did
+not hold" through the `NOT COALESCE(..., FALSE)` it already had. A binding position
+withholds the row through the definedness guard, `canBeUndefined` now answering
+true for an ordering: no nullness bit is in scope there, so the answer is
+conservative, which costs an `IS NOT NULL` that is a no-op on non-null operands.
+
+**Two things had to move together with it, and one was a bug I would not have
+found otherwise.** `refineBody` narrows on `<=` and `>=` now, which is the
+precision win §5's table promised. And the obligation goal had to become
+`def(formula) ∧ formula`: with the non-null condition moved out of the ordering's
+*value* and into its *definedness*, a goal asserting only the value stopped
+mentioning nullness at all, so a contract `_: Y > X` over a nullable `Y` would have
+been discharged. A refinement holds only where it has a value, exactly as a body
+conjunct does; that is now stated in one place and the encoder's three positions
+for definedness (hypothesis on a head term, constraint on a free variable, goal on
+a refinement) are written down in its header.
+
+**One more implementation of comparison agreed to the old rule**, `compareOp` in
+`values.ts`, exported and called by nothing but its own tests. A second answer to a
+question the language answers once is a drift trap whether or not anything calls
+it, so it moved too.
+
+### 15.22 Position 3's second half, and the corpus correcting its scope
+
+Built: arithmetic, negation, the bitwise operators, string concatenation, a
+subscript or slice index, a range bound, a builtin with a primitive parameter, and
+the aggregates `sum`, `avg`, `min`, `max` and `concat` all reject a nullable
+operand. `core/src/nullable-operands.ts`, run from `inferTypes` at the first point
+where both the types and the converged nullness exist.
+
+**I nearly declined this one, and the reason I changed my mind is worth keeping.**
+§5's own case for it is that "a computation silently contributing no row is the bug
+you wanted the type for", and that case is void in what shipped: arithmetic
+*propagates* the null, so `X + 1` on a null gives a visible null rather than a
+missing row. Nothing is silent. What survives is §5's other reason, the one it
+calls the stronger one and I had read as a bonus: it is what keeps a SQL NULL
+single-valued. A `T?`-typed expression is never undefined, so a NULL in a `T?`
+context means the null value and nothing else. Let arithmetic take a `T?` and `X +
+1` becomes a `T?`-typed expression with no value at the top of the integer domain,
+and §9.2's table stops being true. That reason is structural rather than
+ergonomic, which is why it outlived the other.
+
+It is also what unblocks §11.6. `defined(e)` has to decide, for a SQL NULL, which
+of the two it is; the one shape it cannot answer is an operand that is both
+nullable and partial, and Position 3 is exactly what makes that shape unwritable.
+Two audit items, one rejection, and putting it at the operation rather than at
+`defined` gives the better error message.
+
+**The corpus corrected the rule's scope twice.** The first measurement rejected
+**8 of 76 examples**, and neither cause was what the rule is for.
+
+`value` operands were one. A proof-term argument desugars to a subscript of the
+implicit `value` proof column, and a `value` subscript can reach a JSON null, so
+the strict reading rejected every fold over an ADT: `list-ops` alone had 32.
+The fix is not a carve-out but the rule's real scope. §9.3 already says a `value`
+spells its null the JSON way, so a SQL NULL in a `value`-typed expression already
+means undefined and there is *no ambiguity for this rule to protect*. §9.2's table
+says as much in its third row and I had read past it. The check now looks only at
+primitive-typed operands.
+
+The second was a genuine imprecision in `mayBeNull`, and §15.16 put it there.
+Propagating a null through every builtin is wrong for one whose parameter is
+`value`: the null reaches the function and the function answers, so
+`as_integer(null)` has no value and `type_of(null)` is `"null"`, and neither is a
+null. The interpreter had this right already, skipping its short-circuit for a
+`value` parameter (§15.10); the analysis had not been told. Fixed by reading the
+overload's parameter types, and after both fixes the corpus rejects **nothing**.
+
+The registry has a stale bit worth noting rather than fixing here: `as_integer` is
+recorded `strict: true`, meaning "null in, null out", which stopped being true when
+a failed projection became undefined rather than null. Nothing reads it for that
+question any more, the parameter type answering better, but a reader would be
+misled.
+
+**One example did change**, and it changed for the better: the playground's Titanic
+program averaged a `float?` age column, which now needs `Age <> null`. The
+predicate was already called `known_age_by_survival`. The guard makes it say what
+its name said.
+
+### 15.23 `defined`, and a grammar objection that did not survive being asked about
+
+Built, with §11.6's three riders. `defined(e)` is `true` where `e` has a value and
+undefined where it does not, so `not defined(e)` is how you ask for the rows an
+expression lost.
+
+**Three of the four pieces needed no new machinery, which is the polarity argument
+paying off.** The interpreter's implementation is `() => true`: `evalCall` is
+already strict in the absence marker, so an undefined argument makes the call
+undefined without anything saying so, and what is left to answer is the case where
+there *is* a value. The registry entry is `ANSWERS_NULL`, one overload per base
+type rather than a single `value` one, exactly as §11.6's second rider requires:
+lifting a primitive would route an undefined `integer` through
+`json_quote(NULL)`, whose result is the text `'null'` and therefore looks defined.
+And Position 3 (§15.22) had already made the SQL emit decidable, `canBeUndefined`
+answering what a NULL in that position would mean.
+
+The one thing built for it is a `CASE` with no `ELSE`, so an undefined argument
+leaves a SQL NULL rather than a `FALSE`. `defined` is true-or-undefined and never
+false, and that has to hold on both sides or the two disagree in a binding
+position.
+
+**And the interesting part: the grammar objection was wrong.** A body element
+shaped `name(args)` parses as an atom, so I first shipped `not (defined(e))` with
+parentheses and an improved error message for the bare form, on the grounds that
+the atom reading was forced. Asked whether `defined` could not simply be read as a
+negated predicate call, the answer is yes, and better than the workaround: a
+post-processing pass rewrites the body `Literal` into a `Filter` over the
+`FunctionCall`, carrying `negated` across. Then `not defined(e)` *is* negation as
+failure over the condition, which is the semantics §11.6 wanted, and nothing
+downstream learns the built-in exists.
+
+Worth recording as a habit rather than a fact about this feature: "the grammar
+cannot express that" deserves a second look when the language already has a
+desugaring pass, since the shape a user writes and the shape the analyzer sees do
+not have to be the same. There was even a precedent in view — `object_entry` and
+`array_element` are built-ins in atom position — and I read it as not applying
+because those *generate* tuples where `defined` only tests. That difference is real
+but it argues for a different lowering, not against lowering at all.
+
+The rider warning is `constant-defined`: `defined(X)` on a bare variable is always
+true, a variable being bound to a value and `null` being one. It is one keystroke
+from `X <> null` and only one of those is ever meant on a variable.
+
+One imprecision fell out of testing it. `defined(A)` on a nullable `A` drew a
+spurious nullable-filter warning, because `mayBeNull` propagated through every
+builtin. A non-strict overload answers for a null instead of passing it on, which
+is what the registry's `strict` bit says and what §15.22's `value`-parameter rule
+was a special case of. Both now read the registry.
+
+### 15.24 Stage 4, audited rather than built
+
+§13 promises five deletions and a replacement. One was buildable, three were
+already true, one is impossible, and the replacement was a bad idea. §13 and §3.1
+now say so; this records how each verdict was reached, because the pattern is the
+same one §15.18 found and worth naming.
+
+**Impossible, and measured rather than argued.** §13's headline is that
+`inferNullness`'s cross-predicate fixed point should be deleted into `inferTypes`,
+leaving one loop. It cannot be: `mayBeNull` reads each call's resolved overload, for
+its `strict` bit and its parameter types, and overloads are resolved by
+`validateTypes`, which needs converged base types. So nullness is a phase *after*
+type inference, not a component of it.
+
+The experiment: pass `inferNullness` an empty overload map and run the example
+suite. **21 of 276 runs fail.** They fail for the reason §15.22 found — with no
+overload, `mayBeNull` takes its conservative branch, every call looks nullable, and
+Position 3 rejects every fold over a proof term. So the dependency is not
+incidental plumbing that a refactor could route around; it is what the analysis
+needs to be precise enough to be usable. Two minutes of experiment beat any amount
+of reasoning about it, and I had been about to write the reasoning.
+
+**Built: the one real duplication.** The two published contracts are each "copy the
+inferred map, then widen it by every head annotation". They cannot be one *call*,
+published types being needed by validation while published nullness cannot exist
+until validation has run. But they were the same walk, and now share it as
+`headAnnotations`, a generator over `(predicate, position, annotation)` in
+`analyzer.ts`. Each published computation is six lines and neither restates the
+traversal.
+
+That is also the answer to the general shape of this item. What looked like
+parallel structure was one shared traversal and two genuinely different phases; the
+traversal was worth extracting and the phases were not worth merging.
+
+**Already true, so nothing to do.** The nullness halves of `checkHeadAnnotations`
+and `checkModuleBoundaries` were never parallel to the type halves: each function
+does both in one loop, reading `argTypes[i]` once and checking the two components
+side by side. §13 describes a duplication that the code never had. And `refineBody`
+already serves Position 3's narrowing (§15.22 calls it directly); restating its
+answer as "the variable's type in this rule" rather than "non-null" would rename
+things without moving any.
+
+**A bad idea, and this one is worth being explicit about, and the count is six
+rather than five: §15.23 added `constant-defined` after this was written.** §13 has the
+nullable-filter warning *replaced* by the undefined-expression warning. They are
+about different things: a `boolean?` column in filter position drops its row
+because of a value it holds, not because of a value it lacks. Replacing the first
+with the second would have deleted a live check to make a sentence tidier. All five
+warnings coexist.
+
+**And the paragraph that started it.** §3.1 calls this the proposal's "largest
+structural win" and says the parallel structure "is not simplified, it is deleted".
+That is true only if `columnTypes` holds pairs, which §6 priced at 146 comparison
+sites and rejected and §15.10 confirms is right about that variant. With two maps
+there is no ordinary meet for the nullness half to fold into, so the win was never
+available at the price the document assumed it was. Recording that is the honest
+end of stage 4: not deferred, not forgotten, but two-thirds mistaken and now
+annotated in place so the next reader does not schedule it again.
+
+### 15.25 The equality's definedness, and the three symptoms one placement caused
+
+A review of this document against the code found three divergences, and they were
+one line. §15.3 chose `(cmp) && <operands defined>` for the local rewrite, and
+`partiality.ts` recorded the consequence as a decision: an equality "always
+answers", being *false* at an undefined operand rather than undefined. False is a
+value, so
+
+- `C = (V = 10 / V)` bound one, keeping a row the interpreters withheld. The two
+  backend families disagreed in binding position, which §15.9's rule forbids.
+- `!` never saw an undefined to propagate, so §4.4's `not`-versus-`!` split was
+  unobservable on SQL.
+- The interpreters, which do return the absence marker there, reached
+  `asBoolean` with it and aborted, on `!(e)` and on `-e` alike. After §15.21 a
+  nullable column under `!` was enough; no partiality required.
+
+The fix is a `CASE` with no `ELSE`, the shape §15.23 already used for `defined`.
+An undefined operand leaves a SQL NULL, and every position already reads a NULL
+correctly: a filter drops the row, a negated filter holds through its
+`NOT COALESCE(..., FALSE)`, and a binding position withholds it through the
+definedness guard. `canBeUndefined` then answers for an equality exactly as it
+answers for an ordering, and the interpreters' unary operators become strict in
+the marker.
+
+§4.2's divergence is unaffected, which is the check that matters: the test still
+sits inside the negation rather than being hoisted, so `V <> 10 / V` gives `{1}`
+and `not (V = 10 / V)` gives `{0, 1}`, now agreeing on all four runnable backends
+in binding and negated position alike.
+
+The lesson is §15.9's own, missed here: the static and runtime tests must agree
+*exactly*, not merely be sound in the same direction. "False rather than
+undefined" was sound in the two positions the suite covered and wrong in the two
+it did not, and the suite stayed green through both.
+
+### 15.26 The connectives, and the last shape that made a SQL NULL ambiguous
+
+§9.2's second row is the design's load-bearing claim: no `T?`-typed expression can
+be undefined, so a NULL in one is the `null` value and the head filter can read
+any other NULL as an absence. The same review found it false, and the
+counterexample is the boolean connectives.
+
+Three rules, each right on its own, combined into the hole. §4.4 requires `&&`
+and `||` to be non-strict in undefinedness, so `nullable-operands.ts` exempts them
+from Position 3. `mayBeNull` propagated a nullable operand through them, per
+today's three-valued table. And `canBeUndefined` recursed into them, a partial
+operand that dominance does not rescue leaving no value. So `A && (10 / B > 0)`
+over a `boolean?` column was **nullable and partial at once**, and the head
+filter's `IS NOT NULL` could not tell which reading its NULL had: it threw away the
+`null && true` row that the interpreters kept.
+
+**The fix is to make the connectives strict at a `null`,** which is §4.1's own
+argument one construct further out. The orderings are strict because a null is not
+in an order; the connectives are strict because a null is not a truth value. What
+survives is dominance, which is what the guard idiom actually needs: `false && e`
+is `false` and `true || e` is `true` whatever `e` is, undefined included. Only the
+non-dominated cases move, from `null` to no value.
+
+Three things worth recording.
+
+**The invariant is restored by deleting a case rather than adding a rule.** A
+connective's result is now non-nullable, so §9.2 row 2 is true again, and the two
+rejected alternatives are worth naming: extending Position 3 to the connectives
+would have rejected programs that behave correctly today, including filters, and
+emitting a structural definedness test for a connective instead of `IS NOT NULL`
+would have kept a second emitter in step with `canBeUndefined` forever.
+
+**SQL needed no change at all, and the interpreter got smaller.** `TRUE AND NULL`
+is already NULL, which is exactly "no value" once the head guard reads it that way,
+so this landed as three lines in `values.ts` and two answers in the analyses. That
+is §15.21's shape again: making the language more partial made the implementation
+smaller, because SQL was already doing it and the interpreter was the one paying to
+differ.
+
+**The costs, both small and both real.** `C = !A` on a nullable `A` derives no row
+where it used to bind a `null`, which is §14.1's silent absence in one more place;
+it is the only shape a user can observe, since every other case either dominates or
+drops the row anyway. And `canBeUndefined` now answers `true` for a connective
+outright, no nullness bit being in scope there, exactly as it already did for an
+ordering. That costs an `IS NOT NULL` that is a no-op over truth values, and two
+false positives in the opt-in undefined-expression warning (`boolean-ops`'s
+`A && I` and `knights-and-knaves`'s `!B`, both over non-nullable booleans), taking
+it from 192 firings to 194. Being exact there would mean giving definedness a
+nullness context, which is the coupling §15.3 removed on purpose.
+
+The `nullable-filter` warning had to change its question to keep working: it asked
+`mayBeNull` of the filter's *result*, which is now false for a connective over a
+nullable operand, so it asks whether a null reaches a truth-value position instead.
+Its subject is unchanged, and so is its firing set.
+
+### 15.27 Value construction, and a contract that read `!` for `not`
+
+Two more of the review's findings, both the same mistake as §15.25's and in places
+the sweep had no reason to look.
+
+**A construction gave a JSON `null` to a part that had no value.** `J = [1 / 0]`
+derived `[null]` on both SQL dialects where the interpreters withheld the row, and
+`--warn-undefined` flagged the expression in the very run that kept it. The cause
+is that `json_array` and `json_object` never return NULL, so the enclosing
+definedness guard asked whether a construction was NULL, got no, and kept the row;
+the parts were emitted unguarded inside it. Construction is not strict in the null
+*value*, `[null]` being a one-element array, so the fix is the same `CASE` with no
+`ELSE` applied per part that can be undefined. It composes, a nested construction
+answering for its own parts, and §8's distinction survives it: `[J["k"]]` over
+`{"k": null}` is `[null]` and over `{}` is no row.
+
+**The synthesised contract check used `!` where it needed `not`.** A refinement
+holds of a tuple only where its proposition is *true*: §15.21 made the obligation
+goal `def(formula) ∧ formula` for exactly that reason. The runtime check did not
+agree, because `!` over a proposition with no value has no value either, so the
+check derived no counterexample and the tuple passed in silence. `--verify`
+reporting FAILED while the program ran clean is as clear a static/runtime
+disagreement as this branch has produced.
+
+It is now a negated filter, so negation as failure reports any tuple where the
+proposition fails to hold, absence included. Nothing in the corpus moves, no
+example's proposition lacking a value at a tuple it derives, and two things become
+loud that were quiet: a partial proposition (`_: 10 / X > 1` at `X = 0`) and a
+nullable operand inside one. The second is where §15.22's rule has a hole worth
+naming: `findNullableOperands` skips synthesised statements, since the contract
+check reproduces the head's expressions and would report them twice, so a
+refinement is the one place a nullable operand still reaches an operation. Catching
+it as a violation is the better error anyway, being about the tuple that broke the
+claim rather than about the shape of the annotation.
+
+Worth noting that this fix was unavailable until §4.4's rewrite deletion landed:
+`not` and `!` were the same node, so there was no way to ask for the reading a
+contract needs.
+
+### 15.28 The lift §9.4 promised, and Postgres's missing identity
+
+The last two of the review's code findings, both of them a site that the sweep
+listed and nobody wrote.
+
+**§9.4's "one new conversion" did not exist.** Lifting a `T?` into a `value` is the
+one place where a SQL NULL has to change spelling, from the marker that means
+undefined into a JSON null, and `liftToJsonIfNeeded` had no case for it. So an
+`integer?` column joined into a `value` column arrived as an absence: `V = null`
+matched on the interpreters and matched nothing on either SQL dialect, and the
+program could not see a row it had stored.
+
+The conversion is now a parameter on the lift, and choosing the right predicate for
+it took two attempts. `!canBeUndefined(e)` is wrong, being true of a literal, which
+earned a dead `CASE` and a failing translator test. The right question is
+`mayBeNull(e)`, which is the same question §9.2's table asks: a NULL is the null
+value exactly where the expression can be one. In a head or atom position the
+nullness bit is in scope and the answer is exact; inside `termToSql` it is not, so
+there the test is "is this operand a variable", a variable being the only lifted
+operand that can be null and still be defined. That over-approximates into a `CASE`
+that never fires on a non-nullable variable, which is the same trade every other
+nullness-free site in the translator makes.
+
+**Postgres never got `concat`'s empty-group identity.** §7 gave the four folding
+aggregates their identities and §15.11 recorded them landing on four backends;
+`STRING_AGG` has no `COALESCE`, where SQLite's arm does, so an empty group yields a
+row holding NULL on Postgres and `""` everywhere else. `concat` cannot be
+undefined, so no `HAVING` withholds the row either. One `COALESCE`, unverified
+locally for want of a `DATABASE_URL`, and the exact analogue of the arm beside it.
+
+That is §15.16's process lesson arriving a second time: a suite that skips itself
+without a service is a suite that rots. Both of this branch's Postgres findings were
+found by reading, not by running.
+
+### 15.29 An unsound refinement, found by fixing a warning
+
+The one finding in this pass that nobody had reported, and the only unsoundness:
+`refineBody` eliminated a double negation that the strict orderings had already
+invalidated.
+
+`refineFalse` handled a `!` operand by delegating to `refineTrue`, on the reason its
+own header gave: "meaning-preserving because comparison is total, so `not` over one
+is exact complementation". §15.21 ended that. `not (!(X < 2))` holds at a null `X`,
+the ordering having no value there and `!` propagating the absence, so the null row
+survives the conjunct while the analysis concluded `X < 2` and marked `X` non-null.
+
+It was observable twice, both silently:
+
+- the join lowered to a plain `=`, so `p(X), not (!(X < 2)), r(X)` lost the
+  null-to-null match on both SQL dialects and kept it on the interpreters;
+- Position 3 accepted `Y = X + 1` over that `X`, so a null propagated into a column
+  typed `integer`, and the two backend families then disagreed about the row.
+
+The fix is one arm: `refineFalse` proves nothing through a `!`. The asymmetry is the
+thing to keep in view, since the two functions otherwise look like duals. `!e` being
+*true* does imply `e` has a value and is false, so `refineTrue` may still flip. `!e`
+*failing* does not imply `e` is true, because it may equally have no value, so
+`refineFalse` may not. The `&&` and `||` arms of `refineFalse` survive for a reason
+worth writing down: it only ever proves anything from an `=`-against-`null` test,
+which is total, so no absence can arise inside one.
+
+**How it was found is the reusable part.** I was correcting the
+`nullable-negated-ordering` warning's text, which still cited the old "every
+ordering is false at NULL" rule. Checking which spellings actually have a gap
+(`not (X < 2)` keeps the null row, `!(X < 2)` now drops it, so only the first
+warrants a warning) produced a test that said the nested case should warn and did
+not. The missing warning was the refinement claiming the operand non-null. A
+diagnostic whose premise is stale is worth chasing rather than editing, because the
+premise is usually shared with an analysis.

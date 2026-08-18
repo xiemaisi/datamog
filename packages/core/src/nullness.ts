@@ -12,7 +12,7 @@
 // imprecise, since a column wrongly believed non-null lowers a join to a plain
 // `=` and drops the NULL-NULL match that null.md §4 specifies.
 
-import { BUILTIN_BODY_ATOMS } from "./analyzer.ts";
+import { BUILTIN_BODY_ATOMS, headAnnotations } from "./analyzer.ts";
 import type { AnalyzedProgram } from "./analyzer.ts";
 import type {
   BinaryExpr,
@@ -164,16 +164,10 @@ function computePublishedNullness(
 ): ReadonlyMap<string, readonly boolean[]> {
   const published = new Map<string, boolean[]>();
   for (const [predicate, cols] of columnNullness) published.set(predicate, [...cols]);
-  for (const [predicate, rules] of analyzed.rules) {
+  for (const [predicate, i, annotation] of headAnnotations(analyzed)) {
     const cols = published.get(predicate);
-    if (!cols) continue;
-    for (const rule of rules) {
-      const annotations = rule.head.argTypes;
-      if (annotations === undefined) continue;
-      for (let i = 0; i < annotations.length && i < cols.length; i++) {
-        if (annotations[i]?.nullable === true) cols[i] = true;
-      }
-    }
+    if (!cols || i >= cols.length) continue;
+    if (annotation.nullable) cols[i] = true;
   }
   return published;
 }
@@ -269,9 +263,10 @@ export function refineBody(
 /**
  * The variables proven non-null by `expr` holding.
  *
- * Runs in negation normal form: `!` flips to `refineFalse` rather than
- * blocking, which is meaning-preserving because comparison is total, so `not`
- * over one is exact complementation (null.md §5).
+ * `!` flips to `refineFalse`, which is sound in this direction only: `!e` holds
+ * only where `e` has a value and is false, `!` propagating an absence rather than
+ * complementing it. The reverse flip is not available, since a comparison is no
+ * longer total; `refineFalse` says why.
  */
 function refineTrue(
   expr: Expression,
@@ -292,10 +287,11 @@ function refineTrue(
     // `(X <> null) || (X > 5)` proves `X` non-null either way.
     return intersect(refineTrue(left, nonNull, owner, ctx), refineTrue(right, nonNull, owner, ctx));
   }
-  // A true strict comparison proves both sides non-null: `<` and `>` are false
-  // whenever either side is null. `<=` and `>=` prove nothing, being true of
-  // two nulls (null.md §5).
-  if (op === "<" || op === ">") {
+  // A true ordering proves both sides non-null, every ordering being strict at
+  // null (null-as-a-value.md §4.1). `<=` and `>=` join `<` and `>` here: they
+  // used to prove nothing, being true of two nulls, which was the wart §4.1
+  // deletes.
+  if (ORDERING_OPS.has(op)) {
     return union(strictVars(left, ctx), strictVars(right, ctx));
   }
   // `X <> null` is exactly the non-null test, `<>` being total and null-aware.
@@ -318,7 +314,13 @@ function refineFalse(
   ctx: NullnessContext,
 ): Set<string> {
   if (expr.$type === "UnaryExpr" && expr.op === "!") {
-    return refineTrue(expr.operand, nonNull, owner, ctx);
+    // No double-negation elimination in this direction, and this is the one arm
+    // where the two are not symmetric. `!e` failing to hold means `e` is true, or
+    // `e` has no value: `not (!(X < 2))` holds at a null `X`, the ordering having
+    // no value there and `!` propagating that. So nothing is proven, where
+    // `refineTrue` may flip soundly, `!e` being *true* only where `e` has a value
+    // and is false.
+    return new Set();
   }
   if (expr.$type !== "BinaryExpr") return new Set();
   const { op, left, right } = expr;
@@ -423,8 +425,10 @@ function isStrictOp(op: string): boolean {
  *   accessor reaching a JSON `null` leaf, and a `value`-typed builtin result,
  *   which may be one.
  * - **Propagates** its operands' nullness, and nothing more: arithmetic, the
- *   connectives, the bitwise operators, string concatenation, and every
- *   builtin. A NULL comes out of `X / Y` only because one went in.
+ *   bitwise operators, string concatenation, and every builtin. A NULL comes out
+ *   of `X / Y` only because one went in.
+ * - **Stops** it: the comparisons, and the connectives with them, a null being
+ *   no truth value (§15.26).
  *
  * Propagation is still needed because §5's hybrid position is only half
  * enforced: a *statically* `null` operand is a type error, but a `T?` one is
@@ -452,7 +456,11 @@ export function mayBeNull(
     case "Variable":
       return !nonNull.has(expr.name);
     case "UnaryExpr":
-      return rec(expr.operand);
+      // `!null` has no value rather than being a null, a null being no truth
+      // value (§15.26), so logical negation originates and propagates nothing.
+      // Arithmetic negation still passes a null on, where Position 3 has not
+      // already rejected the operand.
+      return expr.op === "!" ? false : rec(expr.operand);
     case "AggregateCall":
       // No aggregate yields a null any more, which is what §7's identities
       // bought. `count`, `sum`, `concat` and `list` fold monoids whose
@@ -469,7 +477,22 @@ export function mayBeNull(
       // `parse_json("null")` is the case. Everything else either returns a
       // primitive or has no value, so it only passes on what it was given.
       if (overload.result === "value") return true;
-      return expr.args.some(rec);
+      // A non-strict overload answers for a null rather than passing it on, which
+      // is exactly what the registry's `strict` bit records: `type_of(null)` is
+      // `"null"` and `defined(null)` is true, neither of them a null.
+      if (!overload.nulls.strict) return false;
+      // And a strict one passes a null on only through a *primitive* parameter. A
+      // `value` parameter accepts a null as one of the shapes it holds, so the
+      // null reaches the function and the function answers: `as_integer(null)`
+      // has no value, `null` being no integer. This mirrors `evalCall`, which
+      // skips its short-circuit for a `value` parameter for the same reason
+      // (§15.10), and without it every fold over a proof term looks nullable,
+      // proof-term arguments being `value` subscripts.
+      const params = overload.params;
+      return expr.args.some((arg, i) => {
+        const param = params[i] ?? params[params.length - 1];
+        return param !== "value" && rec(arg);
+      });
     }
     case "Subscript":
       // A `value` key that is present and holds a JSON `null` yields the null
@@ -486,8 +509,14 @@ export function mayBeNull(
       );
     case "BinaryExpr": {
       const { op, left, right } = expr;
-      // Comparison is where NULL stops travelling: every one is total.
+      // Comparison is where a null stops travelling: equality is total over
+      // values, and an ordering is strict at a null, so neither returns one.
       if (EQUALITY_OPS.has(op) || ORDERING_OPS.has(op)) return false;
+      // A connective stops it too, and for the ordering's reason: `null` is no
+      // truth value, so `null && true` has no value rather than being a null
+      // (§15.26). That is what keeps a connective's result non-nullable, which
+      // is what §9.2 needs in order to read a SQL NULL as undefined.
+      if (op === "&&" || op === "||") return false;
       // Everything else propagates its operands' nullness and originates none.
       // Division, modulo and exponentiation used to answer `true` outright, and
       // arithmetic with it, because overflow and a zero divisor produced a

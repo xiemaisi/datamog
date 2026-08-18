@@ -38,6 +38,14 @@ expr(C) :- expr(E), E["kind"] = "op", C = E["l"].
 expr(C) :- expr(E), E["kind"] = "op", C = E["r"].
 
 # A constant differentiates to zero, and so does any variable other than x.
+#
+# The `<>` draws a warning, and it is a true one worth reading rather than
+# silencing. `E["name"]` has no value on a var node that is missing its `name`,
+# and `<>` does not hold where an operand has none, so such a node gets no
+# derivative at all. `not (E["name"] = "x")` would instead give it zero. Dropping
+# a malformed node is what this program wants, so `<>` is the right operator here,
+# but the two readings are one rewrite apart and the difference does not show up
+# in the output.
 deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] = "num".
 deriv(E, {"kind": "num", "value": 0}) :- expr(E), E["kind"] = "var", E["name"] <> "x".
 deriv(E, {"kind": "num", "value": 1}) :- expr(E), E["kind"] = "var", E["name"] = "x".

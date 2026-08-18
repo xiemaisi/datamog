@@ -10,8 +10,9 @@ input predicate config(blob: value).
 app_name(N) :- config(C), N = as_string(C["name"]).
 
 # Iterate the `features` object: project the names whose flag is
-# the JSON boolean true. `as_boolean` returns SQL NULL on shape
-# mismatch, and the `= true` test then drops those rows.
+# the JSON boolean true. `as_boolean` has no value on a shape
+# mismatch, so the conjunct does not hold and the row leaves before
+# the `= true` test sees anything.
 output predicate enabled_feature(F) :-
     config(C),
     object_entry(C["features"], F, Flag),

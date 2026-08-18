@@ -208,22 +208,23 @@ describe("head nullness annotations", () => {
 
   // A NULL has to come from a null value, not from a partial operation: a zero
   // divisor leaves the expression with no value, so the row is withheld rather
-  // than kept with a NULL in it (null-as-a-value.md §13). So these use a nullable
-  // input column, which arithmetic propagates.
+  // than kept with a NULL in it (null-as-a-value.md §13). And it cannot come
+  // through an operation either, arithmetic needing a non-null operand (§5), so
+  // these pass a nullable column straight through.
   test("`?` is accepted where the rule can produce a NULL", () => {
     const typed = check(`
       input predicate p(a: integer?, b: integer).
-      total(X: integer?) :- p(A, B), X = A + B.
+      passed(X: integer?) :- p(X, _).
     `);
-    expect(typed.columnTypes.get("total")).toEqual(["integer"]);
-    expect(typed.nullness.columnNullness.get("total")).toEqual([true]);
+    expect(typed.columnTypes.get("passed")).toEqual(["integer"]);
+    expect(typed.nullness.columnNullness.get("passed")).toEqual([true]);
   });
 
   test("omitting `?` where the rule can produce a NULL is rejected", () => {
     expect(() =>
       check(`
         input predicate p(a: integer?, b: integer).
-        total(X: integer) :- p(A, B), X = A + B.
+        passed(X: integer) :- p(X, _).
       `),
     ).toThrow(/column 1 is annotated 'integer' but this rule can produce NULL/);
   });
@@ -268,10 +269,11 @@ describe("head nullness annotations", () => {
   test("an aggregate position takes the annotation too", () => {
     // No aggregate can produce a NULL (§7 gives the empty group an identity and
     // withholds the row where there is none), so the only direction left to
-    // exercise here is the widening one.
+    // exercise here is the widening one. `count` rather than `sum`, since a value
+    // aggregate would reject the nullable argument outright (§5).
     const typed = check(`
       input predicate p(a: integer?).
-      total(sum(X): integer?) :- p(X).
+      total(count(X): integer?) :- p(X).
     `);
     expect(typed.nullness.columnNullness.get("total")).toEqual([false]);
     expect(typed.nullness.publishedNullness.get("total")).toEqual([true]);

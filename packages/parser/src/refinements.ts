@@ -244,20 +244,20 @@ function contractCheck(
     a.$containerIndex = i;
   });
 
-  const negated = {
-    $type: "UnaryExpr",
-    op: "!",
-    operand: formula,
-    $cstNode: cst,
-  } as unknown as Expression;
-  (formula as { $container?: AstNode }).$container = negated as unknown as AstNode;
+  // Negation as failure over the proposition, not `!` over it. A contract holds
+  // of a tuple only where the proposition is *true*, so a proposition with no
+  // value at that tuple is a counterexample: `!` would propagate the absence and
+  // report nothing, which is the reading the obligation encoder rejects when it
+  // asks for `def(formula) ∧ formula` (doc/design/null-as-a-value.md §15.21,
+  // §15.27). The two were one node until §4.4's rewrite was deleted, so this
+  // distinction could not be drawn before.
   const filter = {
     $type: "Filter",
-    expr: negated,
-    negated: false,
+    expr: formula,
+    negated: true,
     $cstNode: cst,
   } as unknown as Query["body"][number];
-  (negated as { $container?: AstNode }).$container = filter as unknown as AstNode;
+  (formula as { $container?: AstNode }).$container = filter as unknown as AstNode;
 
   const check = {
     $type: "Query",

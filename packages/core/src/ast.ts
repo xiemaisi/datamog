@@ -150,7 +150,7 @@ export const COMPARISON_OPS: ReadonlySet<string> = new Set<ComparisonOp>([
 /** `=` and `<>`, the language's only equality (`null = null` is true). */
 export const EQUALITY_OPS: ReadonlySet<string> = new Set(["=", "<>"]);
 
-/** `<`, `<=`, `>`, `>=`: null is an isolated point, so these are total. */
+/** `<`, `<=`, `>`, `>=`: `null` is outside the order, so these are strict at it. */
 export const ORDERING_OPS: ReadonlySet<string> = new Set(["<", "<=", ">", ">="]);
 
 export const LOGICAL_BINARY_OPS: ReadonlySet<string> = new Set(["&&", "||"]);

@@ -196,7 +196,12 @@ export class SqliteSqlDialect implements SqlDialect {
       THEN CAST(${positive} - ${negative} AS INTEGER) ELSE NULL END)`;
   }
 
-  jsonAgg(valueSql: string, argSql: string, argIsJson: boolean): string {
+  jsonAgg(
+    valueSql: string,
+    argSql: string,
+    argIsJson: boolean,
+    argMayBeUndefined: boolean,
+  ): string {
     // SQLite stores `value`s as canonical TEXT, so ordering by the
     // raw `argSql` works for both shapes: value columns sort by their
     // canonical-TEXT form, and primitive columns sort by their natural
@@ -211,21 +216,26 @@ export class SqliteSqlDialect implements SqlDialect {
     // CASE for booleans). Either way, `json_group_array` nests the
     // value structurally rather than escaping it.
     //
-    // The `FILTER` tests the *original* `argSql` (not `valueSql`) so
-    // SQL-NULL inputs are skipped. `json_quote(NULL)` returns the
-    // text `'null'` (not SQL NULL), which would otherwise pass the
-    // filter and emit a JSON `null` entry for what was really an
-    // absent value.
+    // The `FILTER` tests the *original* `argSql` rather than `valueSql`, because
+    // the lift has already turned a SQL NULL into the text `'null'`
+    // (`json_quote(NULL)` returns that, not SQL NULL) and there would be nothing
+    // left to test. Whether to filter at all depends on what a NULL there means:
+    // an undefined contribution goes, a `null` value stays as a JSON null.
     //
-    // An all-NULL or empty group yields '[]' (§7), where it used to yield NULL
-    // to SQL NULL. A legitimate non-empty group containing the JSON
-    // value `[]` produces the outer result `'[[]]'`, which NULLIF
-    // leaves alone.
-    const orderKey = argIsJson ? this.stringOrder(argSql) : argSql;
     // `JSON_GROUP_ARRAY` already returns '[]' over an empty group, which is
     // append's identity and what §7 wants. The `NULLIF(..., '[]')` this used to
-    // carry turned that into NULL on purpose; removing it is the whole change.
-    return `JSON_GROUP_ARRAY(json(${valueSql}) ORDER BY ${orderKey}) FILTER (WHERE ${argSql} IS NOT NULL)`;
+    // carry turned that into NULL on purpose.
+    //
+    // A null element sorts first (§7). For a primitive argument that is SQLite's
+    // default ASC ordering and needs nothing said; for a `value` argument the
+    // null is a JSON null in canonical TEXT, so it would otherwise sort at `null`
+    // among the other leaves, between `[7]` and `{"k":1}`. A leading key puts it
+    // where the spec says regardless of the argument's type.
+    const orderKey = argIsJson
+      ? `(CASE WHEN json_type(${argSql}) = 'null' THEN 0 ELSE 1 END), ${this.stringOrder(argSql)}`
+      : argSql;
+    const filter = argMayBeUndefined ? ` FILTER (WHERE ${argSql} IS NOT NULL)` : "";
+    return `JSON_GROUP_ARRAY(json(${valueSql}) ORDER BY ${orderKey})${filter}`;
   }
 
   logicalEq(leftSql: string, rightSql: string): string {

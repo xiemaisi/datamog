@@ -145,6 +145,30 @@ export const BUILTINS: ReadonlyMap<string, Builtin> = new Map([
   ]),
   builtin("type_of", [ov("type_of.value", ["value"], "string", ANSWERS_NULL)]),
 
+  // `defined(e)`: does `e` have a value? True where it does, and *undefined*
+  // where it does not, by the ordinary strictness every builtin has. That
+  // polarity is the whole trick (doc/design/null-as-a-value.md §11.6): an
+  // `undefined(e)` that had to be true on an undefined argument could not be a
+  // builtin at all, since strictness would make the call undefined exactly where
+  // it must hold. Here strictness does the work, and `not defined(e)` is the
+  // spelling for the negative case.
+  //
+  // One overload per base type rather than a single `value` one, and the
+  // difference matters: lifting a primitive into a `value` would route an
+  // undefined `integer` through `json_quote(NULL)`, whose result is the *text*
+  // `'null'` and therefore looks defined. `abs`'s shape, for the same reason of
+  // wanting no lift.
+  //
+  // `ANSWERS_NULL`: a null argument is a value, so `defined(null)` is true. It
+  // never propagates one and never returns one.
+  builtin("defined", [
+    ov("defined.integer", ["integer"], "boolean", ANSWERS_NULL),
+    ov("defined.float", ["float"], "boolean", ANSWERS_NULL),
+    ov("defined.string", ["string"], "boolean", ANSWERS_NULL),
+    ov("defined.boolean", ["boolean"], "boolean", ANSWERS_NULL),
+    ov("defined.value", ["value"], "boolean", ANSWERS_NULL),
+  ]),
+
   // Object helpers. `has_key` is a boolean presence test. `keys`
   // returns a sorted array of the object's keys (as JSON strings);
   // `values` returns the corresponding array of values, ordered by key

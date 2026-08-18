@@ -85,13 +85,33 @@ describe("operations", () => {
     expect(cols(source, "unfinite")).toEqual([false]);
   });
 
-  test("but it still propagates a null it was given", () => {
-    // The other half, and why the propagation cases are not deleted along with
-    // the origination ones: §5's hybrid position is only half enforced, so a
-    // `T?` operand still type-checks into arithmetic and still comes out null.
+  test("a null cannot reach arithmetic at all, so the guard makes it non-null", () => {
+    // Position 3 (§5) rejects a nullable operand outright, so the propagation
+    // path is unreachable from a `T?` column: guarding is the only way to write
+    // the rule, and the guard is what makes the result non-null.
     const source = `
       input predicate p(a: integer?).
+      q(X) :- p(A), A <> null, X = A + 1.
+    `;
+    expect(cols(source, "q")).toEqual([false]);
+    expect(() =>
+      cols(
+        `
+      input predicate p(a: integer?).
       q(X) :- p(A), X = A + 1.
+    `,
+        "q",
+      ),
+    ).toThrow(/can be null, and `\+` needs a value/);
+  });
+
+  test("propagation is still what happens where a null can reach an operator", () => {
+    // A `value` operand is exempt (§9.3: it spells its null the JSON way, so
+    // there is no SQL NULL to disambiguate), and that is the case where the
+    // propagation branch of `mayBeNull` still earns its keep.
+    const source = `
+      input predicate p(a: value).
+      q(X) :- p(A), X = A["k"].
     `;
     expect(cols(source, "q")).toEqual([true]);
   });
@@ -152,9 +172,12 @@ describe("refinement from body constraints", () => {
     expect(cols(`${decl}q(X) :- p(X), 100 > X.`, "q")).toEqual([false]);
   });
 
-  test("`<=` and `>=` prove nothing, holding of two nulls", () => {
-    expect(cols(`${decl}q(X) :- p(X), X <= 100.`, "q")).toEqual([true]);
-    expect(cols(`${decl}q(X) :- p(X), X >= 100.`, "q")).toEqual([true]);
+  test("`<=` and `>=` prove it too, every ordering being strict at null", () => {
+    // These proved nothing while `null <= null` was true by convention. §4.1
+    // makes an ordering have no value at a null instead, so one that holds has
+    // non-null operands, exactly as `<` and `>` did.
+    expect(cols(`${decl}q(X) :- p(X), X <= 100.`, "q")).toEqual([false]);
+    expect(cols(`${decl}q(X) :- p(X), X >= 100.`, "q")).toEqual([false]);
   });
 
   test("`not (X < 2)` proves nothing: that is where the null row lives", () => {
@@ -171,7 +194,9 @@ describe("refinement from body constraints", () => {
 
   test("`||` proves it only when both branches do", () => {
     expect(cols(`${decl}q(X) :- p(X), (X <> null) || (X > 5).`, "q")).toEqual([false]);
-    expect(cols(`${decl}q(X) :- p(X), (X <> null) || (X <= 5).`, "q")).toEqual([true]);
+    // One branch that proves nothing is enough to lose it. `X = null` is the
+    // branch to use now that every ordering proves its operands non-null.
+    expect(cols(`${decl}q(X) :- p(X), (X <> null) || (X = null).`, "q")).toEqual([true]);
   });
 
   test("a guard reaches through a strict operation", () => {
@@ -219,11 +244,36 @@ describe("refinement from body constraints", () => {
   });
 
   test("refinement is reported per body, naming the proven variables", () => {
+    // Both, and `Y` is the interesting one: `Y <= 3` now proves it non-null,
+    // where it proved nothing while `<=` held of two nulls.
     const source = `
       input predicate p(a: integer?, b: integer?).
       q(X) :- p(X, Y), X <> null, Y <= 3.
     `;
+    expect(proven(source, "q")).toEqual(["X", "Y"]);
+  });
+
+  test("a variable no conjunct constrains stays unproven", () => {
+    const source = `
+      input predicate p(a: integer?, b: integer?).
+      q(X) :- p(X, Y), X <> null, Y = null.
+    `;
     expect(proven(source, "q")).toEqual(["X"]);
+  });
+
+  test("`not (!(X < 2))` proves nothing, there being no double-negation law here", () => {
+    // `!` propagates an absence rather than complementing it, so `!(X < 2)` has no
+    // value at a null `X` and `not` holds of it: the null row survives the
+    // conjunct. Eliminating the two negations would claim `X < 2`, which proves
+    // `X` non-null, and that claim is false of the row that is actually there.
+    //
+    // It mattered twice before it was fixed: the join lowered to a plain `=` and
+    // lost a null-to-null match on SQL while the interpreters kept it, and
+    // Position 3 accepted `X + 1` over an operand that can be null.
+    expect(cols(`${decl}q(X) :- p(X), not (!(X < 2)).`, "q")).toEqual([true]);
+    // The other direction is sound and still narrows: `!e` is true only where `e`
+    // has a value and is false.
+    expect(cols(`${decl}q(X) :- p(X), !(X = null).`, "q")).toEqual([false]);
   });
 });
 
@@ -252,29 +302,40 @@ describe("aggregates", () => {
     expect(cols(source, "q")).toEqual([false]);
   });
 
-  test("nor is one over a nullable column, grouped or not", () => {
+  test("nor is one over a guarded nullable column, grouped or not", () => {
+    // `sum` needs a value, so a `T?` argument is rejected (§5) and the guard is
+    // how the rule gets written. Which means the value aggregates never meet a
+    // null at all; only `count` and `list` can, and neither returns one.
     const grouped = `
       input predicate p(g: string, a: integer?).
-      q(G, sum(X)) :- p(G, X).
+      q(G, sum(X)) :- p(G, X), X <> null.
     `;
     const ungrouped = `
       input predicate p(g: string, a: integer?).
-      q(sum(X)) :- p(_, X).
+      q(sum(X)) :- p(_, X), X <> null.
     `;
     expect(cols(grouped, "q")).toEqual([false, false]);
     expect(cols(ungrouped, "q")).toEqual([false]);
   });
 
-  test("nor min or max, which withhold the row rather than yield a null", () => {
+  test("a value aggregate rejects a nullable argument rather than skipping nulls", () => {
     const source = `
       input predicate p(a: integer?).
       lo(min(X)) :- p(X).
-      hi(max(X)) :- p(X).
-      mean(avg(X)) :- p(X).
     `;
-    expect(cols(source, "lo")).toEqual([false]);
-    expect(cols(source, "hi")).toEqual([false]);
-    expect(cols(source, "mean")).toEqual([false]);
+    expect(() => cols(source, "lo")).toThrow(/can be null, and `min` needs a value/);
+  });
+
+  test("count and list take one, and still return no null", () => {
+    // The two aggregates a null can reach: `count` counts it (§11.2) and `list`
+    // collects it (§7). Both answer with something that is not a null.
+    const source = `
+      input predicate p(a: integer?).
+      n(count(X)) :- p(X).
+      l(list(X)) :- p(X).
+    `;
+    expect(cols(source, "n")).toEqual([false]);
+    expect(cols(source, "l")).toEqual([false]);
   });
 });
 

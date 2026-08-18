@@ -620,12 +620,15 @@ function emitPolarityWarnings(analyzed: Parameters<typeof findInertPolarity>[0])
 }
 
 // Also always reported, and for the same reason: the symptom of both is a row
-// that quietly is not there. Neither fires unless a NULL can actually reach the
-// place in question, so a program with no nullable columns never sees these.
+// that quietly is not there. None fires unless a NULL or an absent value can
+// actually reach the place in question, so most programs never see these. The
+// `<>`-on-a-partial-operand one is on by default on the same measured grounds
+// the undefined-expression one is off: it fires once across the 76 single-file
+// examples (§15.20).
 //
-// `--warn-undefined` adds the partiality check, which is opt-in because it is
-// noisy by nature rather than by accident: partial operations are pervasive and
-// usually deliberate. It is the flag to reach for when rows you expected are
+// `--warn-undefined` adds the general partiality check, which is opt-in because
+// it is noisy by nature rather than by accident: partial operations are pervasive
+// and usually deliberate. It is the flag to reach for when rows you expected are
 // missing. See doc/design/null-as-a-value.md §15.14.
 function emitNullnessWarnings(
   typed: Parameters<typeof findNullnessRisks>[0],

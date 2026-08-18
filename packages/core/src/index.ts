@@ -119,6 +119,7 @@ export {
   type NullnessDiagnostic,
   type NullnessDiagnosticOptions,
 } from "./nullness-diagnostics.ts";
+export { findNullableOperands, type NullableOperandError } from "./nullable-operands.ts";
 export { findRecursiveCalls, type RecursiveCall } from "./recursion.ts";
 export { findPredicateReferences, type PredicateReference } from "./references.ts";
 export {

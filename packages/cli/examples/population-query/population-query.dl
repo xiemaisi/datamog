@@ -19,11 +19,18 @@ input predicate area(country: string, sq_miles: integer).
 # A refinement: a density is never negative. It is checked against the tuples
 # derived, so on this data it passes silently.
 #
-# `--obligations` shows why checking and proving are different things. The
-# emitted goal carries the divide-by-zero condition `(= A 0)`, because `/` is
-# NULL when the divisor is, and nothing here says an area cannot be zero. No
-# solver will discharge it. The contract holds for this data and is not a
-# theorem, which is exactly the gap between the two modes.
+# `--obligations` shows why checking and proving are different things, and
+# `--verify` names the reason: `((D -1) (P -1) (A 51))`, a negative population.
+# Nothing here says a population cannot be negative, so `P * 100 / A` need not be
+# non-negative, and no solver will discharge the claim. The contract holds for
+# this data and is not a theorem, which is exactly the gap between the two modes.
+# Closing it needs the bound stated where the value enters, which for an input
+# predicate this formulation has no place to put.
+#
+# Note which reasons are *not* in that counterexample. A zero area and an
+# overflowing `P * 100` would each leave the division with no value, so the rule
+# derives no tuple, so the contract says nothing about either. Those are
+# hypotheses the encoder supplies rather than cases the claim has to survive.
 density(C, D, _: D >= 0) :- population(C, P), area(C, A), D = P * 100 / A.
 
 close_pair(C1, D1, C2, D2) :-

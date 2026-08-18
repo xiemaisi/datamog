@@ -504,7 +504,12 @@ export class PostgresSqlDialect implements SqlDialect {
     // native evaluator. We sort by the original argument expression
     // before the `::TEXT` cast so numeric values keep their natural
     // (numeric, not lexicographic) order.
-    return `STRING_AGG(${argSql}::TEXT, ',' ORDER BY ${argSql})`;
+    //
+    // `COALESCE` supplies concatenation's identity over an empty group, per §7,
+    // as SQLite's arm does. Without it `STRING_AGG` returns NULL there, which
+    // means undefined, and `concat` cannot be undefined, so nothing downstream
+    // withholds the row and the column carries a NULL no other backend produces.
+    return `COALESCE(STRING_AGG(${argSql}::TEXT, ',' ORDER BY ${argSql}), '')`;
   }
 
   integerSum(argSql: string): string {
@@ -519,7 +524,12 @@ export class PostgresSqlDialect implements SqlDialect {
       THEN ${positive} - ${negative} ELSE NULL END)`;
   }
 
-  jsonAgg(valueSql: string, argSql: string, argIsJson: boolean): string {
+  jsonAgg(
+    valueSql: string,
+    argSql: string,
+    argIsJson: boolean,
+    argMayBeUndefined: boolean,
+  ): string {
     // `JSONB_AGG` returns NULL on empty groups, matching the rest of
     // the SQL aggregate family. Sort key choice differs by argument
     // shape: jsonb arguments cast to text so structurally equal
@@ -532,10 +542,20 @@ export class PostgresSqlDialect implements SqlDialect {
     // for strings — matching SQLite's default ORDER BY semantics and
     // the native comparator. The FILTER tests the *original* argument
     // so we skip rows that were SQL-NULL on input rather than rows whose
-    // lifted form happens to be a JSON `null` string.
-    const orderKey = argIsJson ? this.stringOrder(`(${argSql})::TEXT`) : argSql;
+    // lifted form happens to be a JSON `null`, and it is emitted only where such
+    // a NULL means undefined rather than the `null` value.
+    //
+    // A null element sorts first (§7), and this dialect has to ask for it twice.
+    // A primitive null argument is a SQL NULL, which Postgres sorts last under
+    // ASC, hence `NULLS FIRST`. A `value` null argument is a JSON null, not a SQL
+    // NULL, so it sorts at the text `null` among the other leaves unless a
+    // leading key lifts it out.
+    const orderKey = argIsJson
+      ? `(CASE WHEN jsonb_typeof(${argSql}) = 'null' THEN 0 ELSE 1 END), ${this.stringOrder(`(${argSql})::TEXT`)}`
+      : argSql;
+    const filter = argMayBeUndefined ? ` FILTER (WHERE ${argSql} IS NOT NULL)` : "";
     // `JSONB_AGG` returns NULL over an empty group, so coalesce to append's
     // identity, which is what §7 wants and what sqlite gives for free.
-    return `COALESCE(JSONB_AGG(${valueSql} ORDER BY ${orderKey}) FILTER (WHERE ${argSql} IS NOT NULL), '[]'::jsonb)`;
+    return `COALESCE(JSONB_AGG(${valueSql} ORDER BY ${orderKey} NULLS FIRST)${filter}, '[]'::jsonb)`;
   }
 }

@@ -261,25 +261,38 @@ describe("DatamogExecutor", () => {
       // `Y = 1 / X` used to yield for `t = {0, 1, 2}`.
       const results = await executor.execute(`
         nullable(0, null). nullable(1, 1). nullable(2, 0).
-        maybe_null(X, Y, IsNull, Below) :-
+        maybe_null(X, Y, IsNull) :-
           nullable(X, Y),
-          IsNull = (Y = null),
-          Below = (Y < 1).
+          IsNull = (Y = null).
 
+        below(X, Below) :- nullable(X, Y), Below = (Y < 1).
         filter_logical(X) :- nullable(X, Y), Y = null.
         neq_logical(X)    :- nullable(X, Y), Y <> null.
-        ?- maybe_null(X, Y, IsNull, Below).
+        dropped(X) :- nullable(X, Y), not (Y < 1).
+        ?- maybe_null(X, Y, IsNull).
+        output predicate bl(X, Below) :- below(X, Below).
         output predicate fl(X) :- filter_logical(X).
         output predicate nl(X) :- neq_logical(X).
+        output predicate dr(X) :- dropped(X).
       `);
-      // `Y < 1` is false, not null, for the NULL row: ordering is total.
+      // Equality answers at a null, `null` being a value.
       expect(sortRows(results[0]!.rows)).toEqual([
-        { X: 0, Y: null, IsNull: true, Below: false },
-        { X: 1, Y: 1, IsNull: false, Below: false },
-        { X: 2, Y: 0, IsNull: false, Below: true },
+        { X: 0, Y: null, IsNull: true },
+        { X: 1, Y: 1, IsNull: false },
+        { X: 2, Y: 0, IsNull: false },
       ]);
-      expect(results[1]!.rows).toEqual([{ X: 0 }]);
-      expect(sortRows(results[2]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
+      // An ordering does not: it is strict at null, so the NULL row binds
+      // nothing and derives no tuple at all (§4.1). It used to bind `false`.
+      expect(sortRows(results[1]!.rows)).toEqual([
+        { X: 1, Below: false },
+        { X: 2, Below: true },
+      ]);
+      expect(results[2]!.rows).toEqual([{ X: 0 }]);
+      expect(sortRows(results[3]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
+      // And in condition position nothing moved: `Y < 1` failing to hold at the
+      // null is what `not` complements, whether it fails by being false or by
+      // having no value. This is why the change is nearly conservative.
+      expect(sortRows(results[4]!.rows)).toEqual([{ X: 0 }, { X: 1 }]);
     } finally {
       await backend.close();
     }
@@ -1883,6 +1896,133 @@ describe("DatamogExecutor", () => {
       const x = results[0]!.rows[0]?.X as number;
       expect(Number.isFinite(x)).toBe(true);
       expect(x).toBeGreaterThan(1e308);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  test("a comparison over a partial operand has no value, in every position", async () => {
+    // §4.4. SQL has one NULL and the interpreters have two markers, so this is
+    // the shape where they can silently disagree, and they did: the equality's
+    // definedness test was folded in as a conjunct, making the comparison
+    // *false* at an undefined operand. False is a value, so `C = (V = 10 / V)`
+    // bound one and kept a row the interpreters withheld, and `!` never saw an
+    // undefined to propagate. A `CASE` with no `ELSE` leaves a NULL instead,
+    // which each position already reads correctly.
+    //
+    // `ne` and `naf` are §4.2's divergence, which must survive the change: the
+    // definedness test still sits inside the negation rather than being hoisted.
+    const backend = await createSqlite();
+    const executor = new DatamogExecutor(backend);
+    try {
+      const results = await executor.execute(`
+        s(0). s(1). s(3).
+        output predicate ne(V)      :- s(V), V <> 10 / V.
+        output predicate naf(V)     :- s(V), not (V = 10 / V).
+        output predicate bang(V)    :- s(V), !(V = 10 / V).
+        output predicate bind(V, C) :- s(V), C = (V = 10 / V).
+        ?- ne(V).
+      `);
+      expect(results[0]!.rows).toEqual([{ V: 1 }]);
+      expect(results[1]!.rows).toEqual([{ V: 0 }, { V: 1 }]);
+      expect(results[2]!.rows).toEqual([{ V: 1 }]);
+      expect(results[3]!.rows).toEqual([
+        { V: 1, C: false },
+        { V: 3, C: true },
+      ]);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  test("lifting a nullable primitive into a `value` spells its null the JSON way", async () => {
+    // §9.4's "one new conversion", which was missing: a `T?` column lifted into a
+    // `value` emitted a bare SQL NULL, and a SQL NULL in a `value` means
+    // undefined (§9.3), so the null row read as an absence. `V = null` found it
+    // on the interpreters and not here.
+    //
+    // A variable is the only lifted operand that can be null and still be
+    // defined, so it is the only one that needs the conversion; a partial
+    // expression's NULL still means undefined.
+    const backend = await createSqlite();
+    const executor = new DatamogExecutor(backend);
+    try {
+      const results = await executor.execute(`
+        p(1, 1). p(2, null).
+        s("hi").
+        u(V) :- p(_, V).
+        u(V) :- s(V).
+        output predicate shape(T)  :- u(V), T = "t=" + type_of(V).
+        output predicate eqnull(V) :- u(V), V = null.
+        ?- shape(T).
+      `);
+      expect(results[0]!.rows.map((r) => r.T).sort()).toEqual(["t=null", "t=number", "t=string"]);
+      expect(results[1]!.rows).toEqual([{ V: null }]);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  test("value construction is strict in undefinedness and not in the null value", async () => {
+    // `json_array` / `json_object` never return NULL, so the enclosing
+    // definedness guard used to see a defined construction over an absent part
+    // and keep a row the interpreters withheld, with a JSON `null` standing in
+    // for the part. The construction is now wrapped so an undefined part makes
+    // the whole thing NULL.
+    //
+    // The null *value* still constructs, including a `value` accessor reaching a
+    // JSON null leaf, which is §8's distinction: `{"k": null}` gives `[null]` and
+    // a missing key gives no row at all.
+    const backend = await createSqlite();
+    const executor = new DatamogExecutor(backend);
+    try {
+      const results = await executor.execute(`
+        one(1).
+        doc(J) :- one(_), J = parse_json("{\\"k\\": null}").
+        output predicate bad(J)    :- one(_), J = [1, 1 / 0, 3].
+        output predicate badobj(J) :- one(_), J = {"a": 1 / 0}.
+        output predicate lit(J)    :- one(_), J = [null, 1].
+        output predicate leaf(J)   :- doc(D), J = [D["k"]].
+        output predicate absent(J) :- doc(D), J = [D["zz"]].
+        ?- bad(J).
+      `);
+      expect(results[0]!.rows).toEqual([]);
+      expect(results[1]!.rows).toEqual([]);
+      expect(results[2]!.rows).toEqual([{ J: [null, 1] }]);
+      expect(results[3]!.rows).toEqual([{ J: [null] }]);
+      expect(results[4]!.rows).toEqual([]);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  test("a connective over a null has no value, agreeing with the interpreters", async () => {
+    // §15.26, and the other half of the test above: a connective was the last
+    // construct that could be nullable *and* partial, so the head guard's
+    // `IS NOT NULL` could not tell which reading a NULL had and threw away the
+    // `null && true` row that the interpreters kept. Making the connectives
+    // strict at a null makes the result non-nullable, so the guard is right
+    // again, and SQL needed no change: `TRUE AND NULL` was already NULL.
+    const backend = await createSqlite();
+    const executor = new DatamogExecutor(backend);
+    try {
+      const results = await executor.execute(`
+        p(1, true, 2). p(2, null, 2). p(3, false, 0). p(4, true, 0).
+        output predicate filt(K)    :- p(K, A, B), A && (10 / B > 0).
+        output predicate bind(K, C) :- p(K, A, B), C = (A && (10 / B > 0)).
+        output predicate bang(K, C) :- p(K, A, _), C = !A.
+        ?- filt(K).
+      `);
+      expect(results[0]!.rows).toEqual([{ K: 1 }]);
+      expect(results[1]!.rows).toEqual([
+        { K: 1, C: true },
+        { K: 3, C: false },
+      ]);
+      expect(results[2]!.rows).toEqual([
+        { K: 1, C: false },
+        { K: 3, C: true },
+        { K: 4, C: false },
+      ]);
     } finally {
       await backend.close();
     }

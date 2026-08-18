@@ -97,10 +97,17 @@ export interface SqlDialect {
    * adjacently (matching native `canonicalizeJson` and SQLite's
    * canonical-TEXT storage).
    *
-   * NULL inputs are skipped; an empty / all-NULL group produces NULL
-   * (matching `concat` and the rest of the aggregate family).
+   * An empty group produces `[]`, append's identity (§7).
+   *
+   * `argMayBeUndefined` says what a SQL NULL in the argument position means, and
+   * it is the same question `count` asks (null-as-a-value.md §15.12). Where the
+   * argument can be undefined a NULL is that, and the row contributes nothing, so
+   * it is filtered out. Where it cannot, a NULL is the `null` **value** and
+   * belongs in the array as a JSON null. For an argument that is neither
+   * nullable nor partial there are no NULLs either way and the two agree.
+   * A null element sorts first.
    */
-  jsonAgg(valueSql: string, argSql: string, argIsJson: boolean): string;
+  jsonAgg(valueSql: string, argSql: string, argIsJson: boolean, argMayBeUndefined: boolean): string;
 
   /**
    * Emit a null-aware equality (`=` operator and body-level Equality

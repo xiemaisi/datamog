@@ -7,9 +7,9 @@
 //   - `sqrt(x<0)`, `ln(x<=0)`, `0 ** neg`, `neg ** fractional` → NULL
 //   - slice bounds that would walk backwards → empty string
 //   - NULL propagates through arithmetic, functions, subscript/slice
-//   - comparison is total: NULL never comes back out of one. Equality is
-//     null-aware (`logicalEq`) and ordering treats NULL as an isolated point
-//     in the order. See doc/design/null.md §5.
+//   - no comparison yields NULL. Equality is null-aware (`logicalEq`); an
+//     ordering is strict at null, `null` being outside the order. See
+//     doc/design/null-as-a-value.md §4.1.
 //
 // Integer-vs-float division follows the same type-driven decision as the
 // translator: both operands integer → truncating division; otherwise
@@ -102,10 +102,9 @@ function asOrderable(v: Value): number | string {
 }
 
 /**
- * The ordering operators, which are total: a null operand never yields
- * null. Null is an isolated point in the order, so `<` and `>` are false
- * whenever either side is null, and `<=` / `>=` are true only when both
- * are. See doc/design/null.md §5.
+ * The ordering operators, which are strict at null: an order has no place for
+ * `null`, so an ordering over one has no value. It never yields a null either,
+ * having no null to yield. See doc/design/null-as-a-value.md §4.1.
  */
 const ORDERING_OPS: ReadonlySet<string> = new Set(["<", "<=", ">", ">="]);
 
@@ -195,9 +194,19 @@ export function evalTerm(
     }
     case "UnaryExpr": {
       const v = evalTerm(term.operand, sub, env, aggregates);
+      // Both unary operators are strict in the absence marker. For `!` that is
+      // §4.4: expression-level `!` propagates undefinedness where formula-level
+      // `not` complements failure, so the two do not agree. Arithmetic negation
+      // has nothing to negate. Only the `null` value flows through, and only
+      // through `!`.
+      if (v === undefined) return undefined;
       if (term.op === "!") {
-        // 3VL: !null = null; !true = false; !false = true.
-        return v === null ? null : !asBoolean(v);
+        // `null` is not a truth value, so `!null` has *no value* rather than
+        // being `null`. Same argument as the orderings' strictness (§4.1): the
+        // operator needs a domain, and the null is not in this one. It is also
+        // what keeps a connective's result non-nullable, so a SQL NULL in one
+        // has a single reading (§9.2, §15.26).
+        return v === null ? undefined : !asBoolean(v);
       }
       if (v === null) return null;
       const negated = -asNumber(v);
@@ -208,19 +217,23 @@ export function evalTerm(
     case "BinaryExpr": {
       const l = evalTerm(term.left, sub, env, aggregates);
       const r = evalTerm(term.right, sub, env, aggregates);
+      // The connectives are non-strict in the *absorbing* case and strict
+      // otherwise. `false` dominates a `&&` and `true` dominates a `||`, so
+      // either survives an operand that has no value, which is what makes
+      // `X <> 0 && 10 / X > 0` a usable guard (§4.4). Past that the connective
+      // needs truth values, and neither an absence nor a `null` is one, so it
+      // has no value. Treating the two differently here is what made a bound
+      // connective nullable *and* partial, the one shape that leaves a SQL NULL
+      // ambiguous (§9.2, §15.26). SQL agrees without being asked: `TRUE AND
+      // NULL` is NULL either way.
       if (term.op === "&&") {
-        // 3VL, plus the absence marker. `false` dominates, so it survives an
-        // undefined operand: that non-strictness is what makes
-        // `X <> 0 && 10 / X > 0` a usable guard (§4.4).
         if (l === false || r === false) return false;
-        if (l === undefined || r === undefined) return undefined;
-        if (l === null || r === null) return null;
+        if (l === undefined || r === undefined || l === null || r === null) return undefined;
         return asBoolean(l) && asBoolean(r);
       }
       if (term.op === "||") {
         if (l === true || r === true) return true;
-        if (l === undefined || r === undefined) return undefined;
-        if (l === null || r === null) return null;
+        if (l === undefined || r === undefined || l === null || r === null) return undefined;
         return asBoolean(l) || asBoolean(r);
       }
       // Every other operator, comparisons included, is undefined at an
@@ -237,12 +250,15 @@ export function evalTerm(
       // to agree with the SQL backends.
       if (term.op === "=") return valueStructuralEq(l, r);
       if (term.op === "<>") return !valueStructuralEq(l, r);
-      // Ordering is total over values: null is an isolated point in the order,
-      // comparable only to itself. See doc/design/null.md §5.
+      // An ordering needs an order and `null` is not in one, so it is strict at
+      // null: no value, rather than a false or a true picked by convention
+      // (doc/design/null-as-a-value.md §4.1). In condition position that drops
+      // the row exactly as the old `false` did, and its negation holds exactly as
+      // before, which is why almost nothing observes the change; what changes is
+      // `null <= null`, which used to be true by fiat, and an ordering bound to a
+      // variable, which now derives nothing.
       if (l === null || r === null) {
-        if (ORDERING_OPS.has(term.op)) {
-          return (term.op === "<=" || term.op === ">=") && l === null && r === null;
-        }
+        if (ORDERING_OPS.has(term.op)) return undefined;
         // Arithmetic, concatenation and the bitwise operators still *propagate*
         // the null value, as spec §5.4 says. This is deliberately not the
         // absence marker: under §5's hybrid position, arithmetic on a nullable
@@ -430,8 +446,8 @@ function evalBinary(
   // Exponentiation: float-valued, with the same domain guards as the SQL `**`.
   if (op === "**") return evalPower(asNumber(l), asNumber(r));
   // Ordering ops. Both operands are non-null at this point: `evalTerm`'s
-  // BinaryExpr case decides every null case before calling here, since
-  // ordering is total and null is an isolated point in the order.
+  // BinaryExpr case has already answered the null cases with no value at all,
+  // an order having no place for `null`.
   if (ORDERING_OPS.has(op)) {
     const av = asOrderable(l);
     const bv = asOrderable(r);
@@ -613,6 +629,15 @@ const NATIVE_IMPLS: ReadonlyMap<string, NativeImpl> = new Map<string, NativeImpl
       return undefined;
     },
   ],
+  // `defined` needs no implementation beyond `true`, and that is the point of
+  // §11.6's polarity argument: `evalCall` never reaches here with an undefined
+  // argument, being strict in the absence marker, so an undefined argument makes
+  // the call undefined without anything here saying so. What is left to answer is
+  // the case where the argument *does* have a value, and the answer is yes. A
+  // null argument is one of those: `null` is a value.
+  ...(["integer", "float", "string", "boolean", "value"] as const).map(
+    (t) => [`defined.${t}`, () => true] as [string, () => boolean],
+  ),
   [
     "has_key.value_string",
     (args) => {
@@ -814,16 +839,18 @@ export function logicalEq(a: Value, b: Value): boolean {
 }
 
 /**
- * Comparison operators, all total: no operand combination yields null.
- * Equality is null-aware, and ordering treats null as an isolated point
- * comparable only to itself. See doc/design/null.md §5.
+ * Comparison over two values. Equality is null-aware; an ordering is strict at
+ * null, so `null` in an ordering position gives no value at all
+ * (null-as-a-value.md §4.1).
+ *
+ * `evalTerm` decides the null cases itself and calls `evalBinary` rather than
+ * this, so this is the spelling for a caller holding two values already. Both
+ * have to agree, which is why the null cases are here rather than assumed away.
  */
-export function compareOp(op: string, a: Value, b: Value): Value {
+export function compareOp(op: string, a: Value, b: Value): EvalResult {
   if (op === "=") return valueStructuralEq(a, b);
   if (op === "<>") return !valueStructuralEq(a, b);
-  if (a === null || b === null) {
-    return (op === "<=" || op === ">=") && a === null && b === null;
-  }
+  if (a === null || b === null) return undefined;
   // Ordering operators require both sides to be the same primitive type
   // (number-number or string-string). The analyzer already enforces this
   // statically; the runtime check guards against analyzer/planner bugs.

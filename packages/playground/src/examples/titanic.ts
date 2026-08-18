@@ -35,8 +35,10 @@ output predicate survival_by_class(Class, avg(Survived), count(*)) :-
 output predicate fare_by_class(Class, avg(Fare)) :-
     passenger(_, _, Class, _, _, _, _, _, _, Fare, _, _).
 
+# Age is declared float?, and averaging needs a value, so the guard says which
+# ages count. That is what "known age" meant anyway.
 output predicate known_age_by_survival(Survived, avg(Age), count(Age)) :-
-    passenger(_, Survived, _, _, _, Age, _, _, _, _, _, _).
+    passenger(_, Survived, _, _, _, Age, _, _, _, _, _, _), Age <> null.
 `,
   csvUrlData: {
     passenger: TITANIC_CSV_URL,

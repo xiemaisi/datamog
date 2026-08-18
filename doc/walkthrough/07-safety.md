@@ -84,7 +84,8 @@ atoms have the same flavour of requirement: you can't safely say
 ## The type system
 
 Datamog gives every column of every predicate a type drawn from
-five basic types:
+five basic types, plus `null` for the literal (chapter 6) and an
+optional `?` for a column that can hold one:
 
 - `string` — strings,
 - `integer` — whole numbers,
@@ -242,8 +243,8 @@ Operator '>' does not order booleans
 
 The equality operators (`=`, `<>`) work on booleans — equality is
 well-defined on every type. There is only the one pair, and it is
-null-aware: `null = null` is `true`. We'll come back to what that
-means once `null` shows up in Chapter 8.
+null-aware: `null = null` is `true`. Chapter 6 introduced the value it
+compares; the orderings, which are strict at it, are there too.
 
 ## Claiming more than a type
 

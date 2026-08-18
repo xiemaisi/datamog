@@ -447,17 +447,18 @@ describe("translator", () => {
   });
 
   test("generates SQL for = constraint (non-binding equality)", () => {
-    // Body `X + 1 = Y` is a constraint — both sides bound. This routes through
-    // the dialect's logical-equality emitter (Postgres uses `IS NOT DISTINCT
-    // FROM`, SQLite uses `IS`). Nullable columns, since a non-null side would
-    // take the plain `=` instead.
+    // Body `X + 1 = Y` is a constraint — both sides bound — and it carries the
+    // integer-domain guard. It takes the *plain* `=`, and there is no way to make
+    // it take the null-aware one: arithmetic needs a non-null operand (§5), so a
+    // computed side is always non-null, and one non-null side is enough. The
+    // null-aware lowering is covered above, where both sides are columns.
     const result = translateSource(`
-      input predicate pairs(a: integer?, b: integer?).
+      input predicate pairs(a: integer, b: integer?).
       match(X, Y) :- pairs(X, Y), X + 1 = Y.
     `);
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("BETWEEN -9007199254740991 AND 9007199254740991");
-    expect(sql).toContain('FROM __datamog_safe_integer) IS NOT DISTINCT FROM __b0."b"');
+    expect(sql).toContain('FROM __datamog_safe_integer) = __b0."b"');
   });
 
   test("generates SQL for equality binding used in head", () => {
@@ -890,9 +891,30 @@ describe("translator", () => {
     // canonical text ordering used by the native evaluator.
     expect(sql).toMatch(/ORDER BY .*::TEXT/i);
     expect(sql).toContain(`COLLATE "C"`);
-    // FILTER clause skips SQL NULLs so the array doesn't carry JSON
-    // null entries for missing rows.
-    expect(sql).toMatch(/FILTER \(WHERE/i);
+    // A leading key lifts a JSON null out of that text order and to the front,
+    // which is where §7 puts it. Postgres also needs NULLS FIRST, for the
+    // primitive case where the null arrives as a SQL NULL instead.
+    expect(sql).toContain("jsonb_typeof");
+    expect(sql).toContain("NULLS FIRST");
+    // No FILTER: the argument is a plain variable, so it cannot be undefined,
+    // so a NULL in that position would be the `null` value and belongs in the
+    // array. See the partial-argument test below for the other branch.
+    expect(sql).not.toMatch(/FILTER \(WHERE/i);
+  });
+
+  test("list filters its argument only where that argument can be undefined", () => {
+    // `count`'s question, asked by `list` (null-as-a-value.md §15.12): a NULL
+    // argument is either an undefined contribution, which the array must not
+    // carry, or the `null` value, which it must.
+    const result = translateSource(`
+      input predicate t(g: string, n: integer).
+      partial(G, list(10 / N)) :- t(G, N).
+      total(G, list(N)) :- t(G, N).
+    `);
+    const partial = norm(result.createViews.find((v) => v.includes('VIEW "partial"'))!);
+    const total = norm(result.createViews.find((v) => v.includes('VIEW "total"'))!);
+    expect(partial).toMatch(/FILTER \(WHERE/i);
+    expect(total).not.toMatch(/FILTER \(WHERE/i);
   });
 
   test("generates JSONB_AGG for list with primitive arg, no ::TEXT cast (postgres)", () => {
@@ -1879,20 +1901,22 @@ describe("translator (sqlite dialect)", () => {
     // native evaluator and Postgres's C-collated jsonb text ordering.
     expect(sql).toMatch(/ORDER BY/i);
     expect(sql).toContain("COLLATE BINARY");
-    // FILTER skips SQL NULL inputs. There is deliberately no outer NULLIF: an
-    // empty or all-null group keeps the `'[]'` that JSON_GROUP_ARRAY returns,
-    // which is append's identity (§7). The wrapper used to map it back to SQL
-    // NULL, which null.md §8 recorded as a wart.
-    expect(sql).toMatch(/FILTER \(WHERE/i);
+    // A leading key puts a JSON null at the front rather than at its place in
+    // the canonical text order, between `[7]` and `{"k":1}` (§7).
+    expect(sql).toContain("json_type");
+    // No FILTER for a plain variable, whose NULL would be the `null` value. And
+    // deliberately no outer NULLIF: an empty group keeps the `'[]'` that
+    // JSON_GROUP_ARRAY returns, which is append's identity (§7). The wrapper
+    // used to map it back to SQL NULL, which null.md §8 recorded as a wart.
+    expect(sql).not.toMatch(/FILTER \(WHERE/i);
     expect(sql).not.toMatch(/NULLIF\(JSON_GROUP_ARRAY/i);
   });
 
   test("generates JSON_GROUP_ARRAY with json_quote for string list (sqlite)", () => {
-    // String columns lift via `json_quote` to add surrounding quotes.
-    // The FILTER must reference the raw `argSql`, not the quoted
-    // form, because `json_quote(NULL)` returns the JSON `'null'` text
-    // rather than SQL NULL — without this, all-NULL groups would
-    // emit a JSON `null` per row.
+    // String columns lift via `json_quote` to add surrounding quotes. Where a
+    // FILTER is emitted at all it has to reference the raw `argSql` rather than
+    // the quoted form, because `json_quote(NULL)` returns the JSON `'null'` text
+    // rather than SQL NULL, so there would be nothing left to test.
     const result = translateSource(
       `
       input predicate t(g: string, w: string).
@@ -1903,7 +1927,6 @@ describe("translator (sqlite dialect)", () => {
     const sql = norm(result.createViews[0]!);
     expect(sql).toContain("JSON_GROUP_ARRAY(");
     expect(sql).toContain("json_quote(");
-    expect(sql).toMatch(/FILTER \(WHERE/i);
     // ORDER BY references the raw argument, not the json_quote'd
     // form — string columns sort by their natural lex order.
     expect(sql).not.toMatch(/ORDER BY .*json_quote/i);

@@ -754,7 +754,18 @@ function translateRule(
       const first = refs[0]!;
       const rawExpr = bindingToSql(first);
       const varType = varTypes.get(term.name);
-      const lifted = liftToJsonIfNeeded(rawExpr, varType, headColType, dialect);
+      // A variable always denotes a value, `null` included, so a NULL here is the
+      // null value and lifting it into a `value` column has to spell it the JSON
+      // way. This and the negated-atom arg below are the only lifts that need it:
+      // after Position 3 a variable and the `null` literal are the only nullable
+      // expressions left that are not also partial.
+      const lifted = liftToJsonIfNeeded(
+        rawExpr,
+        varType,
+        headColType,
+        dialect,
+        !nonNullVars.has(term.name),
+      );
       const expr = castHeadColumn(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
       if (isAggregateRule && isGroupingArg(term, literalBound)) {
@@ -930,7 +941,13 @@ function translateRule(
         const refs = bindings.get(term.name);
         if (refs && refs.length > 0) {
           const varType = varTypes.get(term.name);
-          const lifted = liftToJsonIfNeeded(bindingToSql(refs[0]!), varType, expectedType, dialect);
+          const lifted = liftToJsonIfNeeded(
+            bindingToSql(refs[0]!),
+            varType,
+            expectedType,
+            dialect,
+            !nonNullVars.has(term.name),
+          );
           subConditions.push(
             isLiteralBinding(refs[0]!) || nonNullVars.has(term.name)
               ? `${ident(col)} = ${lifted}`
@@ -999,9 +1016,9 @@ function translateRule(
     const leftType = inferTermType(eq.left, varTypes, columnTypes);
     const rightType = inferTermType(eq.expr, varTypes, columnTypes);
     if (leftType === "value" && rightType !== undefined && rightType !== "value") {
-      rhs = primitiveToJsonSql(rhs, rightType, dialect);
+      rhs = primitiveToJsonSql(rhs, rightType, dialect, !cannotBeNullHere(eq.expr));
     } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
-      lhs = primitiveToJsonSql(lhs, leftType, dialect);
+      lhs = primitiveToJsonSql(lhs, leftType, dialect, !cannotBeNullHere(eq.left));
     }
     const plainEq = cannotBeNullHere(eq.left) || cannotBeNullHere(eq.expr);
     conditions.push(markSpan(eq, plainEq ? `(${lhs} = ${rhs})` : dialect.logicalEq(lhs, rhs)));
@@ -1209,6 +1226,32 @@ function partialityCtx(
   };
 }
 
+/**
+ * Wrap a `value` construction so that an undefined *part* makes the whole thing
+ * a SQL NULL.
+ *
+ * Construction is not strict in the `null` value: `[null]` is a one-element array
+ * and `{"a": null}` an object with a null field, which is the whole point of §1's
+ * value domain. It is strict in undefinedness, and the parts sit inside a
+ * `json_array` / `json_object` call that never returns NULL, so without this the
+ * enclosing definedness guard sees a defined construction over an absent part and
+ * keeps a row the interpreters withhold. Same `CASE` with no `ELSE` as the
+ * equality emit, and it composes: a nested construction answers for its own parts.
+ */
+function guardConstruction(
+  sql: string,
+  parts: readonly { term: HeadTerm; sql: string }[],
+  varTypes: Map<string, PrimitiveType>,
+  columnTypes: ReadonlyMap<string, readonly PrimitiveType[]>,
+  functionOverloads: ReadonlyMap<FunctionCall, Overload>,
+): string {
+  const ctx = partialityCtx(varTypes, columnTypes, functionOverloads);
+  const guards = parts
+    .filter((p) => canBeUndefined(p.term, ctx))
+    .map((p) => `${p.sql} IS NOT NULL`);
+  return guards.length === 0 ? sql : `(CASE WHEN ${guards.join(" AND ")} THEN ${sql} END)`;
+}
+
 function termToSql(
   term: HeadTerm,
   bindings: Map<string, Binding[]>,
@@ -1280,22 +1323,40 @@ function termToSql(
       if (EQUALITY_OPS.has(term.op)) {
         const leftType = inferTermType(term.left, varTypes, columnTypes);
         const rightType = inferTermType(term.right, varTypes, columnTypes);
+        // A variable is the only lifted operand that can hold the null value and
+        // still be defined, the `null` literal being lifted by its own type arm,
+        // so it is the only one whose SQL NULL has to become a JSON null. No
+        // nullness bit is in scope here, so a non-nullable variable gets a `CASE`
+        // that never fires.
         if (leftType === "value" && rightType !== undefined && rightType !== "value") {
-          rightSql = primitiveToJsonSql(rightSql, rightType, dialect);
+          rightSql = primitiveToJsonSql(
+            rightSql,
+            rightType,
+            dialect,
+            term.right.$type === "Variable",
+          );
         } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
-          leftSql = primitiveToJsonSql(leftSql, leftType, dialect);
+          leftSql = primitiveToJsonSql(leftSql, leftType, dialect, term.left.$type === "Variable");
         }
       }
       // Equality is null-aware over *values*, so it routes through the
       // dialect-specific emitter (Postgres `IS NOT DISTINCT FROM`, SQLite /
       // sql.js `IS`), and it holds only of two defined operands.
       //
-      // The definedness conjunct goes here, locally, rather than being hoisted
-      // to a rule-level guard, and that placement is the whole point. A
-      // rule-level guard withholds the row, which is right for a head argument
-      // and wrong under a negation: `V <> 10 / V` must not hold at `V = 0`
-      // while `not (V = 10 / V)` must, and only a conjunct sitting *inside* the
-      // negation gives both. See doc/design/null-as-a-value.md §4.2 and §15.3.
+      // The definedness test goes here, locally, rather than being hoisted to a
+      // rule-level guard, and that placement is the whole point. A rule-level
+      // guard withholds the row, which is right for a head argument and wrong
+      // under a negation: `V <> 10 / V` must not hold at `V = 0` while
+      // `not (V = 10 / V)` must, and only a test sitting *inside* the negation
+      // gives both. See doc/design/null-as-a-value.md §4.2 and §15.3.
+      //
+      // It is a `CASE` with no `ELSE`, so an undefined operand leaves a SQL NULL
+      // rather than a `FALSE`, which is what the interpreters' absence marker
+      // does. Each position then reads it the way it already reads a NULL: a
+      // filter drops the row, a negated filter holds through its
+      // `NOT COALESCE(..., FALSE)`, and a binding position has nothing to bind
+      // and withholds the row through `canBeUndefined`'s guard. A `FALSE` here
+      // would be a value, and would bind one.
       if (EQUALITY_OPS.has(term.op)) {
         const cmp =
           term.op === "="
@@ -1308,7 +1369,7 @@ function termToSql(
         if (canBeUndefined(term.right, partialityCtx(varTypes, columnTypes, functionOverloads))) {
           guards.push(`${rightSql} IS NOT NULL`);
         }
-        return guards.length === 0 ? cmp : `(${cmp} AND ${guards.join(" AND ")})`;
+        return guards.length === 0 ? cmp : `(CASE WHEN ${guards.join(" AND ")} THEN ${cmp} END)`;
       }
       if (ORDERING_OPS.has(term.op)) {
         const leftType = inferTermType(term.left, varTypes, columnTypes);
@@ -1317,7 +1378,7 @@ function termToSql(
           leftSql = dialect.stringOrder(leftSql);
           rightSql = dialect.stringOrder(rightSql);
         }
-        return totalOrderingSql(term.op, leftSql, rightSql, term.left, term.right);
+        return orderingSql(term.op, leftSql, rightSql);
       }
       // Bitwise / shift ops: each dialect owns the emission (XOR / `>>>`
       // emulation, 32-bit wrapping). The analyzer has already gated the
@@ -1527,7 +1588,13 @@ function termToSql(
         sql: termToSql(elem, bindings, varTypes, columnTypes, functionOverloads, dialect),
         type: inferTermType(elem, varTypes, columnTypes),
       }));
-      return dialect.jsonArray(elements);
+      return guardConstruction(
+        dialect.jsonArray(elements),
+        term.elements.map((elem, i) => ({ term: elem, sql: elements[i]!.sql })),
+        varTypes,
+        columnTypes,
+        functionOverloads,
+      );
     }
     case "ObjectLiteral": {
       const entries = term.entries.map((entry) => ({
@@ -1542,7 +1609,13 @@ function termToSql(
         ),
         valueType: inferTermType(entry.value, varTypes, columnTypes),
       }));
-      return dialect.jsonObject(entries);
+      return guardConstruction(
+        dialect.jsonObject(entries),
+        term.entries.map((entry, i) => ({ term: entry.value, sql: entries[i]!.valueSql })),
+        varTypes,
+        columnTypes,
+        functionOverloads,
+      );
     }
     case "BracketAccess":
       // Post-processing rewrites every BracketAccess into Subscript or Slice,
@@ -1566,32 +1639,6 @@ function isSelfRecursive(rule: Rule, predicate: string): boolean {
   return rule.body.some(
     (elem) => elem.$type === "Literal" && !elem.negated && elem.predicate === predicate,
   );
-}
-
-/** True if a binding resolves to a pure SQL literal (number or quoted string). */
-/**
- * True if a term can never evaluate to NULL, so a plain SQL `=` against it
- * agrees with the null-aware form. Syntactic and conservative: only the
- * literal cases.
- *
- * Used by `totalOrderingSql`, which runs inside `termToSql` and so has no
- * access to the enclosing body's refinements. The real analysis
- * (`mayBeNull`, see doc/design/nullness-tracking.md §4) is what the equality
- * sites use, where the body is in scope. Keeping the syntactic one here costs
- * nothing measurable: an ordering comparison is never a hash or merge join
- * key, so the wrapper it fails to remove is not on any plan's critical path.
- */
-function cannotBeNull(term: Expression): boolean {
-  switch (term.$type) {
-    case "StringLiteral":
-    case "NumberLiteral":
-    case "BooleanLiteral":
-      return true;
-    case "UnaryExpr":
-      return term.op === "-" && cannotBeNull(term.operand);
-    default:
-      return false;
-  }
 }
 
 /**
@@ -1723,45 +1770,59 @@ function liftToJsonIfNeeded(
   exprType: PrimitiveType | undefined,
   expectedType: PrimitiveType | undefined,
   dialect: SqlDialect,
+  nullIsValue = false,
 ): string {
   if (expectedType !== "value") return sql;
   if (exprType === "value") return sql;
   if (exprType === undefined) return `CAST(${sql} AS ${sqlTypeFor(dialect, "value")})`;
-  return primitiveToJsonSql(sql, exprType, dialect);
-}
-
-function primitiveToJsonSql(sql: string, exprType: PrimitiveType, dialect: SqlDialect): string {
-  const liftedSql = exprType === "float" ? finiteFloatOrNullSql(sql) : sql;
-  return dialect.toJson(liftedSql, exprType);
+  return primitiveToJsonSql(sql, exprType, dialect, nullIsValue);
 }
 
 /**
- * An ordering comparison, made total. SQL's `<` and friends yield NULL when
- * either operand is NULL; Datamog treats null as an isolated point in the
- * order, so `<` / `>` are false whenever a side is null and `<=` / `>=` are
- * true only when both are. See doc/design/null.md §5.
+ * Lift a primitive-typed expression into the `value` representation.
  *
- * In a plain WHERE conjunct the wrapper is redundant, NULL and FALSE both
- * dropping the row, but it is needed under `not` and wherever the result is
- * bound to a variable. Emitting it unconditionally costs nothing measurable:
- * no backend creates an index, and an ordering predicate is never a hash or
- * merge join key.
+ * `nullIsValue` says which of NULL's two readings applies to *this* expression,
+ * which is the same question §9.4 asks at every other site: pass `true` where the
+ * expression cannot be undefined, so a NULL in it is the `null` value and has to
+ * arrive inside the `value` as a JSON null rather than as a SQL NULL, which a
+ * `value` reads as undefined (§9.3). Pass `false`, the default, where the
+ * expression is partial: there a NULL is an absence and must stay one, or the
+ * enclosing definedness guard keeps a row it should drop.
+ *
+ * The test is on the raw operand, before the float finite-guard, so a non-finite
+ * float stays a SQL NULL: that one is undefined, not a null.
  */
-function totalOrderingSql(
-  op: string,
-  leftSql: string,
-  rightSql: string,
-  left: Expression,
-  right: Expression,
+function primitiveToJsonSql(
+  sql: string,
+  exprType: PrimitiveType,
+  dialect: SqlDialect,
+  nullIsValue = false,
 ): string {
-  const cmp = `${leftSql} ${op} ${rightSql}`;
-  // Neither side can be null, so SQL's own answer is already total.
-  if (cannotBeNull(left) && cannotBeNull(right)) return `(${cmp})`;
-  // `<=` and `>=` hold of two nulls, but only if both sides can be one.
-  if ((op === "<=" || op === ">=") && !cannotBeNull(left) && !cannotBeNull(right)) {
-    return `COALESCE(${cmp}, (${leftSql} IS NULL AND ${rightSql} IS NULL))`;
-  }
-  return `COALESCE(${cmp}, FALSE)`;
+  const liftedSql = exprType === "float" ? finiteFloatOrNullSql(sql) : sql;
+  const lifted = dialect.toJson(liftedSql, exprType);
+  if (!nullIsValue || exprType === "null") return lifted;
+  return `(CASE WHEN ${sql} IS NULL THEN ${dialect.toJson("NULL", "null")} ELSE ${lifted} END)`;
+}
+
+/**
+ * An ordering comparison, which is strict at null: an order has no place for
+ * `null`, so an ordering over one has no value (null-as-a-value.md §4.1).
+ *
+ * That is SQL's own behaviour, so this emits the bare operator and the wrappers
+ * are gone. What each position does with the resulting NULL is already right:
+ * a WHERE conjunct drops the row, a negated filter reads it as "did not hold"
+ * through its `NOT COALESCE(..., FALSE)`, and a binding position withholds the
+ * row through the definedness guard, `canBeUndefined` answering true for an
+ * ordering.
+ *
+ * The wrappers this replaces were `COALESCE(cmp, FALSE)` and, for `<=` / `>=`,
+ * `COALESCE(cmp, (l IS NULL AND r IS NULL))`, which made `null <= null` true.
+ * Deleting the second is the point: it was the wart null.md §5 apologised for,
+ * and with it goes the reason `<=` proved nothing about its operands' nullness,
+ * so `refineBody` narrows on it now.
+ */
+function orderingSql(op: string, leftSql: string, rightSql: string): string {
+  return `(${leftSql} ${op} ${rightSql})`;
 }
 
 /**
@@ -1885,14 +1946,22 @@ function translateAggregate(
       //
       // The dialect receives both the lifted value and the raw arg —
       // the lifted form is the array element, and the raw arg drives
-      // the NULL filter (so `json_quote(NULL) = 'null'` doesn't sneak
-      // a JSON `null` into the array) and the ORDER BY (so primitive
-      // columns sort by their natural SQL value rather than by the
-      // lifted text).
+      // the NULL filter and the ORDER BY (so primitive columns sort by
+      // their natural SQL value rather than by the lifted text).
+      //
+      // Whether that filter is emitted at all is `count`'s question again
+      // (§15.12): a NULL argument is an undefined contribution, which the array
+      // must not carry, or the `null` value, which it must, and `canBeUndefined`
+      // is the test. Without it a `null` in the group vanished, so `count(V)`
+      // and `length(list(V))` disagreed where §7 says they agree.
       const argIsJson = argType === "value";
       const valueSql =
         argType === undefined || argIsJson ? argSql : primitiveToJsonSql(argSql, argType, dialect);
-      return dialect.jsonAgg(valueSql, orderArgSql, argIsJson);
+      const mayBeUndefined = canBeUndefined(
+        agg.arg as HeadTerm,
+        partialityCtx(varTypes, columnTypes, functionOverloads),
+      );
+      return dialect.jsonAgg(valueSql, orderArgSql, argIsJson, mayBeUndefined);
     }
     default:
       return `${agg.func.toUpperCase()}(${argSql})`;
@@ -2036,11 +2105,26 @@ const INTEGER_RESULT_GUARDS = new Set([
   "ceil.float",
 ]);
 
+/**
+ * Built-ins whose emit needs the argument's *AST* rather than its SQL, so it
+ * happens in `translateCall` before the table is consulted and there is nothing
+ * to register here. Only `defined`, which asks what a SQL NULL in that position
+ * would mean and reads `canBeUndefined` to answer.
+ */
+const EMITTED_FROM_AST: ReadonlySet<string> = new Set([
+  "defined.integer",
+  "defined.float",
+  "defined.string",
+  "defined.boolean",
+  "defined.value",
+]);
+
 // Module-load coverage check: every overload key in the core registry
 // must have a SQL emitter, and every emitter must correspond to a
 // registered overload. Mismatches fail loudly at startup rather than
 // surfacing as a missing-emit error on a user's first call.
 for (const key of BUILTIN_KEYS) {
+  if (EMITTED_FROM_AST.has(key)) continue;
   if (!SQL_EMIT.has(key)) throw new Error(`SQL emit not registered for built-in '${key}'`);
 }
 for (const key of SQL_EMIT.keys()) {
@@ -2075,6 +2159,25 @@ function translateCall(
         `Internal error: no overload available for '${call.name}' at translation time`,
       );
     }
+  }
+  // `defined` needs the argument's AST, not its SQL, so it cannot go through the
+  // per-overload emit table. The question it asks is what a SQL NULL in that
+  // position *means*, which is `canBeUndefined`'s and is decidable: a `T?`
+  // expression is never undefined (§5), so a NULL there is the null value, and a
+  // partial expression's NULL is an absence. Where neither, there is no NULL at
+  // all and the answer is a constant.
+  //
+  // The CASE has no ELSE on purpose. `defined` is true-or-undefined and never
+  // false (§11.6), so an undefined argument has to leave a SQL NULL behind: in
+  // condition position it drops the row, under `not` the negated-filter wrapper
+  // reads it as "did not hold", and in a binding position the definedness guard
+  // withholds the row, all of which agree with the interpreter's strictness.
+  if (call.name === "defined" && call.args.length === 1) {
+    const arg = call.args[0]!;
+    const argSql = termToSql(arg, bindings, varTypes, columnTypes, functionOverloads, dialect);
+    return canBeUndefined(arg, partialityCtx(varTypes, columnTypes, functionOverloads))
+      ? `(CASE WHEN ${argSql} IS NOT NULL THEN TRUE END)`
+      : "TRUE";
   }
   const sqlArgs = call.args.map((a, i) => {
     const rawSql = termToSql(a, bindings, varTypes, columnTypes, functionOverloads, dialect);

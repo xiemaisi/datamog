@@ -252,8 +252,7 @@ complementation.
 |---|---|
 | `X <> null`, `null <> X` | `X` non-null |
 | `not (X = null)` | `X` non-null (the same fact, spelled as a SQL programmer would) |
-| `e1 < e2`, `e1 > e2` | every variable in a strict position of `e1` and of `e2` |
-| `e1 <= e2`, `e1 >= e2` | nothing: both are true when both sides are null |
+| `e1 < e2`, `e1 > e2`, `e1 <= e2`, `e1 >= e2` | every variable in a strict position of `e1` and of `e2` |
 | `X = e`, `e = X` | `X` non-null if `e` is non-null |
 | `X in [lo .. hi]` | `X` non-null |
 | positive atom `p(..., X, ...)` | `X` non-null if `p`'s inferred column is non-null (`publishedNullness` is read only at module boundaries) |
@@ -262,11 +261,15 @@ complementation.
 | negated atom `not p(...)` | nothing: it binds nothing |
 | `not (X < 2)` | nothing: this is exactly where the NULL row lives |
 
-The strict-comparison row is the one worth checking against the table in null.md
-§5. `5 < null`, `null < 5` and `null < null` are all false, so a true `<` implies
-neither side is null; `<=` is true at `null <= null`, so it implies nothing. That
-asymmetry is not an accident of the encoding, it is what "null is an isolated
-point in the order" means.
+The ordering row is the one worth checking against the comparison table. Every
+ordering has no value at a null, so one that *holds* implies neither side is one,
+and all four refine.
+
+As designed here only `<` and `>` did, because `null <= null` was true by
+convention and so `<=` implied nothing. The asymmetry was read at the time as
+what "null is an isolated point in the order" means; it was really an artifact of
+giving an ordering an answer where it has none. null-as-a-value.md §4.1 makes the
+orderings strict, and the asymmetry goes.
 
 A variable occurs in a **strict position** of an expression if the path from the
 expression's root to that occurrence passes only through strict operations.
@@ -286,12 +289,13 @@ q(X) :- p(X), X <> null.                    % X non-null, so q's column is too
 q(X) :- p(X), X < 100.                      % same, via the strict comparison
 q(X) :- p(Y), Y <> null, X = Y & 1.         % Y non-null, wrapping bitwise op total, so X
 q(X) :- p(Y), Y <> null, X = Y / 2.         % Y non-null and `/` propagates, so X
-q(X) :- p(X), X <= 100.                     % nothing: `<=` admits the NULL row
+q(X) :- p(X), X <= 100.                     % X non-null too, `<=` being strict now
 ```
 
-The division row read `q(X) :- p(Y), X = Y / 2.` and proved nothing, on the
-grounds that `/` is partial. Partiality is no longer nullness (see the status
-note), so the guard on `Y` is what the row now turns on.
+Two rows moved since. The division one read `q(X) :- p(Y), X = Y / 2.` and proved
+nothing, on the grounds that `/` is partial; partiality is no longer nullness (see
+the status note), so the guard on `Y` is what it turns on. And the `<=` one proved
+nothing while `null <= null` was true by convention.
 
 Order independence comes from running it as a fixed point over the conjuncts,
 descending from maybenull to nonnull until nothing changes. This is the shape the
@@ -375,11 +379,12 @@ Three notes from building it. The body-level equality had to be done at the same
 time as the join, not after: a repeated variable and a spelled-out `X = Y` are
 the same relation (null.md §4), so lowering one and not the other made the two
 spellings emit different operators, which a test caught immediately. And the
-`COALESCE` wrappers on `<` and `<=` were left alone. They sit inside `termToSql`,
-which has no access to the enclosing body's refinements, and threading it there
-would touch thirty call sites to buy nothing measurable: as `translator.ts`
-already observed before any of this, an ordering comparison is never a hash or
-merge join key. They keep the syntactic literal check.
+`COALESCE` wrappers on `<` and `<=` were left alone, on the grounds that
+`termToSql` has no access to the enclosing body's refinements and that an ordering
+comparison is never a hash or merge join key, so threading it there would buy
+nothing measurable. Both wrappers are gone since, and not by threading anything:
+making the orderings strict (null-as-a-value.md §4.1) means SQL's own NULL
+propagation is the rule, so the emit is the bare operator.
 
 The third note is the one that got the invariant in §1 wrong for a while, and it is
 worth keeping as a warning about how the reasoning fails. `mayBeNull` argued that a

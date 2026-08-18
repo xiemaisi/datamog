@@ -7,7 +7,7 @@ tradeoffs so you can pick the right one for your use case.
 
 These compile Datalog to SQL and execute against a SQL engine.
 They all share Datamog's cross-backend runtime guarantees (see
-Appendix B) — division-by-zero is `NULL`, `sqrt(-x)` is `NULL`,
+Appendix B) — division-by-zero has no value, `sqrt(-x)` has none,
 etc.
 
 | Backend      | Where it runs                        | Best for                                   | Notes                                     |

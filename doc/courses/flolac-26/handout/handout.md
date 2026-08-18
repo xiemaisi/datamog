@@ -76,7 +76,7 @@ Note that the order of literals in the body of a rule does not matter. However, 
 
 Built-in predicates are neither declared nor defined in the program, but come predefined. The built-in comparison predicates are equality (`=`), disequality (`<>`), and the orderings `<`, `<=`, `>`, and `>=`. There is also the range atom `X in [lo..hi]`, which binds `X` to each integer from `lo` to `hi` when `X` is not already bound, and filters otherwise. For example, `Person1 = Person2`, `Person1 <> Person2`, and `Age1 < Age2` are all built-in atoms.
 
-The expressions that appear as arguments (in atoms, comparisons, and rule heads) are built from constants and variables using arithmetic operators (`+`, `-`, `*`, `/`, and `%` for modulo) and string operators (such as concatenation), together with a library of built-in functions (for example `length`, `abs`, and `sqrt`). Division or modulo by zero, and other out-of-domain operations, yield the special value `null`.
+The expressions that appear as arguments (in atoms, comparisons, and rule heads) are built from constants and variables using arithmetic operators (`+`, `-`, `*`, `/`, and `%` for modulo) and string operators (such as concatenation), together with a library of built-in functions (for example `length`, `abs`, and `sqrt`). Division or modulo by zero, and other out-of-domain operations, have **no value**: a rule derives no tuple where one of its expressions has none. That is separate from `null`, which is an ordinary value a column can hold.
 
 #### Semantics
 

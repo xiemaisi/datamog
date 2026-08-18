@@ -37,7 +37,7 @@ error predicate <head>(<args>) :- ... .       # a named integrity constraint
 <name>^(<args>)                               # the parity sigil: this predicate is maximal
 ```
 
-Column types are `string`, `integer`, `float`, `boolean`, or `value`; the annotation is optional and defaults to `string`.
+Column types are `string`, `integer`, `float`, `boolean`, or `value`, each optionally suffixed `?` for a column that can hold `null`; the annotation is optional and defaults to `string`.
 
 ## Post-processing
 

@@ -5,6 +5,7 @@ import type {
   Expression,
   ExtDecl,
   FunctionCall,
+  HeadAnnotation,
   HeadTerm,
   Literal,
   PrimitiveType,
@@ -472,6 +473,16 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     const expected = arities.get(literal.predicate);
     const pos = nodePos(literal);
     if (expected === undefined) {
+      // A body element shaped `name(args)` parses as an atom, so a bare call to a
+      // built-in *function* lands here rather than as a condition. `defined` is
+      // rewritten into a filter during post-processing and never reaches this
+      // point; the rest have no condition reading, so name the shape that does.
+      if (BUILTINS.has(literal.predicate)) {
+        throw new AnalyzerError(
+          `'${literal.predicate}' is a built-in function, not a predicate. Use it inside an expression, as in \`X = ${literal.predicate}(...)\`.`,
+          ...(pos ?? []),
+        );
+      }
       throw new AnalyzerError(`Predicate '${literal.predicate}' is not defined`, ...(pos ?? []));
     }
     if (literal.args.length !== expected) {
@@ -1070,6 +1081,30 @@ export function isGroupingArg(
  * translator puts in `GROUP BY`, and whether a non-`count` aggregate column can
  * be NULL (`nullness.ts`). Copies of it have drifted apart twice.
  */
+/**
+ * Every head annotation in the program, as `(predicate, position, annotation)`.
+ *
+ * Both published contracts are the inferred map widened by these: the type half
+ * in `types.ts`, the nullness half in `nullness.ts`. They cannot be one call,
+ * published types being needed by validation while published nullness cannot be
+ * computed until validation has resolved the overloads nullness inference reads.
+ * Sharing the walk is what is left, and it is the part that was duplicated.
+ */
+export function* headAnnotations(
+  analyzed: AnalyzedProgram,
+): Generator<[string, number, HeadAnnotation]> {
+  for (const [predicate, rules] of analyzed.rules) {
+    for (const rule of rules) {
+      const annotations = rule.head.argTypes;
+      if (annotations === undefined) continue;
+      for (let i = 0; i < annotations.length; i++) {
+        const annotation = annotations[i];
+        if (annotation !== undefined) yield [predicate, i, annotation];
+      }
+    }
+  }
+}
+
 export function hasGroupingColumns(rule: Rule): boolean {
   const literalBound = literalBindings(rule);
   return rule.head.args.some((arg) => isGroupingArg(arg, literalBound));

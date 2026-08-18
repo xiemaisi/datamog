@@ -84,9 +84,11 @@ running it.
 
 A contract that will not discharge is not thereby false. It may be a property of
 the data rather than a theorem, or it may need a bound the program has not
-stated: integer arithmetic is NULL on overflow, so an ordering over a computed
-column is provable only where the inputs are bounded. The counterexample is
-usually the missing precondition.
+stated: a free variable ranges over an unbounded SMT integer, so a claim about one
+is provable only where the program bounds it. A *computed* term needs no such bound,
+its tuple witnessing its own definedness, since arithmetic leaving the integer domain
+has no value and derives nothing. The counterexample is usually the missing
+precondition.
 
 ## Loading data
 
@@ -161,6 +163,7 @@ The one positional argument after the program picks which output to evaluate: an
 | `--solver <command>` | Solver to run for `--verify` (default `z3 -in`); implies `--verify` |
 | `--strict-contracts` | Treat refinement-contract advisories as errors |
 | `--warn-finiteness` | Print a warning for each predicate column whose values may grow unboundedly across iterations |
+| `--warn-undefined` | Print a warning for each rule with an expression that can have no value, so a row you expect may be absent rather than carrying a null. Off by default: partiality is pervasive and usually deliberate, so this is a debugging tool for missing rows rather than a lint |
 | `--max-iterations <n>` | Cap fixed-point passes per stratum and stop with a note instead of looping (native/seminaive only) |
 | `--repl` | Start the REPL explicitly (this is the default when no `program.dl` is given) |
 | `--json` | In REPL mode, emit one ndjson event per declaration, rule, query, or command |

@@ -312,7 +312,7 @@ Next: **[Chapter 6 — Arithmetic, ranges, and strings](06-arithmetic.md)**.
 Time to do something besides pattern-match facts. We'll introduce numeric
 expressions, range atoms that generate values on the fly, and the
 string-manipulation operators that make Datamog practical for real data —
-plus the cross-backend invariants that keep `a / 0` consistently `NULL`
+plus the cross-backend invariants that keep `a / 0` consistently *without a value*
 everywhere.
 
 [pg]: https://max-schaefer.github.io/datamog/

@@ -59,7 +59,7 @@ Same mental model as SQL: any `SELECT` column not inside an aggregate function b
 The special form `count(*)` counts rows — irrespective of column.
 
 - `count(*)` → `COUNT(*)`
-- `count(X)` → `COUNT("x")` (skips NULLs)
+- `count(X)` counts every row where `X` has a value, `null` included, so it equals `count(*)`
 
 For ordinary Datalog programs the two coincide. `count(*)` is the **idiomatic** "how many rows".
 

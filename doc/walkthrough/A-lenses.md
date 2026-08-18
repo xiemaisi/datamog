@@ -42,7 +42,7 @@ views we've developed across the tutorial.
 | `X + Y` (integers)             | `+` on integers                             | `"X" + "Y"`                                 | `X + Y`                                  |
 | `X + Y` (string, at least one)   | string concat                               | `"X" \|\| "Y"`                                | `X + Y`                                  |
 | `X / Y` (integers)             | integer division                            | `/` (truncating on every shipped backend)   | `X // Y`                                 |
-| `X % Y`                        | modulo                                      | `%` (with divide-by-zero → `NULL`)          | `X % Y`                                  |
+| `X % Y`                        | modulo                                      | `%` (divide-by-zero has no value)           | `X % Y`                                  |
 | `X in [lo .. hi]`              | `X ∈ {lo, lo+1, ..., hi}`                   | `generate_series(lo, hi)` or recursive CTE  | `for X in range(lo, hi+1):`              |
 | `length(W)`, `W[i]`, `W[i:j]`  | string operations                           | dialect-specific functions                  | `len(W)`, `W[i]`, `W[i:j]`               |
 | `J["k"]`, `J[i]`, `object_entry(J, K, V)`, `as_string(J)` | `value` destructuring                       | `json_extract` / `jsonb_each` / `jsonb_typeof` | `J["k"]`, `J[i]`, `J.items()`, `str(J)`   |

@@ -164,8 +164,8 @@ describe("negated ordering", () => {
   const decl = "input predicate p(a: integer?).\n";
 
   test("negating an ordering on a nullable operand warns", () => {
-    // `X < 2` is false at NULL, so `not (X < 2)` is true there, where the
-    // arithmetic complement `X >= 2` is false.
+    // `X < 2` has no value at a null, so it does not hold, so `not (X < 2)` does
+    // and the row stays, where the complement `X >= 2` drops it.
     expect(codes(`${decl}q(X) :- p(X), not (X < 2).`)).toEqual(["nullable-negated-ordering"]);
   });
 
@@ -188,14 +188,19 @@ describe("negated ordering", () => {
     expect(codes(`${decl}q(X) :- p(X), X < 2.`)).toEqual([]);
   });
 
-  test("double negation is the original comparison, so no gap", () => {
-    // `not` is a body-element prefix and does not nest; `!` is the expression
-    // operator, so this is the spelling that parses.
+  test("the expression operator has no gap, so it does not warn", () => {
+    // `!` propagates the absence rather than complementing it, so `!(X < 2)`
+    // drops the null row exactly as `X >= 2` does. Verified on native and sqlite:
+    // over `p(1). p(5). p(null).` both give `{5}` where `not (X < 2)` gives
+    // `{5, null}`. Only the `not` spelling diverges from the complement.
+    expect(codes(`${decl}q(X) :- p(X), !(X < 2).`)).toEqual([]);
     expect(codes(`${decl}q(X) :- p(X), !(!(X < 2)).`)).toEqual([]);
   });
 
-  test("the expression operator is caught as well as the body prefix", () => {
-    expect(codes(`${decl}q(X) :- p(X), !(X < 2).`)).toEqual(["nullable-negated-ordering"]);
+  test("but a `!` inside a `not` still warns, the `not` deciding the outcome", () => {
+    // `!(X < 2)` has no value at a null, and `not` holds of that, so the row
+    // stays. The gap belongs to the outermost construct.
+    expect(codes(`${decl}q(X) :- p(X), not (!(X < 2)).`)).toEqual(["nullable-negated-ordering"]);
   });
 
   test("it reaches an ordering nested under a connective", () => {
@@ -265,5 +270,54 @@ describe("undefined expressions (opt-in)", () => {
       q(X, null) :- n(X).
     `;
     expect(undefinedRisks(source)).toEqual([]);
+  });
+});
+
+describe("`<>` on a partial operand", () => {
+  // The flagship divergence of doc/design/null-as-a-value.md §4.2, and the whole
+  // mitigation for it. On by default, unlike the general partiality warning: it
+  // fires once across the 76 single-file examples, where that one fires 192 times.
+
+  test("warns and names the other reading", () => {
+    const source = `
+      input predicate n(x: integer, y: integer).
+      q(X) :- n(X, Y), X <> 10 / Y.
+    `;
+    const ds = risks(source);
+    expect(ds.map((d) => d.code)).toEqual(["partial-inequality"]);
+    expect(ds[0]!.message).toContain("10 / Y");
+    expect(ds[0]!.message).toContain("not (a = b)");
+  });
+
+  test("does not warn where both operands always have a value", () => {
+    const source = `
+      input predicate n(x: integer, y: integer).
+      q(X) :- n(X, Y), X <> Y.
+    `;
+    expect(codes(source)).toEqual([]);
+  });
+
+  test("nor for `=`, which has no competing reading", () => {
+    const source = `
+      input predicate n(x: integer, y: integer).
+      q(X) :- n(X, Y), X = 10 / Y.
+    `;
+    expect(codes(source)).toEqual([]);
+  });
+
+  test("reaches inside a compound filter", () => {
+    const source = `
+      input predicate n(x: integer, y: integer).
+      q(X) :- n(X, Y), Y > 0 && X <> 10 / Y.
+    `;
+    expect(codes(source)).toEqual(["partial-inequality"]);
+  });
+
+  test("`!=` warns too, being the same operator spelled differently", () => {
+    const source = `
+      input predicate n(x: integer, y: integer).
+      q(X) :- n(X, Y), X != 10 / Y.
+    `;
+    expect(codes(source)).toEqual(["partial-inequality"]);
   });
 });

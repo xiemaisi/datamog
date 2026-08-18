@@ -147,25 +147,26 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(results[3]!.rows).toEqual([]);
   });
 
-  test("`null` literal, null-aware `=` / `<>`, and total ordering", async () => {
+  test("`null` literal, null-aware `=` / `<>`, and strict ordering", async () => {
     // Cross-backend invariant from §5.4 of the spec: `=`/`<>` are null-aware
-    // (IS NOT DISTINCT FROM on Postgres) and ordering is total. Same shape as
-    // the SQLite version, including where the nulls come from: the literal, not
-    // `1 / X`, which now has no value rather than a null one, so its row is
-    // withheld. These facts are what `Y = 1 / X` used to yield for `{0, 1, 2}`.
+    // (IS NOT DISTINCT FROM on Postgres) and the orderings are strict at null.
+    // Same shape as the SQLite version, including where the nulls come from: the
+    // literal, not `1 / X`, which now has no value rather than a null one, so its
+    // row is withheld. These facts are what `Y = 1 / X` used to yield for
+    // `{0, 1, 2}`.
+    //
+    // A strict ordering is Postgres's own behaviour, so the emit here is the bare
+    // operator; the wrappers that made it total are gone from every dialect.
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`
       t(0, null). t(1, 1). t(2, 0).
-      maybe_null(X, Y, IsNull, Below, AtMost) :-
-        t(X, Y),
-        IsNull = (Y = null),
-        Below = (Y < 1),
-        AtMost = (Y <= Y).
-
+      maybe_null(X, Y, IsNull) :- t(X, Y), IsNull = (Y = null).
+      ordered(X, Below, AtMost) :- t(X, Y), Below = (Y < 1), AtMost = (Y <= Y).
       filter_logical(X) :- t(X, Y), Y = null.
       neq_logical(X)    :- t(X, Y), Y <> null.
       not_below(X)      :- t(X, Y), not (Y < 1).
-      ?- maybe_null(X, Y, IsNull, Below, AtMost).
+      ?- maybe_null(X, Y, IsNull).
+      output predicate od(X, Below, AtMost) :- ordered(X, Below, AtMost).
       output predicate fl(X) :- filter_logical(X).
       output predicate nl(X) :- neq_logical(X).
       output predicate nb(X) :- not_below(X).
@@ -173,13 +174,20 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     const sorted = (rows: Record<string, unknown>[]) =>
       [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     expect(sorted(results[0]!.rows)).toEqual([
-      { X: 0, Y: null, IsNull: true, Below: false, AtMost: true },
-      { X: 1, Y: 1, IsNull: false, Below: false, AtMost: true },
-      { X: 2, Y: 0, IsNull: false, Below: true, AtMost: true },
+      { X: 0, Y: null, IsNull: true },
+      { X: 1, Y: 1, IsNull: false },
+      { X: 2, Y: 0, IsNull: false },
     ]);
-    expect(results[1]!.rows).toEqual([{ X: 0 }]);
-    expect(sorted(results[2]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
-    expect(sorted(results[3]!.rows)).toEqual([{ X: 0 }, { X: 1 }]);
+    // No X=0 row: an ordering over its null has no value to bind.
+    expect(sorted(results[1]!.rows)).toEqual([
+      { X: 1, Below: false, AtMost: true },
+      { X: 2, Below: true, AtMost: true },
+    ]);
+    expect(results[2]!.rows).toEqual([{ X: 0 }]);
+    expect(sorted(results[3]!.rows)).toEqual([{ X: 1 }, { X: 2 }]);
+    // Condition position is unchanged, which is the point of §4.1: the ordering
+    // fails to hold at the null either way, so `not` holds there either way.
+    expect(sorted(results[4]!.rows)).toEqual([{ X: 0 }, { X: 1 }]);
   });
 
   test("primitive conversions: parse string → integer / float / boolean (no row on bad input)", async () => {

@@ -617,10 +617,15 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
       return sorted.map((v) => String(v)).join(",");
     }
     case "list": {
-      // `list` collects values into a json array. Skip SQL NULLs; an empty or
-      // all-null group yields `[]`, append's identity, per §7. It used to yield
-      // null, which null.md §8 recorded as a wart: `[]` is what a reader expects
-      // and what makes `length(list(V))` mean something over an empty group.
+      // `list` collects every value the group contributes, `null` included: it is
+      // a value, an array can hold it, and skipping it would make
+      // `length(list(V))` disagree with `count(V)`, which counts it (§7, §11.2).
+      // `values` has already had the undefined contributions dropped, so what is
+      // left is exactly what belongs in the array. An empty group yields `[]`,
+      // append's identity.
+      //
+      // Nulls sort first, which is what SQLite's ASC ordering does for free and
+      // what Postgres is told to do with `NULLS FIRST`.
       //
       // Sort key depends on argument shape:
       //   - For value arguments (objects / arrays), sort by
@@ -633,21 +638,22 @@ export function evalAggregate(agg: AggregateCall, subs: Substitution[], env: Typ
       //     BY and Postgres's pre-cast ordering on `to_jsonb(int)`),
       //     strings get lex, booleans get false-before-true. Same
       //     convention as `concat`.
-      const nonNull = values.filter((v) => v !== null);
-      if (nonNull.length === 0) return [];
+      if (values.length === 0) return [];
+      const nulls = values.filter((v) => v === null);
+      const present = values.filter((v) => v !== null);
       const argType = inferTermType(agg.arg, env.vars, env.columns);
       let sorted: Value[];
       if (argType === "value") {
-        const keyed = nonNull.map((v) => ({
+        const keyed = present.map((v) => ({
           value: v,
           key: canonicalizeJson(v as JsonValue),
         }));
         keyed.sort((a, b) => compareStrings(a.key, b.key));
         sorted = keyed.map((k) => k.value);
       } else {
-        sorted = [...nonNull].sort(comparePrimitive);
+        sorted = [...present].sort(comparePrimitive);
       }
-      return sorted.map(scrubNonFiniteForJson);
+      return [...nulls, ...sorted].map(scrubNonFiniteForJson);
     }
     default:
       throw new Error(`Unknown aggregate '${agg.func}'`);

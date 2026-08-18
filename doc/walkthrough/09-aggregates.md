@@ -64,10 +64,13 @@ totals(G, count(*)) :- scores(_, _, _), G = "all".   # the same rule
 ```
 
 You notice the difference only over empty input. A rule with no
-grouping columns still derives one row there, matching SQL's
-`SELECT COUNT(*) FROM <empty>`: every `count` is `0` and every other
-aggregate is `NULL`. A rule that does group derives nothing, there
-being no group to reduce.
+grouping columns still derives one row there, if every head expression
+has a value: an aggregate folds a monoid, so over nothing it returns
+that monoid's identity. `count` is `0`, `sum` is `0`, `concat` is
+`""`, and `list` is `[]`. `avg`, `min` and `max` have no identity to
+return, an average over nothing being `0 / 0`, so they have **no
+value** there and the row is withheld. A rule that does group derives
+nothing either way, there being no group to reduce.
 
 **An aggregate can sit inside an expression.** It does not have to be
 the whole argument, so a rank counted from one becomes a 0-based index
@@ -102,11 +105,13 @@ declaration already gives its columns.
 ### `count(*)` is `COUNT(*)`
 
 The special form `count(*)` counts rows without caring about a
-specific column. It compiles to SQL's `COUNT(*)`. `count(X)` where
-`X` is a regular variable compiles to `COUNT("x")`, which counts
-only non-`NULL` values — for normal Datalog programs over non-null
-data the two are equivalent, but the `count(*)` form is the
-idiomatic way to ask "how many".
+specific column. `count(X)` where `X` is a regular variable counts
+every row where `X` has a value, and `null` is one, so the two are
+the *same number* for any variable. `count(*)` is the idiomatic way
+to ask "how many", and `count(X)` on a variable is a smell: it reads
+as if it excluded something and it does not. Only a partial
+expression makes a difference, `count(10 / X)` skipping the rows
+where the division has no value.
 
 ### `concat` for textual aggregation
 
@@ -160,8 +165,10 @@ Per-element order depends on the argument's type:
   keys sorted, no whitespace). Backends agree because the
   canonical form is the one structure they all preserve.
 
-SQL `NULL` inputs are skipped, and an all-`NULL` or empty group
-yields `NULL` — matching `concat` and the rest of the family.
+A `null` is collected like any other value, sorting first. An input
+with no value contributes nothing, and an empty group gives `[]`,
+`list`'s identity. So `length(list(V))` is the number of rows whose
+`V` has a value, and over ordinary data that is the row count.
 
 Pair `list` with chapter 14's destructuring (`X[0]`,
 `object_entry`) to round-trip relational data through structured

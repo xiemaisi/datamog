@@ -14,8 +14,12 @@
 # suggests looks the same as one that derives none for a different reason.
 #
 # To see which inputs were rejected, ask for the ones whose conversion has no
-# value. `not (e = e)` holds exactly when `e` is undefined, since an equality
-# needs both sides to have a value:
+# value. `defined` is the readable spelling:
+#
+#     rejected(R) :- inputs("int", R), not defined(to_integer(R)).
+#
+# `not (e = e)` says the same thing without the builtin, an equality needing both
+# sides to have a value:
 #
 #     rejected(R) :- inputs("int", R), not (to_integer(R) = to_integer(R)).
 

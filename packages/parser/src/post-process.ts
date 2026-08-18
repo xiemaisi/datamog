@@ -183,6 +183,73 @@ function mkVar(name: string, cst: Cst): Variable {
   return { $type: "Variable", name, $cstNode: cst } as unknown as Variable;
 }
 
+/** Built-in functions usable as a bare body condition, with their arity. */
+const CONDITION_CALLS = new Map<string, number>([["defined", 1]]);
+
+/**
+ * Rewrite a bare `defined(e)` body element from an atom into a filter.
+ *
+ * A body element shaped `name(args)` parses as a `Literal`, because that is what
+ * a predicate call looks like and the grammar cannot tell the two apart. For a
+ * built-in that answers a question rather than generating tuples, the atom
+ * reading is the wrong one: the call is a condition.
+ *
+ * The `negated` flag travels across, which is the whole reason this is worth
+ * doing. `not defined(e)` becomes a negated *filter*, so it is negation as
+ * failure and holds wherever the filter does not, which for `defined` is exactly
+ * where `e` has no value. Folding it into `!defined(e)` instead would be
+ * undefined precisely where it must hold, which is §4.4's distinction and §11.6's
+ * motivating case for keeping `not` and `!` apart.
+ *
+ * Nothing downstream needs to know the built-in exists: the analyzer, translator
+ * and interpreters all see an ordinary filter over a function call.
+ *
+ * A predicate cannot share a built-in function's name unless its head is
+ * backtick-quoted, which the analyzer enforces, so there is no user program this
+ * can capture from; the quoted form is left alone regardless.
+ */
+function rewriteConditionCalls(program: Program): void {
+  for (const node of AstUtils.streamAllContents(program)) {
+    if (!isRule(node) && !isQuery(node)) continue;
+    const body = node.body as BodyElement[];
+    for (let i = 0; i < body.length; i++) {
+      const element = body[i];
+      if (element === undefined || !isLiteral(element)) continue;
+      const arity = CONDITION_CALLS.get(element.predicate);
+      if (arity === undefined || isQuotedIdentifier(element.predicate)) continue;
+      if (element.args.length !== arity) {
+        throw parseErrorAtNode(
+          `'${element.predicate}' takes ${arity} argument${arity === 1 ? "" : "s"} but is used with ${element.args.length}`,
+          element,
+        );
+      }
+      if (element.proofVar !== undefined) {
+        throw parseErrorAtNode(
+          `'${element.predicate}' is a condition and carries no proof`,
+          element,
+        );
+      }
+      const cst = element.$cstNode;
+      const call = {
+        $type: "FunctionCall",
+        $cstNode: cst,
+        name: element.predicate,
+        args: element.args,
+      } as unknown as FunctionCall;
+      const filter = {
+        $type: "Filter",
+        $cstNode: cst,
+        expr: call,
+        negated: element.negated,
+      } as unknown as BodyElement;
+      setContainer(call, filter, "expr");
+      element.args.forEach((arg, j) => setContainer(arg, call, "args", j));
+      setContainer(filter, node, "body", i);
+      body[i] = filter;
+    }
+  }
+}
+
 /**
  * Build a proof-term value: the tagged object `{ "$proof": ctor, "args": [...] }`.
  * A reserved `$proof` key keeps proof terms from colliding with plain JSON data.
@@ -422,6 +489,9 @@ export function postProcess(program: Program): void {
   // once synthesised, so it must be in place for the passes below to treat it
   // like one (don't-care desugaring, literal tagging, alias rewriting).
   synthesiseContractChecks(program);
+  // And before the literal passes below see them, since this turns literals into
+  // filters.
+  rewriteConditionCalls(program);
   for (const node of streamAll(program)) {
     if (isExtDecl(node)) {
       node.predicateQuoted = isQuotedIdentifier(node.predicate);

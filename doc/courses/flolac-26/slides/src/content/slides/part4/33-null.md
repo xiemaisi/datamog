@@ -1,25 +1,25 @@
 ---
-title: "Missing data is null"
+title: "Missing data, and the null that is data"
 kind: content
 section: "JSON"
 tight: true
 ---
 
-Reaching past what is there does not drop the row; it yields `null`.
-A missing key and an out-of-range index both give `null`, and `null` keeps spreading as you reach further in:
+Reaching past what is there gives **no value**, and a rule derives no tuple where one of its expressions has none.
+Reaching a key that is *present and null* gives the `null` value, and the row stays:
 
 ```datamog
 input predicate tree(t: value).
 
-kind(T["nope"])            :- tree(T).   # null: no such key
-deep(T["args"][9]["name"]) :- tree(T).   # null: index 9 is off the end
-internal("yes")            :- tree(T), T["name"] = null.   # branch on null
+kind(T["nope"])            :- tree(T).   # no such key: no row at all
+deep(T["args"][9]["name"]) :- tree(T).   # index off the end: no row
+internal(N)                :- tree(T), N = T["name"].   # present: the value, null included
 
-?- kind(K).
+?- internal(N).
 ```
 
-`null` is one of the `value` shapes, **not** the absence of a row, so every rule still produces a tuple; the last one branches on it with `= null`.
+So the two are distinguishable, which is the point: `null` is one of the `value` shapes and an ordinary value, while an absent key has no value at all. Ask for the rows an expression lost with `not defined(e)`.
 
 <div class="note">
-This safe-navigation <code>null</code> is <strong>Datamog-specific</strong>: standard Datalog has only flat, atomic values and no notion of <code>null</code>.
+Both notions are <strong>Datamog-specific</strong>: standard Datalog has only flat, atomic values, no <code>null</code>, and total expressions.
 </div>

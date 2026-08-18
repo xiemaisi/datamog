@@ -11,7 +11,7 @@ recursive strata are evaluated in a single pass.
 
 The planner, atom matcher, aggregate reducer and term evaluator are shared
 with `datamog-backend-native`; only the fixed-point driver differs.
-Cross-backend invariants (divide-by-zero / domain-error NULLs, slice
+Cross-backend invariants (divide-by-zero and domain errors having no value, slice
 bounds, integer-vs-float division) match the other backends.
 
 ## Usage

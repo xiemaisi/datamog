@@ -280,14 +280,20 @@ empty-group value:
 
 ```
 count(*), count(X)                        →  0
-sum, avg, min, max, concat, list          →  null
+sum                                       →  0
+concat                                    →  ""
+list                                      →  []
+avg, min, max                             →  no value, so no tuple
 ⊢  φ_R
 ```
 
 Both obligations must discharge. Note what this rules out: an annotation on a
-`min`/`max` position of an ungrouped rule can essentially never hold, since
-comparison is total and `null >= 0` is false (`null.md` §5). That is the right
-answer, and it is the same guard §4.1 puts on the derived contracts.
+`min`/`max` position of an ungrouped rule can essentially never hold. It used to be
+because `null >= 0` was false; it is now because such a rule derives no tuple over
+an empty group at all, `min` and `max` having no identity in the domain
+(`null-as-a-value.md` §7), so there is nothing for the annotation to hold of. Same
+answer, better reason, and it is the same guard §4.1 puts on the derived
+contracts.
 
 The condition is exactly `hasGroupingColumns` in `core/src/analyzer.ts`, the
 shared definition used by the translator, interpreters and nullness analysis.
@@ -434,23 +440,26 @@ of the predicate there. A predicate with one grouped and one ungrouped rule
 therefore publishes only the weaker `>= 0`.
 
 The non-empty guard matters even when the argument column is non-null. An
-ungrouped aggregate over empty input emits one row: `count(*)` is `0`, while
-`min(X)` and `max(X)` are NULL. A grouped result normally exists because an input
-row established its group, but the implementation must derive that fact from the
-actual grouping shape rather than from the presence of a literal head expression.
-Within a known non-empty group, `min`/`max` still need `X` to be non-null because
-they skip NULLs (`null.md` §8). When either condition is missing, derive nothing.
+ungrouped aggregate over empty input emits one row where every head expression has
+a value: `count(*)` is `0` and `sum` is `0`, while `min(X)` and `max(X)` have no
+value, so a rule containing one derives nothing there. A grouped result normally
+exists because an input row established its group, but the implementation must
+derive that fact from the actual grouping shape rather than from the presence of a
+literal head expression. Within a known non-empty group, `min`/`max` still need `X`
+to be non-null: they reject a nullable operand statically now
+(`null-as-a-value.md` §5). When either condition is missing, derive nothing.
 
 `sum` and `avg` derive nothing. Both are derivable in principle, `sum` from its
 argument's sign and `avg` from the min/max bracket, but no corpus case wants
 either and `avg` would drag division into the derivation itself.
 
-Also excluded: a **bare boolean term** in formula position. Comparison is total
-(`null.md` §5) but the boolean connectives stay three-valued, so `!null` is
-`null` and a nullable `boolean?` column or `as_boolean(null)` can still put a
-NULL into boolean position. Restricting formulas to comparisons combined with
-connectives keeps them two-valued, since a comparison absorbs NULL rather than
-propagating it.
+Also excluded: a **bare boolean term** in formula position. A nullable `boolean?`
+column can put a `null` there, and a formula is required to hold rather than merely
+to not-be-false. Restricting formulas to comparisons combined with connectives is
+what keeps that from arising: no comparison returns a `null`, and a connective over
+comparisons cannot invent one. (`as_boolean(null)` no longer serves as an example,
+having no value at all now, and `!null` has none either:
+`null-as-a-value.md` §15.26.)
 
 Every obligation is then a quantifier-free formula over primitives, mentioning
 no relations, so it is decidable and needs no interaction.
@@ -483,15 +492,14 @@ a body equality: `as K` rewrites nothing, so `K = I + 1` holds because position
 3 is that expression. `token` and `lexicon` are input predicates and contribute
 nothing.
 
-**R1 does not actually discharge, and emitting it is what showed that.** The
-integer domain is `[-(2^53 - 1), 2^53 - 1]` and arithmetic leaving it is NULL
-(spec §2.6), so `I + 1` is NULL when `I` is the largest integer, `K` is then
-NULL, and `I < K` is false because an ordering is false at NULL. The contract
-holds only for `I` bounded away from the top of the domain, and nothing in
-`cyk-parser` says token positions are. The fix is a second claim,
-`_: I < K, _: K <= 1000000`, or a bound on the input; the point for this
-document is that the obligation is right to fail and the earlier text claiming
-otherwise predated the integer domain. R2's two hypotheses are the contract of
+**R1 discharges, and the two readings of it are the clearest small illustration of
+what partiality bought.** Under the old model, `I + 1` leaving the integer domain
+was a *NULL*, `K` was then null, and `I < K` was false, so the obligation failed for
+`I` at the top of the domain and no strengthening of the invariant could have saved
+it. Under the value model that overflow has **no value**, so the rule derives no
+tuple there, so a derived tuple witnesses `def(I + 1)` and the obligation may assume
+it. R1 now proves, as does the whole of `fibonacci`, which failed for the same
+reason. Verified with z3 on the two rules above: 2/2. R2's two hypotheses are the contract of
 `span` instantiated at each recursive atom, which is the induction hypothesis of
 §3.2. Both are valid in linear integer arithmetic and discharge with no
 interaction.
@@ -517,26 +525,34 @@ annotation makes the gap loud at build time.
 
 ### 4.4 NULL: ask the analysis, but keep the encoding honest
 
-Comparison being total (`null.md` §5) is what makes tier 1 viable, and nullness
-tracking (`nullness-tracking.md`) supplies most of what this section originally
-had to derive by hand. What survives is one soundness requirement on the solver
+No comparison returning a `null` (spec §2.6) is what makes tier 1 viable, and
+nullness tracking (`nullness-tracking.md`) supplies most of what this section
+originally had to derive by hand. The orderings being *strict* at a null rather
+than false there is why the encoder asks for `def(formula)` alongside the formula;
+§4.4 below and `null-as-a-value.md` §15.21 carry that. What survives is one soundness requirement on the solver
 encoding.
 
-`null` is an isolated point in a **partial** order: `<`/`>` are false whenever
-either side is null, `<=`/`>=` are true only when both are, `=` is null-aware so
-`null = null` holds. Trichotomy fails deliberately, so `not (X < 2)` is not
-`X >= 2` (the NULL row is in the first and neither of the second). A solver
-handed plain linear arithmetic assumes trichotomy and would therefore *discharge*
-that implication, certifying a contract that does not hold. So null must be in
-the encoding:
+`null` is outside the order: every ordering is **strict** at it and has no value
+there, while `=` is null-aware so `null = null` holds. Trichotomy fails
+deliberately, so `not (X < 2)` is not `X >= 2` (the NULL row is in the first and
+neither of the second). A solver handed plain linear arithmetic assumes
+trichotomy and would therefore *discharge* that implication, certifying a
+contract that does not hold. So null must be in the encoding, and so must
+definedness, which is a second and separate condition:
 
 ```
-a = b    ⟺  (a.isNull ∧ b.isNull) ∨ (¬a.isNull ∧ ¬b.isNull ∧ a.v = b.v)
-a < b    ⟺  ¬a.isNull ∧ ¬b.isNull ∧ a.v < b.v
-a <= b   ⟺  (a.isNull ∧ b.isNull) ∨ (¬a.isNull ∧ ¬b.isNull ∧ a.v <= b.v)
-a + b    →  isNull ⟺ a.isNull ∨ b.isNull
-a / b    →  isNull ⟺ a.isNull ∨ b.isNull ∨ b.v = 0
+a = b    ⟹  v   ⟺  (a.isNull ∧ b.isNull) ∨ (¬a.isNull ∧ ¬b.isNull ∧ a.v = b.v)
+a < b    ⟹  v   ⟺  a.v < b.v
+             def ⟺  a.def ∧ b.def ∧ ¬a.isNull ∧ ¬b.isNull
+a + b    ⟹  isNull ⟺ a.isNull ∨ b.isNull
+             def    ⟺ a.def ∧ b.def ∧ inDomain(a.v + b.v)
+a / b    ⟹  isNull ⟺ a.isNull ∨ b.isNull
+             def    ⟺ a.def ∧ b.def ∧ b.v ≠ 0
 ```
+
+`<=` and `>=` take `<`'s shape. They had an extra `(a.isNull ∧ b.isNull)` disjunct
+while `null <= null` was true by convention; null-as-a-value.md §4.1 deletes it,
+which is also what lets nullness inference narrow on them.
 
 Each term becomes a `(isNull, v)` pair, which keeps the query quantifier-free in
 arithmetic plus booleans, so it stays decidable and cheap.
@@ -569,9 +585,10 @@ for the right reason.
 `nullness-tracking.md` §1 payoff 4 anticipated this section and calls it "a
 reference rather than a workaround". That is the correct reading: the analysis
 this section was written to avoid needing now exists, so the right move is to
-depend on it. Note that `null.md` §7's verdict survives intact and should not be
-cited against this: nullness rides as a bit *beside* the base type, so there is
-still no `null` type and base-type inference still does not see nullability.
+depend on it. Note that nullness rides as a bit *beside* the base type, so base-type inference
+still does not see nullability. (`null.md` §7's verdict that there can be no `null`
+type did *not* survive; the literal has one. That is orthogonal to the bit, and to
+this section.)
 
 ### 4.5 Discharging: two modes, no solver dependency
 
@@ -1218,15 +1235,24 @@ say which kind:
 | --- | --- |
 | `refinements`: `slot`'s `S < E` | A property of the data. The body is one EDB atom, which promises nothing. |
 | `refinements`: `padded`'s `F > 0` | Nothing bounds `E` below; `E = -60` gives `F = 0`. |
-| `refinements`: `padded`'s `S < F` | `E + 60` can leave the integer domain. §4.2. |
-| `fibonacci`: `Curr <= Next` | Same overflow. Bounding it needs the invariant to relate the values to `I`, which that formulation does not. |
-| `population-query`: `D >= 0` | `P * 100` can overflow and `A` can be zero. Stated in the example. |
+| `population-query`: `D >= 0` | A property of the data: `P` can be negative. The zero divisor is no longer a counterexample, a tuple witnessing its own definedness (`null-as-a-value.md` §10). |
 
-So the honest summary of what static discharge adds: it proves inductive
+So the summary of what static discharge adds: it proves inductive
 invariants over bounded integer arithmetic, and it declines, with a
 counterexample, whenever the program has not said enough to bound its inputs.
 That second case is the common one, and it is a feature: the counterexample is
 usually the missing precondition.
+
+**Two rows left this table, and one clause left a third, when expressions became
+partial.** `refinements`' `padded`'s `S < F` and `fibonacci`'s `Curr <= Next` both
+failed only on an overflow of a computed head position, and
+`population-query`'s `D >= 0` failed on an overflow as well as on a zero divisor.
+An expression that leaves the integer domain now has no value, so its rule derives
+no tuple, and a contract is a claim about the tuples that exist. The encoder says
+so by asserting the definedness of every head expression among the hypotheses. See
+null-as-a-value.md §10 and §15.19; the residual 8 below, which called the domain
+guard the single largest reason a plausible invariant does not discharge, is
+answered.
 
 `--strict-contracts` (§2.2, §11.4) did not wait for this: the warning it
 promotes exists from phase 1 on, so it shipped with phase 3.
@@ -1328,18 +1354,24 @@ Nothing here is blocking.
    constraint, costs nothing, and checks it against the data at hand. That is
    what §9.4 already concluded for `cnf-tseitin`'s other invariants.
 8. **What integer domain does solver discharge use?** Decided: the JavaScript
-   safe-integer range. Operations are exact inside it and return NULL on overflow.
-   The solver uses mathematical integers with a range guard and §4.4's null bit,
-   rather than bit-vectors or backend storage widths. Runtime alignment is in
-   place (§4.1).
+   safe-integer range. Operations are exact inside it and leave the expression
+   with no value outside it. The solver uses mathematical integers with a range
+   guard, rather than bit-vectors or backend storage widths. Runtime alignment is
+   in place (§4.1).
 
-   Running a solver showed the guard is not a detail. It is the single largest
-   reason a plausible invariant does not discharge, and it applies to the free
+   Running a solver showed the guard is not a detail. It was the single largest
+   reason a plausible invariant did not discharge, and it applies to the free
    variables as much as to the computed terms: an unconstrained SMT `Int` is
    falsified with values no tuple can hold, so each one is confined to the
-   domain too. What makes this workable rather than fatal is that the language
-   can already state the missing bound. Adding
-   `_: 1 <= N, _: N <= 1000000` to `size` is what takes
+   domain too.
+
+   **Where the guard falls now differs by position, and that is what stopped it
+   being fatal.** On a *computed head* term the guard is a hypothesis: the term
+   having no value means the rule derives no tuple, so the contract makes no claim
+   there. On a *free variable* it is still a constraint, for the original reason.
+   The first of those is what took the overflow rows out of the table above. What
+   remains, and is unchanged, is that the language can state a missing bound
+   itself: adding `_: 1 <= N, _: N <= 1000000` to `size` is what takes
    `examples/binary-search` from nothing discharged to everything, and it is
    the same thing a proof about machine arithmetic needs in any language.
 9. **A refinement mentioning no head position is inert.** Decided: warn, as

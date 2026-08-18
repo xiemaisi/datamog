@@ -27,6 +27,24 @@ withSolver(`with ${solver}`, () => {
     ]);
   });
 
+  test("an overflow no longer falsifies a claim over a computed position", async () => {
+    // §10's payoff, and the thing to run a solver at rather than assert about
+    // the encoding: `Prev + Curr` leaving the integer domain derives no tuple,
+    // so a contract over the tuples that exist has nothing to answer for. This
+    // is `examples/fibonacci` reduced to the one rule that used to fail.
+    const verdicts = await verify(`
+      step(1, 0 as P0, 1 as C0, _: 0 <= P0, _: P0 <= C0).
+      step(I + 1, Curr, Prev + Curr as Next, _: 0 <= Curr, _: Curr <= Next) :-
+        step(I, Prev, Curr), I < 10.
+    `);
+    expect(verdicts.map((v) => v.status)).toEqual([
+      "discharged",
+      "discharged",
+      "discharged",
+      "discharged",
+    ]);
+  });
+
   test("a counterexample names the assignment that falsifies the claim", async () => {
     const [verdict] = await verify("p(1, 2).\nr(X, Y, _: Y > X) :- p(X, Y).");
     expect(verdict!.status).toBe("counterexample");

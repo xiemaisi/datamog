@@ -133,3 +133,35 @@ describe("a constrained position that cannot be computed", () => {
     expect(message).toContain("Y > X");
   });
 });
+
+describe("a proposition that has no value at a derived tuple", () => {
+  test("is a counterexample, like a false one", async () => {
+    // The tuple exists, so the contract has something to say about it, and it
+    // holds of a tuple only where the proposition is *true*. A proposition
+    // without a value there is therefore a violation, which is the same reading
+    // the obligation encoder takes when it asks for `def(formula)` alongside
+    // `formula` (§15.21, §15.27).
+    //
+    // The check is negation as failure over the proposition rather than `!` over
+    // it; `!` propagates the absence and reports nothing, which silently passed
+    // every such tuple.
+    const message = await violation(`
+      seed(0). seed(4).
+      r(X, _: 10 / X > 1) :- seed(X).
+      ?- r(A).
+    `);
+    expect(message).toContain("10 / X > 1");
+  });
+
+  test("and a nullable operand is one, since arithmetic propagates the null", async () => {
+    // Position 3 rejects arithmetic on a nullable operand, but the check it runs
+    // on skips synthesised statements, so a refinement is where a nullable
+    // operand can still reach an operation. It now reports rather than passing.
+    const message = await violation(`
+      seed(1). seed(null).
+      r(X, _: X + 1 > 0) :- seed(X).
+      ?- r(A).
+    `);
+    expect(message).toContain("X + 1 > 0");
+  });
+});

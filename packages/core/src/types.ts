@@ -3,11 +3,13 @@ import {
   BUILTIN_BODY_ATOMS,
   allVarsBound,
   equalityBindingCandidates,
+  headAnnotations,
 } from "./analyzer.ts";
 import type { AnalyzedProgram, BuiltinBodyAtomSpec } from "./analyzer.ts";
 import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } from "./ast.ts";
 import { BITWISE_OPS, COMPARISON_OPS, EQUALITY_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
+import { findNullableOperands } from "./nullable-operands.ts";
 import { type BodyOwner, type NullnessInfo, inferNullness } from "./nullness.ts";
 
 export interface TypedProgram extends AnalyzedProgram {
@@ -175,6 +177,25 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
   });
 
   checkHeadAnnotations(analyzed, types, published, nullness);
+
+  // Position 3's second half (§5): an operation that computes needs a value, so a
+  // nullable operand has to be narrowed first. Runs here because it is the first
+  // point where both the types and the converged nullness are available.
+  const nullableOperands = findNullableOperands(analyzed, nullness, {
+    overloads: functionOverloads,
+    typeOf: (owner, expr) => {
+      let vars = varTypeCache.get(owner);
+      if (!vars) {
+        vars = rebuildVarTypes(owner.body, types);
+        varTypeCache.set(owner, vars);
+      }
+      return inferTermType(expr, vars, types);
+    },
+  });
+  const firstNullable = nullableOperands[0];
+  if (firstNullable) {
+    throw new AnalyzerError(firstNullable.message, firstNullable.offset, firstNullable.end);
+  }
 
   // Finalize: reject unconstrained column types. `publishedTypes` is
   // `columnTypes` widened by annotations (`published` ≥ inferred, so it is
@@ -1253,17 +1274,10 @@ function computePublishedTypes(
 ): Map<string, (PrimitiveType | undefined)[]> {
   const published = new Map<string, (PrimitiveType | undefined)[]>();
   for (const [pred, cols] of inferred) published.set(pred, [...cols]);
-  for (const [pred, rules] of analyzed.rules) {
+  for (const [pred, i, annotation] of headAnnotations(analyzed)) {
     const cols = published.get(pred);
-    if (!cols) continue;
-    for (const rule of rules) {
-      const argTypes = rule.head.argTypes;
-      if (argTypes === undefined) continue;
-      for (let i = 0; i < argTypes.length; i++) {
-        const declared = argTypes[i]?.type as PrimitiveType | undefined;
-        if (declared !== undefined) cols[i] = unifyColumnType(cols[i], declared);
-      }
-    }
+    if (!cols || i >= cols.length) continue;
+    cols[i] = unifyColumnType(cols[i], annotation.type as PrimitiveType);
   }
   return published;
 }

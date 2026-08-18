@@ -7,7 +7,7 @@ naive bottom-up evaluator; no SQL is generated. Intended for teaching
 the semantics: strata are computed in topological order and each stratum
 is re-run until its fixed point is reached.
 
-Cross-backend invariants (divide-by-zero / domain-error NULLs, slice
+Cross-backend invariants (divide-by-zero and domain errors having no value, slice
 bounds, integer-vs-float division) match the SQL backends.
 
 ## Usage

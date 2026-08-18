@@ -71,7 +71,7 @@ A negated body atom has the same flavour: `not p(X)` requires `X` to be bound el
 
 ---
 
-# The five basic types
+# The five basic types (plus `null`)
 
 | Type | Meaning |
 | --- | --- |
@@ -262,7 +262,7 @@ A type-rejected rule is one Datamog *can't* compile, not one that compiles badly
 
 - A rule is **safe** when every head variable (and every variable in a comparison, arithmetic, or negation) is bound by a positive body atom, range, or equality with a safe other side.
 - Safety ↔ domain independence — answer depends only on the data, not on the universe.
-- Datamog has **five types**: `string`, `integer`, `float`, `boolean`, `value`. Two widenings: `integer → float`, and primitive → `value` via auto-lift.
+- Datamog has **five basic types**: `string`, `integer`, `float`, `boolean`, `value`, plus `null` for the literal and a `?` for a column that can hold one. Two widenings: `integer → float`, and primitive → `value` via auto-lift.
 - A `_` head position can carry a **proposition** instead of a type. It is checked against the derived tuples and erases; `--verify` proves it instead. A contract is the disjunction over a predicate's rules, so one unannotated sibling makes it vacuous.
 - Both checks run **before** SQL is emitted. Bad programs get line-numbered errors, not runtime nonsense.
 

@@ -12,16 +12,30 @@ with its own type. So `1 / 0` withholds its row rather than storing a NULL, and
 `X = null` binds rather than failing to type. The normative rules are spec §5.4,
 now titled "Partiality and NULL".
 
-What survives unchanged. Comparison is still total **over values**, there is
-still one equality, and §4's insistence that a shared variable and a spelled-out
-`=` mean the same thing still holds. §5's table is still the table. Read those
-sections as written; they are about the value half, which did not move.
+What survives unchanged. There is still one equality, `=`/`<>` is still total and
+null-aware over values, and §4's insistence that a shared variable and a
+spelled-out `=` mean the same thing still holds. Read §4 as written.
 
-What was wrong. §3's dismissal of partial expressions answers a proposal nobody
-makes, and §3's rejection of option types is refuted by partiality being the
-case analysis it says a rule body has nowhere to put; both are marked in place
-below. §6's Postgres warning still applies, to genuinely nullable columns only,
-which are now rare.
+What was wrong, beyond the framing. Four things, each marked in place below:
+
+- **§5's ordering table.** `<`, `<=`, `>` and `>=` are now strict at a `null`: they
+  have **no value** there, so `null <= null` is not true and an ordering bound to a
+  variable derives no tuple. The wart §5 apologises for is deleted rather than
+  defended. The connectives went the same way: `null && true` has no value, though
+  `false && e` is still `false`.
+- **§7's verdict that `null` cannot be a type.** It is one. The argument turns on
+  putting `null` *below* the primitives; the successor makes it a sibling, and
+  §7's objection does not reach that design.
+- **§8's summary of what NULL does.** `count(e)` counts a `null`, `list` collects
+  one, an empty or all-null group yields the fold's identity rather than `null`, and
+  a JSON `null` leaf no longer collapses: `type_of` of one is `"null"`, and an
+  absent key is distinguishable from a present-but-null one.
+- **§3's dismissal of partial expressions**, which answers a proposal nobody makes,
+  and its rejection of option types, refuted by partiality being the case analysis
+  it says a rule body has nowhere to put.
+
+§6's Postgres warning still applies, to genuinely nullable columns only, which are
+now rare.
 
 ## 1. The reflex, and why it misfires
 
@@ -202,6 +216,14 @@ explicit equality disagree, which is what §4 is about.
 
 ### Ordering: null is an isolated point
 
+> **Superseded.** The orderings are now **strict** at a `null`: they have no value
+> there, so every ordering cell below that involves a `null` is "no value" rather
+> than true or false, and `null <= null` in particular is not true. The successor
+> keeps this section's diagnosis, that `null` is outside the order, and draws the
+> other conclusion from it: an operator that needs an order has nothing to say
+> where its operand is not in one. The comparison of `=`/`<>` in the first two
+> columns is unchanged. See null-as-a-value.md §4.1.
+
 The non-null values keep their total order. `null` sits outside it,
 comparable only to itself:
 
@@ -239,6 +261,14 @@ output predicate hi(X) :- p(X), not (X < 2).    % {null}
 
 `lo` and `hi` partition `p`.
 
+> **Superseded, and the example no longer runs this way.** `X = 3 / 0` now derives
+> no tuple at all, so `p` is `{1}` and `hi` is empty. Write `p(null).` for the row
+> this was reaching for; then `lo` is `{1}` and `hi` is `{null}` as shown, because
+> the ordering has no value at the null and `not` holds of anything that does not
+> hold. What is *not* fixed is complementation itself: `not` complements failure,
+> so it holds where a comparison has no value, and only expression-level `!` is
+> strict. See null-as-a-value.md §4.4.
+
 **Not fixed: `not (X < 2)` is not `X >= 2`.** The NULL row is in the first
 and not the second, because it is in neither `<` nor `>=`. That follows
 from incomparability and no ordering design avoids it without inventing a
@@ -255,6 +285,16 @@ the language, only hide it, so the connectives keep propagating.
 
 The line to draw: NULL propagates through *operations* and is absorbed by
 *comparisons*.
+
+> **Superseded.** Nothing stays three-valued. `!null` and `null && true` have no
+> value, a null being no truth value, and a connective is non-strict only at its
+> dominating operand, where `false && e` is still `false`. `as_boolean(null)` has no
+> value either, a null being no boolean. What killed 3VL in the connectives was not
+> a wish to hide NULL: it was that a connective which propagated a null while also
+> being able to lack a value made a SQL NULL ambiguous between the two readings.
+> The line this section draws survives one notch out: an operation that *computes*
+> requires a non-null operand, and the constructs that *test* take one and fail.
+> See null-as-a-value.md §15.26.
 
 ## 6. The price: null-aware joins on Postgres
 
@@ -330,6 +370,17 @@ column is non-null unless declared `?`.
 
 ## 7. Why the static story stays clean
 
+> **Superseded, and this is the argument that turned out to be wrong.** There *is*
+> a `null` type: the literal has one, `X = null` binds `X`, and the type is checked
+> like any other. The final paragraph below is the load-bearing mistake, and it is
+> load-bearing on one word: it requires `null` to sit *below* the primitives, and
+> then correctly shows that this makes `string ⊓ integer` inhabited. Making it a
+> **sibling** of the primitives costs nothing and answers the objection, since
+> nothing was added below them. What that buys is a static error where `X = null`
+> is asked of a type that cannot hold one. The nullness *bit* survives beside the
+> base type, exactly as this section describes it. See null-as-a-value.md §2 and
+> §3.
+
 None of the above leaks into the type system, which is worth saying because
 it is what keeps the cost contained.
 
@@ -370,6 +421,16 @@ which also covers why the analyser's "no type information" element sits
 *above* `value` rather than below the primitives.
 
 ## 8. Writing programs that survive NULL
+
+> **Superseded in its last three bullets.** `count(e)` counts a `null`, so
+> `count(X)` equals `count(*)` for any variable; `list` collects nulls, sorting a
+> null first, so `length(list(V))` *is* the count of values; an empty or all-null
+> group yields the fold's identity, `[]` for `list`, `0` for `sum`, `""` for
+> `concat`; and a JSON `null` leaf no longer collapses, so `type_of` of one is the
+> string `"null"` and an absent key is distinguishable from a present-but-null one.
+> The reason given for the old behaviour, that a kept null would be unobservable,
+> is what stopped being true. The first four bullets stand, with `<>` now also
+> warned about over a partial operand. See null-as-a-value.md §7 and §8.
 
 - Guard with `<> null` when a column can hold one. It is total, so it never
   silently drops the row you meant to keep. This is the answer to the one

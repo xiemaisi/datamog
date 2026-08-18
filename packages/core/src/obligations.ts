@@ -10,16 +10,23 @@
 //   - SMT-LIB's `div`/`mod` are Euclidean, with a non-negative remainder,
 //     where Datamog truncates toward zero and takes the dividend's sign
 //     (spec §5.3). Both are written out.
-//   - `integer` is `[-(2^53 - 1), 2^53 - 1]` and arithmetic leaving it is
-//     NULL, so every arithmetic term carries an overflow condition.
+//   - `integer` is `[-(2^53 - 1), 2^53 - 1]` and arithmetic leaving it has no
+//     value, so every arithmetic term carries a domain condition.
 //
-// NULL is modelled as a pair, per §4.4: each term has a value and a Bool
-// saying whether it is null. An ordering is false at NULL and `=` is
-// null-aware, so the comparisons are written out rather than mapped straight
-// onto SMT-LIB's. Where the nullness analysis proves a variable non-null the
-// companion Bool is dropped, and every variable is confined to the integer
-// domain: an SMT `Int` left free is falsified with a null a column cannot hold
-// or a value no tuple can hold, and neither counterexample means anything.
+// Each term carries three things, and the second and third are separate
+// questions rather than one: a value, whether it is the `null` value, and
+// whether it has a value at all. `=` is null-aware and the orderings are strict
+// at null, so the comparisons are written out rather than mapped straight onto
+// SMT-LIB's.
+//
+// Where definedness enters decides everything. A *computed head term* having no
+// value means the rule derives no tuple, so its definedness is a **hypothesis**
+// and the contract makes no claim there. A *free variable* is confined to the
+// integer domain by a **constraint**, an SMT `Int` left free being falsified with
+// a value no tuple can hold. And a *refinement* holds only where it has a value,
+// so its definedness is part of the **goal**. Where the nullness analysis proves
+// a variable non-null its companion Bool is dropped, without which every contract
+// over an integer column fails for a reason the program excludes.
 
 import type { AnalyzedProgram } from "./analyzer.ts";
 import { containsAggregate } from "./analyzer.ts";
@@ -29,13 +36,29 @@ import { inferTermType, rebuildVarTypes } from "./types.ts";
 
 const MAX_SAFE = "9007199254740991";
 
-/** A term as a value and the condition under which it is NULL. */
+/**
+ * A term as a value, the condition under which it is NULL, and the condition
+ * under which it has a value at all.
+ *
+ * The two conditions are different questions and the encoder needs both, exactly
+ * as the rest of the language does (null-as-a-value.md §1). `isNull` says the
+ * term denotes the `null` **value**; `def` says it denotes anything. Leaving the
+ * integer domain and dividing by zero move `def`, not `isNull`.
+ *
+ * `def` is only ever *asserted*, never assumed to be false, so it has to be
+ * implied by the thing being asserted and never stronger than it. Where the exact
+ * condition is awkward to state the safe answer is `DEFINED`, which claims
+ * nothing: a missing hypothesis weakens a goal, an over-strong one would prove
+ * something false.
+ */
 interface Term {
   v: string;
   isNull: string;
+  def: string;
 }
 
 const NOT_NULL = "false";
+const DEFINED = "true";
 
 function or(...conditions: string[]): string {
   const live = conditions.filter((c) => c !== NOT_NULL);
@@ -43,11 +66,17 @@ function or(...conditions: string[]): string {
   return live.length === 1 ? live[0]! : `(or ${live.join(" ")})`;
 }
 
+function and(...conditions: string[]): string {
+  const live = conditions.filter((c) => c !== DEFINED);
+  if (live.length === 0) return DEFINED;
+  return live.length === 1 ? live[0]! : `(and ${live.join(" ")})`;
+}
+
 function nonNull(t: Term): string {
   return t.isNull === NOT_NULL ? "true" : `(not ${t.isNull})`;
 }
 
-/** Within the integer domain, so an arithmetic result is not NULL. */
+/** Within the integer domain, so an arithmetic result has a value. */
 function inDomain(value: string): string {
   return `(and (<= (- ${MAX_SAFE}) ${value}) (<= ${value} ${MAX_SAFE}))`;
 }
@@ -119,11 +148,13 @@ function toSmt(
       // what decides, not `isFloatLiteral`: a refinement formula never reaches
       // the walker that attaches `rawText`.
       if (!Number.isInteger(expr.value)) throw new UnsupportedTerm("a non-integer literal");
-      return { v: String(expr.value), isNull: NOT_NULL };
+      return { v: String(expr.value), isNull: NOT_NULL, def: DEFINED };
     case "BooleanLiteral":
-      return { v: expr.value ? "true" : "false", isNull: NOT_NULL };
+      return { v: expr.value ? "true" : "false", isNull: NOT_NULL, def: DEFINED };
     case "NullLiteral":
-      return { v: "0", isNull: "true" };
+      // Defined: `null` is a value, and writing it down is not a partial
+      // operation. Only `isNull` moves.
+      return { v: "0", isNull: "true", def: DEFINED };
     case "Variable": {
       // Tier 1 is QF_LIA, so `integer` is the only sort that can be declared
       // faithfully. Anything else — a `float`, a `string`, a `value` — would
@@ -142,13 +173,19 @@ function toSmt(
       return {
         v: expr.name,
         isNull: ctx.nonNull.has(expr.name) ? NOT_NULL : `${expr.name}$null`,
+        // A variable is bound to a value, null included, so it is always defined.
+        def: DEFINED,
       };
     }
     case "UnaryExpr": {
       const operand = toSmt(expr.operand, ctx, vars, subst);
-      if (expr.op === "!") return { v: `(not ${operand.v})`, isNull: NOT_NULL };
+      if (expr.op === "!") return { v: `(not ${operand.v})`, isNull: NOT_NULL, def: operand.def };
       const value = `(- ${operand.v})`;
-      return { v: value, isNull: or(operand.isNull, `(not ${inDomain(value)})`) };
+      return {
+        v: value,
+        isNull: operand.isNull,
+        def: and(operand.def, inDomain(value)),
+      };
     }
     case "BinaryExpr": {
       const l = toSmt(expr.left, ctx, vars, subst);
@@ -168,40 +205,63 @@ export class UnsupportedTerm extends Error {
 
 function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
   // Connectives over comparisons stay two-valued (§4.1 excludes a bare
-  // boolean term, so neither side can be NULL here).
-  if (op === "&&") return { v: `(and ${l.v} ${r.v})`, isNull: NOT_NULL };
-  if (op === "||") return { v: `(or ${l.v} ${r.v})`, isNull: NOT_NULL };
+  // boolean term, so neither side can be NULL here). Their definedness is left
+  // unstated: `&&` is non-strict in undefinedness (`false && e` is false), so
+  // "the conjunction has a value" does not give "both sides do", and asserting
+  // the stronger reading would be asserting something false.
+  if (op === "&&") return { v: `(and ${l.v} ${r.v})`, isNull: NOT_NULL, def: DEFINED };
+  if (op === "||") return { v: `(or ${l.v} ${r.v})`, isNull: NOT_NULL, def: DEFINED };
 
-  // Comparison is total: null never comes back out of one (null.md §5).
+  // No comparison ever yields a null. They part on what happens at one instead.
+  // An ordering is **strict** at null as well as at undefined, `null` having no
+  // place in an order (§4.1), so its definedness carries both conditions and its
+  // value is the bare SMT-LIB comparison. Equality is total over values, so it
+  // answers at a null and is defined wherever its operands are.
   const both = `(and ${nonNull(l)} ${nonNull(r)})`;
   const bothNull = `(and ${l.isNull} ${r.isNull})`;
+  const bothDef = and(l.def, r.def);
   switch (op) {
     case "<":
     case ">":
-      return { v: `(and ${both} (${op} ${l.v} ${r.v}))`, isNull: NOT_NULL };
     case "<=":
     case ">=":
-      return { v: `(or ${bothNull} (and ${both} (${op} ${l.v} ${r.v})))`, isNull: NOT_NULL };
+      return {
+        v: `(${op} ${l.v} ${r.v})`,
+        isNull: NOT_NULL,
+        def: and(bothDef, both),
+      };
     case "=":
-      return { v: `(or ${bothNull} (and ${both} (= ${l.v} ${r.v})))`, isNull: NOT_NULL };
+      return {
+        v: `(or ${bothNull} (and ${both} (= ${l.v} ${r.v})))`,
+        isNull: NOT_NULL,
+        def: bothDef,
+      };
     case "<>":
     case "!=":
-      return { v: `(not (or ${bothNull} (and ${both} (= ${l.v} ${r.v}))))`, isNull: NOT_NULL };
+      return {
+        v: `(not (or ${bothNull} (and ${both} (= ${l.v} ${r.v}))))`,
+        isNull: NOT_NULL,
+        def: bothDef,
+      };
   }
 
-  // Arithmetic: NULL propagates, and leaving the integer domain originates it.
+  // Arithmetic propagates NULL and originates none. Leaving the integer domain
+  // and dividing by zero leave the term with no value, which is `def`'s business
+  // rather than `isNull`'s: modelling them as nulls is what used to falsify
+  // `fibonacci`'s `Curr <= Next` with an overflow no derived tuple can contain
+  // (§10, §15.19).
   const propagated = or(l.isNull, r.isNull);
   if (op === "+" || op === "-" || op === "*") {
     if (op === "*" && !isNumeral(l.v) && !isNumeral(r.v)) ctx.nonlinear = true;
     const value = `(${op} ${l.v} ${r.v})`;
-    return { v: value, isNull: or(propagated, `(not ${inDomain(value)})`) };
+    return { v: value, isNull: propagated, def: and(bothDef, inDomain(value)) };
   }
   if (op === "/" || op === "%") {
     if (!isNumeral(r.v)) ctx.nonlinear = true;
-    const byZero = `(= ${r.v} 0)`;
+    const nonZero = `(not (= ${r.v} 0))`;
     const q = truncDiv(l.v, r.v);
     const value = op === "/" ? q : `(- ${l.v} (* ${r.v} ${q}))`;
-    return { v: value, isNull: or(propagated, byZero) };
+    return { v: value, isNull: propagated, def: and(bothDef, nonZero) };
   }
   throw new UnsupportedTerm(`operator ${op}`);
 }
@@ -267,14 +327,17 @@ function hypotheses(
   ctx: ObligationContext,
   vars: Map<string, PrimitiveType>,
 ): string[] {
-  const out: string[] = [];
+  // A set, because two head arguments over the same expression contribute the
+  // same definedness hypothesis. Duplicates cost a solver nothing but make the
+  // `--obligations` output harder to read.
+  const out = new Set<string>();
   // Hypotheses are best effort: one outside the fragment is dropped rather
   // than failing the obligation, since omitting a hypothesis only weakens the
   // goal. A goal outside the fragment is a different matter and is reported.
   const attempt = (build: () => string | undefined) => {
     try {
       const built = build();
-      if (built !== undefined) out.push(built);
+      if (built !== undefined) out.add(built);
     } catch (e) {
       if (!(e instanceof UnsupportedTerm)) throw e;
     }
@@ -285,21 +348,38 @@ function hypotheses(
       // the values, so only a positive one contributes.
       if (!element.negated) attempt(() => contractHypothesis(element, ctx.types, ctx, vars));
     } else if (element.$type === "Filter") {
-      attempt(() => toSmt(element.expr as HeadTerm, ctx, vars).v);
+      // A conjunct holds only where it has a value, so its definedness joins it.
+      attempt(() => {
+        const t = toSmt(element.expr as HeadTerm, ctx, vars);
+        return and(t.def, t.v);
+      });
     } else if (element.$type === "Equality") {
       // The grammar calls the right-hand side `expr`.
-      attempt(
-        () =>
-          binary(
-            "=",
-            toSmt(element.left as HeadTerm, ctx, vars),
-            toSmt(element.expr as HeadTerm, ctx, vars),
-            ctx,
-          ).v,
-      );
+      attempt(() => {
+        const eq = binary(
+          "=",
+          toSmt(element.left as HeadTerm, ctx, vars),
+          toSmt(element.expr as HeadTerm, ctx, vars),
+          ctx,
+        );
+        return and(eq.def, eq.v);
+      });
     }
     // A range atom bounds its variable and could contribute those bounds; it
     // does not yet. Omitting a hypothesis only weakens a goal.
+  }
+
+  // A derived tuple witnesses its own definedness: a head expression with no
+  // value derives nothing, so every tuple the contract quantifies over is one
+  // where each head expression has a value (§10). This is what retires the
+  // overflow counterexample, and it has to be a hypothesis rather than a
+  // side-condition on the goal, because the goal is about the tuple.
+  for (const arg of rule.head.args) {
+    if (containsAggregate(arg)) continue;
+    attempt(() => {
+      const def = toSmt(arg as HeadTerm, ctx, vars).def;
+      return def === DEFINED ? undefined : def;
+    });
   }
 
   // A named head position contributes its definition (§3.3's last row). `as`
@@ -313,17 +393,19 @@ function hypotheses(
     // anything else the goal mentioning it is already being dropped.
     if (vars.get(name) !== "integer") return;
     ctx.declared.set(name, "integer");
+    // Just the equality: the expression's definedness is asserted by the
+    // head-argument pass above, which sees this same argument.
     attempt(
       () =>
         binary(
           "=",
-          { v: name, isNull: ctx.nonNull.has(name) ? NOT_NULL : `${name}$null` },
+          { v: name, isNull: ctx.nonNull.has(name) ? NOT_NULL : `${name}$null`, def: DEFINED },
           toSmt(arg, ctx, vars),
           ctx,
         ).v,
     );
   });
-  return out;
+  return [...out];
 }
 
 /** One obligation: a named goal with its hypotheses. */
@@ -375,7 +457,14 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
           if (rule.head.args.some(containsAggregate)) {
             throw new UnsupportedTerm("an aggregate in the head");
           }
-          const goal = toSmt(refinement.formula as HeadTerm, ctx, vars);
+          const formula = toSmt(refinement.formula as HeadTerm, ctx, vars);
+          // A refinement *holds* of a tuple only where it has a value and that
+          // value is true, which is the same rule a body conjunct follows. It
+          // matters for an ordering, which is strict at null (§4.1): a contract
+          // `_: Y > X` is violated by a tuple whose `Y` is null, the ordering
+          // having no answer there, so the null case has to be inside the goal
+          // rather than assumed away.
+          const goal = and(formula.def, formula.v);
           const asserts = hypotheses(rule, ctx, vars);
           // Every variable ranges over an `integer` column, so it is inside
           // the domain: a solver given an unbounded `Int` otherwise falsifies
@@ -396,7 +485,7 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
             "(push 1)",
             declarations,
             ...asserts.map((a) => `(assert ${a})`),
-            `(assert (not ${goal.v}))`,
+            `(assert (not ${goal}))`,
             "(check-sat) ; unsat discharges the obligation",
             "(pop 1)",
           ]

@@ -64,8 +64,12 @@ export function canBeUndefined(expr: HeadTerm, ctx: PartialityContext): boolean 
     case "Variable":
       return false;
     case "UnaryExpr":
-      // `!` is total on a boolean; arithmetic negation can leave the domain.
-      return expr.op === "!" ? rec(expr.operand) : true;
+      // Arithmetic negation can leave the integer domain, and `!` has no value
+      // at a `null` operand, a null being no truth value (§15.26). Whether the
+      // operand can be a null is a nullness question and no nullness bit is in
+      // scope here, so the answer is the conservative one for both, exactly as
+      // for the orderings below.
+      return true;
     case "AggregateCall":
       // §7. `count` folds with 0, and so do `sum`, `concat` and `list`, so those
       // always have a value over any group. `avg`, `min` and `max` have no
@@ -98,11 +102,26 @@ export function canBeUndefined(expr: HeadTerm, ctx: PartialityContext): boolean 
       );
     case "BinaryExpr": {
       const { op, left, right } = expr;
-      // A comparison always answers, so it is defined whatever its operands do.
-      // Note this is about the comparison's own definedness: whether it *holds*
-      // when an operand is undefined is §1's conjunct rule, applied elsewhere.
-      if (EQUALITY_OPS.has(op) || ORDERING_OPS.has(op)) return false;
-      if (op === "&&" || op === "||") return rec(left) || rec(right);
+      // Equality is total over *values* and strict in undefinedness, exactly
+      // like an ordering: `e = f` holds only of two defined operands (§1), so as
+      // an expression it has no value where either side has none. The translator
+      // folds that definedness into the emission locally rather than hoisting it
+      // to a rule-level guard, which is what keeps `<>` and `not (=)` apart
+      // (§4.2, §15.3) while still leaving a binding position with nothing to
+      // bind.
+      if (EQUALITY_OPS.has(op)) return rec(left) || rec(right);
+      // An ordering is strict at null and at undefined alike, `null` having no
+      // place in an order (§4.1). No nullness bit is in scope here, so the answer
+      // is the conservative one: any ordering may have no value. That costs an
+      // `IS NOT NULL` guard where the result is bound to a variable, which is a
+      // no-op for non-null operands, and nothing at all in condition position.
+      if (ORDERING_OPS.has(op)) return true;
+      // A connective is strict at a `null` operand for the same reason `!` is,
+      // and non-strict at its absorbing value, so it has no value wherever an
+      // operand is a null or an absence that `false`/`true` does not rescue.
+      // Same conservative answer, and the same cost: an `IS NOT NULL` that is a
+      // no-op where the operands are truth values.
+      if (op === "&&" || op === "||") return true;
       // 32-bit wrapping, so nothing escapes the domain.
       if (BITWISE_OPS.has(op)) return rec(left) || rec(right);
       // A zero divisor, a negative base with a fractional exponent, overflow.

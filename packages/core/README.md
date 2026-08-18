@@ -49,10 +49,10 @@ const typed = inferTypes(analyze(program));
 typed.columnTypes;      // Map<string, PrimitiveType[]>, column types per predicate — what codegen uses
 typed.publishedTypes;   // the same, widened by head annotations — the contract consumers see
 typed.functionOverloads;// Map<FunctionCall, Overload>, the hand-off to backend dispatch
-typed.nullness;         // which columns can hold NULL, and which variables each body proves cannot
+typed.nullness;         // which columns can hold the `null` value, and which variables each body proves cannot
 ```
 
-Types are: `string`, `integer`, `float`, `boolean`, `value`. Type inference is a fixed-point iteration; columns that the iteration leaves un-pinned are reported as a type-inference error (rather than silently defaulted).
+Types are: `string`, `integer`, `float`, `boolean`, `value`, and `null` (the literal's own type), each optionally nullable. Type inference is a fixed-point iteration; columns that the iteration leaves un-pinned are reported as a type-inference error (rather than silently defaulted).
 
 ## Other analyses
 
@@ -60,7 +60,9 @@ Each is a pull-based call the CLI, the playground, and the VS Code extension mak
 
 | Entry point | Module | What it answers |
 | ----------- | ------ | --------------- |
-| `inferNullness`, `findNullnessRisks` | `nullness.ts`, `nullness-diagnostics.ts` | which columns can be NULL, plus three warnings where a NULL lands somewhere easy not to expect |
+| `inferNullness`, `findNullnessRisks` | `nullness.ts`, `nullness-diagnostics.ts` | which columns can hold the `null` value, plus five warnings where a null or an absent value lands somewhere easy not to expect |
+| `canBeUndefined` | `partiality.ts` | whether an expression can have no value, which is a different question from nullness and the one that decides guards, `count`'s emit and `defined`'s |
+| `findNullableOperands` | `nullable-operands.ts` | every nullable operand in a position that needs a value, which is a static error |
 | `findInertContracts` | `contracts.ts` | which refinement contracts an unannotated sibling rule has made vacuous |
 | `generateObligations`, `obligationScript` | `obligations.ts` | the refinement contracts as SMT-LIB 2, for a solver you supply |
 | `findInfiniteRisks` | `finiteness.ts` | which columns may grow unboundedly across iterations |
