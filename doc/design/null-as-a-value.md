@@ -29,7 +29,8 @@ changed it. §15.32 is a fourth audit, angled by premise rather than by file for
 reason, which found four more unsoundnesses and applied §15.31's lesson to §15.31:
 the emit sites were made to share one predicate and nobody re-audited the predicate.
 It leaves five items open with reasons, and adds the three property-shaped tests
-that make a fifth audit worth less. §2, §4.4, §5, §6, §9.4, §10 and §14 carry its
+that make a fifth audit worth less. §15.33 then closes the structural half of §9.4:
+a lift site that does not say what a NULL means there is now a compile error. §2, §4.4, §5, §6, §9.4, §10 and §14 carry its
 corrections in place.** This is the design
 [partial-expressions.md](./partial-expressions.md) should have found and did not.
 It supersedes that doc's recommendation: where that one concluded "keep NULL, at
@@ -648,11 +649,14 @@ accessor emit, not a redesign.
 
 > **Five is wrong, twice over. §15.31 counted at least eleven, and a fourth audit
 > (§15.32) enumerated 48 sites in the translator and the three dialects that emit a
-> comparison, a lift, a guard, a `FILTER`, a `COALESCE` or a `CAST`.** Of those,
-> four consult no predicate at all and are correct only because Position 3 forbids
-> the case that would break them, and two consult the syntactic proxy
-> `$type === "Variable"` because `termToSql` has no rule context. The list below is
-> the work this section foresaw, not the work there was.
+> comparison, a lift, a guard, a `FILTER`, a `COALESCE` or a `CAST`.** The list below
+> is the work this section foresaw, not the work there was.
+>
+> **The lift sites no longer answer by default (§15.33).** `nullMeans: NullMeaning`
+> is a required parameter on `liftToJsonIfNeeded` and `primitiveToJsonSql`, so a site
+> that does not state whether a NULL there is the `null` value or an absence is a
+> compile error rather than a silent inheritance of `false`. Six sites had been
+> inheriting it.
 
 Every site that today reads "this is SQL NULL" has to ask the expression's type
 first. There are five:
@@ -2435,3 +2439,50 @@ findable by a kind of test that did not exist: none asserted that a builtin's
 or that a parity stratum under a cap can be read on its maximal side. Three
 property-shaped tests now do, and they are what makes a fifth audit worth less than
 this one was.
+
+### 15.33 The lift sites, made to answer
+
+§9.4 says "the static type decides", and §15.31 corrected that to an obligation on
+every site that emits a comparison or a lift, counting at least eleven where the
+section had five and finding four different predicates being consulted ad hoc. The
+fourth audit enumerated 48 such sites. This closes the part of that which is
+structural rather than a bug: **the question is now impossible to leave unanswered.**
+
+`nullMeans: NullMeaning` is required on `liftToJsonIfNeeded` and `primitiveToJsonSql`,
+where it had been `nullIsValue = false`. Six sites were inheriting that default — a
+builtin iteration source, a non-variable head argument, a builtin's bound argument, a
+fact's head term, `list`'s element lift, and the expression-equality helper. Each was
+correct, and each was correct for a reason living in another file: Position 3 forbids
+the case that would break it. A required parameter turns the seventh such site into a
+compile error, which is the only form of enforcement that survives someone not having
+read this document.
+
+Two of the six had the answer already computed one line away and were not passing it:
+the builtin bound argument calls `cannotBeNullHere` for its equality, and the
+expression-equality helper takes `plainEq`, which *is* the nullness answer. Both now
+derive the lift from the same value rather than a second, possibly different one, and
+`nullMeansIn` beside `cannotBeNullHere` is the one place the derivation lives.
+
+Two sites keep answering from the term's shape rather than from nullness, and that is
+recorded rather than fixed: `termToSql` and the builtin argument lift have no rule
+context, so no refinements to read. Both over-approximate in the safe direction — a
+non-nullable variable gets a `CASE` that never fires, costing SQL noise and no wrong
+answer — and threading `nonNullVars` through every recursive call would buy only that
+noise back.
+
+`list`'s element lift is the one whose answer §15.32 called right by accident, and it
+still is: both families turn a SQL NULL inside their array aggregate into a JSON null
+by themselves, so the null reaches the array without an explicit `CASE`. The accident
+is now written at the site, so the next reader knows the answer rests on that dialect
+behaviour rather than on the lift.
+
+**Verified as behaviour-preserving rather than assumed.** The generated SQL for every
+single-file example, on both dialects, is byte-identical before and after: 12,349
+lines, zero diff. The suite is 2041 pass, 0 fail with a live Postgres. And the
+enforcement itself was tested by deleting one site's answer and confirming `tsc`
+rejects it.
+
+What this does not do is unify the four predicates. `canBeUndefined`, `mayBeNull`,
+`nonNullVars` and the type answer different questions and a site may legitimately need
+any of them; collapsing them would hide that. What it does is stop a site answering
+*nothing*, which is the case that has actually gone wrong.

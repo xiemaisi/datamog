@@ -389,6 +389,23 @@ function translateViews(
   return { sql, predicates };
 }
 
+/**
+ * What a SQL NULL means in one particular expression (§9.2 of
+ * doc/design/null-as-a-value.md).
+ *
+ * SQL has one NULL and this language gives it two unrelated jobs: the `null` value,
+ * which a row carries, and the absence of a value, which withholds the row. For the
+ * four primitive types the static type decides, so nothing has to be passed around.
+ * For a `value`-typed position it does not decide — a `value` can be both nullable
+ * and partial — so every site that emits a lift or a comparison there owes an answer,
+ * and this type is how it states one.
+ *
+ * Spelled out rather than left as a boolean because the answer is the thing that has
+ * repeatedly been got wrong: `nullMeans: "absence"` reads at the call site where
+ * `false` needs the signature looked up.
+ */
+type NullMeaning = "absence" | "value";
+
 /** Variable binding: either a column reference or an SQL expression (from equality). */
 type Binding =
   | { kind: "col"; alias: string; col: string; type: PrimitiveType | undefined }
@@ -604,11 +621,17 @@ function translateRule(
             dialect,
           );
           const sourceType = inferTermType(sourceTerm, varTypes, columnTypes);
+          // Either reading iterates to zero rows here: a JSON null is not an object
+          // or an array, and a SQL NULL makes the dialect's guarded `CASE` hand the
+          // set-returning function a NULL, which yields nothing. So the answer does
+          // not matter for the result, and `"absence"` is the one that emits no dead
+          // `CASE`.
           const sourceValueSql = liftToJsonIfNeeded(
             sourceSql,
             sourceType,
             spec.sourceType,
             dialect,
+            "absence",
           );
           const iter = dialect.jsonIterate(spec.kind, sourceValueSql, alias);
           // Bind the bound-arg Variables to the SQL expressions that
@@ -777,7 +800,7 @@ function translateRule(
         varType,
         headColType,
         dialect,
-        !nonNullVars.has(term.name),
+        nonNullVars.has(term.name) ? "absence" : "value",
       );
       const expr = castHeadColumn(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
@@ -787,7 +810,11 @@ function translateRule(
     } else {
       const rawExpr = termToSql(term, bindings, varTypes, columnTypes, functionOverloads, dialect);
       const termType = inferTermType(term, varTypes, columnTypes);
-      const lifted = liftToJsonIfNeeded(rawExpr, termType, headColType, dialect);
+      // Not a bare variable, so after Position 3 it is either non-nullable or
+      // partial, and in both cases a NULL is an absence: the definedness guard
+      // pushed below is what drops the row. The `null` literal reaches this arm and
+      // is handled by its own type inside the lift.
+      const lifted = liftToJsonIfNeeded(rawExpr, termType, headColType, dialect, "absence");
       const expr = castHeadColumn(lifted, headColType, dialect);
       selectParts.push(`${expr} AS ${targetCol}`);
       // A tuple is derived only where every head expression is defined. An
@@ -830,6 +857,13 @@ function translateRule(
   };
   const cannotBeNullHere = (term: HeadTerm): boolean =>
     !mayBeNull(term, nonNullVars, rule, nullCtx);
+  /**
+   * §9.2's question for one expression in this body: if its SQL is NULL, is that the
+   * `null` value or an absence? Derived from nullness rather than from the term's
+   * shape, and named so a lift site states its answer instead of inheriting one.
+   */
+  const nullMeansIn = (term: HeadTerm): NullMeaning =>
+    cannotBeNullHere(term) ? "absence" : "value";
   const partialCtx: PartialityContext = {
     overloads: functionOverloads,
     typeOf: (expr) => inferTermType(expr, varTypes, columnTypes),
@@ -949,13 +983,20 @@ function translateRule(
       if (arg.$type === "Variable") continue;
       const termType = inferTermType(arg, varTypes, columnTypes);
       const termSql = termToSql(arg, bindings, varTypes, columnTypes, functionOverloads, dialect);
-      const lifted = liftToJsonIfNeeded(termSql, termType, expectedType, dialect);
+      // The same answer the equality below already asks for. It was available here
+      // all along and the lift did not ask, which is the shape of every finding
+      // §15.32 lists against this class of site.
+      const nonNull = cannotBeNullHere(arg);
+      const lifted = liftToJsonIfNeeded(
+        termSql,
+        termType,
+        expectedType,
+        dialect,
+        nonNull ? "absence" : "value",
+      );
       const slot = slotSql[k]!;
       conditions.push(
-        markSpan(
-          atom,
-          cannotBeNullHere(arg) ? `${slot} = ${lifted}` : dialect.logicalEq(slot, lifted),
-        ),
+        markSpan(atom, nonNull ? `${slot} = ${lifted}` : dialect.logicalEq(slot, lifted)),
       );
     }
   }
@@ -1066,9 +1107,9 @@ function translateRule(
     const leftType = inferTermType(eq.left, varTypes, columnTypes);
     const rightType = inferTermType(eq.expr, varTypes, columnTypes);
     if (leftType === "value" && rightType !== undefined && rightType !== "value") {
-      rhs = primitiveToJsonSql(rhs, rightType, dialect, !cannotBeNullHere(eq.expr));
+      rhs = primitiveToJsonSql(rhs, rightType, dialect, nullMeansIn(eq.expr));
     } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
-      lhs = primitiveToJsonSql(lhs, leftType, dialect, !cannotBeNullHere(eq.left));
+      lhs = primitiveToJsonSql(lhs, leftType, dialect, nullMeansIn(eq.left));
     }
     const plainEq = cannotBeNullHere(eq.left) || cannotBeNullHere(eq.expr);
     conditions.push(markSpan(eq, plainEq ? `(${lhs} = ${rhs})` : dialect.logicalEq(lhs, rhs)));
@@ -1132,7 +1173,11 @@ function translateFact(rule: Rule, analyzed: TypedProgram, dialect: SqlDialect):
     const headColType = analyzed.columnTypes.get(rule.head.predicate)?.[i];
     const termType = inferTermType(term, emptyVarTypes, analyzed.columnTypes);
     if (canBeUndefined(term, partialCtx)) definedness.push(`${rawSql} IS NOT NULL`);
-    const lifted = liftToJsonIfNeeded(rawSql, termType, headColType, dialect);
+    // A fact has no body, so no variable and no refinement: every term is a literal
+    // or an expression over literals. The `null` literal carries the `null` type and
+    // the lift spells it from that, so nothing else here can be null and a NULL means
+    // an absence, which the guard above drops.
+    const lifted = liftToJsonIfNeeded(rawSql, termType, headColType, dialect, "absence");
     return `${castHeadColumn(lifted, headColType, dialect)} AS col${i + 1}`;
   });
   // A nullary fact (empty head) becomes the constant marker column; see translateRule.
@@ -1410,19 +1455,29 @@ function termToSql(
         const leftType = inferTermType(term.left, varTypes, columnTypes);
         const rightType = inferTermType(term.right, varTypes, columnTypes);
         // A variable is the only lifted operand that can hold the null value and
-        // still be defined, the `null` literal being lifted by its own type arm,
-        // so it is the only one whose SQL NULL has to become a JSON null. No
-        // nullness bit is in scope here, so a non-nullable variable gets a `CASE`
-        // that never fires.
+        // still be defined, the `null` literal being lifted by its own type arm, so
+        // it is the only one whose SQL NULL has to become a JSON null.
+        //
+        // This is the one place that answers from the term's *shape* rather than from
+        // nullness, because `termToSql` has no rule context and so no refinements to
+        // read. That is an over-approximation in the safe direction: a non-nullable
+        // variable gets a `CASE` that never fires, costing SQL noise and no wrong
+        // answer. The alternative, threading `nonNullVars` through every recursive
+        // call, buys only that noise back.
         if (leftType === "value" && rightType !== undefined && rightType !== "value") {
           rightSql = primitiveToJsonSql(
             rightSql,
             rightType,
             dialect,
-            term.right.$type === "Variable",
+            term.right.$type === "Variable" ? "value" : "absence",
           );
         } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
-          leftSql = primitiveToJsonSql(leftSql, leftType, dialect, term.left.$type === "Variable");
+          leftSql = primitiveToJsonSql(
+            leftSql,
+            leftType,
+            dialect,
+            term.left.$type === "Variable" ? "value" : "absence",
+          );
         }
       }
       // Equality is null-aware over *values*, so it routes through the
@@ -1869,24 +1924,29 @@ function liftToJsonIfNeeded(
   exprType: PrimitiveType | undefined,
   expectedType: PrimitiveType | undefined,
   dialect: SqlDialect,
-  nullIsValue = false,
+  nullMeans: NullMeaning,
 ): string {
   if (expectedType !== "value") return sql;
   if (exprType === "value") return sql;
   if (exprType === undefined) return `CAST(${sql} AS ${sqlTypeFor(dialect, "value")})`;
-  return primitiveToJsonSql(sql, exprType, dialect, nullIsValue);
+  return primitiveToJsonSql(sql, exprType, dialect, nullMeans);
 }
 
 /**
  * Lift a primitive-typed expression into the `value` representation.
  *
- * `nullIsValue` says which of NULL's two readings applies to *this* expression,
- * which is the same question §9.4 asks at every other site: pass `true` where the
- * expression cannot be undefined, so a NULL in it is the `null` value and has to
- * arrive inside the `value` as a JSON null rather than as a SQL NULL, which a
- * `value` reads as undefined (§9.3). Pass `false`, the default, where the
- * expression is partial: there a NULL is an absence and must stay one, or the
- * enclosing definedness guard keeps a row it should drop.
+ * `nullMeans` says which of NULL's two readings applies to *this* expression, which
+ * is the same question §9.4 asks at every site that emits a comparison or a lift:
+ * `"value"` where the expression cannot be undefined, so a NULL in it is the `null`
+ * value and has to arrive inside the `value` as a JSON null rather than as a SQL
+ * NULL, which a `value` reads as undefined (§9.3); `"absence"` where the expression
+ * is partial, so a NULL must stay one or the enclosing definedness guard keeps a row
+ * it should drop.
+ *
+ * Required rather than defaulted, and that is the point. §9.4 counted five sites
+ * that owed this answer where §15.32 found forty-eight, four of which answered
+ * nothing and inherited a default that happened to be right. A required parameter
+ * turns the next such site into a compile error instead of a silent guess.
  *
  * The test is on the raw operand, before the float finite-guard, so a non-finite
  * float stays a SQL NULL: that one is undefined, not a null.
@@ -1895,11 +1955,11 @@ function primitiveToJsonSql(
   sql: string,
   exprType: PrimitiveType,
   dialect: SqlDialect,
-  nullIsValue = false,
+  nullMeans: NullMeaning,
 ): string {
   const liftedSql = exprType === "float" ? finiteFloatOrNullSql(sql) : sql;
   const lifted = dialect.toJson(liftedSql, exprType);
-  if (!nullIsValue || exprType === "null") return lifted;
+  if (nullMeans === "absence" || exprType === "null") return lifted;
   return `(CASE WHEN ${sql} IS NULL THEN ${dialect.toJson("NULL", "null")} ELSE ${lifted} END)`;
 }
 
@@ -1951,10 +2011,14 @@ function sqlEqWithJsonLift(
 ): string {
   let lhs = leftSql;
   let rhs = rightSql;
+  // `plainEq` is already the caller's nullness answer: it picks the plain `=` exactly
+  // where neither side can be null. So the lift takes the same answer rather than a
+  // second, possibly different one.
+  const nullMeans: NullMeaning = plainEq ? "absence" : "value";
   if (leftType === "value" && rightType !== undefined && rightType !== "value") {
-    rhs = primitiveToJsonSql(rhs, rightType, dialect, !plainEq);
+    rhs = primitiveToJsonSql(rhs, rightType, dialect, nullMeans);
   } else if (rightType === "value" && leftType !== undefined && leftType !== "value") {
-    lhs = primitiveToJsonSql(lhs, leftType, dialect, !plainEq);
+    lhs = primitiveToJsonSql(lhs, leftType, dialect, nullMeans);
   }
   return plainEq ? `${lhs} = ${rhs}` : dialect.logicalEq(lhs, rhs);
 }
@@ -2076,8 +2140,17 @@ function translateAggregate(
       // is the test. Without it a `null` in the group vanished, so `count(V)`
       // and `length(list(V))` disagreed where §7 says they agree.
       const argIsJson = argType === "value";
+      // `"absence"` here, and it is not the lift that carries the null: both families
+      // turn a SQL NULL inside their array aggregate into a JSON null by themselves
+      // (`json_group_array` over a NULL, `jsonb_agg` over a NULL), so a nullable
+      // argument's null reaches the array without an explicit `CASE`. §15.32 called
+      // this site right by accident, which it is; the accident is recorded here so
+      // the next reader knows the answer rests on that dialect behaviour, and the
+      // `FILTER` below is what removes the *undefined* contributions.
       const valueSql =
-        argType === undefined || argIsJson ? argSql : primitiveToJsonSql(argSql, argType, dialect);
+        argType === undefined || argIsJson
+          ? argSql
+          : primitiveToJsonSql(argSql, argType, dialect, "absence");
       const mayBeUndefined = canBeUndefined(
         agg.arg as HeadTerm,
         partialityCtx(varTypes, columnTypes, functionOverloads),
@@ -2309,8 +2382,15 @@ function translateCall(
     // `"null"` and `has_key(X, k)` is false, as they are on the interpreters. No
     // nullness bit is in scope here, so the test is whether the operand is a
     // variable, a variable being the only lifted operand that can be null and
-    // still have a value.
-    return liftToJsonIfNeeded(rawSql, argType, overload.params[i], dialect, a.$type === "Variable");
+    // still have a value. Over-approximating in the safe direction, as in
+    // `termToSql`: a non-nullable variable gets a `CASE` that never fires.
+    return liftToJsonIfNeeded(
+      rawSql,
+      argType,
+      overload.params[i],
+      dialect,
+      a.$type === "Variable" ? "value" : "absence",
+    );
   });
   const emit = SQL_EMIT.get(overload.key);
   if (!emit) {
