@@ -189,7 +189,7 @@ CELLS: list[dict] = [
         "- **One subprocess per kernel.** No multi-session support yet — every `%%datamog` cell shares the same backend.",
         "- **Subprocess overhead.** Each cell pays one stdin / stdout round-trip. For tutorial-sized programs this is well under a second; for large EDB loads (millions of rows) the SQL backends still do the bulk of the work, but the round-trip is no longer free.",
         "",
-        "If you hit a bug or want a feature, file an issue at [github.com/max-schaefer/datamog/issues](https://github.com/max-schaefer/datamog/issues).",
+        "If you hit a bug or want a feature, file an issue at [github.com/xiemaisi/datamog/issues](https://github.com/xiemaisi/datamog/issues).",
     ),
 ]
 

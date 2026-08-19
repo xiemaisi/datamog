@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://max-schaefer.github.io/datamog/">Playground</a> ·
+  <a href="https://xiemaisi.github.io/datamog/">Playground</a> ·
   <a href="doc/spec.md">Language spec</a> ·
   <a href="doc/walkthrough/README.md">Walkthrough</a> ·
   <a href="DEVELOPMENT.md">Development</a>
@@ -44,7 +44,7 @@ ancestor(X, Y) :- parent(X, Z), ancestor(Z, Y).  # recursive case
 bun run datamog ancestor.dl   # parent data loads from ./parent.csv by convention
 ```
 
-**[Try it in the browser, no install needed](https://max-schaefer.github.io/datamog/)**
+**[Try it in the browser, no install needed](https://xiemaisi.github.io/datamog/)**
 
 ## Highlights
 
@@ -116,7 +116,7 @@ bun run datamog packages/cli/examples/family/family.dl
 
 ## Playground
 
-The [playground](https://max-schaefer.github.io/datamog/) is a zero-install,
+The [playground](https://xiemaisi.github.io/datamog/) is a zero-install,
 fully client-side IDE: write a program, attach CSV/JSONL data, and run the whole
 pipeline (parse, analyze, translate, execute) in your browser. SQL runs on
 sql.js (SQLite compiled to WASM); the `native` / `seminaive` evaluators run
@@ -169,7 +169,7 @@ A sibling Python package, [`datamog-magic`](python/datamog-magic), provides a
   cells with pandas DataFrame binding.
 - [Embed tutorials](doc/embed-tutorials/README.md): Markdown whose code blocks
   render as live, editable mini-playgrounds.
-- [FLOLAC 2026 course slides](https://max-schaefer.github.io/datamog/slides/):
+- [FLOLAC 2026 course slides](https://xiemaisi.github.io/datamog/slides/):
   *Introduction to Logic Programming with Datalog*.
 
 ## Development

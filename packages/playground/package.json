@@ -6,14 +6,14 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/max-schaefer/datamog",
+    "url": "https://github.com/xiemaisi/datamog",
     "directory": "packages/playground"
   },
   "keywords": ["datalog", "playground", "preact", "vite", "codemirror", "sql.js", "bun", "datamog"],
   "author": "Max Schaefer",
-  "homepage": "https://max-schaefer.github.io/datamog/",
+  "homepage": "https://xiemaisi.github.io/datamog/",
   "bugs": {
-    "url": "https://github.com/max-schaefer/datamog/issues"
+    "url": "https://github.com/xiemaisi/datamog/issues"
   },
   "type": "module",
   "engines": {

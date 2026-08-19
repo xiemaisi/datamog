@@ -34,7 +34,7 @@ Three facts arranged as a chain `a → b → c → d`. The right answer
 has six rows — every pair `(a,b), (b,c), (c,d), (a,c), (b,d),
 (a,d)`.
 
-**[Open this program in the playground →](https://max-schaefer.github.io/datamog/#p=%23%20Tutorial%2C%20chapter%205%20%E2%80%94%20a%20small%20chain%20to%20trace%20by%20hand.%0A%23%0A%23%20%20%20a%20-%3E%20b%20-%3E%20c%20-%3E%20d%0A%23%0A%23%20Small%20enough%20to%20walk%20through%20the%20fixed-point%20iteration%20on%20paper%2C%0A%23%20big%20enough%20for%20naive%20and%20seminaive%20evaluation%20to%20differ%20on.%0A%0Aparent(%22a%22%2C%20%22b%22).%0Aparent(%22b%22%2C%20%22c%22).%0Aparent(%22c%22%2C%20%22d%22).%0A%0Aancestor(X%2C%20Y)%20%3A-%20parent(X%2C%20Y).%0Aancestor(X%2C%20Y)%20%3A-%20parent(X%2C%20Z)%2C%20ancestor(Z%2C%20Y).%0A%0A%3F-%20ancestor(X%2C%20Y).%0A)**
+**[Open this program in the playground →](https://xiemaisi.github.io/datamog/#p=%23%20Tutorial%2C%20chapter%205%20%E2%80%94%20a%20small%20chain%20to%20trace%20by%20hand.%0A%23%0A%23%20%20%20a%20-%3E%20b%20-%3E%20c%20-%3E%20d%0A%23%0A%23%20Small%20enough%20to%20walk%20through%20the%20fixed-point%20iteration%20on%20paper%2C%0A%23%20big%20enough%20for%20naive%20and%20seminaive%20evaluation%20to%20differ%20on.%0A%0Aparent(%22a%22%2C%20%22b%22).%0Aparent(%22b%22%2C%20%22c%22).%0Aparent(%22c%22%2C%20%22d%22).%0A%0Aancestor(X%2C%20Y)%20%3A-%20parent(X%2C%20Y).%0Aancestor(X%2C%20Y)%20%3A-%20parent(X%2C%20Z)%2C%20ancestor(Z%2C%20Y).%0A%0A%3F-%20ancestor(X%2C%20Y).%0A)**
 
 ## Naive evaluation, by hand
 
@@ -315,4 +315,4 @@ string-manipulation operators that make Datamog practical for real data —
 plus the cross-backend invariants that keep `a / 0` consistently *without a value*
 everywhere.
 
-[pg]: https://max-schaefer.github.io/datamog/
+[pg]: https://xiemaisi.github.io/datamog/

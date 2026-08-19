@@ -1,6 +1,6 @@
 # datamog-magic
 
-IPython cell magic for running [Datamog](https://github.com/max-schaefer/datamog) programs from a Jupyter notebook.
+IPython cell magic for running [Datamog](https://github.com/xiemaisi/datamog) programs from a Jupyter notebook.
 
 The magic talks to the Datamog CLI in its `--repl --json` mode over stdin/stdout: the same long-lived subprocess persists across notebook cells, so declarations, rules, and queries accumulate just like they do in the interactive REPL.
 

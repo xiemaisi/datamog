@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/max-schaefer/datamog",
+    "url": "https://github.com/xiemaisi/datamog",
     "directory": "packages/core"
   },
   "keywords": [
@@ -27,9 +27,9 @@
     "datamog"
   ],
   "author": "Max Schaefer",
-  "homepage": "https://github.com/max-schaefer/datamog/tree/main/packages/core#readme",
+  "homepage": "https://github.com/xiemaisi/datamog/tree/main/packages/core#readme",
   "bugs": {
-    "url": "https://github.com/max-schaefer/datamog/issues"
+    "url": "https://github.com/xiemaisi/datamog/issues"
   },
   "dependencies": {
     "datamog-parser": "workspace:*"

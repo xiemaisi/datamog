@@ -129,7 +129,7 @@ something new.
 Datamog is a Bun project. If you have not already:
 
 ```bash
-git clone https://github.com/max-schaefer/datamog.git
+git clone https://github.com/xiemaisi/datamog.git
 cd datamog
 bun install
 ```
@@ -199,4 +199,4 @@ first Datalog program: a tiny database of facts and some queries
 over it. No recursion yet — just enough to get a feel for the shape
 of the language.
 
-[pg]: https://max-schaefer.github.io/datamog/
+[pg]: https://xiemaisi.github.io/datamog/

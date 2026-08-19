@@ -12,7 +12,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-const BASE = "https://max-schaefer.github.io/datamog/";
+const BASE = "https://xiemaisi.github.io/datamog/";
 const EXT_RE = /^\s*input\s+predicate\s+(\w+)\s*\(([^)]+)\)\s*\.\s*$/gm;
 
 function parseCsvFields(line, delimiter = ",") {

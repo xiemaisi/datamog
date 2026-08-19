@@ -15,7 +15,7 @@ formula() :- impl(0, T), len(T).
 - `yes` for `~(p|q)&r|p` or `p->q->r`
 - `no` for `p&|q` or `(p|q`.
 
-Try it live in the <a href="https://max-schaefer.github.io/datamog/#example=Recognise%20a%20Formula" target="_blank" rel="noopener">playground</a>.
+Try it live in the <a href="https://xiemaisi.github.io/datamog/#example=Recognise%20a%20Formula" target="_blank" rel="noopener">playground</a>.
 
 <div class="note">
 This only <strong>recognises</strong> well-formed formulas; it does not yet build the tree.

@@ -131,4 +131,4 @@ For a precise description of the language, see
 [`doc/spec.md`](../spec.md). This tutorial is the friendly front door;
 the spec is the source of truth.
 
-[pg]: https://max-schaefer.github.io/datamog/
+[pg]: https://xiemaisi.github.io/datamog/

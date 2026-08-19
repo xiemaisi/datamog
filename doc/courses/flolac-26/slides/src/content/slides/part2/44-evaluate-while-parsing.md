@@ -19,4 +19,4 @@ satisfies(A)  :- formula(A, 1).
 ?- satisfies(A).
 ```
 
-Try it live in the <a href="https://max-schaefer.github.io/datamog/#example=Evaluate%20a%20Formula" target="_blank" rel="noopener">playground</a>.
+Try it live in the <a href="https://xiemaisi.github.io/datamog/#example=Evaluate%20a%20Formula" target="_blank" rel="noopener">playground</a>.

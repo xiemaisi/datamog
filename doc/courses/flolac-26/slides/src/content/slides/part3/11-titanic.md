@@ -23,7 +23,7 @@ input predicate age(id: integer,                # refers to an id in passenger
 ```
 
 <div class="note">
-The next few summaries run live on the full dataset in the <a href="https://max-schaefer.github.io/datamog/#example=Titanic" target="_blank" rel="noopener">playground</a> — switch over there to demo them.
+The next few summaries run live on the full dataset in the <a href="https://xiemaisi.github.io/datamog/#example=Titanic" target="_blank" rel="noopener">playground</a> — switch over there to demo them.
 </div>
 
 <p style="font-size: calc(var(--u) * 2.2); color: var(--muted)">Source: the <a href="https://www.kaggle.com/c/titanic" target="_blank" rel="noopener">Kaggle <em>Titanic</em></a> dataset.</p>

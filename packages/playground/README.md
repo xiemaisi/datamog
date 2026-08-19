@@ -6,7 +6,7 @@ The browser-based Datamog playground: a zero-install, fully client-side IDE for
 writing and running Datamog programs. There is no backend server; the whole
 pipeline (parse, analyze, translate, execute) runs in your browser.
 
-**Live: [max-schaefer.github.io/datamog](https://max-schaefer.github.io/datamog/)**
+**Live: [xiemaisi.github.io/datamog](https://xiemaisi.github.io/datamog/)**
 
 ## Features
 

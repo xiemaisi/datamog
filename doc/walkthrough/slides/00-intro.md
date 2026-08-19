@@ -161,7 +161,7 @@ The gap is where Datalog's leverage lives:
 # Getting set up
 
 ```bash
-git clone https://github.com/max-schaefer/datamog.git
+git clone https://github.com/xiemaisi/datamog.git
 cd datamog
 bun install
 ```

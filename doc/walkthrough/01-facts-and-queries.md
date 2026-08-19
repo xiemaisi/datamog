@@ -45,7 +45,7 @@ bun run datamog doc/walkthrough/code/ch01/people-inline.dl
 You should see a table with all eight rows. Congratulations — you've
 written a Datalog program.
 
-**[Open this program in the playground →](https://max-schaefer.github.io/datamog/#p=%23%20Same%20facts%20as%20people.dl%2C%20but%20written%20inline%20instead%20of%20loaded%0A%23%20from%20a%20CSV.%20Useful%20for%20one-off%20experiments%3A%20no%20companion%20data%0A%23%20file%20is%20needed.%0A%0Aperson(%22ada_lovelace%22%2C%20%20%20%20%22uk%22%2C%201815).%0Aperson(%22alan_turing%22%2C%20%20%20%20%20%22uk%22%2C%201912).%0Aperson(%22grace_hopper%22%2C%20%20%20%20%22us%22%2C%201906).%0Aperson(%22edsger_dijkstra%22%2C%20%22nl%22%2C%201930).%0Aperson(%22john_mccarthy%22%2C%20%20%20%22us%22%2C%201927).%0Aperson(%22tony_hoare%22%2C%20%20%20%20%20%20%22uk%22%2C%201934).%0Aperson(%22barbara_liskov%22%2C%20%20%22us%22%2C%201939).%0Aperson(%22niklaus_wirth%22%2C%20%20%20%22ch%22%2C%201934).%0A%0A%3F-%20person(Name%2C%20Country%2C%20Year).%0A)**
+**[Open this program in the playground →](https://xiemaisi.github.io/datamog/#p=%23%20Same%20facts%20as%20people.dl%2C%20but%20written%20inline%20instead%20of%20loaded%0A%23%20from%20a%20CSV.%20Useful%20for%20one-off%20experiments%3A%20no%20companion%20data%0A%23%20file%20is%20needed.%0A%0Aperson(%22ada_lovelace%22%2C%20%20%20%20%22uk%22%2C%201815).%0Aperson(%22alan_turing%22%2C%20%20%20%20%20%22uk%22%2C%201912).%0Aperson(%22grace_hopper%22%2C%20%20%20%20%22us%22%2C%201906).%0Aperson(%22edsger_dijkstra%22%2C%20%22nl%22%2C%201930).%0Aperson(%22john_mccarthy%22%2C%20%20%20%22us%22%2C%201927).%0Aperson(%22tony_hoare%22%2C%20%20%20%20%20%20%22uk%22%2C%201934).%0Aperson(%22barbara_liskov%22%2C%20%20%22us%22%2C%201939).%0Aperson(%22niklaus_wirth%22%2C%20%20%20%22ch%22%2C%201934).%0A%0A%3F-%20person(Name%2C%20Country%2C%20Year).%0A)**
 
 ### Facts, atoms, predicates
 
@@ -308,4 +308,4 @@ that we can state facts and ask questions, we'll give Datalog some
 general principles to work with — and see how a rule with shared
 variables is secretly a SQL join.
 
-[pg]: https://max-schaefer.github.io/datamog/
+[pg]: https://xiemaisi.github.io/datamog/

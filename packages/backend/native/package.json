@@ -14,14 +14,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/max-schaefer/datamog",
+    "url": "https://github.com/xiemaisi/datamog",
     "directory": "packages/backend/native"
   },
   "keywords": ["datalog", "backend", "interpreter", "evaluator", "native", "bun", "datamog"],
   "author": "Max Schaefer",
-  "homepage": "https://github.com/max-schaefer/datamog/tree/main/packages/backend/native#readme",
+  "homepage": "https://github.com/xiemaisi/datamog/tree/main/packages/backend/native#readme",
   "bugs": {
-    "url": "https://github.com/max-schaefer/datamog/issues"
+    "url": "https://github.com/xiemaisi/datamog/issues"
   },
   "dependencies": {
     "datamog-core": "workspace:*",
