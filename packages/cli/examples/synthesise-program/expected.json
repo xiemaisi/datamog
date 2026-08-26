@@ -1,0 +1,95 @@
+[
+  [
+    {
+      "count": 40
+    }
+  ],
+  [
+    {
+      "S": 4,
+      "T": {
+        "args": [
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "term::Var"
+              }
+            ],
+            "$proof": "term::Shl1"
+          },
+          {
+            "args": [],
+            "$proof": "term::Var"
+          }
+        ],
+        "$proof": "term::Plus"
+      }
+    },
+    {
+      "S": 4,
+      "T": {
+        "args": [
+          {
+            "args": [],
+            "$proof": "term::Var"
+          },
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "term::Var"
+              }
+            ],
+            "$proof": "term::Shl1"
+          }
+        ],
+        "$proof": "term::Plus"
+      }
+    }
+  ],
+  [
+    {
+      "S": 4,
+      "T": {
+        "args": [
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "term::Var"
+              }
+            ],
+            "$proof": "term::Shl1"
+          },
+          {
+            "args": [],
+            "$proof": "term::Var"
+          }
+        ],
+        "$proof": "term::Plus"
+      }
+    },
+    {
+      "S": 4,
+      "T": {
+        "args": [
+          {
+            "args": [],
+            "$proof": "term::Var"
+          },
+          {
+            "args": [
+              {
+                "args": [],
+                "$proof": "term::Var"
+              }
+            ],
+            "$proof": "term::Shl1"
+          }
+        ],
+        "$proof": "term::Plus"
+      }
+    }
+  ]
+]

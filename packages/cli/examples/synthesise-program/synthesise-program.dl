@@ -1,0 +1,54 @@
+# Synthesising a program from input/output examples
+#
+# The ICFP Programming Contest 2013 task: a server holds a secret function
+# written in a small bitvector language, answers queries about it, and you must
+# name a program that agrees with it. The core of every entry was the same --
+# enumerate candidate programs bottom-up by size, keep the ones consistent with
+# what you have seen -- and that is a least fixpoint, so it is a Datalog
+# program rather than a search loop.
+#
+# `term` is the language as an ADT, indexed by size so the type is finite. Its
+# proof terms ARE the candidate programs: the answer comes out as
+# `Plus(Shl1(Var()), Var())`, not as an opaque id. Enumeration and filtering
+# stay separate -- `eval` values every candidate at every example input, and
+# `wrong` refutes the ones that disagree -- so adding an operator or an example
+# is a line, not a rewrite.
+#
+# The real task had 64-bit words, an `if0` conditional, a `fold`, and an oracle
+# you query for fresh counterexamples. Here the operator set is
+# Var/One/Shl1/Plus/And, words are plain integers, and the examples are fixed:
+# the counterexample loop is the part that is not a fixpoint.
+#
+# native/seminaive only: `term` and `eval` each read themselves twice for the
+# binary operators, so the recursion is non-linear.
+
+# Three readings of the secret function. It happens to be x + 2x.
+example(1, 3). example(2, 6). example(5, 15).
+maxsize(4).
+
+# Every term of the language up to the size bound. The index is what makes the
+# ADT finite: without it, Shl1 alone would build forever.
+term(1) :: Var.
+term(1) :: One.
+term(S + 1) :: Shl1(A) :- A : term(S), maxsize(M), S + 1 <= M.
+term(SA + SB + 1) :: Plus(A, B) :-
+  A : term(SA), B : term(SB), maxsize(M), SA + SB + 1 <= M.
+term(SA + SB + 1) :: And(A, B) :-
+  A : term(SA), B : term(SB), maxsize(M), SA + SB + 1 <= M.
+
+# Value every candidate at every example input. A constructor pattern in an
+# argument position is a match, so these rules only ever see terms that exist.
+eval(Var(), X, X) :- example(X, _).
+eval(One(), X, 1) :- example(X, _).
+eval(Shl1(A), X, 2 * V) :- eval(A, X, V).
+eval(Plus(A, B), X, V + W) :- eval(A, X, V), eval(B, X, W).
+eval(And(A, B), X, V & W) :- eval(A, X, V), eval(B, X, W).
+
+# One disagreement is enough to rule a candidate out.
+wrong(T) :- example(X, Y), eval(T, X, V), V <> Y.
+
+output predicate searched(count(*)) :- T : term(_).
+output predicate solution(S, T) :- T : term(S), not wrong(T).
+
+# Two programs of size 4 fit: x + 2x and 2x + x. Nothing smaller does.
+?- solution(S, T).

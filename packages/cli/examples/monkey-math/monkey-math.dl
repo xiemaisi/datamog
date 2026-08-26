@@ -1,0 +1,64 @@
+# Running an evaluator backwards: Advent of Code 2022 day 21, both parts.
+#
+# Each monkey either shouts a number or an operation over two other monkeys, so
+# the monkeys form an expression DAG and their values are a least fixpoint.
+# Part 1 evaluates it bottom-up, which is the Expression Evaluator again on a
+# tree that is given rather than parsed.
+#
+# Part 2 rereads the same input: `root` is an equality to satisfy, `humn` is
+# ours to choose, and the question is what to choose. Enumerating candidates is
+# hopeless, but the DAG can be run the other way. `free` marks the nodes above
+# the unknown -- the ones that lose their value once `humn` is unfixed. Every
+# other node keeps the value part 1 gave it, since that value never depended on
+# the choice. Then `need(N, T)` reads "node N must come out as T", seeded from
+# root's fixed side and pushed down through whichever operand is still free,
+# inverting one operator per step. The answer is what `humn` must be.
+#
+# native/seminaive only: each operator rule reads `val` twice (non-linear).
+
+num("dbpl", 5). num("zczc", 2). num("dvpt", 3). num("lfqf", 4).
+num("humn", 5). num("ljgn", 2). num("sllz", 4). num("hmdt", 32).
+
+op("root", "+", "pppw", "sjmn").
+op("cczh", "+", "sllz", "lgvd").
+op("ptdq", "-", "humn", "dvpt").
+op("sjmn", "*", "drzm", "dbpl").
+op("pppw", "/", "cczh", "lfqf").
+op("lgvd", "*", "ljgn", "ptdq").
+op("drzm", "-", "hmdt", "zczc").
+
+# Part 1: bottom-up, taking `humn` at the value it was listed with.
+val(N, V) :- num(N, V).
+val(N, A + B) :- op(N, "+", X, Y), val(X, A), val(Y, B).
+val(N, A - B) :- op(N, "-", X, Y), val(X, A), val(Y, B).
+val(N, A * B) :- op(N, "*", X, Y), val(X, A), val(Y, B).
+val(N, A / B) :- op(N, "/", X, Y), val(X, A), val(Y, B).
+
+output predicate part1(V) :- val("root", V).
+
+# Part 2. The nodes whose value depends on the one we get to choose.
+free("humn").
+free(N) :- op(N, _, X, _), free(X).
+free(N) :- op(N, _, _, Y), free(Y).
+
+# Everything else keeps its part 1 value: no choice of `humn` can move it.
+fixed(N, V) :- val(N, V), not free(N).
+
+# `root` is an equality, so its fixed side is the target for its free side.
+need(X, V) :- op("root", _, X, Y), free(X), fixed(Y, V).
+need(Y, V) :- op("root", _, X, Y), free(Y), fixed(X, V).
+
+# Push the target down through the free operand, inverting the operator. Both
+# operands are never free at once: only one branch of the DAG reaches `humn`.
+need(X, T - B) :- need(N, T), op(N, "+", X, Y), free(X), fixed(Y, B).
+need(Y, T - A) :- need(N, T), op(N, "+", X, Y), free(Y), fixed(X, A).
+need(X, T + B) :- need(N, T), op(N, "-", X, Y), free(X), fixed(Y, B).
+need(Y, A - T) :- need(N, T), op(N, "-", X, Y), free(Y), fixed(X, A).
+need(X, T / B) :- need(N, T), op(N, "*", X, Y), free(X), fixed(Y, B).
+need(Y, T / A) :- need(N, T), op(N, "*", X, Y), free(Y), fixed(X, A).
+need(X, T * B) :- need(N, T), op(N, "/", X, Y), free(X), fixed(Y, B).
+need(Y, A / T) :- need(N, T), op(N, "/", X, Y), free(Y), fixed(X, A).
+
+output predicate part2(V) :- need("humn", V).
+
+?- part1(P1), part2(P2).

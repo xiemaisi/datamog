@@ -1,0 +1,5 @@
+{
+  "name": "Monkey Math",
+  "description": "Advent of Code 2022 day 21: evaluate a DAG of monkey arithmetic bottom-up, then run the same evaluator backwards to solve for the one unknown leaf",
+  "order": 241
+}

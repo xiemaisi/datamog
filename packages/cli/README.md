@@ -127,6 +127,12 @@ Place a file named `<predicate>.json` in the data directory. The extensional dec
 
 Place a file named `<predicate>.mmd` (a Mermaid `graph TD` / `graph LR` block) in the data directory. The loader extracts edges as `(source, target)` pairs, a convenient way to author small graph EDBs that double as illustrations in markdown.
 
+### Parquet
+
+Place a file named `<predicate>.parquet` in the data directory. Only the declared columns are decoded, so a wide file costs no more than the columns the program names, and a declared column the file lacks is an error. Values are type-checked rather than coerced, as with JSONL.
+
+`INT64` (what most writers use for integers) loads as an `integer` and errors outside `[-(2^53 - 1), 2^53 - 1]`; a date or timestamp column loads as ISO 8601 text, so declare it `string`; a nested or repeated column (`LIST`, `MAP`, a struct) needs a `value` column. Uncompressed and Snappy files read out of the box, Snappy being the usual writer default.
+
 ### Google Sheets
 
 Pass a Google Sheets share URL as the input predicate's source:
@@ -151,7 +157,7 @@ The one positional argument after the program picks which output to evaluate: an
 
 | Option | Description |
 |--------|-------------|
-| `--<input> source` | Supply data for input predicate `<input>` from a local file or HTTP(S) URL (`.csv`, `.jsonl`, `.json`, `.mmd`), a Google Sheets URL, or a GitHub shorthand `github:OWNER/REPO/PATH[#REF]` (`gh:` alias). Placed after the program; a kebab flag aliases a snake_case predicate |
+| `--<input> source` | Supply data for input predicate `<input>` from a local file or HTTP(S) URL (`.csv`, `.jsonl`, `.json`, `.mmd`, `.parquet`), a Google Sheets URL, or a GitHub shorthand `github:OWNER/REPO/PATH[#REF]` (`gh:` alias). Placed after the program; a kebab flag aliases a snake_case predicate |
 | `--input name=source` | Same, with an explicit predicate name (escape hatch for names no flag can express) |
 | `--data-dir <path>` | Base directory loaders read from (defaults to the program's directory; the current working directory in `--repl` mode) |
 | `--all` | Evaluate every output (the default `?-` plus every named output) instead of a single one |

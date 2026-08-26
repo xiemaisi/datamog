@@ -78,6 +78,7 @@
         "datamog-json": "workspace:*",
         "datamog-jsonl": "workspace:*",
         "datamog-mermaid": "workspace:*",
+        "datamog-parquet": "workspace:*",
         "datamog-parser": "workspace:*",
         "datamog-repl": "workspace:*",
       },
@@ -161,6 +162,19 @@
         "datamog-parser": "workspace:*",
       },
     },
+    "packages/loader/parquet": {
+      "name": "datamog-parquet",
+      "version": "0.1.0",
+      "dependencies": {
+        "datamog-core": "workspace:*",
+        "datamog-engine": "workspace:*",
+        "hyparquet": "^1.29.1",
+      },
+      "devDependencies": {
+        "datamog-parser": "workspace:*",
+        "hyparquet-writer": "^0.16.6",
+      },
+    },
     "packages/parser": {
       "name": "datamog-parser",
       "version": "0.1.0",
@@ -230,8 +244,10 @@
         "datamog-engine": "workspace:*",
         "datamog-json": "workspace:*",
         "datamog-jsonl": "workspace:*",
+        "datamog-parquet": "workspace:*",
         "datamog-parser": "workspace:*",
         "esbuild": "^0.25.0",
+        "hyparquet-writer": "^0.16.6",
       },
     },
   },
@@ -844,6 +860,8 @@
 
     "datamog-mermaid": ["datamog-mermaid@workspace:packages/loader/mermaid"],
 
+    "datamog-parquet": ["datamog-parquet@workspace:packages/loader/parquet"],
+
     "datamog-parser": ["datamog-parser@workspace:packages/parser"],
 
     "datamog-playground": ["datamog-playground@workspace:packages/playground"],
@@ -999,6 +1017,10 @@
     "http-proxy-agent": ["http-proxy-agent@7.0.2", "", { "dependencies": { "agent-base": "^7.1.0", "debug": "^4.3.4" } }, "sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig=="],
 
     "https-proxy-agent": ["https-proxy-agent@7.0.6", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "4" } }, "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="],
+
+    "hyparquet": ["hyparquet@1.29.1", "", {}, "sha512-Wa57A2KxGFtRTeDTJp4pT0TaqN8btb7/XTrMs17iM+xJxsbBxRyzaGaRRPQ4lOPbmso/qohDafJD7b+cFMZq8A=="],
+
+    "hyparquet-writer": ["hyparquet-writer@0.16.6", "", { "dependencies": { "hyparquet": "1.28.1" } }, "sha512-KK3FhIf/yPhDi63rAEV6Di9tLZXDGYqXcOMVS2Ssm5zerEkrfc71REfGCFcEKtiiATGzd9kq5uWcy8JeCapQVQ=="],
 
     "iconv-lite": ["iconv-lite@0.6.3", "", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, "sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw=="],
 
@@ -1455,6 +1477,8 @@
     "dom-serializer/entities": ["entities@4.5.0", "", {}, "sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw=="],
 
     "glob/minimatch": ["minimatch@10.2.5", "", { "dependencies": { "brace-expansion": "^5.0.5" } }, "sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg=="],
+
+    "hyparquet-writer/hyparquet": ["hyparquet@1.28.1", "", {}, "sha512-04PlyhYZpNDVaOjJNX4SP00beWf9Y9vXEOEQXSMFqVQNzxGxTmsJOQgBjar8VzLpT6E2kxNiWKL539e1dHcOVA=="],
 
     "katex/commander": ["commander@8.3.0", "", {}, "sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww=="],
 

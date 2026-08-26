@@ -1,0 +1,5 @@
+{
+  "name": "Synthesise a Program",
+  "description": "The ICFP Contest 2013 task: enumerate a little bitvector language bottom-up by size as proof terms, keep the candidates that agree with every input/output example",
+  "order": 215
+}

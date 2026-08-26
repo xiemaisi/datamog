@@ -7,11 +7,22 @@ import { csvRowsFromKeyed } from "datamog-csv/parse-content";
 import { type Backend, type ExtensionalLoader, type LoadResult, insertRows } from "datamog-engine";
 import { parseJsonContent } from "datamog-json/parse-content";
 import { parseJsonlContent } from "datamog-jsonl/parse-content";
+import { parseParquetContent } from "datamog-parquet/parse-content";
 
 // Extensions probed for each extensional predicate, in precedence order
 // (matching the CLI's loader registration: CSV, then whole-file JSON, then
-// JSONL). The first existing file wins.
-const EXTENSIONS = [".csv", ".json", ".jsonl"] as const;
+// JSONL, then Parquet). The first existing file wins.
+const EXTENSIONS = [".csv", ".json", ".jsonl", ".parquet"] as const;
+
+/**
+ * Read a file as an `ArrayBuffer`. `readFile` hands back a `Buffer` that may
+ * be a view into a larger pooled allocation, so its `buffer` needs slicing to
+ * the file's own bytes.
+ */
+async function readArrayBuffer(path: string): Promise<ArrayBuffer> {
+  const buf = await readFile(path);
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+}
 
 /**
  * Loads extensional data from files sitting next to the `.dl` program,
@@ -44,8 +55,12 @@ export class DiskLoader implements ExtensionalLoader {
     const match = this.fileFor(decl);
     if (!match) return { rowsLoaded: 0 };
 
-    const content = await readFile(match.path, "utf8");
-    const rows = this.parse(content, decl, match.ext, match.path);
+    const rows =
+      match.ext === ".parquet"
+        ? await parseParquetContent(await readArrayBuffer(match.path), decl, {
+            source: match.path,
+          })
+        : this.parse(await readFile(match.path, "utf8"), decl, match.ext, match.path);
     await insertRows(backend, decl, rows);
     return { rowsLoaded: rows.length };
   }

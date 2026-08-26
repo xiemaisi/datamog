@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ExtDecl } from "datamog-core";
 import type { Backend } from "datamog-engine";
 import { parse } from "datamog-parser";
+import { parquetWriteBuffer } from "hyparquet-writer";
 import { DiskLoader } from "../src/disk-loader.ts";
 
 function getExtDecl(source: string): ExtDecl {
@@ -61,6 +62,36 @@ describe("DiskLoader", () => {
       const loader = new DiskLoader(dir);
       const decl = getExtDecl("input predicate t(a: integer, b: integer, c: integer).");
       expect(loader.load(decl, captureBackend())).rejects.toThrow(/missing field 'c'/);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("loads a sibling .parquet file", async () => {
+    // The binary branch reads with `readFile` and hands hyparquet the
+    // `Buffer`'s slice of its pooled allocation; getting that wrong reads
+    // someone else's bytes rather than failing loudly.
+    dir = await mkdtemp(join(tmpdir(), "datamog-disk-"));
+    try {
+      await writeFile(
+        join(dir, "t.parquet"),
+        new Uint8Array(
+          parquetWriteBuffer({
+            columnData: [
+              { name: "a", data: [1n, 2n], type: "INT64" },
+              { name: "b", data: ["x", "y"], type: "STRING" },
+            ],
+          }),
+        ),
+      );
+      const loader = new DiskLoader(dir);
+      const decl = getExtDecl("input predicate t(a: integer, b: string).");
+      const backend = captureBackend();
+      expect(await loader.load(decl, backend)).toEqual({ rowsLoaded: 2 });
+      expect(backend.rows).toEqual([
+        { a: 1, b: "x" },
+        { a: 2, b: "y" },
+      ]);
     } finally {
       await rm(dir, { recursive: true });
     }

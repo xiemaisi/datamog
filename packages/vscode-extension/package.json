@@ -100,8 +100,10 @@
     "datamog-engine": "workspace:*",
     "datamog-json": "workspace:*",
     "datamog-jsonl": "workspace:*",
+    "datamog-parquet": "workspace:*",
     "datamog-parser": "workspace:*",
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "hyparquet-writer": "^0.16.6"
   },
   "scripts": {
     "build": "node esbuild.mjs",
