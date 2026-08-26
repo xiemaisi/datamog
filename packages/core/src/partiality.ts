@@ -105,6 +105,17 @@ export function canBeUndefined(expr: HeadTerm, ctx: PartialityContext): boolean 
         (expr.start !== undefined && rec(expr.start)) ||
         (expr.end !== undefined && rec(expr.end))
       );
+    case "Conditional":
+      // Strict in the condition, which is where the conservative answer comes
+      // from: a null condition is no truth value, so the conditional has no
+      // value there, and whether the condition can be a null is a nullness
+      // question with no nullness bit in scope — exactly the position `!`, the
+      // connectives and the orderings are in above. Both branches then have to
+      // be non-nullable (`nullable-operands.ts`), which is what makes this
+      // answer safe as well as conservative: a NULL from a conditional is
+      // always an absence, never the `null` value, so the guard this earns can
+      // never drop a row it should keep.
+      return true;
     case "BinaryExpr": {
       const { op, left, right } = expr;
       // Equality is total over *values* and strict in undefinedness, exactly

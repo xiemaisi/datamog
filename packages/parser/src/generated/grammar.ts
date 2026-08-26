@@ -86,7 +86,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@34"
+                "$ref": "#/rules@35"
               },
               "arguments": []
             }
@@ -181,7 +181,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 },
@@ -203,7 +203,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@40"
+                    "$ref": "#/rules@41"
                   },
                   "arguments": []
                 }
@@ -268,7 +268,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@40"
+                    "$ref": "#/rules@41"
                   },
                   "arguments": []
                 }
@@ -287,7 +287,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                     "terminal": {
                       "$type": "RuleCall",
                       "rule": {
-                        "$ref": "#/rules@34"
+                        "$ref": "#/rules@35"
                       },
                       "arguments": []
                     }
@@ -316,7 +316,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@34"
+                "$ref": "#/rules@35"
               },
               "arguments": []
             }
@@ -332,7 +332,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@34"
+                "$ref": "#/rules@35"
               },
               "arguments": []
             }
@@ -356,7 +356,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@34"
+                "$ref": "#/rules@35"
               },
               "arguments": []
             }
@@ -501,7 +501,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 }
@@ -716,7 +716,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@34"
+                "$ref": "#/rules@35"
               },
               "arguments": []
             }
@@ -827,7 +827,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                         "terminal": {
                           "$type": "RuleCall",
                           "rule": {
-                            "$ref": "#/rules@34"
+                            "$ref": "#/rules@35"
                           },
                           "arguments": []
                         }
@@ -943,7 +943,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@38"
+                "$ref": "#/rules@39"
               },
               "arguments": []
             }
@@ -1030,7 +1030,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 }
@@ -1056,7 +1056,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 }
@@ -1152,7 +1152,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 }
@@ -1241,7 +1241,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@25"
+                "$ref": "#/rules@26"
               },
               "arguments": []
             }
@@ -1382,7 +1382,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
     },
     {
       "$type": "ParserRule",
-      "name": "Or",
+      "name": "Conditional",
       "inferredType": {
         "$type": "InferredType",
         "name": "Expression"
@@ -1404,23 +1404,18 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "$type": "Action",
                 "inferredType": {
                   "$type": "InferredType",
-                  "name": "BinaryExpr"
+                  "name": "Conditional"
                 },
-                "feature": "left",
+                "feature": "consequent",
                 "operator": "="
               },
               {
-                "$type": "Assignment",
-                "feature": "op",
-                "operator": "=",
-                "terminal": {
-                  "$type": "Keyword",
-                  "value": "||"
-                }
+                "$type": "Keyword",
+                "value": "if"
               },
               {
                 "$type": "Assignment",
-                "feature": "right",
+                "feature": "cond",
                 "operator": "=",
                 "terminal": {
                   "$type": "RuleCall",
@@ -1429,9 +1424,25 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                   },
                   "arguments": []
                 }
+              },
+              {
+                "$type": "Keyword",
+                "value": "else"
+              },
+              {
+                "$type": "Assignment",
+                "feature": "alternate",
+                "operator": "=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@18"
+                  },
+                  "arguments": []
+                }
               }
             ],
-            "cardinality": "*"
+            "cardinality": "?"
           }
         ]
       },
@@ -1441,7 +1452,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
     },
     {
       "$type": "ParserRule",
-      "name": "And",
+      "name": "Or",
       "inferredType": {
         "$type": "InferredType",
         "name": "Expression"
@@ -1474,7 +1485,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "operator": "=",
                 "terminal": {
                   "$type": "Keyword",
-                  "value": "&&"
+                  "value": "||"
                 }
               },
               {
@@ -1500,7 +1511,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
     },
     {
       "$type": "ParserRule",
-      "name": "BitOr",
+      "name": "And",
       "inferredType": {
         "$type": "InferredType",
         "name": "Expression"
@@ -1533,7 +1544,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "operator": "=",
                 "terminal": {
                   "$type": "Keyword",
-                  "value": "|"
+                  "value": "&&"
                 }
               },
               {
@@ -1559,7 +1570,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
     },
     {
       "$type": "ParserRule",
-      "name": "BitXor",
+      "name": "BitOr",
       "inferredType": {
         "$type": "InferredType",
         "name": "Expression"
@@ -1592,7 +1603,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "operator": "=",
                 "terminal": {
                   "$type": "Keyword",
-                  "value": "^"
+                  "value": "|"
                 }
               },
               {
@@ -1618,7 +1629,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
     },
     {
       "$type": "ParserRule",
-      "name": "BitAnd",
+      "name": "BitXor",
       "inferredType": {
         "$type": "InferredType",
         "name": "Expression"
@@ -1651,7 +1662,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "operator": "=",
                 "terminal": {
                   "$type": "Keyword",
-                  "value": "&"
+                  "value": "^"
                 }
               },
               {
@@ -1662,6 +1673,65 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                   "$type": "RuleCall",
                   "rule": {
                     "$ref": "#/rules@23"
+                  },
+                  "arguments": []
+                }
+              }
+            ],
+            "cardinality": "*"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "BitAnd",
+      "inferredType": {
+        "$type": "InferredType",
+        "name": "Expression"
+      },
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@24"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "Group",
+            "elements": [
+              {
+                "$type": "Action",
+                "inferredType": {
+                  "$type": "InferredType",
+                  "name": "BinaryExpr"
+                },
+                "feature": "left",
+                "operator": "="
+              },
+              {
+                "$type": "Assignment",
+                "feature": "op",
+                "operator": "=",
+                "terminal": {
+                  "$type": "Keyword",
+                  "value": "&"
+                }
+              },
+              {
+                "$type": "Assignment",
+                "feature": "right",
+                "operator": "=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@24"
                   },
                   "arguments": []
                 }
@@ -1688,7 +1758,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@24"
+              "$ref": "#/rules@25"
             },
             "arguments": []
           },
@@ -1749,7 +1819,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@24"
+                    "$ref": "#/rules@25"
                   },
                   "arguments": []
                 }
@@ -1776,7 +1846,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@25"
+              "$ref": "#/rules@26"
             },
             "arguments": []
           },
@@ -1821,7 +1891,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@25"
+                    "$ref": "#/rules@26"
                   },
                   "arguments": []
                 }
@@ -1848,7 +1918,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@26"
+              "$ref": "#/rules@27"
             },
             "arguments": []
           },
@@ -1889,7 +1959,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@26"
+                    "$ref": "#/rules@27"
                   },
                   "arguments": []
                 }
@@ -1916,7 +1986,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@27"
+              "$ref": "#/rules@28"
             },
             "arguments": []
           },
@@ -1961,7 +2031,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@27"
+                    "$ref": "#/rules@28"
                   },
                   "arguments": []
                 }
@@ -1988,7 +2058,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@28"
+              "$ref": "#/rules@29"
             },
             "arguments": []
           },
@@ -2020,7 +2090,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@27"
+                    "$ref": "#/rules@28"
                   },
                   "arguments": []
                 }
@@ -2079,7 +2149,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@28"
+                    "$ref": "#/rules@29"
                   },
                   "arguments": []
                 }
@@ -2089,7 +2159,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@29"
+              "$ref": "#/rules@30"
             },
             "arguments": []
           }
@@ -2112,7 +2182,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@32"
+              "$ref": "#/rules@33"
             },
             "arguments": []
           },
@@ -2325,7 +2395,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@33"
+              "$ref": "#/rules@34"
             },
             "arguments": []
           },
@@ -2346,7 +2416,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 }
@@ -2370,7 +2440,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@40"
+                    "$ref": "#/rules@41"
                   },
                   "arguments": []
                 }
@@ -2394,7 +2464,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@41"
+                    "$ref": "#/rules@42"
                   },
                   "arguments": []
                 }
@@ -2450,14 +2520,14 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@35"
+              "$ref": "#/rules@36"
             },
             "arguments": []
           },
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@36"
+              "$ref": "#/rules@37"
             },
             "arguments": []
           },
@@ -2499,7 +2569,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@34"
+                    "$ref": "#/rules@35"
                   },
                   "arguments": []
                 }
@@ -2518,7 +2588,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@38"
+                "$ref": "#/rules@39"
               },
               "arguments": []
             }
@@ -2587,14 +2657,14 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@38"
+              "$ref": "#/rules@39"
             },
             "arguments": []
           },
           {
             "$type": "RuleCall",
             "rule": {
-              "$ref": "#/rules@39"
+              "$ref": "#/rules@40"
             },
             "arguments": []
           },
@@ -2621,6 +2691,14 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "Keyword",
             "value": "as"
+          },
+          {
+            "$type": "Keyword",
+            "value": "if"
+          },
+          {
+            "$type": "Keyword",
+            "value": "else"
           }
         ]
       },
@@ -2722,7 +2800,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@37"
+                    "$ref": "#/rules@38"
                   },
                   "arguments": []
                 }
@@ -2741,7 +2819,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                     "terminal": {
                       "$type": "RuleCall",
                       "rule": {
-                        "$ref": "#/rules@37"
+                        "$ref": "#/rules@38"
                       },
                       "arguments": []
                     }
@@ -2775,7 +2853,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@40"
+                "$ref": "#/rules@41"
               },
               "arguments": []
             }

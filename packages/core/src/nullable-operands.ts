@@ -115,6 +115,24 @@ function walk(
       if (expr.op === "-") check(expr.operand, "negation");
       walk(expr.operand, ctx, check);
       return;
+    case "Conditional":
+      // The *branches*, not the condition, and the asymmetry is the point.
+      // A conditional is the only expression that could be nullable and partial
+      // at once — a branch supplying the null, the condition the absence — and
+      // one SQL NULL cannot say which, so the definedness guard would have no
+      // way to tell the row to keep from the row to drop. Requiring non-nullable
+      // branches settles it the same way Position 3 settles arithmetic: the
+      // result is never a null, so a NULL in it is always an absence.
+      //
+      // The condition stays free, and a null there withholds the row, which is
+      // the strictness `&&` and the orderings already have. That is why it is
+      // exempt where the branches are not: it cannot produce a null *result*.
+      check(expr.consequent, "a conditional branch");
+      check(expr.alternate, "a conditional branch");
+      walk(expr.consequent, ctx, check);
+      walk(expr.cond, ctx, check);
+      walk(expr.alternate, ctx, check);
+      return;
     case "Subscript":
       check(expr.object, "a subscript");
       check(expr.index, "a subscript index");

@@ -118,6 +118,11 @@ function collectVarsInTerm(term: HeadTerm, into: Set<string>): void {
       collectVarsInTerm(term.left, into);
       collectVarsInTerm(term.right, into);
       return;
+    case "Conditional":
+      collectVarsInTerm(term.consequent, into);
+      collectVarsInTerm(term.cond, into);
+      collectVarsInTerm(term.alternate, into);
+      return;
     case "UnaryExpr":
       collectVarsInTerm(term.operand, into);
       return;

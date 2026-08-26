@@ -10,6 +10,7 @@ export type {
   BodyElement,
   ColumnDecl,
   ComparisonOp,
+  Conditional,
   Equality,
   Expression,
   ExtDecl,

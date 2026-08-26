@@ -669,7 +669,8 @@ Expressions are used in atom arguments, equality right-hand sides,
 comparisons, ranges, and rule heads. The grammar uses precedence levels:
 
 ```
-Expression     ::= Or
+Expression     ::= Conditional
+Conditional    ::= Or ('if' Or 'else' Conditional)?
 Or             ::= And ('||' And)*
 And            ::= BitOr ('&&' BitOr)*
 BitOr          ::= BitXor ('|' BitXor)*
@@ -710,6 +711,8 @@ ObjectEntry    ::= STRING ':' Expression
 10. Bitwise or: `|`
 11. Logical and: `&&`
 12. Logical or: `||`
+13. Conditional: `a if c else b` (right-associative, so
+    `a if c else b if d else e` is `a if c else (b if d else e)`)
 
 `**` binds tighter than the multiplicative operators but its left operand
 is a unary expression, so `-2 ** 2` is `(-2) ** 2`. It is always float-
@@ -721,6 +724,37 @@ connectives. See §5.9 for their integer semantics.
 The Datalog source uses `%` for modulo, matching the SQL `%` operator
 that the translator emits. (Datamog comments use `#`, so the lexer
 sees the two characters distinctly.)
+
+#### The conditional expression
+
+`a if c else b` denotes `a` where `c` is true and `b` where `c` is false.
+It is postfix, as in Python, so `if` and `else` never begin an expression
+and both stay contextual keywords: a predicate, column or variable may
+still be named `if` or `else`. It is right-associative, which is what makes
+`"neg" if V < 0 else ("zero" if V = 0 else "pos")` an elif chain.
+
+Three rules complete it.
+
+- **The condition must be `boolean`**, exactly as `!`'s operand and `&&`'s
+  two must be.
+- **The result's type is the join of the branches** (§5.6), so
+  `[1] if c else 2` is a `value` and the primitive branch takes the same
+  lift a `value`-typed position gives it elsewhere. Two branches with no
+  join, such as `integer` and `string`, are an error rather than a
+  widening to `value`.
+- **It is strict in the condition and lazy in the branches.** A condition
+  that is a null or has no value leaves the whole conditional with no
+  value, the same strictness the four orderings and the connectives have
+  past their absorbing value (§5.4); the row is withheld rather than a
+  branch being chosen. Only the branch the condition names is evaluated, so
+  `7 if V > 0 else 0 / 0` has a value wherever `V > 0`.
+
+Both branches must be non-nullable (§5.4). This is the one asymmetry worth
+stating, because the condition is not: a branch is what could make the
+*result* a null, and a conditional whose result could be a null and could
+also have no value would need one NULL to mean both. The condition can only
+ever contribute an absence, so it is free to be nullable. Narrow a nullable
+branch with `<> null`, or write the two cases as two rules.
 
 #### Boolean Operators
 
@@ -1410,7 +1444,8 @@ Equality       ::= Addition '=' Expression
 RangeAtom      ::= Expression 'in' '[' Expression '..' Expression ']'
 Filter         ::= ('not')? Expression
 
-Expression     ::= Or
+Expression     ::= Conditional
+Conditional    ::= Or ('if' Or 'else' Conditional)?
 Or             ::= And ('||' And)*
 And            ::= BitOr ('&&' BitOr)*
 BitOr          ::= BitXor ('|' BitXor)*
@@ -1933,9 +1968,15 @@ undefined. That is what makes `X <> 0 && 10 / X > 0` usable as a guard.
 The `null` *value* is a different matter, and mostly it cannot arise: **an
 operation that computes requires a non-null operand.** Arithmetic, negation, the
 bitwise operators, string concatenation, a subscript or slice index, a range
-bound, a builtin with a primitive parameter, and the aggregates `sum`, `avg`,
-`min`, `max` and `concat` all reject one statically. So does a statically `null`
-operand, the same rule at its far end: `null + 1` is rejected (§5.3).
+bound, a builtin with a primitive parameter, either branch of a conditional, and
+the aggregates `sum`, `avg`, `min`, `max` and `concat` all reject one statically.
+So does a statically `null` operand, the same rule at its far end: `null + 1` is
+rejected (§5.3).
+
+A conditional's *condition* is not on that list, and the asymmetry is the reason
+the branches are. A branch is what could make the result a null; the condition can
+only withhold the row. Were both nullable, one NULL would have to carry the null
+value and the absence at once, which is the guarantee this rule exists to keep.
 
 Narrow first. Any of these conjuncts proves every variable in a **strict
 position** of its operand non-null for the rest of the rule:
@@ -3376,6 +3417,6 @@ integration:
 | **Parse error** | Missing period, unexpected token, malformed expression       |
 | **Analyzer error** | Undefined predicate, arity mismatch, unsafe variable, unstratifiable negation, duplicate input predicate declaration, EDB/IDB conflict, aggregate constraint violation, unknown function, function arity mismatch |
 | **Type error**  | Non-numeric range bounds, unary minus on string, subscript/slice on non-string, wrong function argument type |
-| **Nullable operand** | A nullable expression in a position that computes: arithmetic, negation, a bitwise operator, string concatenation, a subscript or slice index, a range bound, a builtin with a primitive parameter, or `sum` / `avg` / `min` / `max` / `concat` (§5.4). Narrow with `<> null` first |
+| **Nullable operand** | A nullable expression in a position that computes: arithmetic, negation, a bitwise operator, string concatenation, a subscript or slice index, a range bound, a builtin with a primitive parameter, either branch of a conditional, or `sum` / `avg` / `min` / `max` / `concat` (§5.4). Narrow with `<> null` first |
 | **Module error** | Import cycle, missing default output, unknown named export, boundary type/arity mismatch (§9), unreadable module reference |
 | **Translation error** | Non-linear recursion, parity-stratified recursion (SQL backends only — `native` and `seminaive` accept both) |

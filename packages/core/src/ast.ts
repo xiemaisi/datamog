@@ -6,6 +6,7 @@ import type {
   AggregateCall,
   BinaryExpr,
   BooleanLiteral,
+  Conditional,
   FunctionCall,
   HeadAnnotation,
   NullLiteral,
@@ -30,6 +31,7 @@ export type {
   BodyElement,
   BooleanLiteral,
   ColumnDecl,
+  Conditional,
   Equality,
   ExtDecl,
   Filter,
@@ -67,6 +69,7 @@ export type Expression =
   | BinaryExpr
   | BooleanLiteral
   | BracketAccess
+  | Conditional
   | FunctionCall
   | NullLiteral
   | NumberLiteral

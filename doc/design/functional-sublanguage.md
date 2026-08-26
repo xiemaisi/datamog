@@ -1,7 +1,9 @@
 # Design proposal: a functional sub-language
 
-Status: **proposal, nothing implemented.** The four boundary decisions a review
-raised are answered below; the datatype half stays deferred. Datamog already
+Status: **proposal, step 1 implemented.** The conditional expression is in
+(spec §2.6); it was always independent of the rest, and the ladder's own advice was
+to build it regardless. Nothing else here is built. The four boundary decisions a
+review raised are answered below; the datatype half stays deferred. Datamog already
 has an implicit functional sub-language: the inline arithmetic, string and `value`
 expressions of spec §2.6 and §2.9, plus the built-in registry in
 `core/src/builtins.ts`. This doc asks whether to spin that out into a language
@@ -545,10 +547,36 @@ currently sidesteps:
 
 ## Recommended order
 
-1. **The conditional expression.** One grammar production, `CASE WHEN c THEN a ELSE
-   b END` in the translator, one branch in `values.ts`, inferred type is the join of
-   the branches with the required primitive-to-JSON lift. Independent of everything
-   else here, and it is what lets a function be single-clause.
+1. **The conditional expression.** *Built.* Postfix `a if c else b`, right-
+   associative, `if` and `else` contextual. The estimate above was one grammar
+   production, one `CASE` and one branch in `values.ts`; the production and the two
+   emits were right, and what it missed was the seventeen other expression walkers
+   a new AST node has to appear in (safety, both type passes, nullness, partiality,
+   Position 3, finiteness, completion, navigation, the head-term collectors).
+
+   Two things the plan got wrong, both about NULL rather than about functions:
+
+   - **"A NULL condition selects the else branch"** was SQL's `CASE` default, and it
+     predates the null/undefined split. Every other boolean position in the
+     language is strict at a null (`null && true`, `!null`, all four orderings), so
+     the conditional is too: a null or absent condition withholds the row. The emit
+     is `CASE c WHEN TRUE .. WHEN FALSE ..`, whose missing `ELSE` is what makes a
+     NULL condition yield NULL.
+   - **The branches have to be non-nullable**, which the plan did not foresee
+     because it treated `null` and undefined as one thing. A conditional is the
+     first expression that could be nullable *and* partial at once — a branch
+     supplying the null, the condition the absence — and one SQL NULL cannot say
+     which, so the definedness guard could not tell the row to keep from the row to
+     drop. The interpreters carry two markers and would have got it right, so
+     leaving it would have been a cross-backend divergence. Position 3 on the
+     branches settles it, and the condition stays exempt because it cannot produce
+     a null *result*. The cost is that the coalesce idiom
+     `A if A <> null else 0` does not type; narrowing or two rules is the answer,
+     and lifting the restriction needs `canBeUndefined` to become nullness-aware,
+     which is a change to a central analysis rather than a local one.
+
+   Still independent of everything else here, and still what would let a function be
+   single-clause.
 2. **The declaration form**: the `fun` node surviving `parseRaw`, the signature
    grammar, the flat name-uniqueness check, and freshening in `expandModule`. Small
    individually, but it is what the parser and elaborator must agree on before

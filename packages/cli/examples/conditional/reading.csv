@@ -1,0 +1,6 @@
+sensor,level,ok
+north,75,true
+east,45,true
+south,12,false
+west,0,true
+inland,95,

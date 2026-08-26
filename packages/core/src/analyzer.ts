@@ -194,6 +194,11 @@ function collectVars(term: HeadTerm, into: Set<string>) {
       collectVars(term.left, into);
       collectVars(term.right, into);
       break;
+    case "Conditional":
+      collectVars(term.consequent, into);
+      collectVars(term.cond, into);
+      collectVars(term.alternate, into);
+      break;
     case "UnaryExpr":
       collectVars(term.operand, into);
       break;
@@ -1138,6 +1143,12 @@ export function aggregateFunctions(term: HeadTerm): string[] {
       return [term.func, ...aggregateFunctions(term.arg)];
     case "BinaryExpr":
       return [...aggregateFunctions(term.left), ...aggregateFunctions(term.right)];
+    case "Conditional":
+      return [
+        ...aggregateFunctions(term.consequent),
+        ...aggregateFunctions(term.cond),
+        ...aggregateFunctions(term.alternate),
+      ];
     case "UnaryExpr":
       return aggregateFunctions(term.operand);
     case "FunctionCall": {
@@ -1203,6 +1214,11 @@ function checkFunctionCalls(term: HeadTerm): void {
     case "BinaryExpr":
       checkFunctionCalls(term.left);
       checkFunctionCalls(term.right);
+      break;
+    case "Conditional":
+      checkFunctionCalls(term.consequent);
+      checkFunctionCalls(term.cond);
+      checkFunctionCalls(term.alternate);
       break;
     case "UnaryExpr":
       checkFunctionCalls(term.operand);
@@ -1456,6 +1472,11 @@ export function queryProjection(query: Query): HeadTerm[] {
         visit(term.left);
         visit(term.right);
         return;
+      case "Conditional":
+        visit(term.consequent);
+        visit(term.cond);
+        visit(term.alternate);
+        return;
       case "UnaryExpr":
         visit(term.operand);
         return;
@@ -1581,6 +1602,12 @@ export function allVarsBound(term: HeadTerm, isBound: (name: string) => boolean)
       return allVarsBound(term.operand, isBound);
     case "BinaryExpr":
       return allVarsBound(term.left, isBound) && allVarsBound(term.right, isBound);
+    case "Conditional":
+      return (
+        allVarsBound(term.consequent, isBound) &&
+        allVarsBound(term.cond, isBound) &&
+        allVarsBound(term.alternate, isBound)
+      );
     case "FunctionCall":
       return term.args.every((a) => allVarsBound(a, isBound));
     case "AggregateCall":

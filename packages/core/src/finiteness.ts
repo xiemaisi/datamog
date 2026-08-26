@@ -172,6 +172,16 @@ function collectVars(term: HeadTerm, into: Set<string>): void {
       collectVars(term.left, into);
       collectVars(term.right, into);
       return;
+    case "Conditional":
+      // All three, the condition included. Only the branches reach the value, so
+      // this is an over-approximation, and this analysis's errors are meant to
+      // fall that way. It costs no spurious warning on its own: a conditional
+      // manufactures no value, so it contributes no PLUS edge for a cycle to
+      // trip over.
+      collectVars(term.consequent, into);
+      collectVars(term.cond, into);
+      collectVars(term.alternate, into);
+      return;
     case "FunctionCall":
       for (const a of term.args) collectVars(a, into);
       return;

@@ -52,10 +52,12 @@ export type DatamogKeywordNames =
     | "^"
     | "as"
     | "boolean"
+    | "else"
     | "error"
     | "false"
     | "float"
     | "from"
+    | "if"
     | "in"
     | "input"
     | "integer"
@@ -130,7 +132,7 @@ export function isAnnotatedHeadTerm(item: unknown): item is AnnotatedHeadTerm {
 }
 
 export interface ArrayLiteral extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'ArrayLiteral';
     elements: Array<Expression>;
 }
@@ -145,7 +147,7 @@ export function isArrayLiteral(item: unknown): item is ArrayLiteral {
 }
 
 export interface BinaryExpr extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'BinaryExpr';
     left: Expression;
     op: '!=' | '%' | '&&' | '&' | '*' | '**' | '+' | '-' | '/' | '<' | '<<' | '<=' | '<>' | '=' | '>' | '>=' | '>>' | '>>>' | '^' | '|' | '||';
@@ -197,7 +199,7 @@ export function isBodyElement(item: unknown): item is BodyElement {
 }
 
 export interface BooleanLiteral extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'BooleanLiteral';
     value: boolean;
 }
@@ -212,7 +214,7 @@ export function isBooleanLiteral(item: unknown): item is BooleanLiteral {
 }
 
 export interface BracketAccess extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'BracketAccess';
     end?: Expression;
     object: Expression;
@@ -251,6 +253,25 @@ export function isColumnDecl(item: unknown): item is ColumnDecl {
     return reflection.isInstance(item, ColumnDecl.$type);
 }
 
+export interface Conditional extends langium.AstNode {
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $type: 'Conditional';
+    alternate: Expression;
+    cond: Expression;
+    consequent: Expression;
+}
+
+export const Conditional = {
+    $type: 'Conditional',
+    alternate: 'alternate',
+    cond: 'cond',
+    consequent: 'consequent'
+} as const;
+
+export function isConditional(item: unknown): item is Conditional {
+    return reflection.isInstance(item, Conditional.$type);
+}
+
 export interface Equality extends langium.AstNode {
     readonly $container: Query | Rule;
     readonly $type: 'Equality';
@@ -268,7 +289,7 @@ export function isEquality(item: unknown): item is Equality {
     return reflection.isInstance(item, Equality.$type);
 }
 
-export type Expression = ArrayLiteral | BinaryExpr | BooleanLiteral | BracketAccess | FunctionCall | NullLiteral | NumberLiteral | ObjectLiteral | StringLiteral | UnaryExpr | Variable | Wildcard;
+export type Expression = ArrayLiteral | BinaryExpr | BooleanLiteral | BracketAccess | Conditional | FunctionCall | NullLiteral | NumberLiteral | ObjectLiteral | StringLiteral | UnaryExpr | Variable | Wildcard;
 
 export const Expression = {
     $type: 'Expression'
@@ -315,7 +336,7 @@ export function isFilter(item: unknown): item is Filter {
 }
 
 export interface FunctionCall extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'FunctionCall';
     args: Array<Expression>;
     name: string;
@@ -362,10 +383,10 @@ export function isHeadTerm(item: unknown): item is HeadTerm {
     return reflection.isInstance(item, HeadTerm.$type);
 }
 
-export type Identifier = 'as' | 'error' | 'from' | 'input' | 'output' | 'predicate' | string;
+export type Identifier = 'as' | 'else' | 'error' | 'from' | 'if' | 'input' | 'output' | 'predicate' | string;
 
 export function isIdentifier(item: unknown): item is Identifier {
-    return item === 'input' || item === 'output' || item === 'error' || item === 'predicate' || item === 'from' || item === 'as' || (typeof item === 'string' && (/[a-zA-Z_][a-zA-Z0-9_]*/.test(item) || /`(\\.|[^`\\\n\r])+`/.test(item)));
+    return item === 'input' || item === 'output' || item === 'error' || item === 'predicate' || item === 'from' || item === 'as' || item === 'if' || item === 'else' || (typeof item === 'string' && (/[a-zA-Z_][a-zA-Z0-9_]*/.test(item) || /`(\\.|[^`\\\n\r])+`/.test(item)));
 }
 
 export interface Literal extends langium.AstNode {
@@ -394,7 +415,7 @@ export function isLiteral(item: unknown): item is Literal {
 }
 
 export interface NullLiteral extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'NullLiteral';
 }
 
@@ -407,7 +428,7 @@ export function isNullLiteral(item: unknown): item is NullLiteral {
 }
 
 export interface NumberLiteral extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'NumberLiteral';
     value: number;
 }
@@ -439,7 +460,7 @@ export function isObjectEntry(item: unknown): item is ObjectEntry {
 }
 
 export interface ObjectLiteral extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'ObjectLiteral';
     entries: Array<ObjectEntry>;
 }
@@ -565,7 +586,7 @@ export function isStatement(item: unknown): item is Statement {
 }
 
 export interface StringLiteral extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'StringLiteral';
     value: string;
 }
@@ -596,7 +617,7 @@ export function isSubscript(item: unknown): item is Subscript {
 }
 
 export interface UnaryExpr extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'UnaryExpr';
     op: '!' | '-';
     operand: Expression;
@@ -613,7 +634,7 @@ export function isUnaryExpr(item: unknown): item is UnaryExpr {
 }
 
 export interface Variable extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'Variable';
     name: Identifier;
 }
@@ -628,7 +649,7 @@ export function isVariable(item: unknown): item is Variable {
 }
 
 export interface Wildcard extends langium.AstNode {
-    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
+    readonly $container: AggregateCall | AnnotatedHeadTerm | ArrayLiteral | BinaryExpr | BracketAccess | Conditional | Equality | Filter | FunctionCall | HeadAtom | Literal | ObjectEntry | RangeAtom | Rule | Slice | Subscript | UnaryExpr;
     readonly $type: 'Wildcard';
 }
 
@@ -651,6 +672,7 @@ export type DatamogAstType = {
     BooleanLiteral: BooleanLiteral
     BracketAccess: BracketAccess
     ColumnDecl: ColumnDecl
+    Conditional: Conditional
     Equality: Equality
     Expression: Expression
     ExtDecl: ExtDecl
@@ -822,6 +844,21 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: []
+        },
+        Conditional: {
+            name: Conditional.$type,
+            properties: {
+                alternate: {
+                    name: Conditional.alternate
+                },
+                cond: {
+                    name: Conditional.cond
+                },
+                consequent: {
+                    name: Conditional.consequent
+                }
+            },
+            superTypes: [Expression.$type]
         },
         Equality: {
             name: Equality.$type,

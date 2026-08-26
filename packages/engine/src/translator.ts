@@ -1416,6 +1416,36 @@ function termToSql(
       const b = refs[0]!;
       return b.kind === "col" ? `${b.alias}.${ident(b.col)}` : b.sql;
     }
+    case "Conditional": {
+      const resultType = inferTermType(term, varTypes, columnTypes);
+      const partialCtx = partialityCtx(varTypes, columnTypes, functionOverloads);
+      // A branch is lifted where the two join to `value`, the same lift `=` takes
+      // across the type-tag boundary, rather than a CASE between two SQL types
+      // that do not unify. Its `nullMeans` is the branch's own answer: a partial
+      // branch keeps a SQL NULL so the enclosing guard still sees the absence.
+      const branch = (b: HeadTerm) =>
+        liftToJsonIfNeeded(
+          termToSql(b, bindings, varTypes, columnTypes, functionOverloads, dialect),
+          inferTermType(b, varTypes, columnTypes),
+          resultType,
+          dialect,
+          canBeUndefined(b, partialCtx) ? "absence" : "value",
+        );
+      // No ELSE, on purpose. The conditional is strict in its condition, like
+      // `&&` and the orderings: a condition that is a null or has no value
+      // matches neither arm, so the CASE is NULL and the enclosing definedness
+      // guard withholds the row. `CASE c WHEN TRUE .. WHEN FALSE ..` rather than
+      // `WHEN c .. WHEN NOT c ..` so the condition is emitted once.
+      const condSql = termToSql(
+        term.cond,
+        bindings,
+        varTypes,
+        columnTypes,
+        functionOverloads,
+        dialect,
+      );
+      return `(CASE ${condSql} WHEN TRUE THEN ${branch(term.consequent)} WHEN FALSE THEN ${branch(term.alternate)} END)`;
+    }
     case "BinaryExpr": {
       const isStringConcat =
         term.op === "+" &&

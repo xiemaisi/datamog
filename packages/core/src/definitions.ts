@@ -462,6 +462,12 @@ function inExpression(
         inExpression(program, scope, expr.left, offset) ??
         inExpression(program, scope, expr.right, offset)
       );
+    case "Conditional":
+      return (
+        inExpression(program, scope, expr.consequent, offset) ??
+        inExpression(program, scope, expr.cond, offset) ??
+        inExpression(program, scope, expr.alternate, offset)
+      );
     case "UnaryExpr":
       return inExpression(program, scope, expr.operand, offset);
     case "AggregateCall":

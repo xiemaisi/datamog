@@ -712,6 +712,39 @@ function validateExpr(
       validateExpr(term.right, varTypes, types, functionOverloads);
       break;
     }
+    case "Conditional": {
+      // The condition is a boolean position like `!`'s operand and `&&`'s two,
+      // and is checked the same way.
+      const condType = inferTermType(term.cond, varTypes, types);
+      if (condType && condType !== "boolean") {
+        const cst = term.cond.$cstNode;
+        throw new AnalyzerError(
+          `Conditional requires a boolean condition, got '${condType}'`,
+          cst?.offset,
+          cst?.end,
+        );
+      }
+      // The branches are alternatives rather than simultaneous positions, so
+      // they join rather than meet. `joinTypesWithJsonLift` is the join that
+      // admits the primitive-to-`value` lift the translator emits, so
+      // `[1] if c else 2` is a `value`; two incompatible primitives have no
+      // join and are an error here rather than widening to `value`, which
+      // would hide a mistake behind a JSON encoding.
+      const thenType = inferTermType(term.consequent, varTypes, types);
+      const elseType = inferTermType(term.alternate, varTypes, types);
+      if (thenType && elseType && joinTypesWithJsonLift(thenType, elseType) === null) {
+        const cst = term.$cstNode;
+        throw new AnalyzerError(
+          `Conditional branches have incompatible types '${thenType}' and '${elseType}'`,
+          cst?.offset,
+          cst?.end,
+        );
+      }
+      validateExpr(term.consequent, varTypes, types, functionOverloads);
+      validateExpr(term.cond, varTypes, types, functionOverloads);
+      validateExpr(term.alternate, varTypes, types, functionOverloads);
+      break;
+    }
     case "AggregateCall":
       validateAggregateArgType(term, varTypes, types);
       validateExpr(term.arg, varTypes, types, functionOverloads);
@@ -1094,6 +1127,16 @@ export function inferTermType(
         return "string";
       }
       return numericResultType(leftType, rightType, term.op);
+    }
+    case "Conditional": {
+      // The join of the branches; the condition contributes nothing, being a
+      // boolean the result never carries. An untyped branch leaves the whole
+      // conditional untyped rather than adopting the other one, the same
+      // discipline `allVarsTyped` keeps for a binding equality.
+      const thenType = inferTermType(term.consequent, varTypes, types);
+      const elseType = inferTermType(term.alternate, varTypes, types);
+      if (thenType === undefined || elseType === undefined) return undefined;
+      return joinTypesWithJsonLift(thenType, elseType) ?? undefined;
     }
     case "UnaryExpr":
       if (term.op === "!") return "boolean";

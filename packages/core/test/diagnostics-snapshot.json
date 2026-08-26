@@ -1162,6 +1162,35 @@
       ]
     }
   },
+  "example/conditional/conditional.dl": {
+    "ok": true,
+    "types": {
+      "adjusted": [
+        "string",
+        "integer"
+      ],
+      "band": [
+        "string",
+        "string"
+      ],
+      "flagged": [
+        "string",
+        "string"
+      ],
+      "interesting": [
+        "string"
+      ],
+      "reading": [
+        "string",
+        "integer",
+        "boolean"
+      ],
+      "scaled": [
+        "string",
+        "integer"
+      ]
+    }
+  },
   "example/constant-expressions/constant-expressions.dl": {
     "ok": true,
     "types": {

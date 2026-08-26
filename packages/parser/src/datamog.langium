@@ -237,7 +237,17 @@ Filter:
 // rewrites it, so no stage past parsing sees the alias.
 
 Expression:
-    Or;
+    Conditional;
+
+// Postfix conditional, as in Python: `a if c else b`. Right-associative, so
+// `a if c else b if d else e` chains without parentheses and reads as an elif
+// ladder. Postfix rather than a C ternary because `:` is already spoken for
+// (head annotations, column declarations, proof captures, slices, object
+// entries), and because it keeps `if` and `else` out of expression-start
+// position, so both stay contextual keywords (see `Identifier`). It needs no
+// new precedence level: the branches are `Or`, the tightest thing above it.
+Conditional infers Expression:
+    Or ({infer Conditional.consequent=current} 'if' cond=Or 'else' alternate=Conditional)?;
 
 Or infers Expression:
     And ({infer BinaryExpr.left=current} op='||' right=And)*;
@@ -334,15 +344,17 @@ FunctionCall:
 // longer enforces it — `Foo(X)` is a predicate, `foo` is a variable.
 // FunctionCall vs Variable in Primary, and Literal vs Filter in body
 // position, are disambiguated by whether `(` follows the identifier.
-// `input`, `output`, `error`, `predicate`, `from`, and `as` are contextual
-// keywords: they lead the declaration / binding forms above, but are otherwise
+// `input`, `output`, `error`, `predicate`, `from`, `as`, `if` and `else` are
+// contextual keywords: they lead (or infix) the forms above, but are otherwise
 // ordinary identifiers, so a program can still name a predicate/column/variable
 // after them (they are common words: `from`/`to` are the usual columns of an
 // edge relation, `error` a plausible predicate name). The parser tells the forms
 // apart by lookahead: `input`/`output`/`error` followed by `predicate`; an
-// optional export identifier followed by `from`.
+// optional export identifier followed by `from`. `if`/`else` only ever appear
+// after a complete expression, which is why they need no reservation.
 Identifier returns string:
-    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as';
+    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as'
+    | 'if' | 'else';
 
 // JSON-style construction. Both literals produce a `value` (an array
 // or object). Element expressions of any primitive type are auto-lifted

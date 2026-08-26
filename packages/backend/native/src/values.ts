@@ -219,6 +219,17 @@ export function evalTerm(
         ? safeIntegerOrUndef(negated)
         : finiteOrUndef(negated);
     }
+    case "Conditional": {
+      const c = evalTerm(term.cond, sub, env, aggregates);
+      // Strict in the condition, like `!` and the connectives past their
+      // absorbing value: neither an absence nor a `null` is a truth value, so
+      // the conditional has no value at either. Lazy in the branches, matching
+      // SQL's `CASE`, so an undefined in the branch not taken costs nothing.
+      if (c === undefined || c === null) return undefined;
+      return asBoolean(c)
+        ? evalTerm(term.consequent, sub, env, aggregates)
+        : evalTerm(term.alternate, sub, env, aggregates);
+    }
     case "BinaryExpr": {
       const l = evalTerm(term.left, sub, env, aggregates);
       const r = evalTerm(term.right, sub, env, aggregates);

@@ -1,0 +1,113 @@
+[
+  [
+    {
+      "S": "north",
+      "col2": "high"
+    },
+    {
+      "S": "east",
+      "col2": "mid"
+    },
+    {
+      "S": "south",
+      "col2": "low"
+    },
+    {
+      "S": "west",
+      "col2": "low"
+    },
+    {
+      "S": "inland",
+      "col2": "high"
+    }
+  ],
+  [
+    {
+      "S": "north",
+      "col2": 1
+    },
+    {
+      "S": "east",
+      "col2": 2
+    },
+    {
+      "S": "south",
+      "col2": 8
+    },
+    {
+      "S": "west",
+      "col2": 0
+    },
+    {
+      "S": "inland",
+      "col2": 1
+    }
+  ],
+  [
+    {
+      "S": "north",
+      "col2": "trusted"
+    },
+    {
+      "S": "east",
+      "col2": "trusted"
+    },
+    {
+      "S": "south",
+      "col2": "suspect"
+    },
+    {
+      "S": "west",
+      "col2": "trusted"
+    }
+  ],
+  [
+    {
+      "S": "north",
+      "col2": 75
+    },
+    {
+      "S": "east",
+      "col2": 45
+    },
+    {
+      "S": "south",
+      "col2": 22
+    },
+    {
+      "S": "west",
+      "col2": 10
+    },
+    {
+      "S": "inland",
+      "col2": 95
+    }
+  ],
+  [
+    {
+      "S": "north"
+    }
+  ],
+  [
+    {
+      "S": "north",
+      "B": "high"
+    },
+    {
+      "S": "east",
+      "B": "mid"
+    },
+    {
+      "S": "south",
+      "B": "low"
+    },
+    {
+      "S": "west",
+      "B": "low"
+    },
+    {
+      "S": "inland",
+      "B": "high"
+    }
+  ]
+]

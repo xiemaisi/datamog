@@ -441,6 +441,13 @@ function strictVars(
         strictVars(expr.right, ctx, into);
       }
       break;
+    case "Conditional":
+      // Strict in the condition and in neither branch. A conditional with a
+      // value proves its condition had one and was not a null, the same
+      // reasoning `!` gets; it proves nothing about a branch, since only one of
+      // them was evaluated and this walk cannot tell which.
+      strictVars(expr.cond, ctx, into);
+      break;
     case "FunctionCall": {
       // Unresolved means no refinement, which is the safe direction here:
       // proving fewer variables non-null only loses precision.
@@ -567,6 +574,12 @@ export function mayBeNull(
         (expr.start !== undefined && rec(expr.start)) ||
         (expr.end !== undefined && rec(expr.end))
       );
+    case "Conditional":
+      // The value is one of the branches, so their nullness joins. The
+      // condition's own nullness does not enter: a null condition gives the
+      // whole conditional no value rather than a null one, and Position 3
+      // rejects a nullable condition anyway.
+      return rec(expr.consequent) || rec(expr.alternate);
     case "BinaryExpr": {
       const { op, left, right } = expr;
       // Comparison is where a null stops travelling: equality is total over
