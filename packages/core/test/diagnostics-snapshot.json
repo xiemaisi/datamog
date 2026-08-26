@@ -2002,6 +2002,42 @@
       ]
     }
   },
+  "example/monkey-math/monkey-math.dl": {
+    "ok": true,
+    "types": {
+      "fixed": [
+        "string",
+        "integer"
+      ],
+      "free": [
+        "string"
+      ],
+      "need": [
+        "string",
+        "integer"
+      ],
+      "num": [
+        "string",
+        "integer"
+      ],
+      "op": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "part1": [
+        "integer"
+      ],
+      "part2": [
+        "integer"
+      ],
+      "val": [
+        "string",
+        "integer"
+      ]
+    }
+  },
   "example/mutual-recursion/mutual-recursion.dl": {
     "ok": true,
     "types": {
@@ -3338,6 +3374,37 @@
       "step": [
         "string",
         "string"
+      ]
+    }
+  },
+  "example/synthesise-program/synthesise-program.dl": {
+    "ok": true,
+    "types": {
+      "eval": [
+        "value",
+        "integer",
+        "integer"
+      ],
+      "example": [
+        "integer",
+        "integer"
+      ],
+      "maxsize": [
+        "integer"
+      ],
+      "searched": [
+        "integer"
+      ],
+      "solution": [
+        "integer",
+        "value"
+      ],
+      "term": [
+        "integer",
+        "value"
+      ],
+      "wrong": [
+        "value"
       ]
     }
   },
