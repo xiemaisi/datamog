@@ -239,24 +239,40 @@ whole content of the deferred half.
 
 ## The conditional expression
 
-Postfix, as in Python:
+C-style:
 
 ```prolog
-1 if X = "x" else 0
+X = "x" ? 1 : 0
 ```
 
-Three reasons not to spell it as a C ternary. `:` already carries head annotations,
-column declarations, proof captures (`V : p`), slices and object-literal entries,
-and `p(c ? a : integer)` collides with the annotation slot
-(`AnnotatedHeadTerm.expr ':' PrimitiveType`). The postfix form lets `if` and `else`
-stay *contextual* keywords, since they appear only where a binary operator could,
-whereas prefix `if c then a else b` puts `if` in expression-start position and has
-to reserve it, and contextual is the cheaper one. (`keywords.ts` does not yet
-split the two classes; today it is one `RESERVED_KEYWORDS` array, so this would
-add the distinction rather than use it.) And it needs no new precedence level:
-`Cond ::= Or ('if' Or 'else' Cond)?` is right-associative, which gives the elif
-chain. It also sits exactly where a `:-` guard would, so it reads as a guard with an
-else, in the same order as `head :- body`.
+**This section first argued for a postfix `1 if X = "x" else 0` and against the
+ternary, and the argument against was wrong.** It is kept because the reasoning is
+worth not repeating. The three claims were: that `:` is already spoken for by head
+annotations, column declarations, proof captures (`V : p`), slices and
+object-literal entries, so `p(c ? a : integer)` would collide with the annotation
+slot (`AnnotatedHeadTerm.expr ':' PrimitiveType`); that a postfix form keeps `if`
+and `else` contextual where a *prefix* `if c then a else b` would have to reserve
+`if`; and that it needs no new precedence level.
+
+Only the third survived, and it is true of both forms. Checked against the parser
+rather than reasoned about:
+
+- **The `:` does not collide.** A `?` commits the parse to consuming the matching
+  `:`, so every other use of `:` is reached only when no `?` opened a conditional.
+  `W[c ? 1 : 2]` is a subscript whose index is a conditional, `W[c ? 1 : 2 : 3]` is
+  a slice from that conditional to `3`, and refinements and annotations are
+  unaffected. The one shape that does not parse is `q(X: integer ? 1 : 2)`, where
+  the annotation has already closed the term.
+- **`p(c ? a : integer)` was a bad example.** It fails, but so does `q(integer)`:
+  a type name is not an identifier, and that has nothing to do with the
+  conditional. `q(c ? 1 : B)` is fine.
+- **The keyword argument was aimed at the wrong alternative.** It compared postfix
+  against *prefix* `if`. Against the ternary it inverts: the ternary needs no
+  keywords at all, so `if` and `else` stay ordinary identifiers rather than
+  contextual keywords, and `keywords.ts` needs no entry.
+
+`Cond ::= Or ('?' Or ':' Cond)?` is right-associative, which gives the else-if
+chain.
 
 **This is why a function needs only one clause.** With a conditional in the
 language there is nothing for multiple clauses to do: dispatch is a condition like
@@ -547,11 +563,11 @@ currently sidesteps:
 
 ## Recommended order
 
-1. **The conditional expression.** *Built.* Postfix `a if c else b`, right-
-   associative, `if` and `else` contextual. The estimate above was one grammar
-   production, one `CASE` and one branch in `values.ts`; the production and the two
-   emits were right, and what it missed was the seventeen other expression walkers
-   a new AST node has to appear in (safety, both type passes, nullness, partiality,
+1. **The conditional expression.** *Built.* C-style `c ? a : b`, right-
+   associative, no keywords. The estimate above was one grammar production, one
+   `CASE` and one branch in `values.ts`; the production and the two emits were
+   right, and what it missed was the seventeen other expression walkers a new AST
+   node has to appear in (safety, both type passes, nullness, partiality,
    Position 3, finiteness, completion, navigation, the head-term collectors).
 
    Two things the plan got wrong, both about NULL rather than about functions:
@@ -571,7 +587,7 @@ currently sidesteps:
      leaving it would have been a cross-backend divergence. Position 3 on the
      branches settles it, and the condition stays exempt because it cannot produce
      a null *result*. The cost is that the coalesce idiom
-     `A if A <> null else 0` does not type; narrowing or two rules is the answer,
+     `A <> null ? A : 0` does not type; narrowing or two rules is the answer,
      and lifting the restriction needs `canBeUndefined` to become nullness-aware,
      which is a change to a central analysis rather than a local one.
 

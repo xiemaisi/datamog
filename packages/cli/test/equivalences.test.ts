@@ -339,7 +339,7 @@ describe("a proof term is a value, so the value rules apply to it", () => {
 });
 
 describe("the conditional expression", () => {
-  // spec §2.6. `a if c else b` is strict in its condition, like `!`, the
+  // spec §2.6. `c ? a : b` is strict in its condition, like `!`, the
   // connectives past their absorbing value, and the four orderings: a condition
   // that is a null or has no value leaves the whole conditional with no value.
   // Its branches are lazy, so only the taken one has to have one.
@@ -347,14 +347,14 @@ describe("the conditional expression", () => {
 
   test("it selects the branch the condition names", async () => {
     await equivalent(
-      `${N}output predicate r(V, "neg" if V < 0 else "ok") :- n(V).`,
+      `${N}output predicate r(V, V < 0 ? "neg" : "ok") :- n(V).`,
       `${N}output predicate r(V, "neg") :- n(V), V < 0.\noutput predicate r(V, "ok") :- n(V), not (V < 0).`,
     );
   });
 
   test("it is right-associative, so it chains", async () => {
     await equivalent(
-      `${N}output predicate r(V, "neg" if V < 0 else ("zero" if V = 0 else "pos")) :- n(V).`,
+      `${N}output predicate r(V, V < 0 ? "neg" : (V = 0 ? "zero" : "pos")) :- n(V).`,
       `${N}output predicate r(V, "neg") :- n(V), V < 0.\noutput predicate r(V, "zero") :- n(V), V = 0.\noutput predicate r(V, "pos") :- n(V), V > 0.`,
     );
   });
@@ -363,14 +363,14 @@ describe("the conditional expression", () => {
     // Lazy on every engine: SQL's `CASE` short-circuits and the interpreters
     // evaluate one branch, so `0 / 0` in the dead branch withholds nothing.
     await equivalent(
-      `${N}output predicate r(V, 7 if V > 0 else 0 / 0) :- n(V).`,
+      `${N}output predicate r(V, V > 0 ? 7 : 0 / 0) :- n(V).`,
       `${N}output predicate r(V, 7) :- n(V), V > 0.`,
     );
   });
 
   test("a condition with no value withholds the row", async () => {
     await equivalent(
-      `${N}output predicate r(V) :- n(V), 1 = (1 if (V / 0) > 0 else 1).`,
+      `${N}output predicate r(V) :- n(V), 1 = ((V / 0) > 0 ? 1 : 1).`,
       `${N}output predicate r(V) :- n(V), false.`,
     );
   });
@@ -381,14 +381,14 @@ describe("the conditional expression", () => {
     // a conditional is always an absence. That is what lets the two agree.
     const NB = "b(1, true).\nb(2, null).\n";
     await equivalent(
-      `${NB}output predicate r(K, 7 if F else 8) :- b(K, F).`,
+      `${NB}output predicate r(K, F ? 7 : 8) :- b(K, F).`,
       `${NB}output predicate r(K, 7) :- b(K, F), F = true.\noutput predicate r(K, 8) :- b(K, F), F = false.`,
     );
   });
 
   test("a primitive branch lifts where the branches join to `value`", async () => {
     await equivalent(
-      `${N}output predicate r(V, [1] if V > 0 else 2) :- n(V).`,
+      `${N}output predicate r(V, V > 0 ? [1] : 2) :- n(V).`,
       `${N}output predicate r(V, [1]) :- n(V), V > 0.\noutput predicate r(V, parse_json("2")) :- n(V), not (V > 0).`,
     );
   });
@@ -398,17 +398,17 @@ describe("the conditional expression", () => {
     // supply the `null` value where the condition can only ever supply an
     // absence, and one SQL NULL cannot mean both.
     const P = "input predicate p(k: integer, v: integer?, f: boolean?).\n";
-    expect(acceptance(`${P}?- p(K, V, F), X = V if K > 0 else 0.`)).toContain(
+    expect(acceptance(`${P}?- p(K, V, F), X = K > 0 ? V : 0.`)).toContain(
       "a conditional branch needs a value",
     );
-    expect(acceptance(`${P}?- p(K, V, F), X = 1 if F else 0.`)).toBe("ok");
+    expect(acceptance(`${P}?- p(K, V, F), X = F ? 1 : 0.`)).toBe("ok");
   });
 
   test("the condition must be a boolean and the branches must have a join", () => {
-    expect(acceptance("?- X = 1 if 5 else 0.")).toContain(
+    expect(acceptance("?- X = 5 ? 1 : 0.")).toContain(
       "Conditional requires a boolean condition, got 'integer'",
     );
-    expect(acceptance('?- X = 1 if true else "a".')).toContain(
+    expect(acceptance('?- X = true ? 1 : "a".')).toContain(
       "Conditional branches have incompatible types 'integer' and 'string'",
     );
   });

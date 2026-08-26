@@ -239,15 +239,21 @@ Filter:
 Expression:
     Conditional;
 
-// Postfix conditional, as in Python: `a if c else b`. Right-associative, so
-// `a if c else b if d else e` chains without parentheses and reads as an elif
-// ladder. Postfix rather than a C ternary because `:` is already spoken for
-// (head annotations, column declarations, proof captures, slices, object
-// entries), and because it keeps `if` and `else` out of expression-start
-// position, so both stay contextual keywords (see `Identifier`). It needs no
-// new precedence level: the branches are `Or`, the tightest thing above it.
+// Conditional, C-style: `c ? a : b`. Right-associative, so `c ? a : d ? b : e`
+// chains without parentheses and reads as an else-if ladder. It needs no new
+// precedence level (the parts are `Or`, the tightest thing above it) and no
+// keywords, so nothing has to be reserved.
+//
+// The `:` does not collide with the other five things `:` does (head
+// annotations, column declarations, proof captures, slices, object entries),
+// checked rather than assumed: a `?` commits the parser to consuming the
+// matching `:` before any of those is considered, so `W[c ? 1 : 2]` is a
+// subscript whose index is a conditional and `W[c ? 1 : 2 : 3]` is a slice from
+// one to `3`. The one shape that does not parse is `q(X: integer ? 1 : 2)`,
+// where the annotation has already closed the term; write
+// `q((c ? 1 : 2): integer)`.
 Conditional infers Expression:
-    Or ({infer Conditional.consequent=current} 'if' cond=Or 'else' alternate=Conditional)?;
+    Or ({infer Conditional.cond=current} '?' consequent=Or ':' alternate=Conditional)?;
 
 Or infers Expression:
     And ({infer BinaryExpr.left=current} op='||' right=And)*;
@@ -344,17 +350,15 @@ FunctionCall:
 // longer enforces it — `Foo(X)` is a predicate, `foo` is a variable.
 // FunctionCall vs Variable in Primary, and Literal vs Filter in body
 // position, are disambiguated by whether `(` follows the identifier.
-// `input`, `output`, `error`, `predicate`, `from`, `as`, `if` and `else` are
-// contextual keywords: they lead (or infix) the forms above, but are otherwise
+// `input`, `output`, `error`, `predicate`, `from`, and `as` are contextual
+// keywords: they lead the declaration / binding forms above, but are otherwise
 // ordinary identifiers, so a program can still name a predicate/column/variable
 // after them (they are common words: `from`/`to` are the usual columns of an
 // edge relation, `error` a plausible predicate name). The parser tells the forms
 // apart by lookahead: `input`/`output`/`error` followed by `predicate`; an
-// optional export identifier followed by `from`. `if`/`else` only ever appear
-// after a complete expression, which is why they need no reservation.
+// optional export identifier followed by `from`.
 Identifier returns string:
-    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as'
-    | 'if' | 'else';
+    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as';
 
 // JSON-style construction. Both literals produce a `value` (an array
 // or object). Element expressions of any primitive type are auto-lifted

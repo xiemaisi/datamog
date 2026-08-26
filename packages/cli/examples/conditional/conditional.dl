@@ -1,8 +1,8 @@
-# The conditional expression: `a if c else b`, postfix as in Python.
+# The conditional expression: `c ? a : b`, as in C.
 #
-# Right-associative, so it chains into an elif ladder without
-# parentheses. `if` and `else` are contextual keywords — they only ever
-# follow a complete expression — so a column may still be named `if`.
+# Right-associative, so it chains into an else-if ladder without
+# parentheses. It needs no keywords, so nothing is reserved: the `?` is
+# what tells this `:` apart from the five others the language uses.
 #
 # Two rules make it fit the rest of the language (spec §2.6):
 #
@@ -16,26 +16,26 @@
 
 input predicate reading(sensor: string, level: integer, ok: boolean?).
 
-# The elif ladder. Three bands from one expression, where the
+# The else-if ladder. Three bands from one expression, where the
 # alternative is three rules with complementary guards.
-output predicate band(S, "high" if V > 60 else ("mid" if V > 30 else "low"))
+output predicate band(S, V > 60 ? "high" : (V > 30 ? "mid" : "low"))
   :- reading(S, V, _).
 
 # Lazy branches: `100 / V` is never evaluated where `V` is zero, so no
 # row is withheld for it. Written as two rules this would need the
 # guard repeated.
-output predicate scaled(S, 0 if V = 0 else 100 / V) :- reading(S, V, _).
+output predicate scaled(S, V = 0 ? 0 : 100 / V) :- reading(S, V, _).
 
 # Strict condition: `ok` is a `boolean?`, and the reading whose status
 # is null has no value here, so it derives nothing. The condition is
 # the one position a null may reach — both branches must be
 # non-nullable, since a branch is what could make the *result* a null.
-output predicate flagged(S, "trusted" if OK else "suspect")
+output predicate flagged(S, OK ? "trusted" : "suspect")
   :- reading(S, _, OK).
 
 # A conditional composes like any other expression: inside arithmetic,
 # and as a body filter.
-output predicate adjusted(S, V + (10 if V < 20 else 0)) :- reading(S, V, _).
-output predicate interesting(S) :- reading(S, V, _), (V > 50 if V < 90 else false).
+output predicate adjusted(S, V + (V < 20 ? 10 : 0)) :- reading(S, V, _).
+output predicate interesting(S) :- reading(S, V, _), (V < 90 ? V > 50 : false).
 
 ?- band(S, B).

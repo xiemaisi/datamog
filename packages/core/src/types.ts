@@ -727,7 +727,7 @@ function validateExpr(
       // The branches are alternatives rather than simultaneous positions, so
       // they join rather than meet. `joinTypesWithJsonLift` is the join that
       // admits the primitive-to-`value` lift the translator emits, so
-      // `[1] if c else 2` is a `value`; two incompatible primitives have no
+      // `c ? [1] : 2` is a `value`; two incompatible primitives have no
       // join and are an error here rather than widening to `value`, which
       // would hide a mistake behind a JSON encoding.
       const thenType = inferTermType(term.consequent, varTypes, types);
@@ -740,8 +740,8 @@ function validateExpr(
           cst?.end,
         );
       }
-      validateExpr(term.consequent, varTypes, types, functionOverloads);
       validateExpr(term.cond, varTypes, types, functionOverloads);
+      validateExpr(term.consequent, varTypes, types, functionOverloads);
       validateExpr(term.alternate, varTypes, types, functionOverloads);
       break;
     }

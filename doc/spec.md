@@ -670,7 +670,7 @@ comparisons, ranges, and rule heads. The grammar uses precedence levels:
 
 ```
 Expression     ::= Conditional
-Conditional    ::= Or ('if' Or 'else' Conditional)?
+Conditional    ::= Or ('?' Or ':' Conditional)?
 Or             ::= And ('||' And)*
 And            ::= BitOr ('&&' BitOr)*
 BitOr          ::= BitXor ('|' BitXor)*
@@ -711,8 +711,8 @@ ObjectEntry    ::= STRING ':' Expression
 10. Bitwise or: `|`
 11. Logical and: `&&`
 12. Logical or: `||`
-13. Conditional: `a if c else b` (right-associative, so
-    `a if c else b if d else e` is `a if c else (b if d else e)`)
+13. Conditional: `c ? a : b` (right-associative, so
+    `c ? a : d ? b : e` is `c ? a : (d ? b : e)`)
 
 `**` binds tighter than the multiplicative operators but its left operand
 is a unary expression, so `-2 ** 2` is `(-2) ** 2`. It is always float-
@@ -727,18 +727,26 @@ sees the two characters distinctly.)
 
 #### The conditional expression
 
-`a if c else b` denotes `a` where `c` is true and `b` where `c` is false.
-It is postfix, as in Python, so `if` and `else` never begin an expression
-and both stay contextual keywords: a predicate, column or variable may
-still be named `if` or `else`. It is right-associative, which is what makes
-`"neg" if V < 0 else ("zero" if V = 0 else "pos")` an elif chain.
+`c ? a : b` denotes `a` where `c` is true and `b` where `c` is false, as in
+C. It is right-associative, which is what makes
+`V < 0 ? "neg" : (V = 0 ? "zero" : "pos")` an else-if chain, and it needs no
+keywords, so nothing is reserved for it.
+
+The `:` is the sixth thing `:` does, after head annotations, column
+declarations, proof captures, slices and object entries, and it does not
+collide with any of them: a `?` commits the parse to the matching `:`, so
+`W[c ? 1 : 2]` is a subscript whose index is a conditional and
+`W[c ? 1 : 2 : 3]` is a slice from that conditional to `3`. The one shape
+that does not parse is a conditional after an annotation on the same head
+term, `q(X: integer ? 1 : 2)`, where the annotation has already closed the
+term; write `q((c ? 1 : 2): integer)`.
 
 Three rules complete it.
 
 - **The condition must be `boolean`**, exactly as `!`'s operand and `&&`'s
   two must be.
 - **The result's type is the join of the branches** (§5.6), so
-  `[1] if c else 2` is a `value` and the primitive branch takes the same
+  `c ? [1] : 2` is a `value` and the primitive branch takes the same
   lift a `value`-typed position gives it elsewhere. Two branches with no
   join, such as `integer` and `string`, are an error rather than a
   widening to `value`.
@@ -747,7 +755,7 @@ Three rules complete it.
   value, the same strictness the four orderings and the connectives have
   past their absorbing value (§5.4); the row is withheld rather than a
   branch being chosen. Only the branch the condition names is evaluated, so
-  `7 if V > 0 else 0 / 0` has a value wherever `V > 0`.
+  `V > 0 ? 7 : 0 / 0` has a value wherever `V > 0`.
 
 Both branches must be non-nullable (§5.4). This is the one asymmetry worth
 stating, because the condition is not: a branch is what could make the
@@ -1445,7 +1453,7 @@ RangeAtom      ::= Expression 'in' '[' Expression '..' Expression ']'
 Filter         ::= ('not')? Expression
 
 Expression     ::= Conditional
-Conditional    ::= Or ('if' Or 'else' Conditional)?
+Conditional    ::= Or ('?' Or ':' Conditional)?
 Or             ::= And ('||' And)*
 And            ::= BitOr ('&&' BitOr)*
 BitOr          ::= BitXor ('|' BitXor)*

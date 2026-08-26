@@ -129,8 +129,8 @@ function walk(
       // exempt where the branches are not: it cannot produce a null *result*.
       check(expr.consequent, "a conditional branch");
       check(expr.alternate, "a conditional branch");
-      walk(expr.consequent, ctx, check);
       walk(expr.cond, ctx, check);
+      walk(expr.consequent, ctx, check);
       walk(expr.alternate, ctx, check);
       return;
     case "Subscript":

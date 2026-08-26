@@ -1,5 +1,5 @@
 {
   "name": "Conditional Expression",
-  "description": "`a if c else b`: the elif ladder, lazy branches, and why a null condition withholds the row",
+  "description": "`c ? a : b`: the else-if ladder, lazy branches, and why a null condition withholds the row",
   "order": 26
 }

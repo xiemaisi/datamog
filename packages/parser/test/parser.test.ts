@@ -996,3 +996,75 @@ describe("head argument names", () => {
     expect(args[1]!.$type).toBe("BinaryExpr");
   });
 });
+
+describe("the conditional's `:` against the other five", () => {
+  // `c ? a : b` adds a sixth meaning to `:`, beside head annotations, column
+  // declarations, proof captures, slices and object entries.
+  // functional-sublanguage.md originally rejected the ternary on the grounds that
+  // this would collide; it does not, because a `?` commits the parse to the
+  // matching `:` and every other use is reached only when no `?` opened one.
+  // These pin that, since it is the reason the syntax is spellable at all.
+
+  function bodyExpr(src: string) {
+    const rule = parse(src).statements[0] as Rule;
+    const eq = rule.body[rule.body.length - 1] as { expr: Record<string, unknown> };
+    return eq.expr;
+  }
+
+  test("a conditional index is a subscript, not a slice", () => {
+    const e = bodyExpr("q(X) :- s(W), X = W[A ? 1 : 2].") as {
+      $type: string;
+      index: { $type: string };
+    };
+    expect(e.$type).toBe("Subscript");
+    expect(e.index.$type).toBe("Conditional");
+  });
+
+  test("a slice over a conditional start still slices", () => {
+    // Three colons in one bracket: the conditional takes the first, the slice the
+    // second. Reading it the other way would need the conditional to stop early.
+    const e = bodyExpr("q(X) :- s(W), X = W[A ? 1 : 2 : 3].") as {
+      $type: string;
+      start: { $type: string };
+      end: { $type: string };
+    };
+    expect(e.$type).toBe("Slice");
+    expect(e.start.$type).toBe("Conditional");
+    expect(e.end.$type).toBe("NumberLiteral");
+  });
+
+  test("a plain slice and a plain subscript are unaffected", () => {
+    expect(bodyExpr("q(X) :- s(W), X = W[1:2].").$type).toBe("Slice");
+    expect(bodyExpr("q(X) :- s(W), X = W[1].").$type).toBe("Subscript");
+  });
+
+  test("a head annotation applies to a conditional term", () => {
+    const rule = parse("q((A ? 1 : 2): integer) :- p(A).").statements[0] as Rule;
+    expect(rule.head.args[0]!.$type).toBe("Conditional");
+    expect(rule.head.argTypes?.[0]).toMatchObject({ type: "integer" });
+  });
+
+  test("a refinement may hold a conditional", () => {
+    expect(() => parse("q(X: integer, _: X > 0 ? true : false) :- p(X).")).not.toThrow();
+  });
+
+  test("an object entry's value may be a conditional", () => {
+    expect(() => parse('q(X) :- p(A), X = {"k": A ? 1 : 2}.')).not.toThrow();
+  });
+
+  test("a proof capture is still a proof capture", () => {
+    const rule = parse("p(1) :: C.\nq(V) :- V : p.").statements[1] as Rule;
+    expect((rule.body[0] as Literal).predicate).toBe("p");
+  });
+
+  test("`if` and `else` are ordinary identifiers, the ternary needing no keyword", () => {
+    expect(() => parse("input predicate p(if: integer, else: integer).")).not.toThrow();
+    expect(() => parse("q(X) :- p(if, else), X = if.")).not.toThrow();
+  });
+
+  test("an annotation closes the term, so a conditional cannot follow it", () => {
+    // The one shape that does not parse. Documented in spec §2.6 with the
+    // rewrite, because the diagnostic alone does not suggest it.
+    expect(() => parse("q(X: integer ? 1 : 2) :- p(X).")).toThrow();
+  });
+});

@@ -24,7 +24,7 @@
       "name": "keyword.control.query.datamog"
     },
     "declaration": {
-      "match": "\\b(input|output|error|predicate|from|as|if|else)\\b",
+      "match": "\\b(input|output|error|predicate|from|as)\\b",
       "name": "keyword.declaration.datamog"
     },
     "string": {

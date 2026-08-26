@@ -464,8 +464,8 @@ function inExpression(
       );
     case "Conditional":
       return (
-        inExpression(program, scope, expr.consequent, offset) ??
         inExpression(program, scope, expr.cond, offset) ??
+        inExpression(program, scope, expr.consequent, offset) ??
         inExpression(program, scope, expr.alternate, offset)
       );
     case "UnaryExpr":

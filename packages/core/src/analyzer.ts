@@ -195,8 +195,8 @@ function collectVars(term: HeadTerm, into: Set<string>) {
       collectVars(term.right, into);
       break;
     case "Conditional":
-      collectVars(term.consequent, into);
       collectVars(term.cond, into);
+      collectVars(term.consequent, into);
       collectVars(term.alternate, into);
       break;
     case "UnaryExpr":
@@ -1145,8 +1145,8 @@ export function aggregateFunctions(term: HeadTerm): string[] {
       return [...aggregateFunctions(term.left), ...aggregateFunctions(term.right)];
     case "Conditional":
       return [
-        ...aggregateFunctions(term.consequent),
         ...aggregateFunctions(term.cond),
+        ...aggregateFunctions(term.consequent),
         ...aggregateFunctions(term.alternate),
       ];
     case "UnaryExpr":
@@ -1216,8 +1216,8 @@ function checkFunctionCalls(term: HeadTerm): void {
       checkFunctionCalls(term.right);
       break;
     case "Conditional":
-      checkFunctionCalls(term.consequent);
       checkFunctionCalls(term.cond);
+      checkFunctionCalls(term.consequent);
       checkFunctionCalls(term.alternate);
       break;
     case "UnaryExpr":
@@ -1473,8 +1473,8 @@ export function queryProjection(query: Query): HeadTerm[] {
         visit(term.right);
         return;
       case "Conditional":
-        visit(term.consequent);
         visit(term.cond);
+        visit(term.consequent);
         visit(term.alternate);
         return;
       case "UnaryExpr":
@@ -1604,8 +1604,8 @@ export function allVarsBound(term: HeadTerm, isBound: (name: string) => boolean)
       return allVarsBound(term.left, isBound) && allVarsBound(term.right, isBound);
     case "Conditional":
       return (
-        allVarsBound(term.consequent, isBound) &&
         allVarsBound(term.cond, isBound) &&
+        allVarsBound(term.consequent, isBound) &&
         allVarsBound(term.alternate, isBound)
       );
     case "FunctionCall":

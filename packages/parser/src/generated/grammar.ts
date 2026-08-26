@@ -1406,16 +1406,16 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
                   "$type": "InferredType",
                   "name": "Conditional"
                 },
-                "feature": "consequent",
+                "feature": "cond",
                 "operator": "="
               },
               {
                 "$type": "Keyword",
-                "value": "if"
+                "value": "?"
               },
               {
                 "$type": "Assignment",
-                "feature": "cond",
+                "feature": "consequent",
                 "operator": "=",
                 "terminal": {
                   "$type": "RuleCall",
@@ -1427,7 +1427,7 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
               },
               {
                 "$type": "Keyword",
-                "value": "else"
+                "value": ":"
               },
               {
                 "$type": "Assignment",
@@ -2691,14 +2691,6 @@ export const DatamogGrammar = (): Grammar => loadedDatamogGrammar ?? (loadedData
           {
             "$type": "Keyword",
             "value": "as"
-          },
-          {
-            "$type": "Keyword",
-            "value": "if"
-          },
-          {
-            "$type": "Keyword",
-            "value": "else"
           }
         ]
       },
