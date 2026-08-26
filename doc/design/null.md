@@ -16,7 +16,7 @@ What survives unchanged. There is still one equality, `=`/`<>` is still total an
 null-aware over values, and §4's insistence that a shared variable and a
 spelled-out `=` mean the same thing still holds. Read §4 as written.
 
-What was wrong, beyond the framing. Four things, each marked in place below:
+What was wrong, beyond the framing. Five things, each marked in place below:
 
 - **§5's ordering table.** `<`, `<=`, `>` and `>=` are now strict at a `null`: they
   have **no value** there, so `null <= null` is not true and an ordering bound to a
@@ -37,6 +37,9 @@ What was wrong, beyond the framing. Four things, each marked in place below:
 - **§3's dismissal of partial expressions**, which answers a proposal nobody makes,
   and its rejection of option types, refuted by partiality being the case analysis
   it says a rule body has nowhere to put.
+- **§7's rule that a bare `null` cannot ground a variable.** It grounds one, at
+  type `null`, and the named-type idiom §7 recommends (`as_integer(null)`) has no
+  value rather than a typed null.
 
 §6's Postgres warning still applies, to genuinely nullable columns only, which are
 now rare.
@@ -400,6 +403,14 @@ or `parse_json("null")` for a `value`. As a head argument
 it is fine, since a sibling rule can type the column: `q(1). q(null).` yields
 both rows. See spec §2.5 and
 [typing-and-safety-constraints.md](typing-and-safety-constraints.md) §8.
+
+> **Superseded, and this is a fifth correction to the four listed at the top.**
+> [null-as-a-value.md](./null-as-a-value.md) gives `null` a type of its own, so
+> the paragraph above is inverted on every point. `X = null` binds `X` at type
+> `null` and `q(X) :- X = null.` derives a row; the `as_*` projections are not a
+> typed spelling of a null but have *no value*, so a rule using one derives
+> nothing (spec §5.7). Only the last sentence survives: a `null` head argument
+> is still fine and `q(1). q(null).` still yields both rows.
 
 An EDB column may
 be declared nullable with a `?` suffix (`age: integer?`), which changes only

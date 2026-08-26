@@ -1219,6 +1219,20 @@ and grepping for `'null'` in each dialect is the way to find the rest.
 
 ### 15.8 The interpreter suites are green, and two gaps remain named
 
+> **Both gaps are since closed, and both closed differently than expected.** A
+> bare `null` now grounds a variable: `inferTermType` returns the `null` type, so
+> `q(X) :- X = null.` derives a row and the head-position workaround below is
+> unnecessary. It also unmade the one behaviour
+> [typing-and-safety-constraints.md](./typing-and-safety-constraints.md) §8 had
+> argued for, which is annotated there. And `count(e)` counts a null: `count(X)`
+> equals `count(*)` for any variable, per §11.2's decision. The type-directed emit
+> this section predicted is what it took, keyed on `canBeUndefined(arg)` rather
+> than on the declared type: `COUNT(*)` where the argument cannot be undefined, so
+> a NULL there is the null value and gets counted, and `COUNT(col)` where it can,
+> SQL's NULL-skipping being exactly what withholding an undefined contribution
+> means. The two agree on a non-nullable argument, there being no NULLs either
+> way.
+
 Down to 23. The native evaluator suite passes in full and the seminaive one
 follows it, sharing `values.ts`.
 

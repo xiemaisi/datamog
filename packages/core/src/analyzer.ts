@@ -1515,27 +1515,23 @@ export function queryProjection(query: Query): HeadTerm[] {
  * analysis, and the native planner. It used to be copied into each, and the
  * copies drifted.
  *
- * A bare `null` literal on the other side is not one of them. `null` is
- * polymorphic, so `X = null` says nothing about what `X` holds and cannot
- * determine its column's type; treating it as a binding produces a column
- * no rule constrains, reported far from the cause. Name the type to bind a
- * NULL: `X = as_integer(null)`, and likewise the other `as_*` projections,
- * or `parse_json("null")` for a `value`. Where `X` is already grounded,
- * `X = null` is unaffected and remains an `IS NULL` filter.
- *
- * Nor is a side whose *other* side mentions the same variable, such as
- * `X = X` or `X = X + 1`. Grounding `X` means evaluating the other side,
- * which cannot be done without `X` already. Callers that iterate to a fixed
- * point reject these anyway, by never finding the other side ready, but
+ * A side whose *other* side mentions the same variable is not one of them,
+ * such as `X = X` or `X = X + 1`. Grounding `X` means evaluating the other
+ * side, which cannot be done without `X` already. Callers that iterate to a
+ * fixed point reject these anyway, by never finding the other side ready, but
  * callers that only ask "could this equality ground X" need the answer
  * directly: judging `X = X` a binding is what let a float-bounded range next
  * to it pass for a filter and diverge across backends.
  *
- * This is a syntactic approximation of "the other side has no type", which
- * is the rule `doc/design/typing-and-safety-constraints.md` states. Safety
- * runs before type inference, so it cannot ask for the type. The
- * approximation grounds strictly more variables than the typed rule would,
- * so it never admits an unsafe program; the gap surfaces as a
+ * A bare `null` on the other side is a binding like any other, `null` being an
+ * ordinary value with its own type: `X = null` grounds `X` at type `null`
+ * (spec §2.5, §5.1). Where `X` is already grounded the same equality is a
+ * null-aware filter instead.
+ *
+ * Grounding a variable is not the same as typing it. Safety runs before type
+ * inference, and `allVarsTyped` in `types.ts` declines to type a binding whose
+ * other side still has an untyped variable in it, so a body this function
+ * approves can still be rejected downstream: `s(X) :- s(Y), X = Y + 1.` gets a
  * cannot-infer-type error rather than an unbound-variable one.
  */
 export function equalityBindingCandidates(eq: Equality): {

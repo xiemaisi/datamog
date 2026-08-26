@@ -4,10 +4,11 @@ Status: **model implemented, structure not.** This recasts what `checkSafety`
 (`core/src/analyzer.ts`) and `rebuildVarTypes` + `validateTypes`
 (`core/src/types.ts`) compute as a single constraint system over a single
 lattice, solved once. The *semantics* described here is what the
-implementation now does: the one behaviour this document argued for has been
-made (§8), and writing it exposed one bug, since fixed. The *structure* is
-still two passes rather than one solve, which is why §8 lists what merging
-them would buy.
+implementation now does, with one exception: the one behaviour this document
+argued for was built and then reverted, `null` having since become a type of its
+own (§8). Writing it exposed one bug, since fixed. The *structure* is still two
+passes rather than one solve, which is why §8 lists what merging them would
+buy.
 
 Scope: **one rule body, with Σ given.** Σ assigns a type to every
 predicate column. For extensional predicates Σ is declared; for
@@ -154,27 +155,29 @@ Following `inferTermType`
 ⟦n⟧            = integer      if written without a fractional part
 ⟦n⟧            = float        otherwise
 ⟦true⟧,⟦false⟧ = boolean
-⟦null⟧         = ⊤            see below
+⟦null⟧         = null         see below
 ⟦[e…]⟧, ⟦{…}⟧  = value
 ```
 
-`⟦null⟧ = ⊤` is the one decision in this document that changed behaviour,
-and §8 records what it changed. The reasoning: NULL inhabits every one
-of the five types, as in SQL, so a `null` literal genuinely constrains
-nothing about the column it flows into. `q(X) :- X = 1 / 0.` yields an
-`integer` column holding NULL, and every partial operation in the language
-(`/`, `%`, `sqrt`, `ln`, `**`, a reversed slice) can produce one.
-Nullability is orthogonal to the lattice: it rides as a second component beside
-the base type, declarable with a `?` suffix on an EDB column or a head
-annotation and inferred per column elsewhere
-([nullness-tracking.md](./nullness-tracking.md)), and none of it changes the
-base type inference sees. So ⊤ is the right element, and
-because ⊤ is the meet's identity no precision is lost where the variable
-has another source: `p(X), X = null` keeps `X ↦ Σ(p)₁`, with the equality
-acting as an `IS NULL` filter. Where the variable has no other source, the
-binding constraint `Γ(x) ⊑ ⊤` is vacuous, so x stays ⊤ and is reported
-unsafe. That is Option B, and it is not a special rule: it falls out of
-`⟦null⟧` being the meet unit.
+This document originally set `⟦null⟧ = ⊤`, on the reasoning that NULL inhabits
+every one of the five types, as in SQL, so a `null` literal constrains nothing
+about the column it flows into. That was the one decision here that changed
+behaviour, and §8 records the change and its subsequent reversal.
+[null-as-a-value.md](./null-as-a-value.md) split NULL's two jobs apart and the
+reasoning dissolved: a partial operation such as `1 / 0` yields *no value* rather
+than a null one, so the null literal is no longer the same thing an `integer`
+column's NULL is, and it gets a type of its own. `null` is a sixth atom beside
+the primitives, and `inferTermType` returns it
+([types.ts](../../packages/core/src/types.ts)).
+
+No precision is lost where the variable has another source: `p(X), X = null`
+keeps `X ↦ Σ(p)₁`, the `null` atom composing with every type at a comparison so
+the equality acts as a null-aware filter. Where the variable has no other
+source it is now bound at type `null` rather than left at ⊤, so it is safe:
+`q(X) :- X = null.` derives one row. Nullability proper is still orthogonal to
+the lattice, riding as a second component beside the base type
+([nullness-tracking.md](./nullness-tracking.md)); the `null` *type* and the
+nullness *bit* are two different things, and §8 keeps them apart.
 
 There is no single `num` and no single arithmetic operator. Each operator
 has its own result type:
@@ -275,10 +278,9 @@ Symmetric, and the interesting cases all fall out of the one rule:
 - `X = Y + 1` binds X to `⟦Y+1⟧` and generates *nothing* for Y, because
   `Y + 1` is not bare. So arithmetic does not run backwards, and this is
   the case the system has to get right without a special rule.
-- `X = null` is vacuous, so X stays ⊤ and is unsafe.
-- `X = as_integer(null)` binds X to `integer`: the call's result type is
-  `integer` whatever its argument denotes, so it names the type the literal
-  does not.
+- `X = null` binds X to `null`, the literal having a type of its own. The
+  `as_*` projections do not serve as a typed spelling of it: `as_integer(null)`
+  has no value, so the rule derives nothing (spec §5.7).
 
 **Range** `e in [lo .. hi]`
 
@@ -421,9 +423,10 @@ unbound, `X` comes out `integer` and only `Y` is reported. That is the
 better diagnostic anyway, and it is what the implementation now does, since
 `checkSafety` walks the body before the head.
 
-The converse fails in exactly one place, by design: a variable whose only
-source is a bare `null` literal is enumerable (its value is NULL) but comes
-out ⊤. That is Option B, and §8 records what it costs.
+The converse used to fail in exactly one place: a variable whose only source was
+a bare `null` literal was enumerable (its value is NULL) but came out ⊤. §8
+records why that no longer holds — `null` is a type, so such a variable comes out
+`null` and the fusion of unsafety with untypedness has no exception left.
 
 ## 6. Reading off diagnostics
 
@@ -433,8 +436,9 @@ At `Γ* = gfp F`:
    anonymous variables occurring only in negated atoms. Where several are ⊤,
    prefer the one whose occurrence is *upstream*: a variable is ⊤ because
    some occurrence failed to constrain it, and the ones downstream of it are
-   ⊤ only in consequence. `q(X) :- N = null, X in [1 .. N].` has both `N` and
-   `X` at ⊤, and naming `N` points at the fix. The implementation approximates
+   ⊤ only in consequence. `q(X) :- X in [1 .. N].` has both `N` and
+   `X` at ⊤, and naming `N` points at the fix ("Unsafe variable 'N' in range
+   upper bound"). The implementation approximates
    this by checking body elements before head arguments, which is enough
    because the head is always downstream of the body.
 2. **Uninhabited**: any `x` with `Γ*(x) = ⊥`. See below, because the verdict
@@ -513,9 +517,9 @@ SELECT CAST(__b0."col1" AS BIGINT) AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE _
 | `not p(_)` | `_ ↦ integer` | ok |
 | `X = 3` | `X ↦ integer` | ok |
 | `X = 1 / 0` | `X ↦ integer` | ok, an integer NULL |
-| `X = null` | `X ↦ ⊤` | X unsafe; see §8 |
-| `X = as_integer(null)` | `X ↦ integer` | ok, a typed NULL |
-| `p(X), X = null` | `X ↦ integer` | ok, the equality is an `IS NULL` filter |
+| `X = null` | `X ↦ null` | ok, X is bound to the null; see §8 |
+| `X = as_integer(null)` | `X ↦ integer` | typed, but has no value, so no rows |
+| `p(X), X = null` | `X ↦ integer` | ok, the equality is a null-aware filter |
 | `X = Y` | `X, Y ↦ ⊤` | both unsafe |
 | `p(X), X = Y` | `X, Y ↦ integer` | ok, either written order |
 | `X = Y + 1` | `X ↦ integer`, `Y ↦ ⊤` | Y unsafe, X not blamed |
@@ -524,7 +528,7 @@ SELECT CAST(__b0."col1" AS BIGINT) AS col1 FROM "s" AS __b0, "b" AS __b1 WHERE _
 | `X in [1 .. 10]` | `X ↦ integer` | ok |
 | `X in [1 .. N]` | `X, N ↦ ⊤` | both unsafe |
 | `p(N), X in [1 .. N]` | `N, X ↦ integer` | ok |
-| `N = null, X in [1 .. N]` | `N, X ↦ ⊤` | both unsafe; see §8 |
+| `N = null, X in [1 .. N]` | `N ↦ null`, `X ↦ ⊤` | rejected on the bound's type; see §8 |
 | `p(X), X < Z` | `X ↦ integer`, `Z ↦ ⊤` | Z unsafe, reported before the type check |
 | `r(V), array_element(V, I, E)` | `V ↦ value`, `I ↦ integer`, `E ↦ value` | ok |
 | `array_element(V, I, E)` | `V ↦ ⊤`, `I ↦ integer`, `E ↦ value` | V unsafe; I and E are concrete but the rule is still rejected (§5) |
@@ -535,34 +539,42 @@ answer, as they must.
 
 ## 8. Relationship to the implementation
 
-### The behaviour change, since made
+### The behaviour change, since reverted
 
-`⟦null⟧ = ⊤` as a non-binding denotation makes a bare `null` unable to
-ground a variable. One previously legal program is now rejected:
+`⟦null⟧ = ⊤` was this document's one behavioural argument: a bare `null`
+denotes ⊤, so it cannot ground a variable, so `q(X) :- X = null.` is unsafe and
+a NULL has to be written with its type named (`as_integer(null)` and friends).
+That shipped, and [null-as-a-value.md](./null-as-a-value.md) then removed the
+premise. `null` is an ordinary value with a type of its own, so it denotes that
+type rather than ⊤:
 
 ```prolog
-q(1).
-q(X) :- X = null.       % Unsafe variable 'X' in left-hand side of equality
+q(X) :- X = null.       % binds X to the null, at type `null`
 ```
 
-To write a NULL, name its type: `X = as_integer(null)`, and likewise
-`as_string`, `as_float`, `as_boolean`, with `parse_json("null")` for a
-`value`. Each call's result type is fixed by its signature regardless of what
-its argument denotes, so it supplies exactly what the bare literal cannot. No
-dedicated ascription syntax is needed. Note that a `null` *head argument* is
-unaffected, so `q(1). q(null).` still yields both rows: a head argument
-contributes to a column's type rather than grounding a variable, and a
-sibling rule can supply the type.
+The named-type idiom is not merely unnecessary now but wrong: `as_integer(null)`
+has *no value*, a null being no integer, so a rule using it derives nothing
+(spec §5.7). Spec §2.5 records the binding rule and §5.1 the type.
 
-Three messages improved as a side effect. `q(X) :- X = null.`,
-`q(X) :- X = null, Y = X + 1, Y = Y.` and
-`q(X) :- N = null, Y = N + 1, X = Y.` all reported "Cannot infer type of
-column 1 of predicate 'q'", which described a symptom; each now names the
-variable that is not grounded.
+What the argument was reaching for survives in a different place. Arithmetic,
+subscript and a range bound all reject a `null` operand by *type* rather than by
+untypedness, so the programs this section used to cite are still rejected, with a
+message that names the operator instead of the variable:
 
-Spec §2.5 and §5.4 record the rule. §1.5 needed no change: its claim that a
-column "acquires a type from another rule that contributes a non-null value"
-is about head arguments, which still behave that way.
+```prolog
+q(X) :- X = null + 0.            % Operator '+' requires numeric or string operands; got 'null'
+q(X) :- X = null[0].             % Subscript requires a string or value operand, got 'null'
+q(X) :- N = null, X in [1 .. N]. % Range upper bound has non-numeric type 'null'
+```
+
+§1.5 needed no change either way: its claim that a column "acquires a type from
+another rule that contributes a non-null value" is about head arguments, and
+`q(1). q(null).` still yields both rows.
+
+The rest of this section stands. ⊤ is still the right denotation for an
+expression nothing constrains, and §5's fusion of unsafety with untypedness is
+still what the implementation computes; `null` simply stopped being an example of
+either.
 
 ### The bug this exposed, since fixed
 
@@ -585,24 +597,22 @@ program written through an equality was already rejected on both backends.
 
 Fixed in `rebuildVarTypes`, which now requires both bounds to be typed, so
 the two paths agree. The program is rejected identically on native, sqlite
-and Postgres. That change was independent of the `null` rule below, which now
-rejects the same program one step earlier, since a bare `null` does not
-ground `N`. A literal bound (`X in [1 .. null]`) is what still exercises the
-range path, and is what the regression test uses.
+and Postgres. That change was independent of the `null` rule above, and it is
+the one that survived: `N` is now typed `null`, so the program is rejected on
+the bound's type ("Range upper bound has non-numeric type 'null'") rather than
+on `N` being ungrounded. A literal bound (`X in [1 .. null]`) exercises the same
+path, and is what the regression test uses.
 
 ### Implementation notes
 
-- **Done, as a syntactic approximation.** `equalityBindingCandidates` in
-  `analyzer.ts` no longer offers a candidate whose other side is a bare
-  `NullLiteral`. The rule this document states is "the other side denotes ⊤",
-  which safety cannot evaluate, since `checkSafety` runs before
-  `inferTypes`. The syntactic version grounds strictly more variables than
-  the typed one, so it never admits an unsafe program; where they differ the
-  program is still rejected, by a cannot-infer-type error instead of an
-  unsafety one. When this landed only the safety copy of the helper changed,
-  because `types.ts`
-  already declines to type a null-bound variable, and the `finiteness.ts` and
-  `planner.ts` copies only ever see safety-approved programs.
+- **Not done, and no longer wanted.** `equalityBindingCandidates` in
+  `analyzer.ts` offers a candidate for every side that is a bare variable whose
+  other side does not mention it, `NullLiteral` included. The rule this document
+  states is "the other side denotes ⊤", which safety cannot evaluate anyway,
+  since `checkSafety` runs before `inferTypes` — but with `null` typed there is
+  no longer a literal that denotes ⊤, so the approximation has nothing left to
+  approximate. Safety and typing can still disagree, and `allVarsTyped` is why:
+  see the bullet below.
 - The `allVarsTyped` guard on equality bindings must **stay**, despite
   looking redundant once unsafety and untypedness are fused. It is what
   stops a ⊥-seeded self-reference from manufacturing a type during the
@@ -617,11 +627,11 @@ range path, and is what the regression test uses.
   claimed the merge would let safety apply the typed rule instead of the
   syntactic approximation, and treated that as the payoff, having measured the
   gap between the two rules as two programs. That measurement was wrong: it is
-  an unbounded family, since a subscript or slice of an untyped object denotes
-  ⊤ (`X = null[0]`, `X = null[1:2]`) and so does arithmetic with no typed
-  operand at all (`X = -null`, `X = null + null`). Every member is rejected
-  either way, so the conclusion survives the correction and the benefit is
-  still only a better message on a pathological program. Against that: `analyze()` is today the
+  an unbounded family. (Its examples were `X = null[0]` and `X = -null`, which
+  now denote a type error on the `null` operand rather than ⊤; the family
+  survives via any expression over a variable nothing types.) Every member is
+  rejected either way, so the conclusion survives both corrections and the
+  benefit is still only a better message on a pathological program. Against that: `analyze()` is today the
   gate that guarantees safety, so moving safety into `inferTypes` changes what
   that function means for the CLI, the editor and `prepareElaborated`; the
   diagnostic ordering in §6 stops being structural and has to be maintained,
@@ -640,8 +650,7 @@ range path, and is what the regression test uses.
   `analyzer.ts`, parameterised by the caller's notion of "ground", with a thin
   adapter in each consumer. That removed three copies of the first and two
   each of the other two, and with them a live divergence, since neither
-  `chooseEqualityBinding` had been built on `equalityBindingCandidates` and so
-  neither honoured the `null` rule.
+  `chooseEqualityBinding` had been built on `equalityBindingCandidates`.
 
   What remains is the five *loops*: each consumer still drives its own
   fixed point over the body, interleaved with its own emission. Sharing those
@@ -725,12 +734,14 @@ infers `integer`. The implementation cannot express the difference, because
 a single `undefined` stands for both, which is why the `allVarsTyped` guard
 exists and must stay (§8).
 
-**What a ⊤-typed head argument contributes.** Nothing, today: `q(null).`
-reports "cannot infer type of column 1", so a ⊤ contribution is skipped
-rather than joined (joining it would give ⊤, since ⊥ ⊔ ⊤ = ⊤, and a
-different diagnostic). A cleaner rule is to make a ⊤-denoting head argument
-a per-rule error, which names the rule that fails to determine the column
-instead of the column that nobody determined.
+**What a ⊤-typed head argument contributes.** Nothing: the contribution is
+skipped rather than joined (joining it would give ⊤, since ⊥ ⊔ ⊤ = ⊤, and a
+different diagnostic). A cleaner rule is to make a ⊤-denoting head argument a
+per-rule error, which names the rule that fails to determine the column instead
+of the column that nobody determined. `q(null).` is no longer an example: the
+`null` type reaches head positions by its own path, so that column is typed and
+the fact derives its row. What a null-only column still cannot do is survive a
+pass-through, which null-as-a-value.md §15.30 records.
 
 **A recursive/non-recursive split is an optimisation, not a semantics.** One
 global least fixed point from ⊥ handles both, which is what `inferTypesImpl`
