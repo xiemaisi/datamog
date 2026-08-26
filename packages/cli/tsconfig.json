@@ -13,6 +13,7 @@
     { "path": "../repl" },
     { "path": "../loader/csv" },
     { "path": "../loader/mermaid" },
+    { "path": "../loader/parquet" },
     { "path": "../backend/postgres" },
     { "path": "../backend/sqlite" },
     { "path": "../backend/sqljs" },

@@ -13,6 +13,7 @@
     { "path": "../backend/seminaive" },
     { "path": "../loader/csv" },
     { "path": "../loader/json" },
-    { "path": "../loader/jsonl" }
+    { "path": "../loader/jsonl" },
+    { "path": "../loader/parquet" }
   ]
 }

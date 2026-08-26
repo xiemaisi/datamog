@@ -13,6 +13,7 @@
     { "path": "packages/loader/jsonl" },
     { "path": "packages/loader/gsheet" },
     { "path": "packages/loader/mermaid" },
+    { "path": "packages/loader/parquet" },
     { "path": "packages/repl" },
     { "path": "packages/cli" },
     { "path": "packages/vscode-extension" },

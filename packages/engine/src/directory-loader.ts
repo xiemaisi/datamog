@@ -1,12 +1,12 @@
 // Factory for the file-per-predicate ExtensionalLoader pattern. Each
-// directory loader (csv, jsonl, json, mermaid) reads
+// directory loader (csv, jsonl, json, mermaid, parquet) reads
 // `<directory>/<predicate>.<ext>` and feeds parsed rows into
-// `insertRows`. The differences across the four collapse to:
+// `insertRows`. The differences across the five collapse to:
 //
 //   - the file extension
 //   - whether the declaration is eligible at all (json's
 //     "single value column" gate, mermaid's "2 or 3 string columns")
-//   - the per-format `parse(content, decl)` step
+//   - the per-format parse step, over text or over bytes
 //
 // Bun-only: imports `node:path` and calls `Bun.file(...)` directly. The
 // browser playground uses its own in-memory loaders and never reaches
@@ -18,7 +18,9 @@ import type { ExtDecl } from "datamog-core";
 import type { Backend } from "./backend.ts";
 import { type ExtensionalLoader, type LoadResult, insertRows } from "./loader.ts";
 
-export interface DirectoryLoaderConfig {
+type ParsedRows = Promise<Record<string, unknown>[]> | Record<string, unknown>[];
+
+export interface DirectoryLoaderOptions {
   /** Loader name surfaced via `ExtensionalLoader.name`. */
   name: string;
   /** File extension (with dot, e.g. `.csv`). */
@@ -38,15 +40,28 @@ export interface DirectoryLoaderConfig {
    * column shape check.
    */
   validate?(decl: ExtDecl): void;
-  /**
-   * Parse the file's text content into typed rows for `decl`. Called
-   * once per matched declaration with the file already read.
-   */
-  parse(
-    content: string,
-    decl: ExtDecl,
-  ): Promise<Record<string, unknown>[]> | Record<string, unknown>[];
 }
+
+/**
+ * A text format supplies `parse`, a binary one `parseBinary`, and which
+ * of the two is present decides how the file is read. Exactly one, as a
+ * union rather than two optional fields, so the choice is checked at the
+ * call site instead of at run time.
+ */
+export type DirectoryLoaderConfig = DirectoryLoaderOptions &
+  (
+    | {
+        /**
+         * Parse the file's text content into typed rows for `decl`. Called
+         * once per matched declaration with the file already read.
+         */
+        parse(content: string, decl: ExtDecl): ParsedRows;
+      }
+    | {
+        /** Parse the file's bytes into typed rows for `decl`. */
+        parseBinary(buffer: ArrayBuffer, decl: ExtDecl): ParsedRows;
+      }
+  );
 
 /**
  * `ExtensionalLoader` exposing `readRows(decl)` for unit tests, in
@@ -76,8 +91,10 @@ export function createDirectoryLoader(config: DirectoryLoaderConfig): DirectoryL
 
     async readRows(decl: ExtDecl): Promise<Record<string, unknown>[]> {
       config.validate?.(decl);
-      const content = await Bun.file(filePath(decl)).text();
-      return await config.parse(content, decl);
+      const file = Bun.file(filePath(decl));
+      return "parseBinary" in config
+        ? await config.parseBinary(await file.arrayBuffer(), decl)
+        : await config.parse(await file.text(), decl);
     },
   };
 }

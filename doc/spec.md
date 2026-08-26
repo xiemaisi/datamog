@@ -2675,8 +2675,8 @@ at all. This keeps Datamog usable as a library and avoids spurious failures
 in scenarios where some EDBs are intentionally unsourced.
 
 **Header matching.** Loaders that resolve declared column names against
-external column or key names (CSV, JSONL object form, Google Sheets)
-match them **by exact name** (case-sensitively). A declaration
+external column or key names (CSV, JSONL object form, Google Sheets,
+Parquet) match them **by exact name** (case-sensitively). A declaration
 `input predicate p(Name: string, Age: integer).` accepts a CSV with headers
 `Name,Age`, a JSONL line `{"Name": "...", "Age": ...}`, or a Google
 Sheet whose first row reads `Name | Age`. Identifiers may be written in
@@ -2805,6 +2805,34 @@ new UrlJsonLoader({
   },
 });
 ```
+
+### 7.6 Parquet Loader
+
+Loads data from an Apache Parquet file named `{predicate}.parquet`. Only
+the declared columns are decoded, which is the point of a columnar format;
+a declared column the file lacks is a load-time error rather than an empty
+column, and undeclared columns in the file are ignored.
+
+Values are type-checked, not coerced, as in JSONL: a Parquet `BYTE_ARRAY`
+does not load into an `integer` column. A `NULL` in the file needs a
+nullable column (`type?`), and a repeated or nested column (`LIST`, `MAP`,
+a struct) needs a `value` column, whose contents it becomes.
+
+Three of Parquet's physical types have no direct counterpart in the type
+lattice (§3):
+
+- **`INT64`** — the default integer width of most writers — is decoded as
+  an `integer`, so a value outside `[-(2^53 - 1), 2^53 - 1]` is a
+  load-time error rather than a silent rounding.
+- A **date or timestamp** column loads as its ISO 8601 text, there being
+  no date type; declare the column `string`.
+- **Raw bytes** (a `FIXED_LEN_BYTE_ARRAY` carrying no logical type) have
+  no representation and are a load-time error. Strings, UUIDs and decimals
+  are decoded before this point and are unaffected.
+
+Compression is transparent for uncompressed and Snappy files (Snappy being
+what the common writers emit by default). Another codec raises a load-time
+error naming it.
 
 ## 8 Proof Terms
 
@@ -3096,7 +3124,7 @@ binding. An input with no binding is a free parameter (§2.2).
 **Data file.** `:= "source"` binds the input to a specific file (resolved
 relative to the importing file), a URL, or a `gh:` shorthand, instead of the
 by-convention default. The loader is chosen by the source's extension, or forced
-with `as <format>` (`csv`, `jsonl`, `json`, `mermaid`) when the extension does
+with `as <format>` (`csv`, `jsonl`, `json`, `mermaid`, `parquet`) when the extension does
 not, or cannot, say:
 
 ```

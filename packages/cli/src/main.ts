@@ -37,6 +37,7 @@ import {
   parseMermaidGraph,
   validateMermaidColumns,
 } from "datamog-mermaid";
+import { ParquetLoader, parseParquetContent } from "datamog-parquet";
 import { ParseError, parseRaw, postProcess } from "datamog-parser";
 import { bigintSafeReplacer, formatCellAsString, prettifyProofRows } from "./output.ts";
 import { runRepl } from "./repl-driver.ts";
@@ -53,7 +54,8 @@ function usage(exitCode = 1): never {
   console.error();
   console.error("Input flags (after the program):");
   console.error("  --<input> <source>   Supply data for input predicate <input> from a file or");
-  console.error("                       URL (.csv/.jsonl/.json/.mmd), a Google Sheets URL, or a");
+  console.error("                       URL (.csv/.jsonl/.json/.mmd/.parquet), a Google Sheets");
+  console.error("                       URL, or a");
   console.error(
     "                       GitHub shorthand github:OWNER/REPO/PATH[#REF] (gh: alias).",
   );
@@ -61,7 +63,8 @@ function usage(exitCode = 1): never {
   console.error("                       predicate name (road_network) when unambiguous.");
   console.error("  --input name=source  Same, for an input whose name is not a valid flag.");
   console.error("                       An input with no flag auto-loads from");
-  console.error("                       <input>.{csv,jsonl,json,mmd} in the data directory.");
+  console.error("                       <input>.{csv,jsonl,json,mmd,parquet} in the data");
+  console.error("                       directory.");
   console.error();
   console.error("Global options (before the program):");
   console.error("  --output-format <format>   table (default), csv, jsonl, jsonl-flat, mermaid,");
@@ -191,12 +194,13 @@ async function createBackend(name: BackendName, maxIterations?: number): Promise
 // CSV-export URL when the loader appends `/export?format=csv`.
 export const GSHEET_URL_RE = /^https:\/\/docs\.google\.com\/spreadsheets\/d\/([^/?#]+)/;
 
-export type ExplicitSourceFormat = ".csv" | ".jsonl" | ".json" | ".mmd";
+export type ExplicitSourceFormat = ".csv" | ".jsonl" | ".json" | ".mmd" | ".parquet";
 const EXPLICIT_SOURCE_FORMATS: readonly ExplicitSourceFormat[] = [
   ".csv",
   ".jsonl",
   ".json",
   ".mmd",
+  ".parquet",
 ];
 
 function httpUrlFor(source: string): URL | undefined {
@@ -245,6 +249,11 @@ export class ExplicitSourceLoader implements ExtensionalLoader {
   }
 
   async load(decl: ExtDecl, backend: Backend): Promise<LoadResult> {
+    // Parquet is binary, so it reads the source as bytes rather than text.
+    if (this.format === ".parquet") {
+      return this.loadParquet(await this.readBinary(), decl, backend);
+    }
+
     const content = await this.readText();
 
     if (this.format === ".csv") {
@@ -266,17 +275,22 @@ export class ExplicitSourceLoader implements ExtensionalLoader {
 
   private async readText(): Promise<string> {
     const url = httpUrlFor(this.source);
-    if (!url) {
-      return Bun.file(this.source).text();
-    }
+    return url ? (await this.fetchSource(url)).text() : Bun.file(this.source).text();
+  }
 
+  private async readBinary(): Promise<ArrayBuffer> {
+    const url = httpUrlFor(this.source);
+    return url ? (await this.fetchSource(url)).arrayBuffer() : Bun.file(this.source).arrayBuffer();
+  }
+
+  private async fetchSource(url: URL): Promise<Response> {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(
         `Failed to fetch input source '${url.href}' for predicate '${this.predicateName}': ${response.status} ${response.statusText}`,
       );
     }
-    return response.text();
+    return response;
   }
 
   private async loadCsv(content: string, decl: ExtDecl, backend: Backend): Promise<LoadResult> {
@@ -296,6 +310,16 @@ export class ExplicitSourceLoader implements ExtensionalLoader {
 
   private async loadJson(content: string, decl: ExtDecl, backend: Backend): Promise<LoadResult> {
     const rows = parseJsonContent(content, decl, { source: this.source });
+    await insertRows(backend, decl, rows);
+    return { rowsLoaded: rows.length };
+  }
+
+  private async loadParquet(
+    buffer: ArrayBuffer,
+    decl: ExtDecl,
+    backend: Backend,
+  ): Promise<LoadResult> {
+    const rows = await parseParquetContent(buffer, decl, { source: this.source });
     await insertRows(backend, decl, rows);
     return { rowsLoaded: rows.length };
   }
@@ -416,6 +440,8 @@ function formatFromName(name: string): ExplicitSourceFormat | undefined {
     case "mermaid":
     case "mmd":
       return ".mmd";
+    case "parquet":
+      return ".parquet";
     default:
       return undefined;
   }
@@ -443,7 +469,7 @@ function buildDataSourceLoaders(
     const format = ds.format ? formatFromName(ds.format) : explicitSourceFormat(src);
     if (ds.format && !format) {
       console.error(
-        `Unknown format '${ds.format}' for '${ds.predicate}' (expected csv, jsonl, json, mermaid)`,
+        `Unknown format '${ds.format}' for '${ds.predicate}' (expected csv, jsonl, json, mermaid, parquet)`,
       );
       process.exit(1);
     }
@@ -945,6 +971,7 @@ async function main() {
     new JsonLoader({ directory: dataDir }),
     new JsonlLoader({ directory: dataDir }),
     new MermaidLoader({ directory: dataDir }),
+    new ParquetLoader({ directory: dataDir }),
   ]);
 
   try {

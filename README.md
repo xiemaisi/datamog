@@ -100,7 +100,7 @@ DATABASE_URL=postgres://localhost/mydb bun run datamog --backend postgres progra
 ```
 
 The CLI loads each input predicate `p` from a like-named data file next to the
-program (`p.csv`, `p.jsonl`, `p.json`, `p.mmd`), or from a file/URL/Google
+program (`p.csv`, `p.jsonl`, `p.json`, `p.mmd`, `p.parquet`), or from a file/URL/Google
 Sheet/GitHub path you pass explicitly. The [CLI README](packages/cli/README.md)
 covers data loading, output formats, and the flags; `datamog --help` is the
 authoritative list.
@@ -147,6 +147,7 @@ Datamog is a Bun-workspace monorepo. The pieces, from foundation to frontend:
 | [`datamog-json`](packages/loader/json) | Whole-file JSON loader (single-row tables) |
 | [`datamog-gsheet`](packages/loader/gsheet) | Google Sheets loader |
 | [`datamog-mermaid`](packages/loader/mermaid) | Mermaid graph/flowchart loader |
+| [`datamog-parquet`](packages/loader/parquet) | Apache Parquet loader (via `hyparquet`) |
 | [`datamog-repl`](packages/repl) | Incremental REPL session engine |
 | [`datamog-cli`](packages/cli) | Command-line interface |
 | [`datamog-playground`](packages/playground) | Browser playground (Preact + sql.js, no server) |

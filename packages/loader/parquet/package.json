@@ -1,0 +1,36 @@
+{
+  "name": "datamog-parquet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Apache Parquet extensional-data loader for Datamog",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "files": ["src"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./parse-content": "./src/parse-content.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiemaisi/datamog",
+    "directory": "packages/loader/parquet"
+  },
+  "keywords": ["datalog", "parquet", "loader", "extensional-data", "bun", "datamog"],
+  "author": "Max Schaefer",
+  "homepage": "https://github.com/xiemaisi/datamog/tree/main/packages/loader/parquet#readme",
+  "bugs": {
+    "url": "https://github.com/xiemaisi/datamog/issues"
+  },
+  "dependencies": {
+    "datamog-core": "workspace:*",
+    "datamog-engine": "workspace:*",
+    "hyparquet": "^1.29.1"
+  },
+  "devDependencies": {
+    "datamog-parser": "workspace:*",
+    "hyparquet-writer": "^0.16.6"
+  }
+}

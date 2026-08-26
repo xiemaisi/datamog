@@ -35,6 +35,7 @@
     "datamog-json": "workspace:*",
     "datamog-jsonl": "workspace:*",
     "datamog-mermaid": "workspace:*",
+    "datamog-parquet": "workspace:*",
     "beautiful-mermaid": "^1",
     "datamog-parser": "workspace:*",
     "datamog-engine": "workspace:*",

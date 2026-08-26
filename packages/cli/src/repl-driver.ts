@@ -4,6 +4,7 @@ import { type Backend, type ExtensionalLoader, IncrementalSession } from "datamo
 import { JsonLoader } from "datamog-json";
 import { JsonlLoader } from "datamog-jsonl";
 import { MermaidLoader } from "datamog-mermaid";
+import { ParquetLoader } from "datamog-parquet";
 import {
   DatamogRepl,
   type ReplEvent,
@@ -39,6 +40,7 @@ export async function runRepl(opts: RunReplOptions): Promise<void> {
       new JsonLoader({ directory: opts.dataDir }),
       new JsonlLoader({ directory: opts.dataDir }),
       new MermaidLoader({ directory: opts.dataDir }),
+      new ParquetLoader({ directory: opts.dataDir }),
     ]);
     return {
       session,
