@@ -1,6 +1,3 @@
-# Chromium hammers /tmp; backing it with tmpfs keeps write churn off the host
-# disk and avoids leaving residue between sessions.
-#
 # seccomp=unconfined lets chromium's user-namespace sandbox initialise — the
 # default docker seccomp profile blocks the clone() namespace flags it needs.
 
@@ -11,8 +8,6 @@ services:
       dockerfile: Dockerfile
     security_opt:
       - seccomp=unconfined
-    tmpfs:
-      - /tmp:size=2g
     depends_on:
       postgres:
         condition: service_healthy
