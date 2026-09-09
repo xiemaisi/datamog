@@ -15,10 +15,12 @@
   <a href="DEVELOPMENT.md">Development</a>
 </p>
 
-Datamog is a small Datalog dialect built for **learning how Datalog works**. You
+Datamog is an educational Datalog dialect built for **learning how Datalog works**. You
 write Horn-clause rules over relations, and Datamog runs them on the backend of
-your choice (three SQL databases or two pure-TypeScript in-memory evaluators),
-all honouring the same language semantics. On top of the classic core
+your choice (three SQL backends or two pure-TypeScript in-memory evaluators).
+They share the same semantics where their supported language fragments overlap;
+the in-memory evaluators additionally support non-linear and parity-stratified
+recursion. On top of the classic core
 (recursion, stratified negation, aggregates) it adds first-class support for
 JSON, algebraic data types, and a module system, and it ships with a
 browser playground, a VS Code extension, a REPL, and a Jupyter magic.
@@ -40,6 +42,14 @@ ancestor(X, Y) :- parent(X, Z), ancestor(Z, Y).  # recursive case
 ?- ancestor("alice", X).
 ```
 
+Create `parent.csv` beside the program:
+
+```csv
+name,child
+alice,bob
+bob,carol
+```
+
 ```bash
 bun run datamog ancestor.dl   # parent data loads from ./parent.csv by convention
 ```
@@ -48,10 +58,12 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
 
 ## Highlights
 
-- **Five backends, one language.** The same program runs on Postgres, SQLite, or
-  sql.js through a SQL translator, or on the pure-TypeScript `native` /
-  `seminaive` evaluators with no SQL at all, which is handy for tracing the
-  semantics step by step. See the [language spec](doc/spec.md).
+- **Five backends, one language.** Programs in the shared SQL-compatible
+  fragment run on Postgres, SQLite, or sql.js through a SQL translator, or on
+  the pure-TypeScript `native` / `seminaive` evaluators with no SQL at all.
+  The in-memory evaluators also support non-linear and parity-stratified
+  recursion and are handy for tracing the semantics step by step. See the
+  [language spec](doc/spec.md).
 - **Nested data, first-class.** A `value` type is the union of every JSON shape
   (null, primitives, arrays, objects) with subscript, slice, iteration, and
   structural equality that agree byte-for-byte across every backend. See
@@ -66,9 +78,11 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
   or a rule head when you want to pin one down, including whether it may be
   NULL. A head position can carry a *proposition* rather than a type
   (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
-  derives and costs nothing at runtime otherwise. With an SMT solver installed,
-  `--verify` proves it instead, for all inputs rather than the data at hand.
-  See [Contracts and refinements](doc/walkthrough/07-safety.md).
+  derives. The witness itself is erased and adds no column. With an SMT solver
+  installed, `--verify` attempts to prove supported integer-arithmetic
+  contracts for all inputs rather than checking them against the data at hand;
+  obligations outside that fragment are reported as skipped. See
+  [Contracts and refinements](doc/walkthrough/07-safety.md).
 - **Integrity constraints.** Declare a conjunction that must have no solutions
   (`!- p(X), not q(X).`) and its tuples become the counterexamples, reported
   before any query runs. See the [language spec](doc/spec.md).
@@ -82,13 +96,20 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
 
 ## Getting started
 
-Datamog is a Bun/TypeScript project. You need [Bun](https://bun.sh) 1.3 or newer.
+The CLI requires [Bun](https://bun.sh) 1.3 or newer. Clone the repository and
+install its workspace dependencies:
 
 ```bash
-bun install                          # install workspace dependencies
+git clone https://github.com/xiemaisi/datamog.git
+cd datamog
+bun install
 bun run datamog                      # start the interactive REPL
 bun run datamog path/to/program.dl   # run a program (in-memory SQLite by default)
 ```
+
+Some development workflows have additional prerequisites: the playground and
+documentation builds use Node.js, while the notebook integration uses Python
+3.10 or newer. See [DEVELOPMENT.md](DEVELOPMENT.md) for details.
 
 Choose a backend, or preview the generated SQL without running it:
 
@@ -105,8 +126,8 @@ Sheet/GitHub path you pass explicitly. The [CLI README](packages/cli/README.md)
 covers data loading, output formats, and the flags; `datamog --help` is the
 authoritative list.
 
-Eighty runnable programs live in
-[`packages/cli/examples/`](packages/cli/examples/), covering transitive closure,
+Runnable programs live in [`packages/cli/examples/`](packages/cli/examples/),
+covering transitive closure,
 stratified negation, aggregates, puzzles, JSON handling, proof-term ADTs, and
 Boolean-circuit solvers:
 
@@ -179,7 +200,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for the full guide. The essentials, run fro
 the repository root:
 
 ```bash
-bun test             # run all tests
+bun test             # run TypeScript tests (optional integrations may skip)
 bun run typecheck    # tsc -b across the workspace
 bun run check        # lint and format check (biome); check:fix to auto-fix
 bun run e2e          # Playwright e2e suite for the playground
