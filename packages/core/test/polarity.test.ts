@@ -98,7 +98,18 @@ describe("sigil spelling", () => {
     expect(() => analyze(program)).toThrow(/'bad' is a maximal predicate/);
   });
 
-  test("rejects a sigil on an extensional predicate", () => {
+  test("accepts a maximal input predicate and consistently sigilled calls", () => {
+    const result = analyze(
+      parse(`
+        input predicate supplied^(x: string).
+        copied^(X) :- supplied^(X).
+        ?- copied^(X).
+      `),
+    );
+    expect(result.maximalPredicates).toEqual(new Set(["supplied", "copied"]));
+  });
+
+  test("rejects a sigil on a minimal extensional predicate", () => {
     const program = parse(`${EDBS}
       p(X) :- not literal^(X), composite(X).
     `);

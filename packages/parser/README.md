@@ -25,8 +25,8 @@ for (const stmt of program.statements) {
 
 ```
 # Comments run to end of line
-input predicate <name>(<col>: <type>, ...).   # input (extensional) declaration
-input predicate <name>(...) := <binding>.     # bound to a data file or a module instance
+input predicate <name>^?(<col>: <type>, ...). # input declaration; optional maximal sigil
+input predicate <name>^?(...) := <binding>.   # data/module binding; polarity is checked
 <head>(<args>) :- <body>, ... .               # rule
 <head>(<args>).                               # fact (rule with empty body)
 output predicate <head>(<args>) :- ... .      # a named, additionally-printed output

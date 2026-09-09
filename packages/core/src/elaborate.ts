@@ -34,15 +34,19 @@ export interface DataSource {
 }
 
 /**
- * A type contract at a module boundary: the merged-program `predicate` must,
- * once types are inferred, have column types compatible with `expected`. Both
+ * A type-and-polarity contract at a module boundary: the merged-program
+ * `predicate` must, once types are inferred, have the declared polarity and
+ * column types compatible with `expected`. Both
  * the actual-vs-input and output-vs-declaration boundaries reduce to this — the
- * declared types they check against are dropped during elaboration, so ordinary
- * inference cannot see them. Checked by `checkModuleBoundaries` after inference.
+ * declarations they check against are dropped during elaboration, so ordinary
+ * analysis cannot see their contracts. Checked by `checkModuleBoundaries` after
+ * inference.
  */
 export interface BoundaryConstraint {
   predicate: string;
   expected: PrimitiveType[];
+  /** Whether the declaration on the other side of the boundary carries `^`. */
+  expectedMaximal: boolean;
   /**
    * Per column, whether the declaration permits a NULL there (`integer?`).
    * Same direction as `expected`: the wired predicate may be narrower than the
@@ -184,12 +188,13 @@ export function elaborate(
   // predicate no matter which binding it was written against.
   for (const stmt of ctx.out) applyNameAliases(stmt, ctx.nameAliases);
   entry.statements = ctx.out;
+  checkElaboratedPolarities(entry, ctx.boundaries);
   return { program: entry, dataSources: ctx.dataSources, boundaries: ctx.boundaries };
 }
 
 /**
  * Bind one import site's declared name to the output it selected, and return the
- * merged predicate its declared columns are a contract for.
+ * merged predicate its declared columns and polarity are a contract for.
  *
  * A plain output is bound by an **alias rule**, so each site keeps its own column
  * names. A proof-carrying one cannot be: its constructors are qualified by the
@@ -209,7 +214,7 @@ function bindLocalName(
 ): string {
   if (!selected.proofCarrying) {
     const output = `${instance.prefix}${selected.name}`;
-    ctx.out.push(aliasRule(decl, output, selected.arity));
+    ctx.out.push(aliasRule(decl, output, selected.arity, selected.maximal));
     return output;
   }
   const canonical = instance.renamed.get(selected.name);
@@ -235,8 +240,15 @@ function bindLocalName(
  * a (possibly shared) instance: `local(a, b) :- <instance>$<export>(a, b).`
  * Its head variables are the declared column names, so the instance's result
  * columns come out named after the interface rather than the module's head vars.
+ * The head carries the receiving declaration's polarity and the body carries the
+ * selected output's polarity; the boundary check then requires them to agree.
  */
-function aliasRule(decl: ExtDecl, target: string, arity: number): Statement {
+function aliasRule(
+  decl: ExtDecl,
+  target: string,
+  arity: number,
+  targetMaximal: boolean,
+): Statement {
   const names: string[] = [];
   for (let i = 0; i < arity; i++) {
     // Fall back to a `$`-name when the declaration is shorter than the output
@@ -249,8 +261,21 @@ function aliasRule(decl: ExtDecl, target: string, arity: number): Statement {
   return {
     $type: "Rule",
     output: true,
-    head: { $type: "HeadAtom", predicate: decl.predicate, args: vars() },
-    body: [{ $type: "Literal", predicate: target, args: vars(), negated: false }],
+    head: {
+      $type: "HeadAtom",
+      predicate: decl.predicate,
+      maximal: decl.maximal,
+      args: vars(),
+    },
+    body: [
+      {
+        $type: "Literal",
+        predicate: target,
+        maximal: targetMaximal,
+        args: vars(),
+        negated: false,
+      },
+    ],
   } as unknown as Statement;
 }
 
@@ -277,6 +302,7 @@ function collectActualBoundaries(
       predicate: mergedActual(actual.arg),
       // An unannotated column defaults to `string` (parseRaw already sets this).
       expected: inputDecl.columns.map((c) => c.type ?? "string"),
+      expectedMaximal: inputDecl.maximal === true,
       expectedNullable: inputDecl.columns.map((c) => c.nullable === true),
       note: `actual '${actual.arg}' wired to input '${actual.param}' of "${binding.source}"`,
       pos: nodePos(importerDecl),
@@ -299,6 +325,7 @@ function outputBoundary(
   return {
     predicate: output,
     expected: importerDecl.columns.map((c) => c.type ?? "string"),
+    expectedMaximal: importerDecl.maximal === true,
     expectedNullable: importerDecl.columns.map((c) => c.nullable === true),
     note: `output of "${binding.source}" bound to '${importerDecl.predicate}'`,
     pos: nodePos(importerDecl),
@@ -307,11 +334,43 @@ function outputBoundary(
 }
 
 /**
- * Check the boundary type contracts collected by `elaborate` against the merged
- * program's inferred column types. Run after `inferTypes`. Throws an
- * `AnalyzerError` (carrying the importer's file/position) on an arity or type
- * mismatch that ordinary inference could not see, because the declared types
- * were dropped when the binding was elaborated away.
+ * Check polarity contracts while the merged raw program is still available, so
+ * a mismatched actual is reported at its binding before ordinary analysis sees
+ * a substituted call with the wrong sigil. Undefined predicates remain the
+ * analyzer's responsibility.
+ */
+function checkElaboratedPolarities(program: Program, boundaries: BoundaryConstraint[]): void {
+  const known = new Set<string>();
+  const maximal = new Set<string>();
+  for (const stmt of program.statements) {
+    if (isExtDecl(stmt)) {
+      known.add(stmt.predicate);
+      if (stmt.maximal) maximal.add(stmt.predicate);
+    } else if (isRule(stmt)) {
+      known.add(stmt.head.predicate);
+      if (stmt.head.maximal) maximal.add(stmt.head.predicate);
+    }
+  }
+  for (const boundary of boundaries) {
+    if (!known.has(boundary.predicate)) continue;
+    checkBoundaryPolarity(maximal.has(boundary.predicate), boundary);
+  }
+}
+
+function checkBoundaryPolarity(actualMaximal: boolean, boundary: BoundaryConstraint): void {
+  if (actualMaximal === boundary.expectedMaximal) return;
+  throw boundaryError(
+    `${boundary.note}: expected ${boundary.expectedMaximal ? "maximal (^)" : "minimal"} polarity but the wired predicate is ${actualMaximal ? "maximal" : "minimal"}`,
+    boundary,
+  );
+}
+
+/**
+ * Check the boundary type and polarity contracts collected by `elaborate`
+ * against the merged program's inferred column types. Run after `inferTypes`.
+ * Throws an `AnalyzerError` (carrying the importer's file/position) on a
+ * polarity, arity, or type mismatch that ordinary inference could not see,
+ * because the declarations were dropped when the binding was elaborated away.
  */
 export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryConstraint[]): void {
   for (const b of boundaries) {
@@ -323,6 +382,7 @@ export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryC
     // A missing predicate (e.g. an actual that names nothing) is left to the
     // analyzer's own reporting; there is no type to compare here.
     if (!actual) continue;
+    checkBoundaryPolarity(typed.maximalPredicates.has(b.predicate), b);
     if (actual.length !== b.expected.length) {
       throw boundaryError(
         `${b.note}: expected ${b.expected.length} column(s) but the wired predicate has ${actual.length}`,
@@ -490,6 +550,8 @@ interface SelectedOutput {
   arity: number;
   /** Whether its rules carry a constructor, i.e. it is a proof-carrying ADT. */
   proofCarrying: boolean;
+  /** Whether the selected output predicate carries the parity `^` sigil. */
+  maximal: boolean;
 }
 
 /**
@@ -516,7 +578,12 @@ function prepareModule(
   // integrity constraints hold wherever it is instantiated. `error predicate`
   // rules need no handling here — the loop below only clears `output` markers.
   module.statements = module.statements.filter((s) => s.$type !== "Query" || (s as Query).isError);
-  const selected: SelectedOutput = { name: exportName, arity: 0, proofCarrying: false };
+  const selected: SelectedOutput = {
+    name: exportName,
+    arity: 0,
+    proofCarrying: false,
+    maximal: false,
+  };
   let found = false;
   const selectedRules: Rule[] = [];
   for (const s of module.statements) {
@@ -524,6 +591,7 @@ function prepareModule(
     if (s.head.predicate === exportName && (s.output || exportName === DEFAULT_OUTPUT)) {
       found = true;
       selected.arity = s.head.args.length;
+      selected.maximal = s.head.maximal === true;
       if (s.ruleName !== undefined) selected.proofCarrying = true;
       selectedRules.push(asCoreRule(s));
     }

@@ -65,6 +65,15 @@ const MODULES: Record<string, string> = {
     input predicate derived(a: integer) := out from "sink.dl"(p = base).
     output predicate result(X) :- derived(X).
   `,
+  "parity.dl": `
+    input predicate node(x: integer).
+    input predicate feedback(x: integer).
+    output predicate outside^(X) :- node(X), not feedback(X).
+  `,
+  "max-consumer.dl": `
+    input predicate source^(x: integer).
+    output predicate copied^(X) :- source^(X).
+  `,
 };
 // Fresh parse per call (elaborate mutates the returned AST in place).
 const resolve: ModuleResolver = (ref) => ({ program: parseRaw(MODULES[ref]!), file: ref });
@@ -319,6 +328,37 @@ describe("elaborate", () => {
     expect(() => analyze(program)).not.toThrow();
   });
 
+  test("imports a named maximal output and preserves its sigil on the alias", () => {
+    const entry = parseRaw(`
+      node(1).
+      feedback(X) :- node(X), not got^(X).
+      input predicate got^(x: integer) := outside from "parity.dl"(node = node, feedback = feedback).
+      ?- got^(X).
+    `);
+    const { program, boundaries } = elaborate(entry, resolve, "main.dl");
+    const alias = byHead(program.statements, "got");
+    expect(alias).toHaveLength(1);
+    expect(alias[0].head.maximal).toBe(true);
+    expect(alias[0].body[0].maximal).toBe(true);
+    postProcess(program);
+    const typed = inferTypes(analyze(program));
+    checkModuleBoundaries(typed, boundaries);
+    expect(typed.maximalPredicates.has("got")).toBe(true);
+  });
+
+  test("wires a maximal imported output into a maximal module input", () => {
+    const entry = parseRaw(`
+      node(1).
+      none(X) :- node(X), not source^(X).
+      input predicate source^(x: integer) := outside from "parity.dl"(node = node, feedback = none).
+      input predicate copy^(x: integer) := copied from "max-consumer.dl"(source = source).
+      ?- copy^(X).
+    `);
+    const { program, boundaries } = elaborate(entry, resolve, "main.dl");
+    postProcess(program);
+    expect(() => checkModuleBoundaries(inferTypes(analyze(program)), boundaries)).not.toThrow();
+  });
+
   test("rejects an actual that names no input of the module", () => {
     const entry = parseRaw(`
       seed(1).
@@ -350,6 +390,34 @@ describe("module boundary type-checking", () => {
         input predicate best(a: integer, b: integer) := reach from "reach.dl"(edge = road).
       `),
     ).not.toThrow();
+  });
+
+  test("rejects a maximal output received under a minimal declaration", () => {
+    expect(() =>
+      check(`
+        node(1).
+        feedback(2).
+        input predicate got(x: integer) := outside from "parity.dl"(node = node, feedback = feedback).
+      `),
+    ).toThrow(/bound to 'got': expected minimal/);
+  });
+
+  test("rejects a minimal output received under a maximal declaration", () => {
+    expect(() =>
+      check(`
+        seed(1).
+        input predicate got^(x: integer) := out from "sink.dl"(p = seed).
+      `),
+    ).toThrow(/bound to 'got': expected maximal/);
+  });
+
+  test("rejects a minimal actual wired to a maximal module input", () => {
+    expect(() =>
+      check(`
+        seed(1).
+        input predicate got^(x: integer) := copied from "max-consumer.dl"(source = seed).
+      `),
+    ).toThrow(/actual 'seed' wired to input 'source'.*expected maximal/);
   });
 
   test("rejects an output whose declared column type is wrong", () => {

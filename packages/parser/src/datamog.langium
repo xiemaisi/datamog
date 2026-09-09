@@ -19,9 +19,11 @@ Statement:
 // An input predicate: a parameter supplied from outside the rules (a data
 // file at the CLI, or a wired module output on import). The AST node keeps
 // its historical `ExtDecl` name; only the surface keyword changed from
-// `extensional` to `input predicate`.
+// `extensional` to `input predicate`. The optional `^` declares the polarity of
+// a module input or receiving binding, matching the sigil on rules and literals.
 ExtDecl:
-    'input' 'predicate' predicate=Identifier '(' columns+=ColumnDecl (',' columns+=ColumnDecl)* ')'
+    'input' 'predicate' predicate=Identifier (maximal?='^')?
+        '(' columns+=ColumnDecl (',' columns+=ColumnDecl)* ')'
         (':=' binding=Binding)? '.';
 
 // The optional source an input predicate is bound to. `from` present means a

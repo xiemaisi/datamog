@@ -302,6 +302,7 @@ export interface ExtDecl extends langium.AstNode {
     readonly $type: 'ExtDecl';
     binding?: Binding;
     columns: Array<ColumnDecl>;
+    maximal: boolean;
     predicate: Identifier;
 }
 
@@ -309,6 +310,7 @@ export const ExtDecl = {
     $type: 'ExtDecl',
     binding: 'binding',
     columns: 'columns',
+    maximal: 'maximal',
     predicate: 'predicate'
 } as const;
 
@@ -885,6 +887,10 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 columns: {
                     name: ExtDecl.columns,
                     defaultValue: []
+                },
+                maximal: {
+                    name: ExtDecl.maximal,
+                    defaultValue: false
                 },
                 predicate: {
                     name: ExtDecl.predicate

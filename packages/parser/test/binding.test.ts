@@ -17,6 +17,13 @@ describe("input predicate source binding", () => {
     expect(bindingOf("input predicate p(a: integer).")).toBeUndefined();
   });
 
+  test("records maximal polarity on a module binding", () => {
+    const decl = parse('input predicate best^(x: integer) := result from "solver.dl".')
+      .statements[0] as ExtDecl;
+    expect(decl.maximal).toBe(true);
+    expect(decl.binding?.export).toBe("result");
+  });
+
   test("data file: bare string", () => {
     const b = bindingOf('input predicate p(a: integer) := "data/p.csv".');
     expect(b?.source).toBe("data/p.csv");

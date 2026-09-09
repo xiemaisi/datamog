@@ -249,8 +249,9 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
   // silently taking whichever came first.
   const emittedOutputs = new Map<string, "output" | "error">();
   // Predicates whose name carries the `^` sigil, i.e. the anti-monotone side
-  // of a parity-stratified recursion. Collected from rule heads; every other
-  // occurrence is then checked to agree (`checkPolaritySpelling`).
+  // of a parity-stratified recursion. Collected from input declarations and
+  // rule heads; every other occurrence is then checked to agree
+  // (`checkPolaritySpelling`).
   const maximalPredicates = new Set<string>();
 
   // Classify statements
@@ -268,6 +269,7 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
             ...(pos ?? []),
           );
         }
+        if (stmt.maximal) maximalPredicates.add(stmt.predicate);
         if (extDecls.has(stmt.predicate)) {
           const pos = nodePos(stmt);
           throw new AnalyzerError(

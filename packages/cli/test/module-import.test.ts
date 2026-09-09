@@ -258,6 +258,26 @@ via_b(X, Y) :- Q : b, Q = b::Lt(X, Y).
     expect(views).not.toContain("b");
   });
 
+  test("runs parity recursion through a maximal module output", async () => {
+    const result = await withTempDir(
+      {
+        "parity.dl": `input predicate node(x: integer).
+input predicate feedback(x: integer).
+output predicate outside^(X) :- node(X), not feedback(X).
+`,
+        "main.dl": `node(1).
+feedback(X) :- node(X), not outside^(X).
+input predicate outside^(x: integer) := outside from "parity.dl"(node = node, feedback = feedback).
+?- outside^(X).
+`,
+      },
+      (dir) => runCli(["--backend", "native", "--output-format", "jsonl", join(dir, "main.dl")]),
+    );
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe('{"X":1}');
+  });
+
   test("rejects an import whose declared output type is wrong", async () => {
     const result = await withTempDir(
       {

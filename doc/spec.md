@@ -312,7 +312,7 @@ results at all.
 ### 2.2 Extensional Declarations
 
 ```
-ExtDecl     ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
+ExtDecl     ::= 'input' 'predicate' Identifier '^'? '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
 ColumnDecl  ::= Identifier (':' PrimitiveType)? ('?')?
 PrimitiveType ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 ```
@@ -353,6 +353,9 @@ type itself, which is declarable as a column type (§1.5) and needs no `?`: `nul
 is the only value it admits, so a `NOT NULL` there would leave the column
 uninhabited. `null` and `null?` are the same type.
 
+An input predicate may carry the postfix `^` polarity sigil (§4.3). This is
+principally a module-interface contract: a maximal input accepts only a maximal
+actual, and a binding that receives a maximal output must itself carry `^` (§9).
 An input predicate may be **bound** to a source with `:=` — a specific data file
 or an instance of another module (§9). An unbound input is a free parameter. In
 the *entry* program it is supplied at the frontend — the CLI and playground load
@@ -1542,8 +1545,8 @@ foo(X) :- not bar(X, Y).              # ERROR: Y in negation must be safe
 
 Every predicate has a **polarity**. A predicate whose name carries the postfix
 `^` sigil is **maximal**; every other predicate is **minimal**, which is the
-default. The sigil is written at every occurrence of the name -- rule heads,
-body literals, and queries -- and all of them must agree, since the definition
+default. The sigil is written at every occurrence of the name -- input declarations,
+rule heads, body literals, and queries -- and all of them must agree, since the definition
 claims the polarity and each call site repeats the claim. It is not part of the
 name: `bad` and `bad^` cannot be two predicates, module wiring and constructor
 qualifiers use the bare name, and only labels (query output, `--all`, the REPL)
@@ -3187,8 +3190,10 @@ module `mod.dl` and binds this input to one of its outputs:
   (`:= from "mod.dl"(...)`) to take the module's unnamed `?-` default output.
 - The parenthesised **actuals** wire the module's own inputs by name
   (`moduleInput = localPredicate`), where `localPredicate` is any predicate in
-  the importing file's scope. A module input the actuals do not wire must be
-  `:=`-bound inside the module; one that is neither wired nor bound is an error
+  the importing file's scope. Their polarities must agree: an
+  `input predicate moduleInput^(...)` accepts only a maximal actual. A module
+  input the actuals do not wire must be `:=`-bound inside the module; one that
+  is neither wired nor bound is an error
   (§9.3) — a module never auto-loads. An actual naming something that is not an
   input of the module is also an error.
 - A `:=` binding on a module's own input is a **default**, not a fixture: an
@@ -3229,6 +3234,8 @@ need no module-specific support. Per instantiation:
    (`local(a, b) :- <instance>$<output>(a, b).`), whose head variables are the
    declared column names. So the importing declaration's column names become the
    result column names, and the module's own head-variable names are not exposed.
+   A maximal output uses a maximal alias on both ends; the receiving declaration
+   is therefore written `input predicate local^(...)`.
 5. Everything merges into one program evaluated by one global least fixed point.
 
 **Instances are shared.** Two bindings of the same module with the same wiring
@@ -3295,6 +3302,11 @@ proof column is named only for the declaration's own sake, since a query hides i
   is not shown); where several bindings share one instance, that is the binding
   the instance was created for, and the constraint is reported once, not per
   binding.
+- **Boundary polarity must match.** A maximal module input accepts only a
+  maximal actual, and a maximal selected output must be received by an
+  `input predicate name^(...)` declaration. A minimal predicate likewise cannot
+  cross a boundary declared maximal. The sigil is omitted from actual and export
+  names because it is not part of predicate identity (§4.3).
 - **Boundary types must satisfy the declaration.** A boundary is checked as a
   directional subtype relation (§5.10), not mutual compatibility: each actual's
   **published** column types must equal or widen to the type declared for the

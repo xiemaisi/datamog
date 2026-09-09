@@ -6,8 +6,8 @@ input predicates), the per-instance expansion (`expandModule`), the elaborator
 the instantiation-graph acyclicity check; named exports and the unnamed `?-`
 default output), the Bun file resolver, CLI wiring (`datamog main.dl` resolves
 `from` imports from disk and wires `:=` data-file bindings into loaders), and
-boundary type-checking (actual vs callee input, selected output vs receiving
-declaration), and VS Code wiring (the language-server validator and the
+boundary type-and-polarity checking (actual vs callee input, selected output vs
+receiving declaration), and VS Code wiring (the language-server validator and the
 `datamog.run` command both elaborate imports from disk) all exist. A violated
 constraint already names the instance it came from (`engine/src/constraints.ts`).
 Still to come: REPL and playground wiring (see *Deferred*). A `:=`
@@ -164,7 +164,11 @@ declared type may equal or widen, never narrow (see *type checking* below).
 Nullness rides the same contract. The existing type machinery checks both at the
 boundary. The receiving types could later be inferred from the
 selected output instead of restated, but declaring them keeps the interface
-explicit.
+explicit. Polarity is part of the same boundary contract: a maximal module
+input or output is written with `^` on its `input predicate` declaration in the
+importer, and a `^` boundary accepts only a maximal predicate. The elaborator
+preserves the sigil on its generated alias rule and rejects a polarity mismatch
+at the binding.
 
 ## Semantics: expansion
 
@@ -196,7 +200,9 @@ Per instantiation:
    instance's selected output through an **alias rule**
    (`road_reach(a, b) :- road_reach$0$reach(a, b).`), which is what lets several
    sites take different outputs of one shared instance, and names the result
-   columns after the importing declaration.
+   columns after the importing declaration. If the selected output is maximal,
+   both sides retain `^` (`local^(...) :- instance$output^(...)`), and the
+   receiving declaration must be `input predicate local^(...)`.
 4. **Proof constructors** need no renaming, because they are qualified by their
    predicate (`predicate::Ctor`, see `qualified-constructors.md`). Renaming the
    head predicate carries the constructor with it: `opt`'s `Some`, imported as
@@ -336,15 +342,18 @@ diagnostics, per-module EDB directories):
   elaborates a binding-using document (re-parsed into a throwaway AST so the
   Langium model is untouched) so a `:=` binding is validated rather than flagged
   as an error. (Done.)
-- **type checking**: `elaborate` records a `BoundaryConstraint` per wiring (each
-  actual vs the callee input's declared columns; the selected output vs the
-  receiving declaration's columns), since those declared types are dropped when
-  the binding is elaborated away. `checkModuleBoundaries` verifies them against
-  the merged program's published types (inferred widened by annotations) after
-  `inferTypes`, using the
+- **boundary checking**: `elaborate` records a `BoundaryConstraint` per wiring
+  (each actual vs the callee input's declared columns and polarity; the selected
+  output vs the receiving declaration's columns and polarity), since those
+  declarations are dropped when the binding is elaborated away.
+  `elaborate` rejects known polarity mismatches before analysis can encounter a
+  wrongly sigilled substituted call. `checkModuleBoundaries` verifies polarity
+  again alongside the merged program's published types (inferred and widened by
+  annotations) after `inferTypes`, using the
   directional subtype check `columnTypesCompatible` (the declared type must equal
   or widen the published one, never narrow it -- the same rule head type
-  annotations use). The CLI runs it right after inference. (Done.)
+  annotations use). The polarity must match exactly. The CLI runs the checks
+  right after inference. (Done.)
 
 ## Deferred
 

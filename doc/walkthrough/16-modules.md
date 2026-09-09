@@ -221,6 +221,35 @@ publishes, so a wider declaration (up to `value`) passes but a narrower one is
 rejected. That is a subtype check, not the symmetric cross-rule widening from
 Chapter 7.
 
+## Boundary polarity
+
+Polarity is part of the interface too. If a module input or output is maximal
+(Chapter 17), write `^` on the corresponding `input predicate` declaration. A
+maximal output therefore has a maximal receiving binding:
+
+```prolog
+# inner.dl
+input predicate node(x: integer).
+input predicate feedback(x: integer).
+output predicate outside^(X) :- node(X), not feedback(X).
+
+# main.dl
+node(1).
+feedback(X) :- node(X), not outside^(X).
+input predicate outside^(x: integer) := outside from "inner.dl"(
+  node = node,
+  feedback = feedback
+).
+?- outside^(X).
+```
+
+The `^` is omitted from the export selector and actual names because it is not
+part of predicate identity. The boundary nevertheless checks it exactly: a
+maximal output cannot be received by an unmarked declaration, a minimal output
+cannot be received by a marked one, and an `input predicate p^(...)` inside a
+module accepts only a maximal actual. The generated alias keeps the sigil on
+both ends, so an alternating recursive component may cross the file boundary.
+
 ## A poor-man's higher-order type
 
 A module parameterises over *relations*, and a unary relation is just a set of
@@ -441,6 +470,9 @@ distinct constructors, which is what the `option.dl` example above relies on.
 - **`from` distinguishes the two bindings.** `from` present is a module; a bare
   string is a data file. `from`, `as` (and `input`/`output`/`predicate`) are
   contextual keywords — you can still name a column `from` or `to`.
+- **Polarity is checked at the boundary.** Receive a maximal output with
+  `input predicate local^(...)`; a maximal module input accepts only a maximal
+  actual. Export selectors and actual names remain bare.
 - **One output per import.** An instance exposes only the output you select; the
   module's other outputs and its `?-` default stay internal.
 - **A `:=` binding on an input is a default.** An actual the importer wires for

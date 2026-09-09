@@ -433,32 +433,37 @@ it is only observable through a positive read (from another maximal rule in the
 SCC, or from a later stratum), since negated atoms contribute no sub-proofs
 already.
 
-**Modules.** The flag lives on `HeadAtom` and `Literal` nodes, which
-`expandModule` rewrites in place when it freshens names, so it survives
-expansion. It does **not** survive the alias rule, and the consequence is
-worse than this section originally predicted.
+**Modules.** The flag lives on `HeadAtom`, `Literal`, and
+`ExtDecl` nodes. `expandModule` rewrites predicates in place when it freshens
+names, so their polarity survives expansion. A maximal module input or a
+receiving binding spells its contract as `input predicate p^(...)`; actuals and
+export selectors still use the bare predicate name because `^` is not part of
+identity.
 
-`aliasRule` synthesises its `HeadAtom` and `Literal` with no `maximal` field,
-so selecting a maximal output *by name* fails outright, whether or not an SCC
-is involved:
+There was an important implementation limitation here: `aliasRule` originally
+synthesised its `HeadAtom` and `Literal` without the `maximal` field.
+Selecting a named maximal output therefore failed on an internal name the user
+could neither see nor repair:
 
 ```
-$ bun run datamog --backend native outer.dl   # := sink from "inner.dl"(node = n)
 'got$0$sink' is a maximal predicate; write 'got$0$sink^' here
 ```
 
-That is the spelling check firing on a freshened internal name the user never
-wrote and cannot write, so there is no way to act on it. An SCC closing through
-the boundary gives the same error rather than a polarity error. Selecting the
-module's `?-` default *does* work, because `nameDefaultOutput`
-(`core/src/elaborate.ts`) repurposes the `?-` statement in place, sigil and all,
-and the alias then targets the minimal `$default`.
+The module elaborator now preserves the selected output's flag on the alias body
+and the receiving declaration's flag on its head. Its boundary contract requires
+those polarities to agree, just as it checks column types and nullness. The same
+check requires an actual wired to a maximal module input to be maximal. Thus a
+named maximal output is imported explicitly:
 
-No test covers any of this. Fixing it means copying the flag onto both ends of
-the alias rule, at which point the original prediction applies: an SCC that
-closes through the boundary needs both ends to agree, and the importing side is
-an `input predicate` with nowhere to put a sigil. Allowing
-`input predicate p^(...)` is the later extension.
+```prolog
+input predicate got^(x: integer) := sink from "inner.dl"(node = n).
+?- got^(X).
+```
+
+An alternating SCC may close through that binding: the alias is maximal on both
+ends, so ordinary polarity analysis sees the same graph it would have seen
+before the files were split. The unnamed `?-` default remains minimal; it may,
+of course, contain correctly sigilled calls to maximal predicates.
 
 **Finiteness analysis.** No change needed. `finiteness.ts` only follows positive
 atoms, and a parity SCC's cross-class edges are negated, so they contribute no

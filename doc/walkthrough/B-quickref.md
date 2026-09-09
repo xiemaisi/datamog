@@ -9,6 +9,7 @@ definition, see [`doc/spec.md`](../spec.md).
 | ------------------------------------------ | ------------------------------------------------ |
 | `input predicate p(col1: type, col2: type).`   | declare an EDB predicate with typed columns      |
 | `input predicate p(col: type?).`               | declare a nullable EDB column                    |
+| `input predicate p^(col: type).`                | declare a maximal input / module boundary        |
 | ``input predicate `p-name`(`col-name`: type).`` | quote predicate or column identifiers            |
 | `p("value", 42).`                          | assert a ground fact                             |
 | `h(X, Y) :- body.`                         | rule defining an IDB predicate                   |
@@ -180,8 +181,10 @@ A file is a function: its `input predicate`s are parameters, its
 - **One output per import site.** Take several outputs with several bindings.
 - Identical (module, wiring) pairs **share** one instance; differing wiring gives
   separate copies. Instantiation is applicative: equal arguments, one instance.
-- Declared columns are the instance's public face and are checked against the
-  output's published types (equal or wider, never narrower). For a proof-carrying
+- Declared columns and polarity are the instance's public face. Receive a
+  maximal output with `input predicate local^(...)`; maximal module inputs accept
+  only maximal actuals. Columns are checked against the output's published types
+  (equal or wider, never narrower). For a proof-carrying
   output the declaration also counts the implicit proof column.
 - A module's `!-` and `error predicate` constraints travel with it, checked per
   instance against the data wired in — an interface can enforce its own laws.
