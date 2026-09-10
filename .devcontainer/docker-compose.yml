@@ -12,7 +12,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://app:app@postgres:5432/app
+      # Dedicated databases: both test suites drop and recreate public.
+      DATABASE_URL: postgres://app:app@postgres:5432/datamog_test
+      DATAMOG_EXAMPLES_DATABASE_URL: postgres://app:app@postgres:5432/datamog_examples
+      DATAMOG_REQUIRE_POSTGRES: "1"
       # Authenticate gh inside the container. gh reads GH_TOKEN before any
       # config file, so this works even when the host stores its token in the
       # OS keyring (macOS Keychain, gnome-keyring) rather than in hosts.yml.

@@ -26,5 +26,5 @@
       ]
     }
   },
-  "postCreateCommand": "/opt/datamog-venv/bin/pip install --no-cache-dir -e /work/python/datamog-magic"
+  "postCreateCommand": "bash /work/.devcontainer/post-create.sh"
 }

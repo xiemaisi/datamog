@@ -91,6 +91,12 @@ are skipped unless `DATABASE_URL` is set. Point `DATABASE_URL` only at a
 dedicated development or test database because those tests create and drop their
 own tables.
 
+Codespaces and the devcontainer include Z3 and a Postgres sidecar. Setup creates
+separate test databases and enables the Postgres environment guards, so ordinary
+`bun test` runs the solver and database suites. After updating the container
+configuration, rebuild the container to install the tools and run setup. Only
+examples unsupported by SQL backends remain intentionally skipped.
+
 The playground end-to-end tests use Playwright:
 
 ```bash
@@ -196,8 +202,10 @@ Generated slide PDFs are written under `doc/walkthrough/slides/pdf`.
 - `DATAMOG_EXAMPLES_DATABASE_URL`: optional second database for the examples
   suite, so it does not share one with the Postgres backend tests. Both drop and
   recreate `public`, which only makes them safe neighbours while `bun test` runs
-  files serially. Unset, the examples suite falls back to `DATABASE_URL`, which
-  is what the devcontainer does.
+  files serially. Unset, the examples suite falls back to `DATABASE_URL`.
+  The devcontainer sets both URLs to separate test databases.
+- `DATAMOG_REQUIRE_POSTGRES`: set to `1` to fail if the Postgres test environment
+  is unavailable. Enabled in the devcontainer and Postgres CI job.
 - `GOOGLE_API_KEY`: lets the CLI load private Google Sheets through the Google
   Sheets loader.
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`: alternative Google

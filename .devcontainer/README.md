@@ -4,7 +4,7 @@ These files extend a base Docker image and stack with what datamog needs at runt
 
 ## Files
 
-- **`Dockerfile`** — built from `node:lts-slim`; adds chromium (for playwright), bun, Claude Code, and the tooling Claude reaches for (gh, ripgrep, fd, jq, less, …). The installed claude launcher is renamed to `claude.real` and replaced with a wrapper that always passes `--dangerously-skip-permissions`; auto-update is disabled so the wrapper survives across sessions (rebuild the container to refresh claude). First-run prompts for theme and workspace trust are pre-answered via a minimal `~/.claude.json` baked into the image; the bypass-permissions warning is suppressed by the host's own `~/.claude/settings.json`, which is bind-mounted in (see below).
+- **`Dockerfile`** — built from `node:lts-slim`; adds chromium (for playwright), Z3 (for refinement verification), the Postgres client, bun, Claude Code, and the tooling Claude reaches for (gh, ripgrep, fd, jq, less, …). The installed claude launcher is renamed to `claude.real` and replaced with a wrapper that always passes `--dangerously-skip-permissions`; auto-update is disabled so the wrapper survives across sessions (rebuild the container to refresh claude). First-run prompts for theme and workspace trust are pre-answered via a minimal `~/.claude.json` baked into the image; the bypass-permissions warning is suppressed by the host's own `~/.claude/settings.json`, which is bind-mounted in (see below).
 - **`docker-compose.yml`** — declares the `claude` service (with `build:` from the Dockerfile) plus the postgres sidecar, the tmpfs for `/tmp`, the seccomp relaxation chromium needs, the `..:/work` workspace bind mount, the `${HOME}/.claude` and `${HOME}/.config/gh` mounts, the `GH_TOKEN` and `ANTHROPIC_API_KEY` passthroughs, and a `sleep infinity` command so the container stays alive for VS Code to exec into.
 - **`devcontainer.json`** — VS Code Dev Containers config. Points at `docker-compose.yml`, attaches to the `claude` service, sets `workspaceFolder: /work`. Project-level config under `.claude/` in the repo is picked up via the workspace mount. VS Code extensions (`anthropic.claude-code`, `biomejs.biome`, `ms-python.python`, `ms-toolsai.jupyter`) are auto-installed in the container on first attach.
 
@@ -26,8 +26,23 @@ Sharing `gh` across the boundary takes **two** pieces, because `gh` splits confi
 ## What runs
 
 - `claude` (the main container, dropping into Claude Code) starts only after `pg_isready` passes against the sidecar.
-- `postgres:16` listens on `postgres:5432` inside the compose network. Reach it as `postgres://app:app@postgres:5432/app` — `DATABASE_URL` is already set.
+- `postgres:16` listens on `postgres:5432` inside the compose network. Setup creates `datamog_test` and `datamog_examples`; `DATABASE_URL` and
+  `DATAMOG_EXAMPLES_DATABASE_URL` point to those separate databases. The original
+  `app` database remains available for manual use.
 - The `pgdata` named volume persists between sessions; `shutdownAction: stopCompose` in `devcontainer.json` stops the stack on disconnect without removing named volumes, so the database survives.
+
+## Tests in Codespaces and Dev Containers
+
+After changing this setup, use **Codespaces: Rebuild Container** (or **Dev
+Containers: Rebuild Container** locally). The post-create script installs the
+locked Bun dependencies, creates any missing test databases, and checks Z3 and
+both database connections. It also works with an existing `pgdata` volume.
+
+Run `bun test` normally: Z3 verification and Postgres tests are enabled without
+additional environment setup. `DATAMOG_REQUIRE_POSTGRES=1` makes a missing database
+configuration or connection a test failure. The two suites use separate databases
+because they drop and recreate `public`; reserve these databases for tests.
+Examples unsupported by SQL backends still skip on those backends.
 
 ## Notebook environment
 
