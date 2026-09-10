@@ -156,12 +156,17 @@ Both outputs are gitignored build artifacts.
 The grammar lives at `packages/parser/src/datamog.langium`. Generated parser
 files live under `packages/parser/src/generated` and are ignored by Biome.
 
-After changing the grammar, regenerate the parser from the parser package:
+After changing the grammar, regenerate the parser from the repository root:
 
 ```bash
-cd packages/parser
-bunx langium generate
+bun run generate:parser
 ```
+
+Parser generation checks that the locally installed Langium CLI and runtime
+have matching major/minor versions. If dependencies were installed by another
+package manager, run `bun install --frozen-lockfile` to restore the locked
+versions. The script also supplies the configuration schema base URI missing
+from Langium CLI 4.2.
 
 When adding language syntax, also check the downstream consumers that mirror the
 language surface, especially `packages/core/src/keywords.ts`, playground

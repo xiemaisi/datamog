@@ -313,7 +313,10 @@ results at all.
 
 ```
 ExtDecl     ::= 'input' 'predicate' Identifier '^'? '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
-ColumnDecl  ::= Identifier (':' PrimitiveType)? ('?')?
+ColumnDecl  ::= Identifier (':' (PrimitiveType | StructuralType))? ('?')?
+StructuralType ::= '{' (TypeField (',' TypeField)*)? '}' | '[' TypeValue ']'
+TypeField   ::= (Identifier | StringLiteral) '?'? ':' TypeValue
+TypeValue   ::= (PrimitiveType | StructuralType) '?'?
 PrimitiveType ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 ```
 
@@ -347,6 +350,26 @@ doubled(N, A * 2) :- survey(N, A).        # error: `*` needs a value
 doubled(N, A * 2) :- survey(N, A), A <> null.   # fine: narrowed first
 ```
 
+Input columns can also declare nested JSON records and homogeneous arrays:
+
+```prolog
+input predicate people(person: {name: string, age?: integer, scores: [float?]}).
+```
+
+Records are closed: undeclared fields are rejected. `age?: integer` permits a
+missing field, while `age: integer?` requires the field but permits JSON null.
+These modifiers can be combined. `[integer]?` permits a null array;
+`[integer?]` permits null elements. Quoted field names and empty records (`{}`)
+are supported. Nested `value` accepts any JSON value, including null.
+
+These declarations retain `value` storage and publish their shape to consumers,
+so proven scalar fields can be used in typed operations (§5.1). Loaders validate
+nested values before insertion and report the offending column and JSON path.
+Module bindings check structural contracts against the supplied predicate's
+published type. The same structural syntax is available in rule-head annotations (§5.10).
+Type aliases, tuple declarations, open
+records and JSON Schema import are not supported.
+
 A column without `?` is emitted `NOT NULL`, and a `null` in its data is a load
 error rather than a silently missing value (§7). The one exception is the `null`
 type itself, which is declarable as a column type (§1.5) and needs no `?`: `null`
@@ -368,8 +391,8 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ```
 Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
-HeadTerm    ::= Expression ( 'as' Identifier (':' PrimitiveType '?'?)?
-                           | ':' (PrimitiveType '?'? | Refinement) )?
+HeadTerm    ::= Expression ( 'as' Identifier (':' TypeValue)?
+                           | ':' (TypeValue | Refinement) )?
 Refinement  ::= Expression
 ```
 
@@ -1428,7 +1451,10 @@ Program        ::= Statement*
 Statement      ::= ExtDecl | Rule | Query | Constraint
 
 ExtDecl        ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
-ColumnDecl     ::= Identifier (':' PrimitiveType)? ('?')?
+ColumnDecl     ::= Identifier (':' (PrimitiveType | StructuralType))? ('?')?
+StructuralType ::= '{' (TypeField (',' TypeField)*)? '}' | '[' TypeValue ']'
+TypeField      ::= (Identifier | StringLiteral) '?'? ':' TypeValue
+TypeValue      ::= (PrimitiveType | StructuralType) '?'?
 PrimitiveType  ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)   -- module
                  | (STRING ('as' Identifier)?)                                    -- data file
@@ -1439,8 +1465,8 @@ Rule           ::= (('output' | 'error') 'predicate')? HeadAtom
                    (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom       ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm       ::= (AggregateCall | Expression)
-                   ( 'as' Identifier (':' PrimitiveType '?'?)?
-                   | ':' (PrimitiveType '?'? | Expression) )?
+                   ( 'as' Identifier (':' TypeValue)?
+                   | ':' (TypeValue | Expression) )?
 AggregateCall  ::= IDENT '(' (Expression | '*') ')'
 
 Query          ::= '?-' BodyElement (',' BodyElement)* '.'
@@ -1759,12 +1785,30 @@ coerces those back to JS `true`/`false` at the result-row boundary
 for any column whose declared type is `boolean`, so query-result
 shape is uniform across every backend.
 
-The `value` type is opaque to the type system — the spec does not
-distinguish an object-shaped `value` from an array-shaped `value`
-from a string-leaf `value` statically. Only the EDB declaration, the
-iteration primitives, and the coercion builtins (§2.9) make any
-structural commitment. See §2.9 for the operators and builtins that
-work on `value`s.
+An explicit `value` declaration remains opaque. Unannotated producers can retain
+inferred object fields, tuple components, array element types and nominal proof
+payload types. Consumers can use a proven scalar projection in arithmetic and
+scalar builtin calls without spelling an extraction builtin:
+
+```prolog
+person({"age": 41, "name": "Ada"}).
+next_age(P["age"] + 1) :- person(P).
+shout(upper(P["name"])) :- person(P).
+```
+
+Shared variables satisfy the intersection of their positive predicate and equality
+requirements. For example, a variable bound to an integer-or-string JSON field can
+be used numerically after an equality constrains it to an integer. Nested proof
+matches can select a known constructor payload from a union of nominal proof
+types; an opaque alternative does not establish a payload type from its tag alone.
+
+These operands lower to the existing type-strict extraction builtins (§2.9).
+Published annotations control what consumers can rely on: declaring the producer
+as `value` hides its inferred shape. A nullable scalar requires a bound-variable
+`<> null` guard before implicit extraction; missing fields and indices stay
+undefined, while standalone JSON null projections remain ordinary null values.
+Whole structured values retain JSON storage. Inference uses bounded widening,
+so a shape that becomes too complex may conservatively fall back to `value`.
 
 ### 5.2 Type Inference
 
@@ -2396,6 +2440,29 @@ recursive body computes with. See the type-lattice design note
 Module boundaries (§9.3) apply this same directional subtype check: the value
 flowing across a boundary must fit within the type declared for it.
 
+#### Structural annotations
+
+Head positions accept the record and array types described in §2.2:
+
+```prolog
+person({"name": "Ada", "age": 37}: {name: string, age?: integer}).
+ages([37, null]: [integer?]).
+```
+
+The rule's contribution must be a semantic subtype of the declared shape.
+Checking is conservative: if bounded inference cannot prove the shape, the
+annotation is rejected. An opaque `value` from a callee cannot be asserted to
+have a record type. Missing required fields, undeclared extra fields and
+incompatible nested values are rejected statically. Optionality and nullability
+have the same independent meanings as in input declarations.
+
+Consumers see the declared generality, including optional fields and widened
+field types, through subsequent predicates. Unannotated sibling rules still
+contribute their own types. Recursive self-references retain inferred types.
+Shapes keep JSON storage; annotations do not validate or coerce runtime values.
+Computed fields use the existing expression nullness analysis, and a nullable
+field requires a guard before it can satisfy a nonnullable field annotation.
+
 #### Nullness annotations
 
 A head annotation may carry a `?` after the type (`ratio(X: integer?)`),
@@ -2918,6 +2985,19 @@ referenced either **bare** — `Cons(...)`, resolved to the one predicate that
 declares that tag — or **qualified** — `num_list::Cons(...)`. Bare suffices
 whenever exactly one predicate declares the tag; when several share it, the
 reference must be qualified.
+
+Proof terms also carry a nominal static identity determined by their predicate
+(after module elaboration). A body variable cannot simultaneously satisfy two
+known disjoint proof identities. Constructor matches check known receiver and
+payload types, including nested nullary patterns: a known integer payload cannot
+match a string literal, and a proof of one predicate cannot match a constructor
+of another. These checks apply in rules, queries, and integrity constraints.
+
+Checks respect published annotations. A producer advertised as `value` hides its
+more precise implementation type from consumers, including constructor payload
+inference. Unknown or `value` payloads remain matchable and are checked by the
+existing runtime guards. This adds no constructors or construction permissions;
+proof terms retain the same tagged JSON representation and derivation semantics.
 
 ### 8.2 Proof-term structure
 

@@ -142,3 +142,32 @@ export {
   type ResolvedModule,
 } from "./elaborate.ts";
 export { assertNever } from "./util.ts";
+export {
+  ANY_VALUE,
+  NEVER,
+  ProofTypeRegistry,
+  fromPrimitiveType,
+  normalizeType,
+  projectType,
+  projectProofPayload,
+  sameSemanticType,
+  isSemanticSubtype,
+  intersectTypes,
+  scalarType,
+  semanticStorageType,
+  unionType,
+  type ProjectionType,
+  type ProofConstructorType,
+  type ProofTypeId,
+  type ScalarType,
+  type SemanticField,
+  type SemanticType,
+} from "./semantic-type.ts";
+export {
+  DEFAULT_TYPE_BUDGET,
+  boundSemanticType,
+  widenSemanticType,
+  type TypeBudget,
+} from "./semantic-widening.ts";
+
+export { declaredColumnType, validateStructuralColumn } from "./structural-declarations.ts";

@@ -113,6 +113,7 @@ export interface AnnotatedHeadTerm extends langium.AstNode {
     name?: Identifier;
     nullable: boolean;
     refinement?: Expression;
+    shape?: StructuralType;
     type?: PrimitiveType;
 }
 
@@ -122,6 +123,7 @@ export const AnnotatedHeadTerm = {
     name: 'name',
     nullable: 'nullable',
     refinement: 'refinement',
+    shape: 'shape',
     type: 'type'
 } as const;
 
@@ -142,6 +144,21 @@ export const ArrayLiteral = {
 
 export function isArrayLiteral(item: unknown): item is ArrayLiteral {
     return reflection.isInstance(item, ArrayLiteral.$type);
+}
+
+export interface ArrayType extends langium.AstNode {
+    readonly $container: AnnotatedHeadTerm | ColumnDecl | TypeValue;
+    readonly $type: 'ArrayType';
+    element: TypeValue;
+}
+
+export const ArrayType = {
+    $type: 'ArrayType',
+    element: 'element'
+} as const;
+
+export function isArrayType(item: unknown): item is ArrayType {
+    return reflection.isInstance(item, ArrayType.$type);
 }
 
 export interface BinaryExpr extends langium.AstNode {
@@ -237,6 +254,7 @@ export interface ColumnDecl extends langium.AstNode {
     readonly $type: 'ColumnDecl';
     name: Identifier;
     nullable: boolean;
+    shape?: StructuralType;
     type?: PrimitiveType;
 }
 
@@ -244,6 +262,7 @@ export const ColumnDecl = {
     $type: 'ColumnDecl',
     name: 'name',
     nullable: 'nullable',
+    shape: 'shape',
     type: 'type'
 } as const;
 
@@ -530,6 +549,21 @@ export function isRangeAtom(item: unknown): item is RangeAtom {
     return reflection.isInstance(item, RangeAtom.$type);
 }
 
+export interface RecordType extends langium.AstNode {
+    readonly $container: AnnotatedHeadTerm | ColumnDecl | TypeValue;
+    readonly $type: 'RecordType';
+    fields: Array<TypeField>;
+}
+
+export const RecordType = {
+    $type: 'RecordType',
+    fields: 'fields'
+} as const;
+
+export function isRecordType(item: unknown): item is RecordType {
+    return reflection.isInstance(item, RecordType.$type);
+}
+
 export interface Rule extends langium.AstNode {
     readonly $container: Program;
     readonly $type: 'Rule';
@@ -600,6 +634,16 @@ export function isStringLiteral(item: unknown): item is StringLiteral {
     return reflection.isInstance(item, StringLiteral.$type);
 }
 
+export type StructuralType = ArrayType | RecordType;
+
+export const StructuralType = {
+    $type: 'StructuralType'
+} as const;
+
+export function isStructuralType(item: unknown): item is StructuralType {
+    return reflection.isInstance(item, StructuralType.$type);
+}
+
 export interface Subscript extends langium.AstNode {
     readonly $type: 'Subscript';
     index: Expression;
@@ -614,6 +658,44 @@ export const Subscript = {
 
 export function isSubscript(item: unknown): item is Subscript {
     return reflection.isInstance(item, Subscript.$type);
+}
+
+export interface TypeField extends langium.AstNode {
+    readonly $container: RecordType;
+    readonly $type: 'TypeField';
+    name: Identifier | string;
+    optional: boolean;
+    value: TypeValue;
+}
+
+export const TypeField = {
+    $type: 'TypeField',
+    name: 'name',
+    optional: 'optional',
+    value: 'value'
+} as const;
+
+export function isTypeField(item: unknown): item is TypeField {
+    return reflection.isInstance(item, TypeField.$type);
+}
+
+export interface TypeValue extends langium.AstNode {
+    readonly $container: ArrayType | TypeField;
+    readonly $type: 'TypeValue';
+    nullable: boolean;
+    shape?: StructuralType;
+    type?: PrimitiveType;
+}
+
+export const TypeValue = {
+    $type: 'TypeValue',
+    nullable: 'nullable',
+    shape: 'shape',
+    type: 'type'
+} as const;
+
+export function isTypeValue(item: unknown): item is TypeValue {
+    return reflection.isInstance(item, TypeValue.$type);
 }
 
 export interface UnaryExpr extends langium.AstNode {
@@ -666,6 +748,7 @@ export type DatamogAstType = {
     AggregateCall: AggregateCall
     AnnotatedHeadTerm: AnnotatedHeadTerm
     ArrayLiteral: ArrayLiteral
+    ArrayType: ArrayType
     BinaryExpr: BinaryExpr
     Binding: Binding
     BodyElement: BodyElement
@@ -688,11 +771,15 @@ export type DatamogAstType = {
     Program: Program
     Query: Query
     RangeAtom: RangeAtom
+    RecordType: RecordType
     Rule: Rule
     Slice: Slice
     Statement: Statement
     StringLiteral: StringLiteral
+    StructuralType: StructuralType
     Subscript: Subscript
+    TypeField: TypeField
+    TypeValue: TypeValue
     UnaryExpr: UnaryExpr
     Variable: Variable
     Wildcard: Wildcard
@@ -740,6 +827,9 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 refinement: {
                     name: AnnotatedHeadTerm.refinement
                 },
+                shape: {
+                    name: AnnotatedHeadTerm.shape
+                },
                 type: {
                     name: AnnotatedHeadTerm.type
                 }
@@ -755,6 +845,15 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [Expression.$type]
+        },
+        ArrayType: {
+            name: ArrayType.$type,
+            properties: {
+                element: {
+                    name: ArrayType.element
+                }
+            },
+            superTypes: [StructuralType.$type]
         },
         BinaryExpr: {
             name: BinaryExpr.$type,
@@ -838,6 +937,9 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 nullable: {
                     name: ColumnDecl.nullable,
                     defaultValue: false
+                },
+                shape: {
+                    name: ColumnDecl.shape
                 },
                 type: {
                     name: ColumnDecl.type
@@ -1054,6 +1156,16 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [BodyElement.$type]
         },
+        RecordType: {
+            name: RecordType.$type,
+            properties: {
+                fields: {
+                    name: RecordType.fields,
+                    defaultValue: []
+                }
+            },
+            superTypes: [StructuralType.$type]
+        },
         Rule: {
             name: Rule.$type,
             properties: {
@@ -1116,6 +1228,12 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
+        StructuralType: {
+            name: StructuralType.$type,
+            properties: {
+            },
+            superTypes: []
+        },
         Subscript: {
             name: Subscript.$type,
             properties: {
@@ -1124,6 +1242,38 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
                 },
                 object: {
                     name: Subscript.object
+                }
+            },
+            superTypes: []
+        },
+        TypeField: {
+            name: TypeField.$type,
+            properties: {
+                name: {
+                    name: TypeField.name
+                },
+                optional: {
+                    name: TypeField.optional,
+                    defaultValue: false
+                },
+                value: {
+                    name: TypeField.value
+                }
+            },
+            superTypes: []
+        },
+        TypeValue: {
+            name: TypeValue.$type,
+            properties: {
+                nullable: {
+                    name: TypeValue.nullable,
+                    defaultValue: false
+                },
+                shape: {
+                    name: TypeValue.shape
+                },
+                type: {
+                    name: TypeValue.type
                 }
             },
             superTypes: []

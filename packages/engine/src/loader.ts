@@ -1,3 +1,4 @@
+import { validateStructuralColumn } from "datamog-core";
 import type { ColumnDecl, ExtDecl, PrimitiveType, TypedProgram } from "datamog-core";
 import type { Backend } from "./backend.ts";
 import { ident } from "./dialect.ts";
@@ -62,7 +63,7 @@ export async function insertRows(
   // sort) from the SQL backends.
   const jsonCols = decl.columns.filter((c) => c.type === "value");
   const isSqlPath = !backend.insertRows;
-  const normalised = rows.map((row) => {
+  const normalised = rows.map((row, rowIndex) => {
     const out: Record<string, unknown> = { ...row };
     for (const col of decl.columns) {
       const v = row[col.name];
@@ -89,6 +90,7 @@ export async function insertRows(
           continue;
         }
         const value = validateDirectJsonValue(v, col);
+        validateStructuralColumn(value, col, `Predicate '${decl.predicate}', row ${rowIndex + 1}`);
         const canonical = canonicalizeJson(value);
         out[col.name] = isSqlPath ? canonical : (JSON.parse(canonical) as JsonValue);
       }

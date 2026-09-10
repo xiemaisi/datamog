@@ -33,6 +33,7 @@ import {
 } from "./generated/ast.js";
 import { substituteHeadNames } from "./head-names.ts";
 import { ParseError } from "./parse-error.js";
+import { markProofConstruction, markProofMatch, markProofProjection } from "./proof-metadata.ts";
 import { extractRefinements, refinementFormulas, synthesiseContractChecks } from "./refinements.ts";
 
 // Post-processing attaches the original source text of numeric literals on
@@ -380,7 +381,8 @@ function replaceNode(oldNode: AstNode, newNode: AstNode): void {
  * argument position.
  */
 export interface HeadAnnotation {
-  type: string;
+  type: import("./generated/ast.js").PrimitiveType;
+  shape?: import("./generated/ast.js").StructuralType;
   nullable: boolean;
 }
 
@@ -390,8 +392,8 @@ export interface HeadAnnotation {
  * AnnotatedHeadTerm{expr, type, nullable}; this replaces each wrapper with its
  * inner expression and records the declared type and nullness in a parallel
  * `argTypes` array on the head (undefined for unannotated positions). The array
- * is attached only when a rule annotates at least one argument; the
- * per-predicate all-or-nothing rule is enforced later, during type inference.
+ * is attached only when a rule annotates at least one argument. Each annotation
+ * is checked against that rule's contribution during type inference.
  *
  * Runs in `parseRaw`, before elaboration and post-processing, so no later stage
  * ever sees an AnnotatedHeadTerm node.
@@ -420,9 +422,13 @@ export function liftHeadAnnotations(program: Program): void {
       // A wrapper may carry a name, a type, or both. Only a type marks the
       // position annotated; a name is substituted away below and leaves no
       // trace for `checkHeadAnnotations` to check.
-      if (arg.type !== undefined) {
+      if (arg.type !== undefined || arg.shape !== undefined) {
         annotated = true;
-        argTypes[i] = { type: arg.type, nullable: arg.nullable === true };
+        argTypes[i] = {
+          type: arg.type ?? "value",
+          nullable: arg.nullable === true,
+          ...(arg.shape ? { shape: arg.shape } : {}),
+        };
       }
       const inner = arg.expr;
       (inner as { $container: AstNode }).$container = stmt.head;
@@ -467,7 +473,7 @@ export function defaultColumnTypes(program: Program): void {
   for (const stmt of program.statements) {
     if (!isExtDecl(stmt)) continue;
     for (const col of stmt.columns) {
-      if (col.type === undefined) col.type = "string";
+      if (col.type === undefined) col.type = col.shape ? "value" : "string";
       // `null` is one element of the lattice, not two: `T?` spells `T ⊔ null`, so
       // `null?` is `null ⊔ null`. Carrying the base without the bit would give a
       // column whose only inhabitant its own nullness check rejects, so the two
@@ -793,6 +799,11 @@ export function postProcess(program: Program): void {
     const qualified = `${stmt.head.predicate}::${ctor}`;
     ctorArity.set(qualified, argExprs.length);
     const proofTerm = buildProofTerm(qualified, argExprs, stmt.head.$cstNode);
+    markProofConstruction(proofTerm, {
+      predicate: stmt.head.predicate,
+      name: ctor,
+      payload: argExprs,
+    });
     setContainer(proofTerm, stmt.head, "args", stmt.head.args.length);
     (stmt.head.args as Expression[]).push(proofTerm);
   }
@@ -880,7 +891,7 @@ export function postProcess(program: Program): void {
       cst: Cst,
       out: BodyElement[],
     ): void => {
-      const { qualified } = resolveCtor(pattern)!;
+      const { pred, qualified } = resolveCtor(pattern)!;
       const arity = ctorArity.get(qualified);
       if (arity !== undefined && pattern.args.length !== arity) {
         throw parseErrorAtNode(
@@ -894,7 +905,13 @@ export function postProcess(program: Program): void {
         [mkSubscript(mkVar(scrutVar, cst), mkStringLiteral("$proof", cst), cst)],
         cst,
       );
-      out.push(mkEquality(tag, mkStringLiteral(qualified, cst), cst));
+      const guard = mkEquality(tag, mkStringLiteral(qualified, cst), cst);
+      markProofMatch(guard, {
+        predicate: pred,
+        name: pattern.name,
+        receiver: mkVar(scrutVar, cst),
+      });
+      out.push(guard);
       for (let i = 0; i < pattern.args.length; i++) {
         const p = pattern.args[i]!;
         // Accessor: S["args"][i].
@@ -903,6 +920,12 @@ export function postProcess(program: Program): void {
           mkNumberLiteral(i, cst),
           cst,
         );
+        markProofProjection(accessor as unknown as Subscript, {
+          predicate: pred,
+          name: pattern.name,
+          index: i,
+          receiver: ((accessor as unknown as Subscript).object as unknown as Subscript).object,
+        });
         if (isCtorTerm(p)) {
           const f = freshPat();
           out.push(mkEquality(mkVar(f, cst), accessor, cst));

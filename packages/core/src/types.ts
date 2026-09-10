@@ -11,8 +11,21 @@ import { BITWISE_OPS, COMPARISON_OPS, EQUALITY_OPS, isFloatLiteral } from "./ast
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
 import { findNullableOperands } from "./nullable-operands.ts";
 import { type BodyOwner, type NullnessInfo, inferNullness } from "./nullness.ts";
+import { inferSemanticColumns } from "./semantic-inference.ts";
+import type { ProofTypeRegistry, SemanticType } from "./semantic-type.ts";
+import { validateSemanticTypes } from "./semantic-validation.ts";
+import { validateStructuralHeadAnnotations } from "./structural-declarations.ts";
+import { lowerTypedOperands, restoreTypedOperands } from "./typed-operands.ts";
 
 export interface TypedProgram extends AnalyzedProgram {
+  /** Bounded inferred shapes and proof identities; distinct from contracts and storage. */
+  semanticColumnTypes: Map<string, SemanticType[]>;
+  /** Inferred signatures of existing proof constructors, keyed by elaborated predicate. */
+  proofTypes: ProofTypeRegistry;
+  /** Consumer-visible shapes, propagated under published annotations. */
+  publishedSemanticColumnTypes: Map<string, SemanticType[]>;
+  /** Payload signatures inferred under published producer contracts. */
+  publishedProofTypes: ProofTypeRegistry;
   /** Column types for every predicate (EDB and IDB). Used by codegen. */
   columnTypes: Map<string, PrimitiveType[]>;
   /**
@@ -49,6 +62,13 @@ export interface TypedProgram extends AnalyzedProgram {
  */
 export function inferTypes(analyzed: AnalyzedProgram): TypedProgram {
   try {
+    restoreTypedOperands(analyzed);
+    // Discover shapes before primitive validation, lower proven extraction, then
+    // run the normal checker and backend handoff on the resulting expressions.
+    // Each round adds conversions only to previously unconverted operands.
+    while (lowerTypedOperands(inferTypesImpl(analyzed, true))) {
+      /* reach dependent projections */
+    }
     return inferTypesImpl(analyzed);
   } catch (e) {
     if (e instanceof AnalyzerError) e.file ??= analyzed.sourceFile;
@@ -56,7 +76,7 @@ export function inferTypes(analyzed: AnalyzedProgram): TypedProgram {
   }
 }
 
-function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
+function inferTypesImpl(analyzed: AnalyzedProgram, preliminary = false): TypedProgram {
   // Internal representation allows undefined for unknown positions
   const types = new Map<string, (PrimitiveType | undefined)[]>();
   /**
@@ -157,7 +177,7 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
   // resolves each FunctionCall to a specific overload — populated into
   // this map during the walk and threaded back out via TypedProgram.
   const functionOverloads = new Map<FunctionCall, Overload>();
-  validateTypes(analyzed, types, published, functionOverloads);
+  if (!preliminary) validateTypes(analyzed, types, published, functionOverloads);
 
   // Nullness is a second component beside the base type, inferred by its own
   // fixed point once the types it reads are settled and the calls it reads are
@@ -176,7 +196,7 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     },
   });
 
-  checkHeadAnnotations(analyzed, types, published, nullness);
+  if (!preliminary) checkHeadAnnotations(analyzed, types, published, nullness);
 
   // Position 3's second half (§5): an operation that computes needs a value, so a
   // nullable operand has to be narrowed first. Runs here because it is the first
@@ -193,13 +213,14 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     },
   });
   const firstNullable = nullableOperands[0];
-  if (firstNullable) {
+  if (firstNullable && !preliminary) {
     throw new AnalyzerError(firstNullable.message, firstNullable.offset, firstNullable.end);
   }
 
   // Finalize: reject unconstrained column types. `publishedTypes` is
   // `columnTypes` widened by annotations (`published` ≥ inferred, so it is
   // defined wherever the inferred type is).
+  const unresolved = new Set<string>();
   const columnTypes = new Map<string, PrimitiveType[]>();
   const publishedTypes = new Map<string, PrimitiveType[]>();
   for (const [pred, predTypes] of types) {
@@ -215,6 +236,12 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
         // whose storage is widest and move on.
         finalTypes.push("string");
         pubTypes.push(pub[i] ?? "string");
+        continue;
+      }
+      if (t === undefined && preliminary) {
+        unresolved.add(pred);
+        finalTypes.push("value");
+        pubTypes.push("value");
         continue;
       }
       if (t === undefined) {
@@ -240,7 +267,33 @@ function inferTypesImpl(analyzed: AnalyzedProgram): TypedProgram {
     publishedTypes.set(pred, pubTypes);
   }
 
-  return { ...analyzed, columnTypes, publishedTypes, functionOverloads, nullness };
+  const typed = { ...analyzed, columnTypes, publishedTypes, functionOverloads, nullness };
+  const semantic = inferSemanticColumns(typed);
+  const publishedSemantic = inferSemanticColumns(typed, semantic.semanticColumnTypes);
+  const result = {
+    ...typed,
+    semanticColumnTypes: semantic.semanticColumnTypes,
+    proofTypes: semantic.proofTypes,
+    publishedSemanticColumnTypes: publishedSemantic.semanticColumnTypes,
+    publishedProofTypes: publishedSemantic.proofTypes,
+  };
+  for (const pred of unresolved) {
+    // Unknown legacy columns must not seed speculative scalar conversions in
+    // unanchored recursion. A later preparation round can discover real evidence.
+    result.semanticColumnTypes.set(
+      pred,
+      result.columnTypes.get(pred)!.map(() => ({ kind: "value" })),
+    );
+    result.publishedSemanticColumnTypes.set(
+      pred,
+      result.columnTypes.get(pred)!.map(() => ({ kind: "value" })),
+    );
+  }
+  if (!preliminary) {
+    validateStructuralHeadAnnotations(publishedSemantic.headContributions);
+    validateSemanticTypes(result);
+  }
+  return result;
 }
 
 function isNumericType(t: PrimitiveType | undefined): boolean {

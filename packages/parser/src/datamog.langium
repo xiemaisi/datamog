@@ -45,7 +45,24 @@ Actual:
 // (applied in `parseRaw` via `defaultColumnTypes`, so every later stage sees a
 // concrete type). `a?` is a nullable untyped column, `a: integer?` a typed one.
 ColumnDecl:
-    name=Identifier (':' type=PrimitiveType)? (nullable?='?')?;
+    name=Identifier (':' (type=PrimitiveType | shape=StructuralType))? (nullable?='?')?;
+
+// Structural input-column types use JSON storage. Field presence and nested
+// value nullability are independent.
+StructuralType:
+    RecordType | ArrayType;
+
+RecordType:
+    '{' (fields+=TypeField (',' fields+=TypeField)*)? '}';
+
+TypeField:
+    (name=Identifier | name=STRING) (optional?='?')? ':' value=TypeValue;
+
+ArrayType:
+    '[' element=TypeValue ']';
+
+TypeValue:
+    (type=PrimitiveType | shape=StructuralType) (nullable?='?')?;
 
 PrimitiveType returns string:
     'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null';
@@ -118,8 +135,8 @@ HeadAtom:
 // be confused. See doc/design/refinement-annotations.md.
 HeadTerm:
     Expression ({infer AnnotatedHeadTerm.expr=current}
-        ('as' name=Identifier (':' type=PrimitiveType (nullable?='?')?)?
-        | ':' (type=PrimitiveType (nullable?='?')? | refinement=Expression)))?;
+        ('as' name=Identifier (':' (type=PrimitiveType | shape=StructuralType) (nullable?='?')?)?
+        | ':' ((type=PrimitiveType | shape=StructuralType) (nullable?='?')? | refinement=Expression)))?;
 
 // Not referenced directly by the grammar — synthesised by post-processing
 // so downstream stages (analyzer, translator) can rely on the AggregateCall

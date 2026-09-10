@@ -256,3 +256,11 @@ export function parse(source: string, file?: string): Program {
   }
   return program;
 }
+
+export {
+  proofConstruction,
+  proofMatch,
+  proofProjection,
+  type ProofConstruction,
+  type ProofProjection,
+} from "./proof-metadata.ts";

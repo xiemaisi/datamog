@@ -3,6 +3,8 @@ import { AnalyzerError, queryProjection } from "./analyzer.ts";
 import { asCoreRule } from "./ast.ts";
 import type { Binding, ExtDecl, PrimitiveType, Program, Query, Rule, Statement } from "./ast.ts";
 import { expandModule } from "./expand.ts";
+import { type SemanticType, isSemanticSubtype } from "./semantic-type.ts";
+import { declaredColumnType } from "./structural-declarations.ts";
 import { type TypedProgram, columnTypesCompatible } from "./types.ts";
 
 /** A module a `ModuleResolver` handed back: its raw (pre-post-process) AST and
@@ -45,6 +47,8 @@ export interface DataSource {
 export interface BoundaryConstraint {
   predicate: string;
   expected: PrimitiveType[];
+  /** Retained structural contracts from declarations erased by elaboration. */
+  expectedShapes?: (SemanticType | undefined)[];
   /** Whether the declaration on the other side of the boundary carries `^`. */
   expectedMaximal: boolean;
   /**
@@ -302,6 +306,7 @@ function collectActualBoundaries(
       predicate: mergedActual(actual.arg),
       // An unannotated column defaults to `string` (parseRaw already sets this).
       expected: inputDecl.columns.map((c) => c.type ?? "string"),
+      expectedShapes: inputDecl.columns.map((c) => (c.shape ? declaredColumnType(c) : undefined)),
       expectedMaximal: inputDecl.maximal === true,
       expectedNullable: inputDecl.columns.map((c) => c.nullable === true),
       note: `actual '${actual.arg}' wired to input '${actual.param}' of "${binding.source}"`,
@@ -325,6 +330,7 @@ function outputBoundary(
   return {
     predicate: output,
     expected: importerDecl.columns.map((c) => c.type ?? "string"),
+    expectedShapes: importerDecl.columns.map((c) => (c.shape ? declaredColumnType(c) : undefined)),
     expectedMaximal: importerDecl.maximal === true,
     expectedNullable: importerDecl.columns.map((c) => c.nullable === true),
     note: `output of "${binding.source}" bound to '${importerDecl.predicate}'`,
@@ -394,6 +400,14 @@ export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryC
     // body currently produces no NULL.
     const actualNullable = typed.nullness.publishedNullness.get(b.predicate);
     for (let i = 0; i < b.expected.length; i++) {
+      const shape = b.expectedShapes?.[i];
+      const semantic = typed.publishedSemanticColumnTypes.get(b.predicate)?.[i];
+      if (shape && semantic && !isSemanticSubtype(semantic, shape)) {
+        throw boundaryError(
+          `${b.note}: column ${i + 1} does not satisfy its structural declaration`,
+          b,
+        );
+      }
       if (!columnTypesCompatible(actual[i]!, b.expected[i]!)) {
         throw boundaryError(
           `${b.note}: column ${i + 1} has type '${actual[i]}' but '${b.expected[i]}' was declared`,

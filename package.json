@@ -30,6 +30,7 @@
     "test:pg": "bash scripts/test-postgres.sh",
     "test:coverage": "bun test --recursive --coverage",
     "typecheck": "tsc -b",
+    "generate:parser": "node scripts/generate-parser.mjs",
     "check": "bunx biome check .",
     "check:fix": "bunx biome check --fix .",
     "datamog": "bun packages/cli/src/main.ts",
