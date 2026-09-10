@@ -269,7 +269,7 @@ function inStatement(program: Program, stmt: Statement, offset: number): Definit
   // every parse entry point, post-processing or not), so the assertion holds
   // even though nothing here has been post-processed.
   if (stmt.$type === "Rule") return inRule(program, asCoreRule(stmt), offset);
-  return inScopeBody(program, stmt, offset);
+  return stmt.$type === "Query" ? inScopeBody(program, stmt, offset) : undefined;
 }
 
 /**

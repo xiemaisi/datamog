@@ -112,3 +112,9 @@ describe("DatamogCompletionProvider", () => {
     expect(labels(items)).toContain("edge");
   });
 });
+
+test("proposes type aliases in type positions", async () => {
+  const result = await getCompletions("type Person = {name: string}. input predicate p(x: |).");
+  const alias = result.items.find((item) => item.label === "Person");
+  expect(alias?.detail).toBe("type alias");
+});

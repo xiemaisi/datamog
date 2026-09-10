@@ -110,7 +110,11 @@ export class IncrementalSession {
    * the state is left untouched and the error propagates.
    */
   async addStatements(source: string): Promise<IncrementalResult> {
-    const fragment = parse(source);
+    const fragment = parse(
+      source,
+      undefined,
+      this.statements.filter((s) => s.$type === "TypeAlias"),
+    );
 
     this.checkRedefinition(fragment.statements);
 
@@ -171,7 +175,11 @@ export class IncrementalSession {
     if (!this.backend.sqlDialect) {
       throw new Error("Cannot preview SQL: backend has no SQL dialect");
     }
-    const fragment = parse(source);
+    const fragment = parse(
+      source,
+      undefined,
+      this.statements.filter((s) => s.$type === "TypeAlias"),
+    );
     if (fragment.statements.length !== 1 || fragment.statements[0]!.$type !== "Query") {
       throw new Error(":sql expects a single query of the form '?- atom.'");
     }

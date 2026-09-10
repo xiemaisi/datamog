@@ -18,6 +18,7 @@ import {
   normalizeOperatorAliases,
   parseRaw,
   postProcess,
+  resolveTypeAliases,
 } from "datamog-parser";
 import type { AstNode } from "langium";
 import { AstUtils } from "langium";
@@ -74,7 +75,7 @@ function analyzeInPlace(program: Program, accept: ValidationAcceptor): Analyzed 
   // (e.g. empty `W[]`); catch it so the validator surfaces the problem
   // as a diagnostic rather than crashing the language server.
   try {
-    // The three passes `parseRaw` runs before `postProcess`, in its order. This
+    // The normalization passes `parseRaw` runs before `postProcess`, in its order. This
     // path starts from the Langium-parsed AST rather than from `parseRaw`, so
     // without them the editor sees a shape no other consumer ever does: a head
     // annotation stays an `AnnotatedHeadTerm` inside `head.args`, which means a
@@ -82,6 +83,7 @@ function analyzeInPlace(program: Program, accept: ValidationAcceptor): Analyzed 
     // contract check is synthesised and none is reported. Alias rewriting goes
     // first for the reason `parseRaw` states: `liftHeadAnnotations` moves each
     // refinement formula off the container tree, out of a `streamAll` walk's reach.
+    resolveTypeAliases(program);
     normalizeOperatorAliases(program);
     liftHeadAnnotations(program);
     defaultColumnTypes(program);

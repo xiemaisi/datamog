@@ -29,6 +29,7 @@ export type {
   Slice,
   PrimitiveType,
   Statement,
+  TypeAlias,
   StringLiteral,
   Subscript,
   UnaryExpr,
@@ -104,13 +105,14 @@ export {
 import type { AstNode } from "langium";
 import { GrammarUtils } from "langium";
 import { createDatamogServices } from "./datamog-module.js";
-import type { Program } from "./generated/ast.js";
+import type { Program, TypeAlias } from "./generated/ast.js";
 import {
   defaultColumnTypes,
   liftHeadAnnotations,
   normalizeOperatorAliases,
   postProcess,
 } from "./post-process.js";
+import { resolveTypeAliases } from "./type-aliases.js";
 
 /**
  * Source span of a single assigned property, for consumers that need to
@@ -131,6 +133,7 @@ export function propertySpan(
   return cst ? { offset: cst.offset, end: cst.end } : undefined;
 }
 
+export { resolveTypeAliases } from "./type-aliases.js";
 export { ParseError } from "./parse-error.js";
 import { ParseError } from "./parse-error.js";
 
@@ -169,6 +172,9 @@ export function parseLenient(source: string): Program {
   const result = parser.parse<Program>(source);
   const program = result.value;
   try {
+    resolveTypeAliases(program);
+    liftHeadAnnotations(program);
+    defaultColumnTypes(program);
     postProcess(program);
   } catch {
     // Post-processing aborts on the first malformed node; nodes
@@ -191,8 +197,13 @@ export function parseLenient(source: string): Program {
  */
 export function parseRawLenient(source: string): Program {
   const program = parser.parse<Program>(source).value;
-  liftHeadAnnotations(program);
-  defaultColumnTypes(program);
+  try {
+    resolveTypeAliases(program);
+    liftHeadAnnotations(program);
+    defaultColumnTypes(program);
+  } catch {
+    // Keep the partial source tree for tooling while an alias is being edited.
+  }
   return program;
 }
 
@@ -204,7 +215,11 @@ export function parseRawLenient(source: string): Program {
  * (substitute inputs, freshen names) before a single post-process runs over
  * the merged program. Lexer / parser errors still throw a `ParseError`.
  */
-export function parseRaw(source: string, file?: string): Program {
+export function parseRaw(
+  source: string,
+  file?: string,
+  aliases: readonly TypeAlias[] = [],
+): Program {
   const result = parser.parse<Program>(source);
   if (result.lexerErrors.length > 0) {
     const err = result.lexerErrors[0]!;
@@ -238,14 +253,20 @@ export function parseRaw(source: string, file?: string): Program {
   // every later stage), and default unannotated input-predicate columns to
   // `string`. Alias rewriting goes first because `liftHeadAnnotations` moves each
   // refinement formula off the container tree, out of reach of a `streamAll` walk.
+  try {
+    resolveTypeAliases(result.value, aliases);
+  } catch (error) {
+    if (error instanceof ParseError) error.file ??= file;
+    throw error;
+  }
   normalizeOperatorAliases(result.value);
   liftHeadAnnotations(result.value);
   defaultColumnTypes(result.value);
   return result.value;
 }
 
-export function parse(source: string, file?: string): Program {
-  const program = parseRaw(source, file);
+export function parse(source: string, file?: string, aliases: readonly TypeAlias[] = []): Program {
+  const program = parseRaw(source, file, aliases);
   // `postProcess` throws `ParseError`s (via `parseErrorAtNode`) that only know
   // their node position, so stamp the source file here at the parse boundary.
   try {

@@ -3,6 +3,7 @@ import {
   BUILTIN_BODY_ATOM_NAMES,
   BUILTIN_FUNCTION_NAMES,
   type PredicateInfo,
+  collectTypeAliases,
   collectUserPredicates,
   collectVariablesInRule,
   findEnclosingRule,
@@ -73,6 +74,14 @@ export class DatamogCompletionProvider extends DefaultCompletionProvider {
     // identifiers too; fuzzy filtering on what the user types narrows
     // down to the relevant set.
     if (parserRuleName === "Identifier") {
+      for (const name of collectTypeAliases(program)) {
+        acceptor(context, {
+          label: name,
+          kind: CompletionItemKind.TypeParameter,
+          detail: "type alias",
+          sortText: `1_${name}`,
+        });
+      }
       this.proposePredicates(context, program, acceptor);
       this.proposeVariables(context, program, acceptor);
       return;

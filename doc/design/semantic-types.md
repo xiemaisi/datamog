@@ -4,7 +4,7 @@ Status: structural/proof inference, published semantic contracts, and conservati
 proof-match validation implemented. Proven scalar operands now lower to existing
 extraction builtins before final primitive checking and backend emission. Disjoint proof requirements and constructor payload
 constraints now produce semantic errors. Structural input declarations and
-rule-head annotations are implemented.
+rule-head annotations and transparent, file-local type aliases are implemented.
 
 The scope is richer structural JSON types and static types for existing proof
 terms. Independent datatype declarations and freely constructible ADTs are
@@ -244,7 +244,40 @@ nullness analysis supplies computed-field nullability and guarded variable
 refinement. Annotation checks do not invent evidence when inference reaches its
 work limit, and structural values retain JSON storage.
 
-Next, consider reusable type aliases. Validate registry references before exposing proof signatures as
+## Reusable type aliases
+
+`type Person = {name: string, age?: integer}.` introduces a transparent alias for
+any existing declaration type, including primitives and nested nullable types.
+Aliases can refer to other aliases and can be used in input columns and rule-head
+annotations. They preserve the exact contract and storage of their expansion;
+they do not introduce nominal identities or freely constructible proof terms.
+
+`packages/parser/src/type-aliases.ts` expands aliases before head annotations are
+lifted and before module elaboration. Each file has its own alias namespace and
+may use forward references. Unknown names, duplicates (including quoted variants),
+primitive-name redefinitions and cycles are rejected at source spans. Unused
+aliases are validated too. Cycles are rejected even through optional fields or
+arrays: accepting them would require recursive structural contracts, which this
+foundation does not provide. Expansion is memoized, with independent AST nodes
+at each use and repaired parent links. Compiler work is capped at 100,000 expanded
+type-value nodes and 128 levels of alias or structural nesting; exhaustion fails
+explicitly rather than widening a declaration to `value`.
+
+The grammar uses lookahead to distinguish alias references from compound
+refinements. On an erased witness a bare unknown alias-like name remains a
+Boolean refinement, preserving `_: B`. If `B` is also an alias, `_: (B)` explicitly
+selects the expression. Alias names otherwise occupy a separate namespace from
+predicates and variables, and `type` is a contextual keyword.
+
+Parsed alias declarations retain expanded definitions so successful incremental
+session chunks can supply them to later chunks. Failed chunks publish no aliases,
+redefinition is rejected, and reset discards them with the rest of the program.
+Modules expand aliases in their own files, so no alias import/export mechanism or
+freshening is necessary. Module contracts compare expanded shapes as before.
+Editor completion offers alias names, and editor validation runs the same
+expansion before type inference.
+
+Next, validate registry references before exposing proof signatures as
 user-facing declarations. Inferred types, published contracts, nullness and
 partiality must remain distinct during this migration. External data validation
 is required before trusting structural input declarations.

@@ -48,6 +48,25 @@ for (const [name, create] of engines)
         await backend.close();
       }
     }
+    test("type aliases drive scalar extraction and structural input validation", async () => {
+      const source = `type Person = {name: string, age: Age}. type Age = integer.
+        input predicate people(p: Person).
+        person(P: Person) :- people(P).
+        answer(upper(P["name"]), P["age"] + 1) :- person(P).
+        ?- answer(N, A).`;
+      const loader = (age: unknown): ExtensionalLoader => ({
+        name: "test",
+        async canLoad() {
+          return true;
+        },
+        async load(decl, backend) {
+          await insertRows(backend, decl, [{ p: { name: "Ada", age } }]);
+          return { rowsLoaded: 1 };
+        },
+      });
+      expect(await run(source, [loader(41)])).toEqual([[{ N: "ADA", A: 42 }]]);
+      await expect(run(source, [loader("41")])).rejects.toThrow('$["age"]');
+    });
     test("structural input contracts validate before typed field operations", async () => {
       const source = `input predicate people(person: {name: string, age?: integer, scores: [integer]}).
         answer(upper(P["name"]), P["scores"][0] + 1) :- people(P).

@@ -155,9 +155,9 @@ not    in    true    false    null
 string    integer    float    boolean    value
 ```
 
-`input`, `output`, `error`, `predicate`, `from`, and `as` are **contextual
+`input`, `output`, `error`, `predicate`, `from`, `as`, and `type` are **contextual
 keywords**: they lead the `input predicate` / `output predicate` /
-`error predicate` declaration forms and the `:=` source binding (§9), but are
+`error predicate` declaration forms, type aliases (§2.2), and the `:=` source binding (§9), but are
 ordinary identifiers everywhere else, so a program may still name a predicate,
 column, or variable after them (for example the `from`/`to` columns of an edge
 relation, or a predicate called `error`).
@@ -226,7 +226,7 @@ constraints below are the only exceptions.
   These are *lexical* keywords, so the parser rejects them as a bare identifier
   in every position (predicate, extensional column, and variable alike). `true`, `false`,
   and `null` are also the literals of §1.5. The declaration words `input`,
-  `output`, `error`, `predicate`, `from`, and `as` are *contextual* (§1.6) and
+  `output`, `error`, `predicate`, `from`, `as`, and `type` are *contextual* (§1.6) and
   stay available as ordinary names.
 - **Built-in operation names**: one set covering the three kinds of built-in
   operation, the *functions* (`upper`, `abs`, `as_integer`, `to_json`,
@@ -235,6 +235,8 @@ constraints below are the only exceptions.
   complete list is in §1.6. Lexically these are ordinary identifiers; they are
   reserved only against predicate names, and may be used freely as extensional
   columns and as variables.
+- **Type aliases**: file-local names for types (§2.2), separate from predicates
+  and variables. Aliases cannot redefine primitive type names, even when quoted.
 - **Predicate names**: a single namespace shared by extensional (EDB) and
   intensional (IDB) predicates. Each name is one or the other, never both
   (§4.6), and carries a fixed arity (§4.2).
@@ -293,7 +295,7 @@ A program is a sequence of statements, each terminated by a period (`.`):
 
 ```
 Program     ::= Statement*
-Statement   ::= ExtDecl | Rule | Query | Constraint
+Statement   ::= TypeAlias | ExtDecl | Rule | Query | Constraint
 ```
 
 Programs are analysed as a whole. Extensional declarations, rules, and
@@ -313,10 +315,11 @@ results at all.
 
 ```
 ExtDecl     ::= 'input' 'predicate' Identifier '^'? '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
-ColumnDecl  ::= Identifier (':' (PrimitiveType | StructuralType))? ('?')?
+ColumnDecl  ::= Identifier (':' (PrimitiveType | StructuralType | Identifier))? ('?')?
 StructuralType ::= '{' (TypeField (',' TypeField)*)? '}' | '[' TypeValue ']'
 TypeField   ::= (Identifier | StringLiteral) '?'? ':' TypeValue
-TypeValue   ::= (PrimitiveType | StructuralType) '?'?
+TypeValue   ::= (PrimitiveType | StructuralType | Identifier) '?'?
+TypeAlias   ::= 'type' Identifier '=' TypeValue '.'
 PrimitiveType ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 ```
 
@@ -367,8 +370,43 @@ so proven scalar fields can be used in typed operations (§5.1). Loaders validat
 nested values before insertion and report the offending column and JSON path.
 Module bindings check structural contracts against the supplied predicate's
 published type. The same structural syntax is available in rule-head annotations (§5.10).
-Type aliases, tuple declarations, open
-records and JSON Schema import are not supported.
+Tuple declarations, open records and JSON Schema import are not supported.
+
+#### Type aliases
+
+A `type` declaration gives a reusable name to a primitive or structural type:
+
+```prolog
+type Person = {name: string, age?: Age, scores: [Age?]}.
+type Age = integer.
+input predicate people(person: Person).
+person({"name": "Ada", "scores": [37]}: Person).
+next_age(P["age"] + 1) :- people(P).
+```
+
+Aliases are transparent: using `Person` has exactly the same meaning, storage,
+validation and published contract as writing its definition inline. They introduce
+no nominal identity, constructors or proof membership. An alias may be used in an
+input column, rule-head annotation (including after `as`), record field, array
+element, or another alias. `?` composes with nullability in the definition:
+`type Age = integer?.` makes both `Age` and `Age?` nullable integers.
+
+Names are case-sensitive and local to their source file. Forward references are
+allowed; unknown names, duplicate aliases and direct or indirect cycles are
+errors, including in unused declarations. A module resolves its aliases before
+its predicates are elaborated. Aliases are neither imported nor exported; module
+boundaries compare their expanded contracts, so files may use the same alias name
+for different types. In an incremental session, a successful chunk's aliases are
+available to later chunks; redefinition is rejected and reset clears them.
+
+A bare name after a head's `:` denotes an alias. On an erased witness, `_: B`
+retains its Boolean-refinement meaning when no alias `B` is declared. Write
+`_: (B)` to explicitly select the expression when a type alias has the same name.
+Compound refinement expressions retain their existing meaning.
+
+Recursive aliases and parameterized aliases are not supported. Expansion is
+bounded compiler work: excessive nesting or expansion is rejected, never replaced
+with a weaker contract. This limit does not restrict the size of runtime values.
 
 A column without `?` is emitted `NOT NULL`, and a `null` in its data is a load
 error rather than a silently missing value (§7). The one exception is the `null`
@@ -1448,13 +1486,14 @@ For reference, the complete grammar in BNF notation:
 ```
 Program        ::= Statement*
 
-Statement      ::= ExtDecl | Rule | Query | Constraint
+Statement      ::= TypeAlias | ExtDecl | Rule | Query | Constraint
 
 ExtDecl        ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
-ColumnDecl     ::= Identifier (':' (PrimitiveType | StructuralType))? ('?')?
+ColumnDecl     ::= Identifier (':' (PrimitiveType | StructuralType | Identifier))? ('?')?
 StructuralType ::= '{' (TypeField (',' TypeField)*)? '}' | '[' TypeValue ']'
 TypeField      ::= (Identifier | StringLiteral) '?'? ':' TypeValue
-TypeValue      ::= (PrimitiveType | StructuralType) '?'?
+TypeValue      ::= (PrimitiveType | StructuralType | Identifier) '?'?
+TypeAlias      ::= 'type' Identifier '=' TypeValue '.'
 PrimitiveType  ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)   -- module
                  | (STRING ('as' Identifier)?)                                    -- data file

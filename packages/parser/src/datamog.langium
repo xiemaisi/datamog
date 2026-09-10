@@ -14,7 +14,11 @@ entry Program:
 // --- Statements --------------------------------------------------------------
 
 Statement:
-    ExtDecl | Rule | Query;
+    TypeAlias | ExtDecl | Rule | Query;
+
+// Transparent, file-local aliases, expanded before module elaboration.
+TypeAlias:
+    'type' name=Identifier '=' value=TypeValue '.';
 
 // An input predicate: a parameter supplied from outside the rules (a data
 // file at the CLI, or a wired module output on import). The AST node keeps
@@ -45,7 +49,7 @@ Actual:
 // (applied in `parseRaw` via `defaultColumnTypes`, so every later stage sees a
 // concrete type). `a?` is a nullable untyped column, `a: integer?` a typed one.
 ColumnDecl:
-    name=Identifier (':' (type=PrimitiveType | shape=StructuralType))? (nullable?='?')?;
+    name=Identifier (':' (type=PrimitiveType | shape=StructuralType | alias=Identifier))? (nullable?='?')?;
 
 // Structural input-column types use JSON storage. Field presence and nested
 // value nullability are independent.
@@ -62,7 +66,7 @@ ArrayType:
     '[' element=TypeValue ']';
 
 TypeValue:
-    (type=PrimitiveType | shape=StructuralType) (nullable?='?')?;
+    (type=PrimitiveType | shape=StructuralType | alias=Identifier) (nullable?='?')?;
 
 PrimitiveType returns string:
     'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null';
@@ -132,11 +136,13 @@ HeadAtom:
 // A `_` position may instead carry a *refinement*: a proposition over the
 // other head positions, whose witness is erased. `PrimitiveType` is a keyword
 // set that `Identifier` does not re-admit, so `: integer` and `: Y > X` cannot
-// be confused. See doc/design/refinement-annotations.md.
+// be confused. Alias references precede expressions in lookahead; the alias
+// resolver preserves bare Boolean refinements on erased witnesses. See
+// doc/design/refinement-annotations.md.
 HeadTerm:
     Expression ({infer AnnotatedHeadTerm.expr=current}
-        ('as' name=Identifier (':' (type=PrimitiveType | shape=StructuralType) (nullable?='?')?)?
-        | ':' ((type=PrimitiveType | shape=StructuralType) (nullable?='?')? | refinement=Expression)))?;
+        ('as' name=Identifier (':' (type=PrimitiveType | shape=StructuralType | alias=Identifier) (nullable?='?')?)?
+        | ':' ((type=PrimitiveType | shape=StructuralType | alias=Identifier) (nullable?='?')? | refinement=Expression)))?;
 
 // Not referenced directly by the grammar — synthesised by post-processing
 // so downstream stages (analyzer, translator) can rely on the AggregateCall
@@ -369,7 +375,7 @@ FunctionCall:
 // longer enforces it — `Foo(X)` is a predicate, `foo` is a variable.
 // FunctionCall vs Variable in Primary, and Literal vs Filter in body
 // position, are disambiguated by whether `(` follows the identifier.
-// `input`, `output`, `error`, `predicate`, `from`, and `as` are contextual
+// `input`, `output`, `error`, `predicate`, `from`, `as`, and `type` are contextual
 // keywords: they lead the declaration / binding forms above, but are otherwise
 // ordinary identifiers, so a program can still name a predicate/column/variable
 // after them (they are common words: `from`/`to` are the usual columns of an
@@ -377,7 +383,7 @@ FunctionCall:
 // apart by lookahead: `input`/`output`/`error` followed by `predicate`; an
 // optional export identifier followed by `from`.
 Identifier returns string:
-    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as';
+    IDENT | QUOTED_IDENT | 'input' | 'output' | 'error' | 'predicate' | 'from' | 'as' | 'type';
 
 // JSON-style construction. Both literals produce a `value` (an array
 // or object). Element expressions of any primitive type are auto-lifted

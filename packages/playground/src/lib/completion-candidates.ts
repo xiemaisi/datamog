@@ -4,6 +4,7 @@ import {
   BUILTIN_FUNCTION_NAMES,
   BUILTIN_TYPE_NAMES,
   RESERVED_KEYWORDS,
+  collectTypeAliases,
   collectUserPredicates,
   collectVariablesInRule,
   findEnclosingRule,
@@ -72,6 +73,9 @@ export function collectCompletionCandidates(source: string, offset: number): Com
   }
   for (const name of BUILTIN_TYPE_NAMES) {
     candidates.push({ label: name, kind: "type", detail: "column type" });
+  }
+  for (const name of collectTypeAliases(program)) {
+    candidates.push({ label: name, kind: "type", detail: "type alias" });
   }
   const rule = findEnclosingRule(program, offset);
   if (rule) {

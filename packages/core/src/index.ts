@@ -99,6 +99,7 @@ export {
   BUILTIN_BODY_ATOM_NAMES,
   BUILTIN_FUNCTION_NAMES,
   collectUserPredicates,
+  collectTypeAliases,
   collectVariablesInRule,
   findEnclosingRule,
   type PredicateInfo,

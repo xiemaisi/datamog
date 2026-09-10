@@ -65,6 +65,7 @@ export type DatamogKeywordNames =
     | "predicate"
     | "string"
     | "true"
+    | "type"
     | "value"
     | "{"
     | "|"
@@ -109,6 +110,7 @@ export function isAggregateCall(item: unknown): item is AggregateCall {
 export interface AnnotatedHeadTerm extends langium.AstNode {
     readonly $container: HeadAtom;
     readonly $type: 'AnnotatedHeadTerm';
+    alias?: Identifier;
     expr: Expression;
     name?: Identifier;
     nullable: boolean;
@@ -119,6 +121,7 @@ export interface AnnotatedHeadTerm extends langium.AstNode {
 
 export const AnnotatedHeadTerm = {
     $type: 'AnnotatedHeadTerm',
+    alias: 'alias',
     expr: 'expr',
     name: 'name',
     nullable: 'nullable',
@@ -252,6 +255,7 @@ export function isBracketAccess(item: unknown): item is BracketAccess {
 export interface ColumnDecl extends langium.AstNode {
     readonly $container: ExtDecl;
     readonly $type: 'ColumnDecl';
+    alias?: Identifier;
     name: Identifier;
     nullable: boolean;
     shape?: StructuralType;
@@ -260,6 +264,7 @@ export interface ColumnDecl extends langium.AstNode {
 
 export const ColumnDecl = {
     $type: 'ColumnDecl',
+    alias: 'alias',
     name: 'name',
     nullable: 'nullable',
     shape: 'shape',
@@ -402,10 +407,10 @@ export function isHeadTerm(item: unknown): item is HeadTerm {
     return reflection.isInstance(item, HeadTerm.$type);
 }
 
-export type Identifier = 'as' | 'error' | 'from' | 'input' | 'output' | 'predicate' | string;
+export type Identifier = 'as' | 'error' | 'from' | 'input' | 'output' | 'predicate' | 'type' | string;
 
 export function isIdentifier(item: unknown): item is Identifier {
-    return item === 'input' || item === 'output' || item === 'error' || item === 'predicate' || item === 'from' || item === 'as' || (typeof item === 'string' && (/[a-zA-Z_][a-zA-Z0-9_]*/.test(item) || /`(\\.|[^`\\\n\r])+`/.test(item)));
+    return item === 'input' || item === 'output' || item === 'error' || item === 'predicate' || item === 'from' || item === 'as' || item === 'type' || (typeof item === 'string' && (/[a-zA-Z_][a-zA-Z0-9_]*/.test(item) || /`(\\.|[^`\\\n\r])+`/.test(item)));
 }
 
 export interface Literal extends langium.AstNode {
@@ -609,7 +614,7 @@ export function isSlice(item: unknown): item is Slice {
     return reflection.isInstance(item, Slice.$type);
 }
 
-export type Statement = ExtDecl | Query | Rule;
+export type Statement = ExtDecl | Query | Rule | TypeAlias;
 
 export const Statement = {
     $type: 'Statement'
@@ -660,6 +665,23 @@ export function isSubscript(item: unknown): item is Subscript {
     return reflection.isInstance(item, Subscript.$type);
 }
 
+export interface TypeAlias extends langium.AstNode {
+    readonly $container: Program;
+    readonly $type: 'TypeAlias';
+    name: Identifier;
+    value: TypeValue;
+}
+
+export const TypeAlias = {
+    $type: 'TypeAlias',
+    name: 'name',
+    value: 'value'
+} as const;
+
+export function isTypeAlias(item: unknown): item is TypeAlias {
+    return reflection.isInstance(item, TypeAlias.$type);
+}
+
 export interface TypeField extends langium.AstNode {
     readonly $container: RecordType;
     readonly $type: 'TypeField';
@@ -680,8 +702,9 @@ export function isTypeField(item: unknown): item is TypeField {
 }
 
 export interface TypeValue extends langium.AstNode {
-    readonly $container: ArrayType | TypeField;
+    readonly $container: ArrayType | TypeAlias | TypeField;
     readonly $type: 'TypeValue';
+    alias?: Identifier;
     nullable: boolean;
     shape?: StructuralType;
     type?: PrimitiveType;
@@ -689,6 +712,7 @@ export interface TypeValue extends langium.AstNode {
 
 export const TypeValue = {
     $type: 'TypeValue',
+    alias: 'alias',
     nullable: 'nullable',
     shape: 'shape',
     type: 'type'
@@ -778,6 +802,7 @@ export type DatamogAstType = {
     StringLiteral: StringLiteral
     StructuralType: StructuralType
     Subscript: Subscript
+    TypeAlias: TypeAlias
     TypeField: TypeField
     TypeValue: TypeValue
     UnaryExpr: UnaryExpr
@@ -814,6 +839,9 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
         AnnotatedHeadTerm: {
             name: AnnotatedHeadTerm.$type,
             properties: {
+                alias: {
+                    name: AnnotatedHeadTerm.alias
+                },
                 expr: {
                     name: AnnotatedHeadTerm.expr
                 },
@@ -931,6 +959,9 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
         ColumnDecl: {
             name: ColumnDecl.$type,
             properties: {
+                alias: {
+                    name: ColumnDecl.alias
+                },
                 name: {
                     name: ColumnDecl.name
                 },
@@ -1246,6 +1277,18 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        TypeAlias: {
+            name: TypeAlias.$type,
+            properties: {
+                name: {
+                    name: TypeAlias.name
+                },
+                value: {
+                    name: TypeAlias.value
+                }
+            },
+            superTypes: [Statement.$type]
+        },
         TypeField: {
             name: TypeField.$type,
             properties: {
@@ -1265,6 +1308,9 @@ export class DatamogAstReflection extends langium.AbstractAstReflection {
         TypeValue: {
             name: TypeValue.$type,
             properties: {
+                alias: {
+                    name: TypeValue.alias
+                },
                 nullable: {
                     name: TypeValue.nullable,
                     defaultValue: false

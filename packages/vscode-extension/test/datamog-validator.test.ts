@@ -173,3 +173,14 @@ describe("datamog-validator", () => {
     }
   });
 });
+
+test("type aliases are expanded before editor contract validation", () => {
+  const errors = (source: string) => runValidator(source).filter((d) => d.severity === "error");
+  expect(
+    errors('type Person = {age: integer}. p({"age": 41}: Person). q(P["age"] + 1) :- p(P).'),
+  ).toEqual([]);
+  expect(errors('type Person = {age: integer}. p({"age": "bad"}: Person).')[0]?.message).toContain(
+    "structural annotation",
+  );
+  expect(errors("input predicate p(x: Missing).")[0]?.message).toContain("Unknown type alias");
+});

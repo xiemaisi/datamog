@@ -9,7 +9,7 @@
 // these lists.
 
 // Lexical keywords, for editor highlighting and keyword completion. `input`,
-// `output`, `error`, `predicate`, `from`, and `as` are *contextual* keywords:
+// `output`, `error`, `predicate`, `from`, `as`, and `type` are *contextual* keywords:
 // they lead the `input predicate` / `output predicate` / `error predicate`
 // declaration and `:=` binding forms but are otherwise ordinary identifiers (the
 // grammar's `Identifier` rule accepts them), so a program may still name a
@@ -24,6 +24,7 @@ export const RESERVED_KEYWORDS = [
   "predicate",
   "from",
   "as",
+  "type",
   "not",
   "in",
   "true",

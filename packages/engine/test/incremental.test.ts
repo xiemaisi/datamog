@@ -4,6 +4,27 @@ import { IncrementalSession } from "../src/incremental.ts";
 import type { ExtensionalLoader } from "../src/loader.ts";
 
 describe("IncrementalSession", () => {
+  test("aliases persist across chunks and failed chunks do not publish definitions", async () => {
+    const sqlite = await createSqlite();
+    try {
+      const session = new IncrementalSession(sqlite);
+      await session.addStatements("type Person = {age: integer}.");
+      await session.addStatements('p({"age": 41}: Person).');
+      const result = await session.addStatements('q(P["age"] + 1) :- p(P). ?- q(N).');
+      expect(result.queries[0]!.rows).toEqual([{ N: 42 }]);
+      await expect(session.addStatements("type Person = string.")).rejects.toThrow(
+        "Duplicate type alias",
+      );
+      await expect(
+        session.addStatements('type Failed = integer. bad("x": Failed).'),
+      ).rejects.toThrow();
+      await expect(session.addStatements("good(1: Failed).")).rejects.toThrow("Unknown type alias");
+      await session.addStatements("type Failed = integer. good(1: Failed).");
+    } finally {
+      await sqlite.close();
+    }
+  });
+
   test("a session can ask several `?-` queries in turn (queries are transient)", async () => {
     // Regression: the one-default-output rule must apply to a file, not to the
     // accumulated REPL session, so a second query must not be rejected.

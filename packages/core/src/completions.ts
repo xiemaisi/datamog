@@ -28,6 +28,18 @@ export interface PredicateInfo {
   columns?: readonly string[];
 }
 
+/** File-local type aliases, including partially written declarations in editors. */
+export function collectTypeAliases(program: Program): string[] {
+  return [
+    ...new Set(
+      program.statements
+        .filter((s) => s.$type === "TypeAlias")
+        .map((s) => s.name)
+        .filter(Boolean),
+    ),
+  ];
+}
+
 /** Built-in function names usable in expressions (`upper`, `sqrt`, `to_json`, …). */
 export const BUILTIN_FUNCTION_NAMES: readonly string[] = Array.from(BUILTINS.keys()).sort();
 
