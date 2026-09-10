@@ -20,6 +20,7 @@
     "vscode": {
       "extensions": [
         "anthropic.claude-code",
+        "openai.chatgpt",
         "biomejs.biome",
         "ms-python.python",
         "ms-toolsai.jupyter"
