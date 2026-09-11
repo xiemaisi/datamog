@@ -398,3 +398,28 @@ does not by itself expose those features as declaration syntax.
 Recursive structural aliases, independent datatype declarations and freely
 constructible ADTs remain out of scope. JSON Schema interoperability is later
 work; this foundation neither accepts schemas nor claims schema conformance.
+
+
+## Continuation checkpoint
+
+At `471a7c14`, the foundation and the hardening work described above are
+implemented. Validation at that revision: `bun run test` passed 2,306 tests
+with 72 skips and no failures; `bun run typecheck` and `bun run check` passed.
+The most recent step prepares structural input validators once per batch and
+removes repeated traversal when reporting nested nullable failures.
+
+Suggested follow-up work, rather than outstanding requirements for this foundation:
+
+1. Measure representative large programs and structural input batches before
+   changing the provisional work budgets. Separate inference, exact relation
+   checks, validator preparation and row validation so the measurements explain
+   which limit or repeated work matters.
+2. If proof signatures are to become declarations, write the syntax and module
+   boundary design first. Specify nominal identity across module instances,
+   constructor payload contracts and how published contracts hide inferred facts;
+   retain the distinction between a JSON shape and established proof membership.
+3. Choose any additional structural declaration syntax explicitly. Internal unions,
+   tuples and open records are not a commitment to expose all three at once.
+
+Continue to commit each completed step separately. The implementation does not
+require a new syntax feature merely to finish the existing foundation.
