@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { parse } from "datamog-parser";
 import { analyze } from "../src/analyzer.ts";
+import { inferSemanticColumns } from "../src/semantic-inference.ts";
 import {
   ANY_VALUE,
   NEVER,
@@ -74,11 +75,18 @@ test("published annotations continue to govern legacy validation", () => {
   expect(infer(`p({"x": 1}). q(P["x"] + 1) :- p(P).`).columnTypes.get("q")).toEqual(["integer"]);
 });
 
-test("exhausting propagation work discards unfinished precision", () => {
+test("long reverse-ordered dependency chains retain structural precision", () => {
   const rules = Array.from({ length: 130 }, (_, i) => `p${i}(X) :- p${i + 1}(X).`);
   const typed = infer(`${rules.join("\n")}\np130({"x": 1}).`);
-  expect(typed.semanticColumnTypes.get("p0")).toEqual([ANY_VALUE]);
-  expect(typed.semanticColumnTypes.get("p130")).toEqual([ANY_VALUE]);
+  const shape = {
+    kind: "record",
+    fields: [{ name: "x", type: int, optional: false }],
+    additional: NEVER,
+  };
+  for (const columns of [typed.semanticColumnTypes, typed.publishedSemanticColumnTypes]) {
+    expect(columns.get("p0")).toEqual([shape]);
+    expect(columns.get("p130")).toEqual([shape]);
+  }
 });
 
 test("dynamic projections retain element shapes across predicate boundaries", () => {
@@ -118,4 +126,32 @@ test("dynamic projections preserve nullable and mixed element alternatives", () 
     result(X + 1) :- selected(X).
   `),
   ).toThrow();
+});
+
+test("work exhaustion discards all unfinished columns, payloads and head contributions", () => {
+  const typed = infer("p(1). colour() :: Red. q(P) :: Wrap(P) :- P : colour.");
+  for (const maxRuleEvaluations of [0, 1]) {
+    for (const inferred of [undefined, typed.semanticColumnTypes]) {
+      const result = inferSemanticColumns(typed, inferred, { maxRuleEvaluations });
+      for (const [name, rules] of typed.rules) {
+        expect(result.semanticColumnTypes.get(name)).toEqual(
+          rules[0]!.head.args.map(() => ANY_VALUE),
+        );
+        for (const rule of rules)
+          expect(result.headContributions.get(rule)).toEqual(rule.head.args.map(() => ANY_VALUE));
+      }
+      expect(result.proofTypes.payload({ predicate: "q" }, "Wrap")).toEqual([ANY_VALUE]);
+    }
+  }
+});
+
+test("payload changes wake consumers even when nominal columns do not change", () => {
+  const typed = infer(`
+    result(N) :- P : box, P = Box(N).
+    box() :: Box(N) :- numbers(N).
+    numbers(N) :- seed(N).
+    seed(7).
+  `);
+  expect(typed.semanticColumnTypes.get("result")).toEqual([int]);
+  expect(typed.publishedSemanticColumnTypes.get("result")).toEqual([int]);
 });

@@ -85,7 +85,7 @@ test("growing fields, tuples and alternatives trigger width limits", () => {
   }
   expect(alternatives).toEqual(ANY_VALUE);
   expect(boundSemanticType({ kind: "tuple", elements: [int, int, int, int] }, budget)).toEqual(
-    ANY_VALUE,
+    array(int),
   );
   expect(
     boundSemanticType(
@@ -96,7 +96,11 @@ test("growing fields, tuples and alternatives trigger width limits", () => {
       },
       budget,
     ),
-  ).toEqual(ANY_VALUE);
+  ).toEqual({
+    kind: "record",
+    fields: ["a", "b", "c"].map((name) => ({ name, type: int, optional: false })),
+    additional: ANY_VALUE,
+  });
 });
 
 test("bounds are applied before traversing deeply nested input", () => {
@@ -113,4 +117,26 @@ test("invalid budgets are rejected", () => {
     { maxDepth: 1, maxWidth: Number.POSITIVE_INFINITY },
   ])
     expect(() => boundSemanticType(int, invalid)).toThrow("Type budget");
+});
+
+test("wide record summaries are deterministic and preserve selected field contracts", () => {
+  const fields = ["d", "b", "c", "a"].map((name) => ({ name, type: int, optional: false }));
+  const source: SemanticType = { kind: "record", fields, additional: NEVER };
+  const summary = boundSemanticType(source, budget);
+  expect(isSemanticSubtype(source, summary)).toBe(true);
+  expect(boundSemanticType({ ...source, fields: [...fields].reverse() }, budget)).toEqual(summary);
+  expect(boundSemanticType(summary, budget)).toEqual(summary);
+});
+
+test("wide tuples preserve element types and summarize mixed alternatives soundly", () => {
+  for (const elements of [
+    [int, int, int, int],
+    [int, str, int, str],
+  ]) {
+    const source: SemanticType = { kind: "tuple", elements };
+    const summary = boundSemanticType(source, budget);
+    expect(summary).toEqual(array(unionType(...elements)));
+    expect(isSemanticSubtype(source, summary)).toBe(true);
+    expect(boundSemanticType(summary, budget)).toEqual(summary);
+  }
 });

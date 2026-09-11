@@ -178,13 +178,45 @@ function recordField(type: Extract<SemanticType, { kind: "record" }>, name: stri
 
 /** Exact intersection of the represented types, distributing over unions. */
 export function intersectTypes(left: SemanticType, right: SemanticType): SemanticType {
+  return intersect(left, right);
+}
+
+const INTERSECTION_LIMIT = Symbol("intersection work limit");
+
+/**
+ * Exact intersection or unknown on work exhaustion, never a partial result.
+ * Inference bounds its input trees before calling this; this budget limits the
+ * recursive pair comparisons, not the size of arbitrary caller-supplied trees.
+ */
+export function intersectTypesWithinBudget(
+  left: SemanticType,
+  right: SemanticType,
+  maxWork: number,
+): SemanticType | undefined {
+  if (!Number.isSafeInteger(maxWork) || maxWork < 0)
+    throw new Error("Intersection work limit must be a nonnegative safe integer");
+  try {
+    return intersect(left, right, { remaining: maxWork });
+  } catch (error) {
+    if (error === INTERSECTION_LIMIT) return undefined;
+    throw error;
+  }
+}
+
+function intersect(
+  left: SemanticType,
+  right: SemanticType,
+  budget?: { remaining: number },
+): SemanticType {
+  if (budget && --budget.remaining < 0) throw INTERSECTION_LIMIT;
+  const recurse = (a: SemanticType, b: SemanticType) => intersect(a, b, budget);
   const a = normalizeType(left);
   const b = normalizeType(right);
   if (a.kind === "never" || b.kind === "never") return NEVER;
   if (a.kind === "value") return b;
   if (b.kind === "value" || typeKey(a) === typeKey(b)) return a;
-  if (a.kind === "union") return unionType(...a.members.map((member) => intersectTypes(member, b)));
-  if (b.kind === "union") return unionType(...b.members.map((member) => intersectTypes(a, member)));
+  if (a.kind === "union") return unionType(...a.members.map((member) => recurse(member, b)));
+  if (b.kind === "union") return unionType(...b.members.map((member) => recurse(a, member)));
   if (a.kind === "scalar" && b.kind === "scalar") {
     return (a.name === "integer" && b.name === "float") ||
       (a.name === "float" && b.name === "integer")
@@ -192,20 +224,20 @@ export function intersectTypes(left: SemanticType, right: SemanticType): Semanti
       : NEVER;
   }
   if (a.kind === "array" && b.kind === "array") {
-    return { kind: "array", element: intersectTypes(a.element, b.element) };
+    return { kind: "array", element: recurse(a.element, b.element) };
   }
-  if (a.kind === "array" && b.kind === "tuple") return intersectTypes(b, a);
+  if (a.kind === "array" && b.kind === "tuple") return recurse(b, a);
   if (a.kind === "tuple" && b.kind === "array") {
     return normalizeType({
       kind: "tuple",
-      elements: a.elements.map((element) => intersectTypes(element, b.element)),
+      elements: a.elements.map((element) => recurse(element, b.element)),
     });
   }
   if (a.kind === "tuple" && b.kind === "tuple") {
     if (a.elements.length !== b.elements.length) return NEVER;
     return normalizeType({
       kind: "tuple",
-      elements: a.elements.map((element, i) => intersectTypes(element, b.elements[i]!)),
+      elements: a.elements.map((element, i) => recurse(element, b.elements[i]!)),
     });
   }
   if (a.kind === "record" && b.kind === "record") {
@@ -217,11 +249,11 @@ export function intersectTypes(left: SemanticType, right: SemanticType): Semanti
         const to = recordField(b, name);
         return {
           name,
-          type: intersectTypes(from.type, to.type),
+          type: recurse(from.type, to.type),
           optional: from.optional && to.optional,
         };
       }),
-      additional: intersectTypes(a.additional, b.additional),
+      additional: recurse(a.additional, b.additional),
     });
   }
   return NEVER;

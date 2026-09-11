@@ -74,8 +74,10 @@ of structure and eight fields, tuple components, or union alternatives per node.
 These defaults are provisional compiler policy, not restrictions on runtime data.
 `boundSemanticType` replaces a subtree exceeding either limit with `value`.
 Scalars and nominal proof references are leaves and retain their identities even
-at the depth boundary. A wide record or tuple currently widens to `value`, rather
-than attempting a more precise summary. Bounding visits children within the budget
+at the depth boundary. A wide record retains the first eight fields in name order and allows arbitrary
+additional fields. A wide tuple becomes an array whose element type covers every
+component. These summaries preserve useful precision without retaining unbounded
+field counts or tuple lengths. Bounding visits children within the budget
 before normalization, so deeply nested inputs do not require an unbounded walk.
 
 `widenSemanticType(previous, contribution)` accumulates producer types. Start at
@@ -89,9 +91,12 @@ For a fixed program's finite field/proof names, fixed depth and width give a fin
 representation domain. Accumulation only widens. Tests exercise recursive array
 and record producers, growing alternatives, oversized records and tuples, subtype
 coverage, idempotence, and input nesting beyond the JavaScript call stack limit.
-This bounds producer state; it does not bound the cost of arbitrary exact
-intersection or establish runtime finiteness. Inference integration must also
-control transient types before expensive structural operations.
+This bounds producer state and does not establish runtime finiteness. Local
+variable refinement bounds both input trees before intersection and caps recursive
+pair comparisons at 4,096. Exhaustion keeps the previous approximation, never a
+partial intersection; a successful result is bounded and must still be provably
+narrower. The exact intersection API remains available for structural relations
+and contract validation; its cost on arbitrary caller-supplied types is not capped.
 
 ## Projections and proofs
 
@@ -160,10 +165,14 @@ External `value` data remains opaque. Proof terms use retained lowering metadata
 The inference pass does not itself validate structural declarations or matches;
 proof-match validation runs afterward using consumer-visible contracts.
 
-A secondary 128-round work limit bounds propagation overhead. If it is exhausted,
-all intensional columns and constructor payloads fall back to `value`; an unfinished, potentially too-narrow
-fixed point is never published. Worklist propagation can improve this fallback for
-large dependency graphs later. Integration tests cover literal shape propagation,
+A worklist initially schedules every rule and then requeues only readers of a
+changed predicate or constructor payload. Reads of nominal signatures register
+dependencies too: a payload can change while its column keeps the same proof
+identity. A secondary limit of 128 rule evaluations per program rule bounds total
+propagation work without imposing a 128-hop limit on dependency chains. If the
+limit is exhausted, all intensional columns, constructor payloads and per-rule
+contributions fall back to `value`; no unfinished, potentially too-narrow fixed
+point is published. Integration tests cover literal shape propagation,
 equality source order, nullable inputs, producer alternatives, missing/null values,
 aggregates, recursion and preservation of legacy checking/storage behavior.
 
@@ -299,7 +308,9 @@ Registry reference validation is implemented. Exposing proof signatures as
 user-facing declarations still requires a separate syntax and boundary design;
 registry closure alone grants neither a new contract nor proof membership.
 Expression/projection typing is now shared between semantic inference and operand
-lowering. Dependency-driven propagation and inference precision are next. Inferred types, published contracts,
+lowering. Dependency-driven propagation, bounded local intersections and more
+precise wide-shape summaries are implemented. Diagnostics and editor navigation
+are next. Inferred types, published contracts,
 nullness and partiality must remain distinct during this migration. Structural
 input declarations already validate external data before trusting its shape.
 

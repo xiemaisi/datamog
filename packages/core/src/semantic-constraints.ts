@@ -1,7 +1,7 @@
 /** Shared-variable refinement for structural inference and operand lowering. */
 import {
   type SemanticType,
-  intersectTypes,
+  intersectTypesWithinBudget,
   isSemanticSubtype,
   sameSemanticType,
 } from "./semantic-type.ts";
@@ -24,7 +24,13 @@ export function constrainSemanticVariable(
     vars.set(name, boundSemanticType(requirement));
     return true;
   }
-  const narrowed = boundSemanticType(intersectTypes(previous, requirement));
+  const intersection = intersectTypesWithinBudget(
+    boundSemanticType(previous),
+    boundSemanticType(requirement),
+    4096,
+  );
+  if (!intersection) return false;
+  const narrowed = boundSemanticType(intersection);
   if (!isSemanticSubtype(narrowed, previous) || sameSemanticType(previous, narrowed)) return false;
   vars.set(name, narrowed);
   return true;

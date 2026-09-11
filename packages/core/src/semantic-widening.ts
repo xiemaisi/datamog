@@ -1,6 +1,7 @@
-/** Bounded producer accumulation for future structural type inference. */
+/** Bounded producer accumulation for structural type inference. */
 import {
   ANY_VALUE,
+  NEVER,
   type SemanticType,
   isSemanticSubtype,
   normalizeType,
@@ -58,18 +59,31 @@ function bound(type: SemanticType, depth: number, width: number): SemanticType {
   switch (type.kind) {
     case "array":
       return { kind: "array", element: child(type.element) };
-    case "tuple":
-      return type.elements.length > width
-        ? ANY_VALUE
-        : normalizeType({ kind: "tuple", elements: type.elements.map(child) });
-    case "record":
-      return type.fields.length > width
-        ? ANY_VALUE
-        : normalizeType({
-            kind: "record",
-            fields: type.fields.map((field) => ({ ...field, type: child(field.type) })),
-            additional: child(type.additional),
-          });
+    case "tuple": {
+      if (type.elements.length <= width)
+        return normalizeType({ kind: "tuple", elements: type.elements.map(child) });
+      let element = NEVER;
+      for (const item of type.elements) {
+        element = widenSemanticType(element, item, { maxDepth: depth - 1, maxWidth: width });
+        if (element.kind === "value") break;
+      }
+      return { kind: "array", element };
+    }
+    case "record": {
+      const wide = type.fields.length > width;
+      // Pick fields by name, independent of their source order. Undeclared
+      // fields remain permitted when the width limit hides part of the shape.
+      const fields = wide
+        ? [...type.fields]
+            .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+            .slice(0, width)
+        : type.fields;
+      return normalizeType({
+        kind: "record",
+        fields: fields.map((field) => ({ ...field, type: child(field.type) })),
+        additional: wide ? ANY_VALUE : child(type.additional),
+      });
+    }
     case "union": {
       if (type.members.length > width) return ANY_VALUE;
       const result = unionType(...type.members.map(child));

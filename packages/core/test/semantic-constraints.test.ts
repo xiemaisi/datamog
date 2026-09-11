@@ -6,6 +6,9 @@ import {
   ANY_VALUE,
   NEVER,
   type SemanticType,
+  intersectTypes,
+  intersectTypesWithinBudget,
+  isSemanticSubtype,
   projectProofPayload,
   scalarType,
   unionType,
@@ -86,7 +89,25 @@ test("a budget boundary cannot widen a variable while applying a requirement", (
   });
   const previous = shape("a");
   const vars = new Map([["X", previous]]);
-  // The exact intersection has ten fields, exceeding the current width budget.
-  expect(constrainSemanticVariable(vars, "X", shape("b"))).toBe(false);
-  expect(vars.get("X")).toEqual(previous);
+  // Summarizing ten fields may retain extra requirements, but must not lose
+  // any of the previous ones, regardless of which field names survive.
+  constrainSemanticVariable(vars, "X", shape("b"));
+  expect(isSemanticSubtype(vars.get("X")!, previous)).toBe(true);
+});
+
+test("intersection work exhaustion returns unknown instead of a partial intersection", () => {
+  const left = unionType(int, str, { kind: "array", element: int });
+  const right = unionType(int, { kind: "array", element: scalarType("float") });
+  expect(intersectTypesWithinBudget(left, right, 1)).toBeUndefined();
+  expect(intersectTypesWithinBudget(left, right, 100)).toEqual(intersectTypes(left, right));
+  expect(() => intersectTypesWithinBudget(left, right, -1)).toThrow("Intersection work limit");
+});
+
+test("deep requirements are bounded before local intersection", () => {
+  let requirement = int;
+  for (let i = 0; i < 20000; i++) requirement = { kind: "array", element: requirement };
+  const previous: SemanticType = { kind: "array", element: ANY_VALUE };
+  const vars = new Map([["X", previous]]);
+  expect(() => constrainSemanticVariable(vars, "X", requirement)).not.toThrow();
+  expect(isSemanticSubtype(vars.get("X")!, previous)).toBe(true);
 });
