@@ -207,23 +207,31 @@ export function inferSemanticColumns(
     }
   }
   if (pending.size === 0) return finish(columns);
-  // Exhaustion must not publish a partial, potentially too-narrow fixed point.
-  // Include rules never visited when a caller supplies a very small work limit.
-  for (const rule of [...program.rules.values()].flat())
-    headContributions.set(
-      rule,
-      rule.head.args.map(() => ANY_VALUE),
-    );
-  for (const name of program.rules.keys()) {
+  // Only unfinished predicates and their transitive readers can still change.
+  // Every unvisited rule remains pending. Evaluated rules have registered all
+  // reads needed for their current approximation, including proof signatures;
+  // changing any of those inputs invalidates that approximation and its readers.
+  // Walk the dependency closure before replacing any state, preserving completed
+  // producers upstream and unrelated components downstream of other inputs.
+  const affected = new Set([...pending].map((rule) => rule.head.predicate));
+  for (const name of affected) {
+    for (const reader of dependents.get(name) ?? []) affected.add(reader.head.predicate);
+  }
+  for (const name of affected) {
     columns.set(
       name,
       program.columnTypes.get(name)!.map(() => ANY_VALUE),
     );
-  }
-  for (const ctors of signatures.values()) {
-    for (const [name, payload] of ctors)
-      ctors.set(
-        name,
+    // All siblings contribute to a predicate's contract. Even a completed rule
+    // must not leave a narrow contribution behind for an affected predicate.
+    for (const rule of program.rules.get(name)!)
+      headContributions.set(
+        rule,
+        rule.head.args.map(() => ANY_VALUE),
+      );
+    for (const [ctorName, payload] of signatures.get(name) ?? [])
+      signatures.get(name)!.set(
+        ctorName,
         payload.map(() => ANY_VALUE),
       );
   }

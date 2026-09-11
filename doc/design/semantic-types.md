@@ -182,9 +182,12 @@ changed predicate or constructor payload. Reads of nominal signatures register
 dependencies too: a payload can change while its column keeps the same proof
 identity. A secondary limit of 128 rule evaluations per program rule bounds total
 propagation work without imposing a 128-hop limit on dependency chains. If the
-limit is exhausted, all intensional columns, constructor payloads and per-rule
-contributions fall back to `value`; no unfinished, potentially too-narrow fixed
-point is published. Integration tests cover literal shape propagation,
+limit is exhausted, pending predicates and their transitive readers fall back to
+`value`, including their constructor payloads and every sibling rule's contribution.
+The dependency closure includes proof-signature reads as well as relation reads.
+Unvisited rules are still pending, so their results cannot be mistaken for completed
+inference. Completed producers upstream and unrelated components retain their
+precision; no unfinished, potentially too-narrow fixed point is published. Integration tests cover literal shape propagation,
 equality source order, nullable inputs, producer alternatives, missing/null values,
 aggregates, recursion and preservation of legacy checking/storage behavior.
 
@@ -329,10 +332,12 @@ copies never supply navigation spans, and Boolean refinements are not alias link
 ## Remaining scope
 
 The foundation keeps inferred facts, published contracts, nullness and partiality
-separate. The worklist still falls back globally if its work budget is exhausted;
-component-local fallback could preserve unrelated precision later. Structural
-subtyping remains sound but incomplete for collective union coverage, and exact
-structural operations on arbitrary caller-supplied types have no global work cap.
+separate. Work-budget fallback preserves completed types outside the dependency
+closure of unfinished predicates. Its treatment of affected predicates remains
+conservative: all columns, payloads and sibling contributions are widened together.
+Structural subtyping remains sound but incomplete for collective union coverage,
+and exact structural operations on arbitrary caller-supplied types have no global
+work cap.
 The inference budgets and summary choices remain provisional compiler policy.
 
 Exposing proof signatures as user-facing declarations requires a separate syntax

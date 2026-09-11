@@ -10,6 +10,7 @@ import {
   scalarType,
   unionType,
 } from "../src/semantic-type.ts";
+import { validateStructuralHeadAnnotations } from "../src/structural-declarations.ts";
 import { inferTypes } from "../src/types.ts";
 
 const infer = (source: string) => inferTypes(analyze(parse(source)));
@@ -134,11 +135,12 @@ test("work exhaustion discards all unfinished columns, payloads and head contrib
     for (const inferred of [undefined, typed.semanticColumnTypes]) {
       const result = inferSemanticColumns(typed, inferred, { maxRuleEvaluations });
       for (const [name, rules] of typed.rules) {
-        expect(result.semanticColumnTypes.get(name)).toEqual(
-          rules[0]!.head.args.map(() => ANY_VALUE),
-        );
-        for (const rule of rules)
-          expect(result.headContributions.get(rule)).toEqual(rule.head.args.map(() => ANY_VALUE));
+        const expected =
+          name === "p" && maxRuleEvaluations === 1
+            ? [int]
+            : rules[0]!.head.args.map(() => ANY_VALUE);
+        expect(result.semanticColumnTypes.get(name)).toEqual(expected);
+        for (const rule of rules) expect(result.headContributions.get(rule)).toEqual(expected);
       }
       expect(result.proofTypes.payload({ predicate: "q" }, "Wrap")).toEqual([ANY_VALUE]);
     }
@@ -154,4 +156,114 @@ test("payload changes wake consumers even when nominal columns do not change", (
   `);
   expect(typed.semanticColumnTypes.get("result")).toEqual([int]);
   expect(typed.publishedSemanticColumnTypes.get("result")).toEqual([int]);
+});
+
+test("exhaustion preserves completed producers and independent published contracts", () => {
+  const typed = infer(`
+    stable({"ok": 1}: {ok: float}).
+    independent(X) :- stable(X).
+    tail(X: {pending: integer}) :- middle(X).
+    middle(X) :- start(X).
+    start({"pending": 1}).
+  `);
+  for (const inferred of [undefined, typed.semanticColumnTypes]) {
+    const complete = inferSemanticColumns(typed, inferred);
+    const partial = inferSemanticColumns(typed, inferred, { maxRuleEvaluations: 5 });
+    for (const name of ["stable", "independent", "start"]) {
+      expect(partial.semanticColumnTypes.get(name)).toEqual(complete.semanticColumnTypes.get(name));
+      for (const rule of typed.rules.get(name)!)
+        expect(partial.headContributions.get(rule)).toEqual(complete.headContributions.get(rule));
+    }
+    for (const name of ["middle", "tail"]) {
+      expect(partial.semanticColumnTypes.get(name)).toEqual([ANY_VALUE]);
+      for (const rule of typed.rules.get(name)!)
+        expect(partial.headContributions.get(rule)).toEqual([ANY_VALUE]);
+    }
+    // An unfinished contribution cannot establish a structural head contract.
+    expect(() => validateStructuralHeadAnnotations(partial.headContributions)).toThrow(
+      "structural annotation",
+    );
+    expect(() => validateStructuralHeadAnnotations(complete.headContributions)).not.toThrow();
+  }
+});
+
+test("exhaustion widens dependent proof payloads but retains independent signatures", () => {
+  const typed = infer(`
+    stable() :: Constant(7).
+    wrapped() :: Stable(P) :- P : stable.
+    result(N) :- P : box, P = Box(N).
+    box() :: Box(N) :- numbers(N).
+    numbers(N) :- seed(N).
+    seed(7).
+  `);
+  for (const inferred of [undefined, typed.semanticColumnTypes]) {
+    const result = inferSemanticColumns(typed, inferred, { maxRuleEvaluations: 6 });
+    expect(result.proofTypes.payload({ predicate: "stable" }, "Constant")).toEqual([int]);
+    expect(result.proofTypes.payload({ predicate: "wrapped" }, "Stable")).toEqual([
+      { kind: "proof", id: { predicate: "stable" } },
+    ]);
+    expect(result.proofTypes.payload({ predicate: "box" }, "Box")).toEqual([ANY_VALUE]);
+    for (const name of ["numbers", "box", "result"])
+      expect(result.semanticColumnTypes.get(name)).toEqual([ANY_VALUE]);
+    expect(result.semanticColumnTypes.get("seed")).toEqual([int]);
+    expect(() => result.proofTypes.validateReferences()).not.toThrow();
+  }
+});
+
+test("exhaustion propagates around recursive components and clears all sibling contributions", () => {
+  const typed = infer('stable({"ok": 1}). p(1). p([X]) :- q(X). q(X) :- p(X).');
+  const result = inferSemanticColumns(typed, undefined, { maxRuleEvaluations: 4 });
+  expect(result.semanticColumnTypes.get("stable")).toEqual(typed.semanticColumnTypes.get("stable"));
+  for (const name of ["p", "q"]) {
+    expect(result.semanticColumnTypes.get(name)).toEqual([ANY_VALUE]);
+    for (const rule of typed.rules.get(name)!)
+      expect(result.headContributions.get(rule)).toEqual([ANY_VALUE]);
+  }
+});
+
+test("every work-budget cutoff covers the completed column and payload types", () => {
+  const rules = [
+    'stable({"ok": 1}: {ok: float}).',
+    "copy(X) :- stable(X).",
+    "result(N) :- P : box, P = Box(N).",
+    "wrapped() :: Wrap(P) :- P : box.",
+    "box() :: Box(N) :- numbers(N).",
+    "numbers(N) :- seed(N).",
+    "seed(7).",
+    'seed("s").',
+  ];
+  for (const ordered of [rules, [...rules].reverse()]) {
+    const typed = infer(ordered.join("\n"));
+    for (const inferred of [undefined, typed.semanticColumnTypes]) {
+      const complete = inferSemanticColumns(typed, inferred);
+      for (
+        let maxRuleEvaluations = 0;
+        maxRuleEvaluations <= 2 * rules.length;
+        maxRuleEvaluations++
+      ) {
+        const partial = inferSemanticColumns(typed, inferred, { maxRuleEvaluations });
+        for (const [name, types] of complete.semanticColumnTypes)
+          types.forEach((type, i) =>
+            expect(isSemanticSubtype(type, partial.semanticColumnTypes.get(name)![i]!)).toBe(true),
+          );
+        for (const [rule, types] of complete.headContributions)
+          types.forEach((type, i) =>
+            expect(isSemanticSubtype(type, partial.headContributions.get(rule)![i]!)).toBe(true),
+          );
+        for (const [predicate, ctorName] of [
+          ["box", "Box"],
+          ["wrapped", "Wrap"],
+        ]) {
+          const id = { predicate: predicate! };
+          complete.proofTypes
+            .payload(id, ctorName!)!
+            .forEach((type, i) =>
+              expect(isSemanticSubtype(type, partial.proofTypes.payload(id, ctorName!)![i]!)).toBe(
+                true,
+              ),
+            );
+        }
+      }
+    }
+  }
 });
