@@ -123,6 +123,15 @@ outside the repository, set `DATAMOG_CMD`, for example:
 export DATAMOG_CMD="bun run --cwd /path/to/datamog datamog"
 ```
 
+## Semantic Type Benchmarks
+
+Run `bun run bench:semantic-types > baseline.json` for synthetic inference,
+structural relation and input validation measurements. Set
+`DATAMOG_BENCH_SAMPLES=11` for more samples. The script checks results and reports
+median/min/max timings; it does not impose performance thresholds. See the
+[baseline and methodology](doc/design/semantic-types-benchmarks.md) for what is
+included in each measurement.
+
 ## Playground
 
 Start the playground dev server:

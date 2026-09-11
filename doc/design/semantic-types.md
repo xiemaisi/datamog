@@ -423,3 +423,9 @@ Suggested follow-up work, rather than outstanding requirements for this foundati
 
 Continue to commit each completed step separately. The implementation does not
 require a new syntax feature merely to finish the existing foundation.
+
+
+The first measurement follow-up is recorded in
+[Semantic type benchmark baseline](semantic-types-benchmarks.md). Run
+`bun run bench:semantic-types` to reproduce the separated workloads; the report
+includes a concrete union-coverage work-limit case for further investigation.
