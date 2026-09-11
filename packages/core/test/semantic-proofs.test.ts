@@ -88,3 +88,16 @@ test("module instantiations retain distinct proof identities and payload signatu
     scalarType("string"),
   ]);
 });
+
+test("inferred and published registries preserve mutually recursive signatures", () => {
+  const typed = infer(`
+    left(0) :: Base.
+    left(N + 1) :: FromRight :- right(N), N < 2.
+    right(N) :: FromLeft :- left(N).
+  `);
+  for (const registry of [typed.proofTypes, typed.publishedProofTypes]) {
+    expect(() => registry.validateReferences()).not.toThrow();
+    expect(registry.payload({ predicate: "left" }, "FromRight")).toEqual([proof("right")]);
+    expect(registry.payload({ predicate: "right" }, "FromLeft")).toEqual([proof("left")]);
+  }
+});

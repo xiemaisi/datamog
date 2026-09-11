@@ -66,6 +66,7 @@ export function inferSemanticColumns(
         [...ctors].map(([name, payload]) => ({ name, payload })),
       );
     }
+    proofTypes.validateReferences();
     return { semanticColumnTypes: columns, proofTypes, headContributions };
   };
   const columns = new Map<string, SemanticType[]>();

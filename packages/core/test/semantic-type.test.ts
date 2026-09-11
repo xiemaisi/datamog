@@ -128,3 +128,66 @@ describe("semantic type foundation", () => {
     registry.define(other.id, [{ name: "X", payload: [proof] }]);
   });
 });
+
+describe("proof registry reference validation", () => {
+  const missing: SemanticType = { kind: "proof", id: { predicate: "missing" } };
+
+  test("forward and mutually recursive references resolve after registration", () => {
+    const registry = new ProofTypeRegistry();
+    const left = { predicate: "left" };
+    const right = { predicate: "right" };
+    registry.define(left, [{ name: "Next", payload: [{ kind: "proof", id: right }] }]);
+    expect(() => registry.validateReferences()).toThrow("right");
+    registry.define(right, [{ name: "Next", payload: [{ kind: "proof", id: left }] }]);
+    expect(() => registry.validateReferences()).not.toThrow();
+    expect(() => registry.validateReferences()).not.toThrow();
+  });
+
+  test("empty registries, nullary constructors and self references are valid", () => {
+    const registry = new ProofTypeRegistry();
+    expect(() => registry.validateReferences()).not.toThrow();
+    const id = { predicate: "list" };
+    registry.define(id, [
+      { name: "Nil", payload: [] },
+      { name: "Cons", payload: [integer, { kind: "proof", id }] },
+    ]);
+    expect(() => registry.validateReferences()).not.toThrow();
+  });
+
+  test("checks references inside every structural type component", () => {
+    const cases: SemanticType[] = [
+      missing,
+      { kind: "array", element: missing },
+      { kind: "tuple", elements: [integer, missing] },
+      unionType(string, missing),
+      {
+        kind: "record",
+        fields: [{ name: "child", type: missing, optional: true }],
+        additional: NEVER,
+      },
+      { kind: "record", fields: [], additional: missing },
+      {
+        kind: "array",
+        element: { kind: "tuple", elements: [unionType(string, missing)] },
+      },
+    ];
+    for (const type of cases) {
+      const registry = new ProofTypeRegistry();
+      registry.define({ predicate: "owner" }, [{ name: "Wrap", payload: [integer, type] }]);
+      expect(() => registry.validateReferences()).toThrow(
+        "Unknown proof type 'missing' in 'owner::Wrap' payload 2",
+      );
+    }
+  });
+
+  test("module identities must resolve exactly, even when source names match", () => {
+    const registry = new ProofTypeRegistry();
+    registry.define({ predicate: "$1$list" }, [{ name: "Nil", payload: [] }]);
+    registry.define({ predicate: "result" }, [
+      { name: "Wrap", payload: [{ kind: "proof", id: { predicate: "$2$list" } }] },
+    ]);
+    expect(() => registry.validateReferences()).toThrow("Unknown proof type '$2$list'");
+    registry.define({ predicate: "$2$list" }, [{ name: "Nil", payload: [] }]);
+    expect(() => registry.validateReferences()).not.toThrow();
+  });
+});

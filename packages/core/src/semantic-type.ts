@@ -1,6 +1,6 @@
 /**
  * Semantic types, independent of the primitive storage types used by backends.
- * This foundation is not yet wired into inference or parser lowering.
+ * Inference and operand lowering use these types while backends retain primitive storage.
  *
  * Unknown inference state is `undefined`, not a SemanticType. `never` is empty;
  * `value` admits every value, including null. Expression absence is separate.
@@ -284,7 +284,7 @@ export interface ProofConstructorType {
 }
 
 /**
- * Constructor signatures supplied by elaboration/inference in a future step.
+ * Constructor signatures supplied by inference after elaboration.
  * References need not be registered yet, allowing mutually recursive signatures.
  * Registration establishes metadata only, never proof membership.
  */
@@ -303,6 +303,50 @@ export class ProofTypeRegistry {
       signatures.set(ctor.name, ctor.payload.map(normalizeType));
     }
     this.definitions.set(id.predicate, signatures);
+  }
+
+  /**
+   * Check closure after all definitions have been registered. Walk structural
+   * payloads but never unfold proof references, so forward and recursive
+   * signatures are valid as long as every nominal identity is registered.
+   * This validates compiler metadata, not membership of runtime proof values.
+   */
+  validateReferences(): void {
+    for (const [predicate, constructors] of this.definitions) {
+      for (const [name, payload] of constructors) {
+        for (const [index, root] of payload.entries()) {
+          const pending = [root];
+          const seen = new Set<SemanticType>();
+          while (pending.length > 0) {
+            const type = pending.pop()!;
+            if (seen.has(type)) continue;
+            seen.add(type);
+            switch (type.kind) {
+              case "proof":
+                if (!this.definitions.has(type.id.predicate)) {
+                  throw new Error(
+                    `Unknown proof type '${type.id.predicate}' in '${predicate}::${name}' payload ${index + 1}`,
+                  );
+                }
+                break;
+              case "array":
+                pending.push(type.element);
+                break;
+              case "tuple":
+                for (const element of type.elements) pending.push(element);
+                break;
+              case "union":
+                for (const member of type.members) pending.push(member);
+                break;
+              case "record":
+                pending.push(type.additional);
+                for (const field of type.fields) pending.push(field.type);
+                break;
+            }
+          }
+        }
+      }
+    }
   }
 
   payload(id: ProofTypeId, name: string): readonly SemanticType[] | undefined {

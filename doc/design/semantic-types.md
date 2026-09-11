@@ -5,6 +5,8 @@ proof-match validation implemented. Proven scalar operands now lower to existing
 extraction builtins before final primitive checking and backend emission. Disjoint proof requirements and constructor payload
 constraints now produce semantic errors. Structural input declarations and
 rule-head annotations and transparent, file-local type aliases are implemented.
+Inferred and published proof registries validate all payload references before
+being returned to consumers.
 
 The scope is richer structural JSON types and static types for existing proof
 terms. Independent datatype declarations and freely constructible ADTs are
@@ -102,7 +104,14 @@ source diagnostics remain responsibilities of future expression typing.
 
 Proof identities use elaborated predicate identities, not source names. The proof
 registry stores constructor payload signatures and permits forward references,
-so recursive signatures do not require recursive object graphs. Ordinary JSON
+so recursive signatures do not require recursive object graphs. After all
+definitions are registered, `validateReferences` checks every proof reference
+inside constructor payloads, including nested structural components and record
+additional-field types. References must resolve to the exact elaborated identity;
+the check does not unfold signatures, so self and mutual recursion are valid.
+Both inferred and published registries run this check before being returned,
+including on the work-limit fallback path. Unresolved references report the
+owning constructor and payload position as a compiler metadata error. Ordinary JSON
 projection does not expose a proof's representation; payload lookup serves generated constructor matches. A signature never establishes membership
 in the predicate's derived proofs.
 
@@ -277,10 +286,13 @@ freshening is necessary. Module contracts compare expanded shapes as before.
 Editor completion offers alias names, and editor validation runs the same
 expansion before type inference.
 
-Next, validate registry references before exposing proof signatures as
-user-facing declarations. Inferred types, published contracts, nullness and
-partiality must remain distinct during this migration. External data validation
-is required before trusting structural input declarations.
+Registry reference validation is implemented. Exposing proof signatures as
+user-facing declarations still requires a separate syntax and boundary design;
+registry closure alone grants neither a new contract nor proof membership.
+The next implementation step is to share expression/projection typing between
+semantic inference and operand lowering. Inferred types, published contracts,
+nullness and partiality must remain distinct during this migration. Structural
+input declarations already validate external data before trusting its shape.
 
 JSON Schema interoperability is later work; this foundation neither accepts
 schemas nor claims schema conformance.
