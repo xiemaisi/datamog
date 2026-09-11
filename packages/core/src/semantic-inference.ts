@@ -25,7 +25,7 @@ export type SemanticInferenceInput = Omit<
 >;
 
 /**
- * Infer successful column values after legacy validation. Supplying inferred
+ * Infer successful column values during preparation and final checking. Supplying inferred
  * columns selects published-contract propagation. Unknown results fall back to value;
  * absence stays with the existing partiality pass. Lowering metadata identifies
  * nominal proof construction and checked payload projections.

@@ -1,12 +1,10 @@
 # Semantic type foundation
 
-Status: structural/proof inference, published semantic contracts, and conservative
-proof-match validation implemented. Proven scalar operands now lower to existing
-extraction builtins before final primitive checking and backend emission. Disjoint proof requirements and constructor payload
-constraints now produce semantic errors. Structural input declarations and
-rule-head annotations and transparent, file-local type aliases are implemented.
-Inferred and published proof registries validate all payload references before
-being returned to consumers.
+Status: implemented. The foundation includes structural/proof inference,
+published semantic contracts, structural input and head declarations, transparent
+file-local aliases, and typed scalar operands. Proof registries validate their
+references. Inference uses dependency-driven propagation and bounded widening;
+structural errors report mismatch paths and editors navigate alias references.
 
 The scope is richer structural JSON types and static types for existing proof
 terms. Independent datatype declarations and freely constructible ADTs are
@@ -21,8 +19,11 @@ scalars, records, arrays, tuples, unions, and nominal proof references.
 
 Unknown inference state remains outside the type domain (`undefined`). `never`
 is the empty type; `value` is the universal type including null. Null is a scalar
-alternative, so nullable types can be represented as unions. Expression absence
-is separate from both null and the empty type.
+alternative, so nullable types can be represented as unions. This internal
+universal `value` is a conservative approximation, not the surface declaration
+`value`: declarations exclude a bare null unless marked `?`, enforced by the
+separate nullness checks. Expression absence is separate from both null and the
+empty type.
 
 Record fields carry independent optionality and value types. The additional-field
 type describes undeclared fields; `never` closes a record. Optional `never` fields
@@ -49,11 +50,15 @@ or `value`; JSON storage does not make it a structural record subtype.
 
 Source unions are checked alternative by alternative. For a target union, each
 source alternative must fit a single target alternative. This is sound but
-incomplete: `[integer | string]` has the same inhabitants as `[integer] | [string]`,
-but the checker does not prove the former is a subtype of the latter. Consequently
+incomplete: a one-element tuple of `integer | string` has the same inhabitants as
+the union of a one-element integer tuple and a one-element string tuple, but the
+checker does not prove the former is a subtype of the latter. These are tuple
+shapes in the internal representation, not homogeneous array declarations. Consequently
 a false result means the contract was not established, not necessarily that the
-types contain a counterexample. Widening uses this API to avoid redundant producer alternatives. Published semantic contracts now propagate through a separate pass; explicit
-annotation and module-boundary guarantees still use the existing primitive checks.
+types contain a counterexample. Widening uses this API to avoid redundant producer
+alternatives. Published semantic contracts propagate through a separate pass.
+Structural annotations and module boundaries use semantic subtype checks alongside
+the existing primitive and nullness checks.
 
 `intersectTypes` computes the represented intersection, distributing over unions.
 Record fields are required if either operand requires them; their types and the
@@ -72,9 +77,10 @@ a recursive inference loop without a convergence and complexity policy.
 `semantic-widening.ts` adds an explicit precision budget, initially four levels
 of structure and eight fields, tuple components, or union alternatives per node.
 These defaults are provisional compiler policy, not restrictions on runtime data.
-`boundSemanticType` replaces a subtree exceeding either limit with `value`.
-Scalars and nominal proof references are leaves and retain their identities even
-at the depth boundary. A wide record retains the first eight fields in name order and allows arbitrary
+`boundSemanticType` replaces excess nesting or too many union alternatives with
+`value`. Scalars and nominal proof references are leaves and retain their identities
+even at the depth boundary. A wide record retains the first eight fields in name
+order and allows arbitrary
 additional fields. A wide tuple becomes an array whose element type covers every
 component. These summaries preserve useful precision without retaining unbounded
 field counts or tuple lengths. Bounding visits children within the budget
@@ -117,9 +123,10 @@ additional-field types. References must resolve to the exact elaborated identity
 the check does not unfold signatures, so self and mutual recursion are valid.
 Both inferred and published registries run this check before being returned,
 including on the work-limit fallback path. Unresolved references report the
-owning constructor and payload position as a compiler metadata error. Ordinary JSON
-projection does not expose a proof's representation; payload lookup serves generated constructor matches. A signature never establishes membership
-in the predicate's derived proofs.
+owning constructor and payload position as a compiler metadata error. Ordinary
+JSON projection does not expose a proof's representation to structural inference;
+payload lookup serves generated constructor matches. A signature never establishes
+membership in the predicate's derived proofs.
 
 Parser lowering attaches construction and payload-projection metadata in weak maps
 keyed by the generated AST nodes. The runtime AST and JSON encoding are unchanged.
@@ -135,20 +142,23 @@ when its receiver has the corresponding nominal identity. Nested matches follow
 recursive payload references, including unions of nominal identities. A successful
 match selects the matching nominal alternative; unrelated nominal alternatives
 cannot pass its tag guard. An opaque or structural alternative keeps the result
-conservative, since a JSON tag alone does not establish proof membership. An unknown or non-nominal receiver falls back to
-`value`, so a tagged JSON shape never grants membership. Ordinary user-written
+conservative, since a JSON tag alone does not establish proof membership. An
+opaque or structural receiver falls back to `value`; known incompatible scalars,
+arrays and tuples have no successful proof payload. A tagged JSON shape never
+grants membership. Ordinary user-written
 JSON access on proofs remains conservatively typed as `value`. Registry signatures
 are inferred implementation facts, not new datatype declarations or contracts.
 
-## Observational inference
+## Implementation inference
 
-After existing type validation and nullness inference, `inferTypes` runs
-`inferSemanticColumns` and exposes its result as `TypedProgram.semanticColumnTypes`.
-The map describes inferred implementation facts only. It is neither a published
-contract nor a replacement for `columnTypes`, and no backend reads it yet.
+`inferTypes` runs `inferSemanticColumns` during preliminary operand preparation
+and again during final checking, after primitive and nullness inference. It exposes
+implementation facts as `TypedProgram.semanticColumnTypes`, separate from published
+contracts. Operand lowering and structural checking use this map; backends continue
+to consume the primitive `columnTypes` and the lowered expressions.
 
-The pass seeds external columns from their primitive declarations and nullness,
-and accumulates rule producers with bounded widening. Object literals retain
+The pass seeds external columns from their primitive or structural declarations,
+including declared nullability, and accumulates rule producers with bounded widening. Object literals retain
 required fields, array literals become tuples, and `list` aggregates retain an
 array element type. Positive predicate bindings and equality dependencies carry
 these shapes into consumers. Literal JSON projections retain successful component
@@ -161,9 +171,11 @@ This remains an over-approximation: positive predicate requirements on shared
 variables and bidirectional equality bindings are intersected, but general guards
 and reverse field-path constraints are not inferred. Unsupported expressions use
 existing primitive results with conservative nullness.
-External `value` data remains opaque. Proof terms use retained lowering metadata for nominal types and payload inference.
-The inference pass does not itself validate structural declarations or matches;
-proof-match validation runs afterward using consumer-visible contracts.
+External `value` data remains opaque. Proof terms use retained lowering metadata
+for nominal types and payload inference. The inference pass computes each rule's
+contribution; final structural annotation and proof-match validation runs afterward
+using consumer-visible contracts. Input loaders validate external structural data
+before insertion, and module boundary checks run after final inference.
 
 A worklist initially schedules every rule and then requeues only readers of a
 changed predicate or constructor payload. Reads of nominal signatures register
@@ -202,9 +214,9 @@ Local refinement stays descending: if bounding an intersection cannot be proved
 narrower than the previous type, it keeps the previous approximation. Ordinary
 JSON filtering is not reinterpreted as a type error. Payload projection over proof
 unions is shared by inference, validation and operand lowering; arbitrary payload
-expressions and opaque alternatives remain conservative. The existing primitive annotation/nullability checks and module
-boundary checks remain authoritative for the declaration syntax supported today.
-Structural input declarations and validation are now implemented as described below.
+expressions and opaque alternatives remain conservative. Primitive and nullness
+checks continue to validate the corresponding parts of declarations; semantic
+subtyping validates their structural parts.
 Structural head and module-boundary errors report a mismatch path and the expected
 and inferred types. Missing required fields report that presence is not guaranteed.
 The formatter bounds display depth and width with ellipses without weakening the
@@ -254,7 +266,7 @@ integer division/remainder, missing and nullable fields, guarded extraction,
 dynamic indexing, nested string access, aggregates, and dependent wrappers.
 Regression tests also check repeated analysis and widened contracts.
 
-## Storage and next steps
+## Storage and structural declarations
 
 The primitive bridge preserves all existing primitive names. Structured values,
 proofs and nontrivial unions map to JSON (`value`) storage. `never` has no storage
@@ -314,15 +326,21 @@ and the playground expose these links; lenient parsing preserves navigation when
 unknown aliases, cycles or unrelated errors prevent successful analysis. Expanded
 copies never supply navigation spans, and Boolean refinements are not alias links.
 
-Registry reference validation is implemented. Exposing proof signatures as
-user-facing declarations still requires a separate syntax and boundary design;
-registry closure alone grants neither a new contract nor proof membership.
-Expression/projection typing is now shared between semantic inference and operand
-lowering. Dependency-driven propagation, bounded local intersections and more
-precise wide-shape summaries, structural diagnostics and alias navigation are
-implemented. Inferred types, published contracts,
-nullness and partiality must remain distinct during this migration. Structural
-input declarations already validate external data before trusting its shape.
+## Remaining scope
 
-JSON Schema interoperability is later work; this foundation neither accepts
-schemas nor claims schema conformance.
+The foundation keeps inferred facts, published contracts, nullness and partiality
+separate. The worklist still falls back globally if its work budget is exhausted;
+component-local fallback could preserve unrelated precision later. Structural
+subtyping remains sound but incomplete for collective union coverage, and exact
+structural operations on arbitrary caller-supplied types have no global work cap.
+The inference budgets and summary choices remain provisional compiler policy.
+
+Exposing proof signatures as user-facing declarations requires a separate syntax
+and boundary design. Registry closure alone grants neither a new contract nor
+proof membership. General union syntax, tuple contracts, open-record declarations
+and parameterized aliases are possible future extensions; the internal type domain
+does not by itself expose those features as declaration syntax.
+
+Recursive structural aliases, independent datatype declarations and freely
+constructible ADTs remain out of scope. JSON Schema interoperability is later
+work; this foundation neither accepts schemas nor claims schema conformance.

@@ -1804,7 +1804,7 @@ there.
 A column that can hold `null` **as well as** other values is written with a
 `?` suffix (`age: integer?`, §2.2). That is not a sixth kind of type but the
 union of the base type and `null`, so `integer?` accepts an integer or a
-`null` and `integer` accepts neither `null` nor anything else.
+`null` and `integer` accepts integers only.
 
 `?` means the same thing on `value` as on every other base type, so `value` is
 any JSON shape but not a bare `null`, and a column that can carry one must say
@@ -1846,8 +1846,24 @@ Published annotations control what consumers can rely on: declaring the producer
 as `value` hides its inferred shape. A nullable scalar requires a bound-variable
 `<> null` guard before implicit extraction; missing fields and indices stay
 undefined, while standalone JSON null projections remain ordinary null values.
-Whole structured values retain JSON storage. Inference uses bounded widening,
-so a shape that becomes too complex may conservatively fall back to `value`.
+Dynamic integer indexing retains array element types or the union of possible
+tuple component types through predicate boundaries. For example:
+
+```prolog
+rows([{"n": 7}, {"n": 9}]).
+index(0). index(1).
+selected(A[I]) :- rows(A), index(I).
+answer(P["n"] + 1) :- selected(P).
+```
+
+Whole structured values retain JSON storage. Inference uses bounded widening:
+wide records may retain only some field guarantees, wide tuples may become array
+summaries, and excess nesting or alternatives may fall back to `value`. These
+precision limits do not restrict the size or shape of runtime values. A structural
+contract that inference cannot establish is rejected with a mismatch path and the
+expected/inferred types; a failure to prove union coverage is not necessarily a
+counterexample. Exact compiler budgets are implementation policy, not language
+syntax.
 
 ### 5.2 Type Inference
 

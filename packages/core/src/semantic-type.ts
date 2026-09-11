@@ -118,7 +118,7 @@ export function sameSemanticType(a: SemanticType, b: SemanticType): boolean {
   return typeKey(normalizeType(a)) === typeKey(normalizeType(b));
 }
 
-/** Exact union; inference will need a separate widening policy for convergence. */
+/** Exact union; producer inference uses a separate bounded widening policy. */
 export function unionType(...members: readonly SemanticType[]): SemanticType {
   return normalizeType({ kind: "union", members });
 }
