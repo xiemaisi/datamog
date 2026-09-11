@@ -20,7 +20,7 @@
 // LSP ranges (or CodeMirror positions) is the consumer's job, which is what
 // keeps this file free of both Langium services and the filesystem.
 
-import { propertySpan } from "datamog-parser";
+import { propertySpan, typeAliasName, typeAliasReferences } from "datamog-parser";
 import { AGGREGATE_NAMES, BUILTIN_BODY_ATOMS } from "./analyzer.ts";
 import { asCoreRule } from "./ast.ts";
 import type {
@@ -249,12 +249,35 @@ function findVariableBindings(scope: Rule | Query, name: string): SourceSpan[] {
 
 // --- Cursor resolution ------------------------------------------------------
 
+/** Alias links are file-local and use retained source spans, never expanded copies. */
+export function findTypeAliasDefinitions(
+  program: Program,
+): Extract<Definition, { kind: "local" }>[] {
+  const definitions = new Map<string, SourceSpan[]>();
+  for (const statement of program.statements) {
+    if (statement.$type !== "TypeAlias") continue;
+    const span = propertySpan(statement, "name");
+    if (!span) continue;
+    const name = typeAliasName(statement.name);
+    const targets = definitions.get(name) ?? [];
+    targets.push(span);
+    definitions.set(name, targets);
+  }
+  return typeAliasReferences(program).map((reference) => ({
+    kind: "local",
+    origin: { offset: reference.offset, end: reference.end },
+    targets: definitions.get(reference.name) ?? [],
+  }));
+}
+
 /**
  * The definition of whatever name sits at `offset`, or undefined when the
  * cursor is not on a navigable name (whitespace, a keyword, a literal, a
  * built-in, or a name that is already its own definition).
  */
 export function findDefinition(program: Program, offset: number): Definition | undefined {
+  const alias = findTypeAliasDefinitions(program).find((link) => contains(link.origin, offset));
+  if (alias) return alias;
   for (const stmt of program.statements) {
     if (!contains(nodeSpan(stmt), offset)) continue;
     return inStatement(program, stmt, offset);

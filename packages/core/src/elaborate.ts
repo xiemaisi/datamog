@@ -3,7 +3,8 @@ import { AnalyzerError, queryProjection } from "./analyzer.ts";
 import { asCoreRule } from "./ast.ts";
 import type { Binding, ExtDecl, PrimitiveType, Program, Query, Rule, Statement } from "./ast.ts";
 import { expandModule } from "./expand.ts";
-import { type SemanticType, isSemanticSubtype } from "./semantic-type.ts";
+import { semanticContractMismatch } from "./semantic-diagnostics.ts";
+import type { SemanticType } from "./semantic-type.ts";
 import { declaredColumnType } from "./structural-declarations.ts";
 import { type TypedProgram, columnTypesCompatible } from "./types.ts";
 
@@ -402,9 +403,10 @@ export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryC
     for (let i = 0; i < b.expected.length; i++) {
       const shape = b.expectedShapes?.[i];
       const semantic = typed.publishedSemanticColumnTypes.get(b.predicate)?.[i];
-      if (shape && semantic && !isSemanticSubtype(semantic, shape)) {
+      const mismatch = shape && semantic && semanticContractMismatch(semantic, shape);
+      if (mismatch) {
         throw boundaryError(
-          `${b.note}: column ${i + 1} does not satisfy its structural declaration`,
+          `${b.note}: column ${i + 1} does not satisfy its structural declaration: ${mismatch}`,
           b,
         );
       }

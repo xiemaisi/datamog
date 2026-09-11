@@ -1,11 +1,11 @@
-/** Structural input-column declarations and validation of their JSON values. */
 import { AnalyzerError } from "./analyzer.ts";
 import type { ColumnDecl, Rule } from "./ast.ts";
+/** Structural input-column declarations and validation of their JSON values. */
+import { semanticContractMismatch } from "./semantic-diagnostics.ts";
 import {
   NEVER,
   type SemanticType,
   fromPrimitiveType,
-  isSemanticSubtype,
   normalizeType,
   scalarType,
   unionType,
@@ -131,10 +131,11 @@ export function validateStructuralHeadAnnotations(
     for (const [i, annotation] of (rule.head.argTypes ?? []).entries()) {
       if (!annotation?.shape) continue;
       const declared = declaredColumnType(annotation);
-      if (!isSemanticSubtype(types[i]!, declared)) {
+      const mismatch = semanticContractMismatch(types[i]!, declared);
+      if (mismatch) {
         const cst = rule.head.args[i]?.$cstNode ?? rule.head.$cstNode;
         throw new AnalyzerError(
-          `Predicate '${rule.head.predicate}' column ${i + 1} does not satisfy its structural annotation`,
+          `Predicate '${rule.head.predicate}' column ${i + 1} does not satisfy its structural annotation: ${mismatch}`,
           cst?.offset,
           cst?.end,
         );

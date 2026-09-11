@@ -205,6 +205,11 @@ unions is shared by inference, validation and operand lowering; arbitrary payloa
 expressions and opaque alternatives remain conservative. The existing primitive annotation/nullability checks and module
 boundary checks remain authoritative for the declaration syntax supported today.
 Structural input declarations and validation are now implemented as described below.
+Structural head and module-boundary errors report a mismatch path and the expected
+and inferred types. Missing required fields report that presence is not guaranteed.
+The formatter bounds display depth and width with ellipses without weakening the
+checked contract; failures of collective union coverage are described as unproven
+guarantees rather than demonstrated counterexamples.
 
 ## Typed operands and backend extraction
 
@@ -302,15 +307,20 @@ redefinition is rejected, and reset discards them with the rest of the program.
 Modules expand aliases in their own files, so no alias import/export mechanism or
 freshening is necessary. Module contracts compare expanded shapes as before.
 Editor completion offers alias names, and editor validation runs the same
-expansion before type inference.
+expansion before type inference. The parser retains original alias-reference spans
+before expansion in a program-keyed weak map. Core uses them for file-local
+go-to-definition, including nested, forward and quoted references. Both VS Code
+and the playground expose these links; lenient parsing preserves navigation when
+unknown aliases, cycles or unrelated errors prevent successful analysis. Expanded
+copies never supply navigation spans, and Boolean refinements are not alias links.
 
 Registry reference validation is implemented. Exposing proof signatures as
 user-facing declarations still requires a separate syntax and boundary design;
 registry closure alone grants neither a new contract nor proof membership.
 Expression/projection typing is now shared between semantic inference and operand
 lowering. Dependency-driven propagation, bounded local intersections and more
-precise wide-shape summaries are implemented. Diagnostics and editor navigation
-are next. Inferred types, published contracts,
+precise wide-shape summaries, structural diagnostics and alias navigation are
+implemented. Inferred types, published contracts,
 nullness and partiality must remain distinct during this migration. Structural
 input declarations already validate external data before trusting its shape.
 

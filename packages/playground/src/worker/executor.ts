@@ -23,6 +23,7 @@ import {
   translate,
 } from "datamog-engine";
 import { ParseError } from "datamog-parser";
+import { collectAliasReferences } from "../lib/alias-references.ts";
 import { collectCompletionCandidates } from "../lib/completion-candidates.ts";
 import { InMemoryCsvLoader, UrlCsvLoader } from "../lib/csv-loader.ts";
 import { InMemoryJsonlLoader } from "../lib/jsonl-loader.ts";
@@ -394,6 +395,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   }
 
   if (msg.type === "lint") {
+    const aliasReferences = collectAliasReferences(msg.source);
     try {
       const typed = DatamogExecutor.prepare(msg.source);
       // Errors above are throws; warnings are static-analysis findings
@@ -454,7 +456,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         result: {
           diagnostics,
           recursiveCalls,
-          predicateReferences,
+          predicateReferences: [...predicateReferences, ...aliasReferences],
           // A constraints-only program has something to run too: checking its
           // constraints is the point of running it.
           hasQueries: typed.queries.length > 0 || typed.constraints.length > 0,
@@ -485,15 +487,15 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
       // Parse/analyse failed → there is no analyzed program to read
       // recursive calls or predicate references from; fall back to
-      // empty lists so the editor clears any markers from the previous
-      // successful lint.
+      // empty predicate lists so stale analysis markers are cleared. Alias
+      // links come from a lenient source parse and remain available.
       self.postMessage({
         type: "lint-result",
         id: msg.id,
         result: {
           diagnostics: [diag],
           recursiveCalls: [],
-          predicateReferences: [],
+          predicateReferences: aliasReferences,
           hasQueries: false,
         },
       });

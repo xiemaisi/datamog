@@ -72,7 +72,7 @@ test("module wiring checks retained structural input contracts against published
   ).not.toThrow();
   expect(() =>
     check('p({"age": 1}). input predicate q(x: {age: string}) := out from "m.dl"(data = p).'),
-  ).toThrow("structural declaration");
+  ).toThrow('$["age"]: expected string, inferred integer');
   for (const source of [
     'p({"age": "x"}).',
     'p({"age": 1, "extra": 2}).',

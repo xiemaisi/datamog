@@ -126,6 +126,7 @@ export { findRecursiveCalls, type RecursiveCall } from "./recursion.ts";
 export { findPredicateReferences, type PredicateReference } from "./references.ts";
 export {
   findDefinition,
+  findTypeAliasDefinitions,
   findModuleTarget,
   findPredicateDefinitions,
   type Definition,

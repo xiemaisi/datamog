@@ -199,3 +199,16 @@ describe("cross-file navigation", () => {
     expect(linksAt(src, '"path.dl"', { uri: "untitled:Untitled-1.dl" })).toBeUndefined();
   });
 });
+
+test("alias references link to their declaration after head annotations are lifted", () => {
+  const links = linksAt("type Age = integer.\nq(1: Age).", "Age", { nth: 1 });
+  expect(links).toHaveLength(1);
+  expect(links[0]?.targetSelectionRange).toEqual({
+    start: { line: 0, character: 5 },
+    end: { line: 0, character: 8 },
+  });
+  expect(links[0]?.originSelectionRange).toEqual({
+    start: { line: 1, character: 5 },
+    end: { line: 1, character: 8 },
+  });
+});

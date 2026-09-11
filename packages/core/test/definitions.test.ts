@@ -5,6 +5,7 @@ import {
   type ModuleSelector,
   findDefinition,
   findModuleTarget,
+  findTypeAliasDefinitions,
 } from "../src/definitions.ts";
 
 /** Definition of the name at the start of the `nth` occurrence of `needle`. */
@@ -387,5 +388,46 @@ describe("robustness", () => {
   test("a string literal is not a name", () => {
     const source = 'q(X) :- X = "edge".';
     expect(defAt(source, '"edge"')).toBeUndefined();
+  });
+});
+
+describe("type aliases", () => {
+  test("input columns, nested aliases and lifted heads link to their own definitions", () => {
+    const source =
+      "type Age = integer. type Person = {age: Age}. input predicate p(x: Person). q(X: Person) :- p(X).";
+    expect(targetsAt(source, "Age", 1)).toEqual(["Age"]);
+    expect(targetsAt(source, "Person", 1)).toEqual(["Person"]);
+    expect(targetsAt(source, "Person", 2)).toEqual(["Person"]);
+    expect(originAt(source, "Person", 2)).toBe("Person");
+    expect(defAt(source, "Age")).toBeUndefined();
+  });
+
+  test("forward and quoted references use the original spelling and span", () => {
+    const source = "type Person = {age: Age}. type `Age` = integer. input predicate p(x: `Age`).";
+    expect(targetsAt(source, "Age")).toEqual(["`Age`"]);
+    expect(targetsAt(source, "`Age`", 1)).toEqual(["`Age`"]);
+    expect(originAt(source, "`Age`", 1)).toBe("`Age`");
+  });
+
+  test("navigation survives failed expansion and stays in the alias namespace", () => {
+    const source =
+      "type Broken = Unknown. type Age = integer. Age(1). input predicate p(x: Age). q(X: Age) :- Age(X).";
+    expect(targetsAt(source, "Age", 2)).toEqual(["Age"]);
+    expect(defAt(source, "Age", 2)?.targets[0]?.offset).toBe(source.indexOf("Age"));
+    expect(targetsAt(source, "Age", 3)).toEqual(["Age"]);
+    expect(targetsAt(source, "Age", 4)).toEqual(["Age"]);
+    expect(defAt(source, "Age", 4)?.targets[0]?.offset).toBe(source.indexOf("Age(1)"));
+    expect(targetsAt(source, "Unknown")).toEqual([]);
+  });
+
+  test("recursive aliases remain navigable while invalid", () => {
+    const source = "type A = [B]. type B = {next?: A}.";
+    expect(targetsAt(source, "B")).toEqual(["B"]);
+    expect(targetsAt(source, "A", 1)).toEqual(["A"]);
+  });
+
+  test("Boolean refinements are not mistaken for alias references", () => {
+    const source = "q(_: B) :- B = true.";
+    expect(findTypeAliasDefinitions(parseRawLenient(source))).toEqual([]);
   });
 });

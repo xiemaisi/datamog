@@ -2,6 +2,7 @@
 import { proofConstruction, proofMatch, proofProjection } from "datamog-parser";
 import { AnalyzerError } from "./analyzer.ts";
 import type { BodyElement, HeadTerm } from "./ast.ts";
+import { formatSemanticType as describe } from "./semantic-diagnostics.ts";
 import {
   ANY_VALUE,
   type SemanticType,
@@ -11,13 +12,6 @@ import {
   scalarType,
 } from "./semantic-type.ts";
 import type { TypedProgram } from "./types.ts";
-
-function describe(type: SemanticType): string {
-  if (type.kind === "proof") return `proof of '${type.id.predicate}'`;
-  if (type.kind === "scalar") return type.name;
-  if (type.kind === "union") return type.members.map(describe).join(" | ");
-  return type.kind;
-}
 
 /**
  * Check disjoint proof requirements and generated constructor payload constraints.

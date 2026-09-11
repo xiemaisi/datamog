@@ -133,7 +133,7 @@ export function propertySpan(
   return cst ? { offset: cst.offset, end: cst.end } : undefined;
 }
 
-export { resolveTypeAliases } from "./type-aliases.js";
+export { resolveTypeAliases, typeAliasReferences, typeAliasName } from "./type-aliases.js";
 export { ParseError } from "./parse-error.js";
 import { ParseError } from "./parse-error.js";
 

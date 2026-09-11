@@ -1,4 +1,4 @@
-import { type AstNode, AstUtils } from "langium";
+import { type AstNode, AstUtils, GrammarUtils } from "langium";
 import type {
   AnnotatedHeadTerm,
   ColumnDecl,
@@ -9,8 +9,58 @@ import type {
 } from "./generated/ast.js";
 import { ParseError } from "./parse-error.js";
 
+export interface TypeAliasReference {
+  readonly name: string;
+  readonly offset: number;
+  readonly end: number;
+}
+
+const references = new WeakMap<Program, readonly TypeAliasReference[]>();
+
+/** Original source references, retained before aliases and head annotations are expanded. */
+export function typeAliasReferences(program: Program): readonly TypeAliasReference[] {
+  return references.get(program) ?? [];
+}
+
+export function typeAliasName(name: string): string {
+  return name.startsWith("`") ? name.slice(1, -1).replace(/\\([\s\S])/g, "$1") : name;
+}
+
+function retainReferences(program: Program): void {
+  if (references.has(program)) return;
+  const names = new Set(
+    program.statements.filter((s) => s.$type === "TypeAlias").map((s) => typeAliasName(s.name)),
+  );
+  const found: TypeAliasReference[] = [];
+  // Capture the whole source tree before validation can fail, so navigation
+  // survives unknown aliases, cycles and unrelated syntax errors mid-edit.
+  for (const node of AstUtils.streamAllContents(program)) {
+    if (
+      node.$type !== "TypeValue" &&
+      node.$type !== "ColumnDecl" &&
+      node.$type !== "AnnotatedHeadTerm"
+    )
+      continue;
+    const site = node as TypeValue | ColumnDecl | AnnotatedHeadTerm;
+    if (!site.alias) continue;
+    if (
+      site.$type === "AnnotatedHeadTerm" &&
+      site.name === undefined &&
+      !site.nullable &&
+      site.expr.$type === "Variable" &&
+      site.expr.name === "_" &&
+      !names.has(typeAliasName(site.alias))
+    )
+      continue;
+    const cst = GrammarUtils.findNodeForProperty(site.$cstNode, "alias");
+    if (cst) found.push({ name: typeAliasName(site.alias), offset: cst.offset, end: cst.end });
+  }
+  references.set(program, found);
+}
+
 /** Aliases are transparent syntax: resolve them in their file before elaboration. */
 export function resolveTypeAliases(program: Program, inherited: readonly TypeAlias[] = []): void {
+  retainReferences(program);
   const definitions = new Map<string, TypeAlias>();
   const resolved = new Map<string, TypeValue>();
   const visiting: string[] = [];
@@ -30,7 +80,7 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
     throw error;
   };
   const nameOf = (name: string, node: AstNode): string => {
-    const decoded = name.startsWith("`") ? name.slice(1, -1).replace(/\\([\s\S])/g, "$1") : name;
+    const decoded = typeAliasName(name);
     if (decoded.startsWith("$")) fail("Type alias names may not start with '$'", node);
     if (["string", "integer", "float", "boolean", "value", "null"].includes(decoded))
       fail(`Type alias '${decoded}' conflicts with a primitive type`, node);
