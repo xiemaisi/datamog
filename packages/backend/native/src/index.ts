@@ -1,4 +1,4 @@
-import { validateStructuralColumn } from "datamog-core";
+import { compileStructuralColumnValidator } from "datamog-core";
 // Native in-memory Datalog backend. See ./evaluator.ts for the evaluation
 // algorithm and ./values.ts for term evaluation semantics.
 
@@ -141,15 +141,20 @@ export function createEvaluatorBackend<E extends DatalogEvaluator>(
       assertOpen();
       // Direct backend inserts bypass the shared loader helper. Validate the
       // entire structural batch before buffering/appending any rows.
+      const structuralColumns =
+        rows.length === 0
+          ? []
+          : decl.columns
+              .filter((column) => column.shape)
+              .map((column) => ({ column, validate: compileStructuralColumnValidator(column) }));
       rows.forEach((row, i) => {
-        for (const column of decl.columns) {
-          if (!column.shape) continue;
+        for (const { column, validate } of structuralColumns) {
           const value = row[column.name] === undefined && column.nullable ? null : row[column.name];
           if (!isJsonValue(value))
             throw new Error(
               `Predicate '${decl.predicate}', row ${i + 1}, column '${column.name}': expected JSON value`,
             );
-          validateStructuralColumn(value, column, `Predicate '${decl.predicate}', row ${i + 1}`);
+          validate(value, `Predicate '${decl.predicate}', row ${i + 1}`);
         }
       });
       if (evaluator && acceptingInserts) {

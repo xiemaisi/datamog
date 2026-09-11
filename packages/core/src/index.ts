@@ -174,4 +174,9 @@ export {
   type TypeBudget,
 } from "./semantic-widening.ts";
 
-export { declaredColumnType, validateStructuralColumn } from "./structural-declarations.ts";
+export {
+  type StructuralColumnValidator,
+  compileStructuralColumnValidator,
+  declaredColumnType,
+  validateStructuralColumn,
+} from "./structural-declarations.ts";

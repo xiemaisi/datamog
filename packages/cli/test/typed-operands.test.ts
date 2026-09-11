@@ -271,3 +271,47 @@ test("shared insertion validates the whole batch before calling a backend", asyn
   await expect(insertRows(backend, decl, [{ x: [1] }, { x: ["bad"] }])).rejects.toThrow("row 2");
   expect(calls).toBe(0);
 });
+
+for (const [name, create] of [
+  ["native", native],
+  ["seminaive", seminaive],
+] as const)
+  test(`${name} insertion rechecks structural contracts after declaration edits`, async () => {
+    const decl = inferTypes(analyze(parse("input predicate p(x: {n: integer})."))).extDecls.get(
+      "p",
+    )!;
+    const backend = await create();
+    try {
+      await backend.insertRows!(decl, [{ x: { n: 1 } }]);
+      decl.columns[0]!.shape = inferTypes(
+        analyze(parse("input predicate p(x: {n: string}).")),
+      ).extDecls.get("p")!.columns[0]!.shape;
+      await expect(backend.insertRows!(decl, [{ x: { n: 2 } }])).rejects.toThrow("expected string");
+      await backend.insertRows!(decl, [{ x: { n: "two" } }]);
+    } finally {
+      await backend.close();
+    }
+  });
+
+test("shared insertion preserves late nested errors without inserting a batch prefix", async () => {
+  const decl = inferTypes(
+    analyze(parse("input predicate p(x: [{child: {n: integer}?}]).")),
+  ).extDecls.get("p")!;
+  let calls = 0;
+  const backend: Backend = {
+    sqlDialect: null,
+    async execute() {
+      calls++;
+      return [];
+    },
+    close() {},
+  };
+  const rows: Record<string, unknown>[] = Array.from({ length: 100 }, () => ({
+    x: [{ child: null }],
+  }));
+  rows.push({ x: [{ child: { n: "bad" } }] });
+  await expect(insertRows(backend, decl, rows)).rejects.toThrow(
+    `row 101, column 'x': $[0]["child"]["n"]: expected integer`,
+  );
+  expect(calls).toBe(0);
+});

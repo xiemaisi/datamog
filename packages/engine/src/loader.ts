@@ -1,4 +1,4 @@
-import { validateStructuralColumn } from "datamog-core";
+import { compileStructuralColumnValidator } from "datamog-core";
 import type { ColumnDecl, ExtDecl, PrimitiveType, TypedProgram } from "datamog-core";
 import type { Backend } from "./backend.ts";
 import { ident } from "./dialect.ts";
@@ -61,7 +61,9 @@ export async function insertRows(
   // mirrors the input file rather than the canonical form, and result
   // sets serialise differently (e.g. `JSON.stringify`-keyed dedup or
   // sort) from the SQL backends.
-  const jsonCols = decl.columns.filter((c) => c.type === "value");
+  const jsonCols = decl.columns
+    .filter((c) => c.type === "value")
+    .map((column) => ({ column, validate: compileStructuralColumnValidator(column) }));
   const isSqlPath = !backend.insertRows;
   const normalised = rows.map((row, rowIndex) => {
     const out: Record<string, unknown> = { ...row };
@@ -77,7 +79,7 @@ export async function insertRows(
       if (col.type === "integer") out[col.name] = checkValue(v, "integer", `column '${col.name}'`);
     }
     if (jsonCols.length > 0) {
-      for (const col of jsonCols) {
+      for (const { column: col, validate } of jsonCols) {
         const v = out[col.name];
         if (v === null) {
           // §9.3: a `value` spells its null the JSON way, so a SQL NULL stays
@@ -90,7 +92,7 @@ export async function insertRows(
           continue;
         }
         const value = validateDirectJsonValue(v, col);
-        validateStructuralColumn(value, col, `Predicate '${decl.predicate}', row ${rowIndex + 1}`);
+        validate(value, `Predicate '${decl.predicate}', row ${rowIndex + 1}`);
         const canonical = canonicalizeJson(value);
         out[col.name] = isSqlPath ? canonical : (JSON.parse(canonical) as JsonValue);
       }

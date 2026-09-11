@@ -320,7 +320,15 @@ Input column declarations now accept closed records, optional fields, homogeneou
 arrays and nested nullability. `structural-declarations.ts` translates them into
 semantic contracts and validates incoming JSON, reporting column/row/path errors.
 The shared loader helper validates each full batch before inserting any row;
-native backend hooks also validate direct inserts. Module boundaries require
+native backend hooks also validate direct inserts. Both insertion paths prepare
+structural validators once per batch, reusing nested shape dispatch and record
+field indexes across cells. Prepared validators snapshot the declaration and are
+not cached between batches, so edits cannot retain stale contracts. Nullable
+failure diagnostics reuse the failed branch's error instead of traversing its
+input subtree again; deeply nested nullable records retain the precise error path
+without exponential revalidation. These compiler preparation costs are separate
+from the number of runtime JSON values checked.
+Module boundaries require
 published semantic types to satisfy declared shapes.
 
 Rule-head annotations accept the same shapes. Semantic inference retains each

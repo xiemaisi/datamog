@@ -44,72 +44,112 @@ export function declaredColumnType(
   return column.nullable ? unionType(type, scalarType("null")) : type;
 }
 
-/** First structural mismatch, with a JSON path. Input must already be valid JSON. */
-function mismatch(type: SemanticType, value: unknown, path: string): string | undefined {
+type StructuralMatcher = (value: unknown, path: string) => string | undefined;
+
+/** Prepare shape dispatch and field indexes once, independently of input values. */
+function compileMatcher(type: SemanticType): StructuralMatcher {
   switch (type.kind) {
     case "value":
-      return undefined;
+      return () => undefined;
     case "never":
-      return `${path}: no value is permitted`;
-    case "scalar": {
-      const matches =
-        type.name === "null"
-          ? value === null
-          : type.name === "integer"
-            ? typeof value === "number" && Number.isSafeInteger(value)
-            : type.name === "float"
-              ? typeof value === "number" && Number.isFinite(value)
-              : type.name === "string"
-                ? typeof value === "string"
-                : typeof value === "boolean";
-      return matches ? undefined : `${path}: expected ${type.name}`;
-    }
+      return (_value, path) => `${path}: no value is permitted`;
+    case "scalar":
+      return (value, path) => {
+        const matches =
+          type.name === "null"
+            ? value === null
+            : type.name === "integer"
+              ? typeof value === "number" && Number.isSafeInteger(value)
+              : type.name === "float"
+                ? typeof value === "number" && Number.isFinite(value)
+                : type.name === "string"
+                  ? typeof value === "string"
+                  : typeof value === "boolean";
+        return matches ? undefined : `${path}: expected ${type.name}`;
+      };
     case "union": {
-      const errors = type.members.map((member) => mismatch(member, value, path));
-      if (errors.some((error) => error === undefined)) return undefined;
-      // Nullable structures should report the useful structural path, rather
-      // than obscure it with the failed null alternative.
-      const nonNull = type.members.filter(
-        (member) => member.kind !== "scalar" || member.name !== "null",
+      const members = type.members.map(compileMatcher);
+      const nonNull = type.members.flatMap((member, i) =>
+        member.kind === "scalar" && member.name === "null" ? [] : [i],
       );
-      return nonNull.length === 1 ? mismatch(nonNull[0]!, value, path) : errors.join(" or ");
+      return (value, path) => {
+        const errors: string[] = [];
+        for (const member of members) {
+          const error = member(value, path);
+          if (error === undefined) return undefined;
+          errors.push(error);
+        }
+        // Nullable structures keep the useful path without checking them twice.
+        return nonNull.length === 1 ? errors[nonNull[0]!] : errors.join(" or ");
+      };
     }
-    case "array":
+    case "array": {
+      const element = compileMatcher(type.element);
+      return (value, path) => {
+        if (!Array.isArray(value)) return `${path}: expected array`;
+        for (const [i, item] of value.entries()) {
+          const error = element(item, `${path}[${i}]`);
+          if (error) return error;
+        }
+        return undefined;
+      };
+    }
     case "tuple": {
-      if (!Array.isArray(value)) return `${path}: expected array`;
-      if (type.kind === "tuple" && value.length !== type.elements.length)
-        return `${path}: wrong tuple length`;
-      for (const [i, item] of value.entries()) {
-        const error = mismatch(
-          type.kind === "array" ? type.element : type.elements[i]!,
-          item,
-          `${path}[${i}]`,
-        );
-        if (error) return error;
-      }
-      return undefined;
+      const elements = type.elements.map(compileMatcher);
+      return (value, path) => {
+        if (!Array.isArray(value)) return `${path}: expected array`;
+        if (value.length !== elements.length) return `${path}: wrong tuple length`;
+        for (const [i, item] of value.entries()) {
+          const error = elements[i]!(item, `${path}[${i}]`);
+          if (error) return error;
+        }
+        return undefined;
+      };
     }
     case "record": {
-      if (value === null || typeof value !== "object" || Array.isArray(value))
-        return `${path}: expected object`;
-      const object = value as Record<string, unknown>;
-      const fields = new Map(type.fields.map((field) => [field.name, field]));
-      for (const field of type.fields) {
-        if (!field.optional && !Object.hasOwn(object, field.name))
-          return `${path}[${JSON.stringify(field.name)}]: required field is missing`;
-      }
-      for (const key of Object.keys(object)) {
-        const field = fields.get(key);
-        const memberPath = `${path}[${JSON.stringify(key)}]`;
-        if (!field && type.additional.kind === "never") return `${memberPath}: unexpected field`;
-        const error = mismatch(field?.type ?? type.additional, object[key], memberPath);
-        if (error) return error;
-      }
-      return undefined;
+      const fields = new Map(type.fields.map((field) => [field.name, compileMatcher(field.type)]));
+      const required = type.fields.filter((field) => !field.optional).map((field) => field.name);
+      const additional =
+        type.additional.kind === "never" ? undefined : compileMatcher(type.additional);
+      return (value, path) => {
+        if (value === null || typeof value !== "object" || Array.isArray(value))
+          return `${path}: expected object`;
+        const object = value as Record<string, unknown>;
+        for (const name of required) {
+          if (!Object.hasOwn(object, name))
+            return `${path}[${JSON.stringify(name)}]: required field is missing`;
+        }
+        for (const key of Object.keys(object)) {
+          const member = fields.get(key) ?? additional;
+          const memberPath = `${path}[${JSON.stringify(key)}]`;
+          if (!member) return `${memberPath}: unexpected field`;
+          const error = member(object[key], memberPath);
+          if (error) return error;
+        }
+        return undefined;
+      };
     }
     case "proof":
-      return `${path}: JSON does not establish proof membership`;
+      return (_value, path) => `${path}: JSON does not establish proof membership`;
   }
+}
+
+/** A prepared column contract. Values must already be valid JSON. */
+export type StructuralColumnValidator = (value: unknown, context: string) => void;
+
+/**
+ * Snapshot a declaration for repeated validation within an insertion batch.
+ * No global cache: edited declarations must be checked anew on the next batch.
+ * Primitive columns remain the responsibility of primitive validation.
+ */
+export function compileStructuralColumnValidator(column: ColumnDecl): StructuralColumnValidator {
+  if (!column.shape) return () => {};
+  const match = compileMatcher(declaredColumnType(column));
+  const name = column.name;
+  return (value, context) => {
+    const error = match(value, "$");
+    if (error) throw new Error(`${context}, column '${name}': ${error}`);
+  };
 }
 
 /** Validate before insertion, so no backend can silently drop invalid input rows. */
@@ -118,9 +158,7 @@ export function validateStructuralColumn(
   column: ColumnDecl,
   context: string,
 ): void {
-  if (!column.shape) return;
-  const error = mismatch(declaredColumnType(column), value, "$");
-  if (error) throw new Error(`${context}, column '${column.name}': ${error}`);
+  compileStructuralColumnValidator(column)(value, context);
 }
 
 /** Check each rule against its published-context contribution, before annotation widening. */

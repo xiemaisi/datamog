@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { parse, parseRaw, postProcess } from "datamog-parser";
 import { analyze } from "../src/analyzer.ts";
 import { checkModuleBoundaries, elaborate } from "../src/elaborate.ts";
-import { declaredColumnType, validateStructuralColumn } from "../src/structural-declarations.ts";
+import {
+  compileStructuralColumnValidator,
+  declaredColumnType,
+  validateStructuralColumn,
+} from "../src/structural-declarations.ts";
 import { inferTypes } from "../src/types.ts";
 const typed = (source: string) => inferTypes(analyze(parse(source)));
 
@@ -81,4 +85,59 @@ test("module wiring checks retained structural input contracts against published
     expect(() =>
       check(`${source} input predicate q(x: value) := out from "m.dl"(data = p).`),
     ).toThrow("structural declaration");
+});
+
+test("prepared validators snapshot contracts without caching later declaration edits", () => {
+  const decl = typed("input predicate p(x: {n: integer}?).").extDecls.get("p")!.columns[0]!;
+  const before = compileStructuralColumnValidator(decl);
+  decl.shape = typed("input predicate p(x: {n: string}).").extDecls.get("p")!.columns[0]!.shape;
+  decl.nullable = false;
+  decl.name = "changed";
+  const after = compileStructuralColumnValidator(decl);
+  expect(() => before(null, "row 1")).not.toThrow();
+  expect(() => before({ n: 1 }, "row 2")).not.toThrow();
+  expect(() => before({ n: "one" }, "row 3")).toThrow(
+    `row 3, column 'x': $["n"]: expected integer`,
+  );
+  expect(() => after({ n: "one" }, "row 4")).not.toThrow();
+  expect(() => after({ n: 1 }, "row 5")).toThrow(
+    `row 5, column 'changed': $["n"]: expected string`,
+  );
+  expect(() => after(null, "row 6")).toThrow("expected object");
+});
+
+test("nested nullable errors traverse each input field once", () => {
+  let schema = "{n: integer}?";
+  let reads = 0;
+  let value: unknown = {
+    get n() {
+      reads++;
+      return "bad";
+    },
+  };
+  for (let i = 0; i < 12; i++) {
+    schema = `{child: ${schema}}?`;
+    value = { child: value };
+  }
+  const decl = typed(`input predicate p(x: ${schema}).`).extDecls.get("p")!.columns[0]!;
+  const validate = compileStructuralColumnValidator(decl);
+  expect(() => validate(value, "row 7")).toThrow(
+    `row 7, column 'x': $${'["child"]'.repeat(12)}["n"]: expected integer`,
+  );
+  expect(reads).toBe(1);
+});
+
+test("prepared record indexes preserve special field names and own-field presence", () => {
+  const decl = typed(
+    'input predicate p(x: {"__proto__": integer, "constructor"?: string}).',
+  ).extDecls.get("p")!.columns[0]!;
+  const validate = compileStructuralColumnValidator(decl);
+  expect(() => validate(JSON.parse('{"__proto__": 1}'), "row 1")).not.toThrow();
+  expect(() => validate({}, "row 2")).toThrow(' $["__proto__"]: required field is missing');
+  expect(() => validate(JSON.parse('{"__proto__": 1, "constructor": 2}'), "row 3")).toThrow(
+    '$["constructor"]: expected string',
+  );
+  expect(() => validate(JSON.parse('{"__proto__": 1, "toString": 2}'), "row 4")).toThrow(
+    '$["toString"]: unexpected field',
+  );
 });
