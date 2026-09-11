@@ -215,7 +215,13 @@ function semanticSubtype(
     semanticSubtype(a, b, budget, work, depth + 1);
   const a = source;
   const b = target;
-  if (a.kind === "never" || b.kind === "value" || typeKey(a, work) === typeKey(b, work))
+  // Different kinds cannot have equal structural keys. In particular, avoid
+  // reading a whole target-union key for every product branch tested against it.
+  if (
+    a.kind === "never" ||
+    b.kind === "value" ||
+    (a.kind === b.kind && typeKey(a, work) === typeKey(b, work))
+  )
     return true;
   if (a.kind === "union") return a.members.every((member) => recurse(member, b));
   if (b.kind === "union") {

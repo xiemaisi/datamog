@@ -126,3 +126,20 @@ test("bounded intersection does not hide malformed type errors", () => {
     "Duplicate semantic field",
   );
 });
+
+test("tuple-to-array checks spend work on elements rather than impossible key equality", () => {
+  const tuple: SemanticType = {
+    kind: "tuple",
+    elements: Array.from({ length: 256 }, () => scalarType("integer")),
+  };
+  // This budget covers normalization and the element checks. Constructing and
+  // comparing a whole tuple key with an array key exhausted it before dispatch.
+  for (const [name, expected] of [
+    ["integer", true],
+    ["float", true],
+    ["string", false],
+  ] as const)
+    expect(
+      isSemanticSubtype(tuple, { kind: "array", element: scalarType(name) }, { maxWork: 15_000 }),
+    ).toBe(expected);
+});

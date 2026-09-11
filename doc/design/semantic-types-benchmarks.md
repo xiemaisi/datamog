@@ -53,9 +53,41 @@ The six-choice tuple case has 64 alternatives and exhausts the default 1,000,000
 work units; with 16,000,000 explicit units it establishes coverage. The larger
 budget is a benchmark comparison only, not a change to compiler policy.
 Inspect repeated work before increasing limits: the subtype relation currently
-requests equality keys even for different top-level kinds, including a tuple
-against its target union. Their keys cannot be equal.
+requested equality keys even for different top-level kinds, including a tuple
+against its target union. Their keys cannot be equal. The follow-up below removes
+that work.
 
 Prepared batch validation avoids repeated schema normalization and field-index
 construction. Nested nullable failure measurements retain exact paths at every
 tested depth. Neither observation calls for a default-budget change.
+
+
+## Follow-up: skip equality keys for different kinds
+
+The subtype fast path now compares structural equality keys only when the two
+normalized types have the same kind. Normalization, element checks, union coverage
+and all default budgets remain in place. This also avoids constructing a whole
+tuple key before checking whether its elements fit an array contract.
+
+A deterministic regression checks a 256-element integer tuple against integer,
+float and string array contracts with 15,000 work units. The previous implementation
+exhausts that budget for the integer-array check; the revised implementation
+accepts the numeric contracts and rejects the string contract within the budget.
+
+Repeating the same seven-sample benchmark in the same environment gave the
+following medians. Before measurements used the baseline above; after measurements
+include only the kind guard. These are separate runs, not a controlled speedup
+estimate. The remaining six-choice work-limit outcome is explicit and unchanged.
+
+| Choices | Work budget | Outcome (both runs) | Before ms | After ms |
+| ---: | ---: | --- | ---: | ---: |
+| 2 | 1,000,000 | accepted | 0.0082 | 0.0088 |
+| 2 | 16,000,000 | accepted | 0.0081 | 0.0081 |
+| 4 | 1,000,000 | accepted | 0.0600 | 0.0583 |
+| 4 | 16,000,000 | accepted | 0.0545 | 0.0618 |
+| 6 | 1,000,000 | work-limit | 0.1712 | 0.2827 |
+| 6 | 16,000,000 | accepted | 0.5915 | 0.6897 |
+
+Further optimization should account for repeated same-kind product comparisons
+before reconsidering default limits. These measurements do not establish a need
+for larger budgets or additional declaration syntax.
