@@ -99,8 +99,9 @@ The projection API describes JSON access with literal string keys and nonnegativ
 integer indices. Its result separates the successful value type from possible
 absence. Required nullable fields are present; optional fields and array indices
 may be absent. Unsupported receivers/keys produce `never` with possible absence.
-Language-level string indexing, negative-index semantics, dynamic indices and
-source diagnostics remain responsibilities of future expression typing.
+The shared language projection helper additionally handles proven string receivers
+and dynamic integer indices into arrays and tuples. Mixed string/JSON receivers
+remain conservative; source diagnostics and runtime bounds checks stay separate.
 
 Proof identities use elaborated predicate identities, not source names. The proof
 registry stores constructor payload signatures and permits forward references,
@@ -147,8 +148,9 @@ required fields, array literals become tuples, and `list` aggregates retain an
 array element type. Positive predicate bindings and equality dependencies carry
 these shapes into consumers. Literal JSON projections retain successful component
 types; a missing projection contributes `never`, not null. Conditional branches
-combine alternatives. Mixed string/JSON receivers and dynamic or negative indexing
-use a conservative fallback until language-level projection typing is integrated.
+combine alternatives. Dynamic integer indexing carries array elements or the union
+of tuple elements through predicate boundaries. Mixed string/JSON receivers
+retain a conservative fallback.
 
 This remains an over-approximation: positive predicate requirements on shared
 variables and bidirectional equality bindings are intersected, but general guards
@@ -196,6 +198,13 @@ boundary checks remain authoritative for the declaration syntax supported today.
 Structural input declarations and validation are now implemented as described below.
 
 ## Typed operands and backend extraction
+
+`semantic-expressions.ts` shares structural expression typing between inference
+and `typed-operands.ts`: literals, construction metadata, conditionals, list
+aggregates, and literal/dynamic projections use the same rules. Callers supply
+their variable environment, proof registry, and legacy nullness/unknown fallback.
+The projection helper retains presence independently; consumers use its successful
+value type without turning a missing element into a null value.
 
 `typed-operands.ts` makes inferred scalar fields usable in arithmetic, logical
 operators, scalar builtin calls, and supported aggregate operands. For example,
@@ -289,8 +298,8 @@ expansion before type inference.
 Registry reference validation is implemented. Exposing proof signatures as
 user-facing declarations still requires a separate syntax and boundary design;
 registry closure alone grants neither a new contract nor proof membership.
-The next implementation step is to share expression/projection typing between
-semantic inference and operand lowering. Inferred types, published contracts,
+Expression/projection typing is now shared between semantic inference and operand
+lowering. Dependency-driven propagation and inference precision are next. Inferred types, published contracts,
 nullness and partiality must remain distinct during this migration. Structural
 input declarations already validate external data before trusting its shape.
 

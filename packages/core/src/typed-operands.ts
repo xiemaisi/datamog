@@ -1,20 +1,11 @@
 /** Lower proven JSON scalar operands onto existing backend extraction operations. */
-import { proofConstruction, proofProjection } from "datamog-parser";
 import type { AnalyzedProgram } from "./analyzer.ts";
 import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType } from "./ast.ts";
 import { EQUALITY_OPS, ORDERING_OPS } from "./ast.ts";
 import { resolveCall } from "./builtins.ts";
 import { constrainSemanticVariable } from "./semantic-constraints.ts";
-import {
-  ANY_VALUE,
-  NEVER,
-  type SemanticType,
-  fromPrimitiveType,
-  projectProofPayload,
-  projectType,
-  unionType,
-} from "./semantic-type.ts";
-import { boundSemanticType } from "./semantic-widening.ts";
+import { inferSemanticExpression } from "./semantic-expressions.ts";
+import { type SemanticType, fromPrimitiveType, unionType } from "./semantic-type.ts";
 import { type TypedProgram, inferTermType, rebuildVarTypes } from "./types.ts";
 
 const implicitOperands = new WeakMap<object, HeadTerm>();
@@ -69,79 +60,20 @@ export function lowerTypedOperands(program: TypedProgram): boolean {
         if (type) constrainSemanticVariable(vars, arg.name, type);
       }
     }
-    const infer = (term: HeadTerm): SemanticType | undefined => {
-      switch (term.$type) {
-        case "Variable":
-          return vars.get(term.name);
-        case "ObjectLiteral": {
-          const proof = proofConstruction(term);
-          if (proof) return { kind: "proof", id: { predicate: proof.predicate } };
-          if (new Set(term.entries.map((e) => e.key)).size !== term.entries.length)
-            return ANY_VALUE;
-          return boundSemanticType({
-            kind: "record",
-            additional: NEVER,
-            fields: term.entries.map((e) => ({
-              name: e.key,
-              optional: false,
-              type: infer(e.value) ?? ANY_VALUE,
-            })),
-          });
-        }
-        case "ArrayLiteral":
-          return boundSemanticType({
-            kind: "tuple",
-            elements: term.elements.map((e) => infer(e) ?? ANY_VALUE),
-          });
-        case "Conditional":
-          return boundSemanticType(
-            unionType(infer(term.consequent) ?? ANY_VALUE, infer(term.alternate) ?? ANY_VALUE),
-          );
-        case "Subscript": {
-          const match = proofProjection(term);
-          if (match) {
-            const source = infer(match.receiver);
-            if (!source) return undefined;
-            const registry =
-              match.predicate === owner ? program.proofTypes : program.publishedProofTypes;
-            return projectProofPayload(
-              source,
-              match.predicate,
-              match.name,
-              match.index,
-              (id, name) => registry.payload(id, name),
-            );
-          }
-          const source = infer(term.object);
-          if (source?.kind === "scalar" && source.name === "string") return source;
-          const index = term.index;
-          const json = (t: SemanticType): boolean =>
-            t.kind === "union" ? t.members.every(json) : t.kind !== "scalar" && t.kind !== "proof";
-          if (
-            source &&
-            json(source) &&
-            (index.$type === "StringLiteral" ||
-              (index.$type === "NumberLiteral" &&
-                index.value >= 0 &&
-                Number.isInteger(index.value)))
-          ) {
-            return projectType(source, index.value).type;
-          }
-          const element = (type: SemanticType): SemanticType => {
-            if (type.kind === "array") return type.element;
-            if (type.kind === "tuple") return unionType(...type.elements);
-            if (type.kind === "union") return unionType(...type.members.map(element));
-            return ANY_VALUE;
-          };
-          if (source && inferTermType(index, legacy, storage) === "integer") return element(source);
-          return ANY_VALUE;
-        }
-        default: {
-          const type = inferTermType(term, legacy, storage);
+    const infer = (term: HeadTerm): SemanticType | undefined =>
+      inferSemanticExpression(term, {
+        variable: (name) => vars.get(name),
+        primitive: (expr) => inferTermType(expr, legacy, storage),
+        payload: (id, name) =>
+          (id.predicate === owner ? program.proofTypes : program.publishedProofTypes).payload(
+            id,
+            name,
+          ),
+        fallback: (expr) => {
+          const type = inferTermType(expr, legacy, storage);
           return type ? fromPrimitiveType(type) : undefined;
-        }
-      }
-    };
+        },
+      });
     for (let pass = 0; pass <= body.length; pass++) {
       let learned = false;
       for (const element of body) {

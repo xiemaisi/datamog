@@ -1,22 +1,21 @@
-import { proofConstruction, proofProjection } from "datamog-parser";
+import { proofConstruction } from "datamog-parser";
 /** Structural inference for implementation facts and published semantic contracts. */
 import { BUILTIN_BODY_ATOMS } from "./analyzer.ts";
 import type { HeadTerm, Rule } from "./ast.ts";
 import { mayBeNull, refineBody } from "./nullness.ts";
 import { constrainSemanticVariable } from "./semantic-constraints.ts";
+import { inferSemanticExpression } from "./semantic-expressions.ts";
 import {
   ANY_VALUE,
   NEVER,
   ProofTypeRegistry,
   type SemanticType,
   fromPrimitiveType,
-  projectProofPayload,
-  projectType,
   sameSemanticType,
   scalarType,
   unionType,
 } from "./semantic-type.ts";
-import { boundSemanticType, widenSemanticType } from "./semantic-widening.ts";
+import { widenSemanticType } from "./semantic-widening.ts";
 import { declaredColumnType } from "./structural-declarations.ts";
 import { type TypedProgram, inferTermType, rebuildVarTypes } from "./types.ts";
 
@@ -124,101 +123,25 @@ export function inferSemanticColumns(
             if (type) constrainSemanticVariable(vars, arg.name, type);
           }
         }
-        const infer = (term: HeadTerm): SemanticType | undefined => {
-          const child = (expr: HeadTerm) => infer(expr);
-          switch (term.$type) {
-            case "Variable": {
-              const type = vars.get(term.name);
-              return type?.kind === "union" && nonNull.has(term.name)
-                ? unionType(
-                    ...type.members.filter(
-                      (member) => member.kind !== "scalar" || member.name !== "null",
-                    ),
-                  )
+        const infer = (term: HeadTerm): SemanticType | undefined =>
+          inferSemanticExpression(term, {
+            variable: (name) => {
+              const type = vars.get(name);
+              return type?.kind === "union" && nonNull.has(name)
+                ? unionType(...type.members.filter((t) => t.kind !== "scalar" || t.name !== "null"))
                 : type;
-            }
-            case "NullLiteral":
-              return scalarType("null");
-            case "StringLiteral":
-              return scalarType("string");
-            case "BooleanLiteral":
-              return scalarType("boolean");
-            case "NumberLiteral":
-              return fromPrimitiveType(
-                inferTermType(term, legacyVars.get(rule)!, program.columnTypes)!,
-              );
-            case "ObjectLiteral": {
-              const proof = proofConstruction(term);
-              if (proof) return { kind: "proof", id: { predicate: proof.predicate } };
-              const fields = [];
-              const keys = new Set<string>();
-              for (const entry of term.entries) {
-                // Leave duplicate-key behavior to existing backends.
-                if (keys.has(entry.key)) return ANY_VALUE;
-                keys.add(entry.key);
-                const type = child(entry.value);
-                if (!type) return undefined;
-                fields.push({ name: entry.key, type, optional: false });
-              }
-              return boundSemanticType({ kind: "record", fields, additional: NEVER });
-            }
-            case "ArrayLiteral": {
-              const elements: SemanticType[] = [];
-              for (const expr of term.elements) {
-                const type = child(expr);
-                if (!type) return undefined;
-                elements.push(type);
-              }
-              return boundSemanticType({ kind: "tuple", elements });
-            }
-            case "Conditional": {
-              const a = child(term.consequent);
-              const b = child(term.alternate);
-              return a && b ? widenSemanticType(a, b) : undefined;
-            }
-            case "Subscript": {
-              const match = proofProjection(term);
-              if (match) {
-                const source = child(match.receiver);
-                if (!source) return undefined;
-                return projectProofPayload(
-                  source,
-                  match.predicate,
-                  match.name,
-                  match.index,
-                  (id, name) => signatures.get(id.predicate)?.get(name),
-                );
-              }
-              const receiver = child(term.object);
-              if (!receiver) return undefined;
-              // This API handles JSON receivers and literal nonnegative keys.
-              // Language string and negative/dynamic indexing retain fallback types.
-              const index = term.index;
-              if (
-                supportsJsonProjection(receiver) &&
-                (index.$type === "StringLiteral" ||
-                  (index.$type === "NumberLiteral" &&
-                    Number.isInteger(index.value) &&
-                    index.value >= 0))
-              ) {
-                return projectType(receiver, index.value).type;
-              }
-              break;
-            }
-            case "AggregateCall":
-              if (term.func === "list") {
-                const element = child(term.arg);
-                return element ? boundSemanticType({ kind: "array", element }) : undefined;
-              }
-              break;
-          }
-          const coarse = inferTermType(term, legacyVars.get(rule)!, program.columnTypes);
-          if (!coarse) return ANY_VALUE;
-          const type = fromPrimitiveType(coarse);
-          return mayBeNull(term, nonNull, rule, nullContext)
-            ? unionType(type, scalarType("null"))
-            : type;
-        };
+            },
+            primitive: (expr) => inferTermType(expr, legacyVars.get(rule)!, legacyContext),
+            payload: (id, name) => signatures.get(id.predicate)?.get(name),
+            fallback: (expr) => {
+              const coarse = inferTermType(expr, legacyVars.get(rule)!, legacyContext);
+              if (!coarse) return ANY_VALUE;
+              const type = fromPrimitiveType(coarse);
+              return mayBeNull(expr, nonNull, rule, nullContext)
+                ? unionType(type, scalarType("null"))
+                : type;
+            },
+          });
         // Equalities propagate in both directions, including requirements on
         // names already bound by predicates or earlier equality bindings.
         for (let pass = 0; pass <= rule.body.length; pass++) {
@@ -287,11 +210,4 @@ export function inferSemanticColumns(
       );
   }
   return finish(columns);
-}
-
-/** A string alternative needs the language's distinct string-indexing semantics. */
-function supportsJsonProjection(type: SemanticType): boolean {
-  return type.kind === "union"
-    ? type.members.every(supportsJsonProjection)
-    : type.kind !== "scalar" && type.kind !== "proof";
 }

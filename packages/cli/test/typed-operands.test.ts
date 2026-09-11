@@ -48,6 +48,24 @@ for (const [name, create] of engines)
         await backend.close();
       }
     }
+    test("dynamic projections forward shapes, null values and absence", async () => {
+      expect(
+        await run(`
+        rows([{"n": 7}, {"n": 9}]). index(0). index(1). index(2).
+        selected(A[I]) :- rows(A), index(I).
+        answer(P["n"] + 1) :- selected(P).
+        ?- answer(N).
+      `),
+      ).toEqual([[{ N: 8 }, { N: 10 }]]);
+      const nullable = `rows([7, null]). index(0). index(1). index(2).
+        selected(A[I]) :- rows(A), index(I).
+        answer(N + 1) :- selected(N), N <> null.`;
+      const selected = (await run(`${nullable} ?- selected(N).`))[0]!;
+      expect(selected).toHaveLength(2);
+      expect(selected).toContainEqual({ N: null });
+      expect(selected).toContainEqual({ N: 7 });
+      expect(await run(`${nullable} ?- answer(N).`)).toEqual([[{ N: 8 }]]);
+    });
     test("type aliases drive scalar extraction and structural input validation", async () => {
       const source = `type Person = {name: string, age: Age}. type Age = integer.
         input predicate people(p: Person).

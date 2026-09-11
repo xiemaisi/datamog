@@ -80,3 +80,42 @@ test("exhausting propagation work discards unfinished precision", () => {
   expect(typed.semanticColumnTypes.get("p0")).toEqual([ANY_VALUE]);
   expect(typed.semanticColumnTypes.get("p130")).toEqual([ANY_VALUE]);
 });
+
+test("dynamic projections retain element shapes across predicate boundaries", () => {
+  const typed = infer(`
+    input predicate rows(items: [{n: integer}]).
+    index(0).
+    selected(A[I]) :- rows(A), index(I).
+    result(P["n"] + 1) :- selected(P).
+  `);
+  for (const columns of [typed.semanticColumnTypes, typed.publishedSemanticColumnTypes]) {
+    expect(columns.get("selected")).toEqual([
+      {
+        kind: "record",
+        fields: [{ name: "n", optional: false, type: int }],
+        additional: NEVER,
+      },
+    ]);
+    expect(columns.get("result")).toEqual([int]);
+  }
+  expect(typed.columnTypes.get("selected")).toEqual(["value"]);
+});
+
+test("dynamic projections preserve nullable and mixed element alternatives", () => {
+  const typed = infer(`
+    input predicate rows(items: [integer?]). index(0).
+    selected(A[I]) :- rows(A), index(I).
+    pair([1, "s"]). mixed(A[I]) :- pair(A), index(I).
+  `);
+  expect(typed.publishedSemanticColumnTypes.get("selected")).toEqual([
+    unionType(int, scalarType("null")),
+  ]);
+  expect(typed.publishedSemanticColumnTypes.get("mixed")).toEqual([unionType(int, str)]);
+  expect(() =>
+    infer(`
+    input predicate rows(items: [integer?]). index(0).
+    selected(A[I]) :- rows(A), index(I).
+    result(X + 1) :- selected(X).
+  `),
+  ).toThrow();
+});
