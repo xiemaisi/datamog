@@ -140,3 +140,13 @@ test("wide tuples preserve element types and summarize mixed alternatives soundl
     expect(boundSemanticType(summary, budget)).toEqual(summary);
   }
 });
+
+test("producer accumulation retains alternatives that collectively cover a new contribution", () => {
+  const previous = unionType(
+    { kind: "tuple", elements: [int] },
+    { kind: "tuple", elements: [str] },
+  );
+  const contribution: SemanticType = { kind: "tuple", elements: [unionType(int, str)] };
+  expect(widenSemanticType(previous, contribution)).toEqual(previous);
+  expect(isSemanticSubtype(contribution, previous)).toBe(true);
+});

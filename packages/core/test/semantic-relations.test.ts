@@ -106,12 +106,11 @@ test("proof identity survives structural operations without implying membership"
   expect(intersectTypes(unionType(proof, otherProof), proof)).toEqual(proof);
 });
 
-test("target union coverage is deliberately conservative", () => {
+test("target unions collectively cover tuple component alternatives", () => {
   const split = unionType(tuple(int), tuple(str));
   const combined = tuple(unionType(int, str));
   expect(isSemanticSubtype(split, combined)).toBe(true);
-  // Equivalent sets, but proving collective coverage needs a stronger algorithm.
-  expect(isSemanticSubtype(combined, split)).toBe(false);
+  expect(isSemanticSubtype(combined, split)).toBe(true);
 });
 
 // Independent finite denotation oracle: checks successful subtype judgments and
@@ -189,4 +188,111 @@ test("structural relations agree with concrete JSON membership", () => {
       }
     }
   }
+});
+
+test("collective coverage preserves correlations between product positions", () => {
+  const source = tuple(unionType(int, str), unionType(int, str));
+  const diagonal = unionType(tuple(int, int), tuple(str, str));
+  expect(isSemanticSubtype(source, diagonal)).toBe(false);
+  expect(isSemanticSubtype(source, unionType(diagonal, tuple(int, str), tuple(str, int)))).toBe(
+    true,
+  );
+  expect(
+    isSemanticSubtype(
+      record(tuple(unionType(int, str))),
+      unionType(record(tuple(int)), record(tuple(str))),
+    ),
+  ).toBe(true);
+});
+
+test("optional field coverage distinguishes absence from null and preserves extra fields", () => {
+  expect(isSemanticSubtype(record(int, true), unionType(emptyRecord, record(int)))).toBe(true);
+  expect(
+    isSemanticSubtype(record(unionType(int, nil), true), unionType(emptyRecord, record(int))),
+  ).toBe(false);
+  expect(
+    isSemanticSubtype(
+      record(unionType(int, nil), true),
+      unionType(emptyRecord, record(int), record(nil)),
+    ),
+  ).toBe(true);
+  const absent = record(NEVER, true, ANY_VALUE);
+  expect(
+    isSemanticSubtype(
+      record(int, true, ANY_VALUE),
+      unionType(absent, record(int, false, ANY_VALUE)),
+    ),
+  ).toBe(true);
+  expect(
+    isSemanticSubtype(
+      record(int, true, ANY_VALUE),
+      unionType(emptyRecord, record(int, false, ANY_VALUE)),
+    ),
+  ).toBe(false);
+});
+
+test("array element unions cannot be distributed across whole arrays", () => {
+  expect(isSemanticSubtype(array(unionType(int, str)), unionType(array(int), array(str)))).toBe(
+    false,
+  );
+  expect(
+    isSemanticSubtype(array(tuple(unionType(int, str))), array(unionType(tuple(int), tuple(str)))),
+  ).toBe(true);
+  expect(
+    isSemanticSubtype(
+      tuple(unionType(proof, otherProof)),
+      unionType(tuple(proof), tuple(otherProof)),
+    ),
+  ).toBe(true);
+  expect(isSemanticSubtype(tuple(openRecord), unionType(tuple(proof), tuple(otherProof)))).toBe(
+    false,
+  );
+});
+
+test("collective coverage is bounded and exhaustion never establishes a contract", () => {
+  const source = tuple(unionType(int, str));
+  const target = unionType(tuple(int), tuple(str));
+  expect(isSemanticSubtype(source, target, { maxUnionSplits: 0 })).toBe(false);
+  expect(isSemanticSubtype(source, target, { maxUnionSplits: 2 })).toBe(true);
+  expect(isSemanticSubtype(int, unionType(float, str), { maxUnionSplits: 0 })).toBe(true);
+  expect(() => isSemanticSubtype(source, target, { maxUnionSplits: -1 })).toThrow("Union coverage");
+});
+
+test("collective coverage agrees with an independent finite membership oracle", () => {
+  const leaf = [int, str, nil, unionType(int, str), unionType(int, nil)];
+  const products = leaf.flatMap((type) => [
+    tuple(type),
+    record(type),
+    record(type, true),
+    record(type, true, ANY_VALUE),
+    array(type),
+  ]);
+  const targets = products.flatMap((a) => products.map((b) => unionType(a, b)));
+  const values: unknown[] = [[], {}, [1, "s"], { y: 1 }];
+  for (const value of [1, "s", null]) values.push([value], { x: value }, { x: value, y: 1 });
+  for (const source of products) {
+    for (const target of targets) {
+      if (!isSemanticSubtype(source, target)) continue;
+      for (const value of values)
+        if (contains(source, value)) expect(contains(target, value)).toBe(true);
+    }
+  }
+});
+
+test("partial Cartesian coverage cannot succeed when the remaining budget is exhausted", () => {
+  const source = tuple(unionType(int, str), unionType(int, str));
+  const target = unionType(tuple(int, int), tuple(int, str), tuple(str, int), tuple(str, str));
+  expect(isSemanticSubtype(source, target, { maxUnionSplits: 4 })).toBe(false);
+  expect(isSemanticSubtype(source, target, { maxUnionSplits: 6 })).toBe(true);
+});
+
+test("additional record fields may choose different union alternatives independently", () => {
+  const source: SemanticType = { kind: "record", fields: [], additional: unionType(int, str) };
+  const target = unionType(
+    { kind: "record", fields: [], additional: int },
+    { kind: "record", fields: [], additional: str },
+  );
+  expect(contains(source, { x: 1, y: "s" })).toBe(true);
+  expect(contains(target, { x: 1, y: "s" })).toBe(false);
+  expect(isSemanticSubtype(source, target)).toBe(false);
 });

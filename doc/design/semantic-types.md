@@ -48,16 +48,30 @@ field does not satisfy a required field even when its value type fits. A proof
 reference only satisfies the same nominal proof identity or a containing union
 or `value`; JSON storage does not make it a structural record subtype.
 
-Source unions are checked alternative by alternative. For a target union, each
-source alternative must fit a single target alternative. This is sound but
-incomplete: a one-element tuple of `integer | string` has the same inhabitants as
-the union of a one-element integer tuple and a one-element string tuple, but the
-checker does not prove the former is a subtype of the latter. These are tuple
-shapes in the internal representation, not homogeneous array declarations. Consequently
-a false result means the contract was not established, not necessarily that the
-types contain a counterexample. Widening uses this API to avoid redundant producer
-alternatives. Published semantic contracts propagate through a separate pass.
-Structural annotations and module boundaries use semantic subtype checks alongside
+Source unions are checked alternative by alternative. For a target union, the
+checker first looks for a single alternative accepting the source. If none does,
+it can split finite product choices in the source: unions inside tuple components
+or declared record fields, and optional fields into absent and present branches.
+Each resulting branch must satisfy the target union. Thus a one-element tuple of
+`integer | string` satisfies the union of a one-element integer tuple and a
+one-element string tuple. These are internal tuple shapes, not array declarations.
+
+Splitting is exact and preserves correlations between components. An absent field
+is represented by optional `never`, including in open records, so absence is not
+confused with null or an undeclared field allowed by the additional-field policy.
+Array elements and additional record fields are not distributed into whole-value
+alternatives: an array of `integer | string` may mix both types, so it does not
+satisfy `[integer] | [string]`.
+
+The checker generates at most 256 split alternatives per subtype call and searches
+at most 32 structural levels for a split. These provisional limits bound product
+expansion, not the cost of normalizing arbitrary caller-supplied type trees.
+Exhaustion declines to establish the contract; partial coverage never counts as
+success. The algorithm remains sound but incomplete, so a false result means a
+guarantee was not established, not necessarily that a counterexample exists.
+Widening uses the same API to retain existing alternatives that collectively cover
+a contribution. Published semantic contracts propagate through a separate pass;
+structural annotations and module boundaries use semantic subtype checks alongside
 the existing primitive and nullness checks.
 
 `intersectTypes` computes the represented intersection, distributing over unions.
@@ -335,10 +349,11 @@ The foundation keeps inferred facts, published contracts, nullness and partialit
 separate. Work-budget fallback preserves completed types outside the dependency
 closure of unfinished predicates. Its treatment of affected predicates remains
 conservative: all columns, payloads and sibling contributions are widened together.
-Structural subtyping remains sound but incomplete for collective union coverage,
-and exact structural operations on arbitrary caller-supplied types have no global
-work cap.
-The inference budgets and summary choices remain provisional compiler policy.
+Structural subtyping proves bounded collective coverage of finite product choices;
+it remains incomplete beyond those limits and does not implement general type
+subtraction or complement. Exact structural operations on arbitrary caller-supplied
+types still have no global work cap. The inference budgets and summary choices
+remain provisional compiler policy.
 
 Exposing proof signatures as user-facing declarations requires a separate syntax
 and boundary design. Registry closure alone grants neither a new contract nor

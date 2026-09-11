@@ -124,25 +124,46 @@ export function unionType(...members: readonly SemanticType[]): SemanticType {
 }
 
 /**
- * Sound structural contract check. A target union must contain an alternative
- * accepting the entire source (after splitting source unions). This deliberately
- * does not prove collective coverage by several target record/tuple alternatives.
- * Proofs are nominal, even though their storage representation is a JSON object.
+ * Sound structural contract check, including bounded collective union coverage.
+ * Tuples and records can be split along component unions or field presence;
+ * array elements and additional record fields cannot be distributed this way.
+ * False means the guarantee was not established, including on budget exhaustion.
+ * Proofs remain nominal even though their storage representation is JSON.
  */
-export function isSemanticSubtype(source: SemanticType, target: SemanticType): boolean {
+export function isSemanticSubtype(
+  source: SemanticType,
+  target: SemanticType,
+  options: { maxUnionSplits?: number } = {},
+): boolean {
+  const remaining = options.maxUnionSplits ?? 256;
+  if (!Number.isSafeInteger(remaining) || remaining < 0)
+    throw new Error("Union coverage split limit must be a nonnegative safe integer");
+  return semanticSubtype(source, target, { remaining });
+}
+
+function semanticSubtype(
+  source: SemanticType,
+  target: SemanticType,
+  budget: { remaining: number },
+): boolean {
+  const recurse = (a: SemanticType, b: SemanticType) => semanticSubtype(a, b, budget);
   const a = normalizeType(source);
   const b = normalizeType(target);
   if (a.kind === "never" || b.kind === "value" || typeKey(a) === typeKey(b)) return true;
-  if (a.kind === "union") return a.members.every((member) => isSemanticSubtype(member, b));
-  if (b.kind === "union") return b.members.some((member) => isSemanticSubtype(a, member));
+  if (a.kind === "union") return a.members.every((member) => recurse(member, b));
+  if (b.kind === "union") {
+    if (b.members.some((member) => recurse(a, member))) return true;
+    const alternatives = splitProductType(a, budget);
+    return alternatives?.every((member) => recurse(member, b)) ?? false;
+  }
   if (a.kind === "scalar" && b.kind === "scalar") {
     return a.name === "integer" && b.name === "float";
   }
   if (a.kind === "array" && b.kind === "array") {
-    return isSemanticSubtype(a.element, b.element);
+    return recurse(a.element, b.element);
   }
   if (a.kind === "tuple" && b.kind === "array") {
-    return a.elements.every((element) => isSemanticSubtype(element, b.element));
+    return a.elements.every((element) => recurse(element, b.element));
   }
   if (a.kind === "array" && b.kind === "tuple") {
     return a.element.kind === "never" && b.elements.length === 0;
@@ -150,7 +171,7 @@ export function isSemanticSubtype(source: SemanticType, target: SemanticType): b
   if (a.kind === "tuple" && b.kind === "tuple") {
     return (
       a.elements.length === b.elements.length &&
-      a.elements.every((element, i) => isSemanticSubtype(element, b.elements[i]!))
+      a.elements.every((element, i) => recurse(element, b.elements[i]!))
     );
   }
   if (a.kind === "record" && b.kind === "record") {
@@ -159,11 +180,55 @@ export function isSemanticSubtype(source: SemanticType, target: SemanticType): b
       const from = recordField(a, name);
       const to = recordField(b, name);
       if (!to.optional && from.optional) return false;
-      if (!isSemanticSubtype(from.type, to.type)) return false;
+      if (!recurse(from.type, to.type)) return false;
     }
-    return isSemanticSubtype(a.additional, b.additional);
+    return recurse(a.additional, b.additional);
   }
   return false;
+}
+
+/**
+ * Split one finite product choice into exact alternatives. In an open record,
+ * the absent branch must explicitly forbid the field, not merely omit its entry.
+ * Only split one position at a time, avoiding materialization of a Cartesian
+ * product. The shared budget caps alternatives across the entire subtype check.
+ */
+function splitProductType(
+  type: SemanticType,
+  budget: { remaining: number },
+  depth = 0,
+): SemanticType[] | undefined {
+  if (budget.remaining < 2 || depth >= 32) return undefined;
+  if (type.kind === "union") {
+    if (type.members.length > budget.remaining) return undefined;
+    budget.remaining -= type.members.length;
+    return [...type.members];
+  }
+  if (type.kind === "tuple") {
+    for (const [i, element] of type.elements.entries()) {
+      const alternatives = splitProductType(element, budget, depth + 1);
+      if (alternatives)
+        return alternatives.map((member) => ({
+          kind: "tuple",
+          elements: type.elements.map((item, j) => (j === i ? member : item)),
+        }));
+    }
+  }
+  if (type.kind === "record") {
+    for (const [i, field] of type.fields.entries()) {
+      const replace = (replacement: SemanticField): SemanticType => ({
+        ...type,
+        fields: type.fields.map((item, j) => (j === i ? replacement : item)),
+      });
+      if (field.optional && field.type.kind !== "never") {
+        budget.remaining -= 2;
+        return [replace({ ...field, type: NEVER }), replace({ ...field, optional: false })];
+      }
+      const alternatives = splitProductType(field.type, budget, depth + 1);
+      if (alternatives) return alternatives.map((member) => replace({ ...field, type: member }));
+    }
+  }
+  return undefined;
 }
 
 function recordField(type: Extract<SemanticType, { kind: "record" }>, name: string): SemanticField {

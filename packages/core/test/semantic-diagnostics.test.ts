@@ -40,11 +40,17 @@ test("formatting distinguishes structural shape, presence and nominal identity",
 });
 
 test("union coverage failures do not claim a demonstrated counterexample", () => {
+  const source: SemanticType = { kind: "array", element: unionType(integer, string) };
+  const target = unionType({ kind: "array", element: integer }, { kind: "array", element: string });
+  expect(semanticContractMismatch(source, target)).toContain("union coverage not established");
+  expect(semanticContractMismatch(source, ANY_VALUE)).toBeUndefined();
+});
+
+test("collectively covered tuple contracts have no diagnostic", () => {
   const source: SemanticType = { kind: "tuple", elements: [unionType(integer, string)] };
   const target = unionType(
     { kind: "tuple", elements: [integer] },
     { kind: "tuple", elements: [string] },
   );
-  expect(semanticContractMismatch(source, target)).toContain("union coverage not established");
-  expect(semanticContractMismatch(source, ANY_VALUE)).toBeUndefined();
+  expect(semanticContractMismatch(source, target)).toBeUndefined();
 });
