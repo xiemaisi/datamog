@@ -65,8 +65,9 @@ satisfy `[integer] | [string]`.
 
 The checker generates at most 256 split alternatives per subtype call and searches
 at most 32 structural levels for a split. These provisional limits bound product
-expansion, not the cost of normalizing arbitrary caller-supplied type trees.
-Exhaustion declines to establish the contract; partial coverage never counts as
+expansion; a separate per-operation budget covers normalization, keys and relation
+work. Split-budget exhaustion declines to establish the contract, while structural
+work exhaustion raises `SemanticTypeLimitError`. Partial coverage never counts as
 success. The algorithm remains sound but incomplete, so a false result means a
 guarantee was not established, not necessarily that a counterexample exists.
 Widening uses the same API to retain existing alternatives that collectively cover
@@ -116,7 +117,32 @@ variable refinement bounds both input trees before intersection and caps recursi
 pair comparisons at 4,096. Exhaustion keeps the previous approximation, never a
 partial intersection; a successful result is bounded and must still be provably
 narrower. The exact intersection API remains available for structural relations
-and contract validation; its cost on arbitrary caller-supplied types is not capped.
+and contract validation, with the exact-operation limits described below.
+
+## Exact-operation work limits
+
+Exact normalization, equality, subtyping, intersection and projection share one
+work context per public operation. The default budget is 1,000,000 work units,
+charging type visits, collection sizes, key text and string comparisons. Structural
+nesting is capped at 256 levels before recursive traversal can exhaust the host
+stack. These are compiler resource policies, independent of the producer widening
+budget and the parser's declaration-expansion limits; they do not limit runtime
+JSON data. Selected APIs accept `maxWork` for callers needing a smaller budget.
+
+Structural keys embed child encodings directly instead of repeatedly JSON-quoting
+an already encoded child. Their size is linear in the represented tree, including
+escaped names. Keys are cached only within the current operation; each comparison
+still charges the key text it reads. Relation checks normalize inputs once and
+reuse those normalized subtrees. Record field lookup uses an index per relation
+check rather than scanning the whole field list for every name.
+
+Exhaustion raises `SemanticTypeLimitError`, never an invented empty type or a
+silently widened declaration. `intersectTypesWithinBudget` additionally enforces
+its caller's pair-comparison limit and returns unknown on either resource limit,
+allowing local inference to retain its previous approximation. Other errors, such
+as duplicate fields, still propagate. Registry definition shares a work context
+across all payloads and commits atomically only after normalization succeeds;
+reference validation and proof projection are budgeted too.
 
 ## Projections and proofs
 
@@ -351,9 +377,9 @@ closure of unfinished predicates. Its treatment of affected predicates remains
 conservative: all columns, payloads and sibling contributions are widened together.
 Structural subtyping proves bounded collective coverage of finite product choices;
 it remains incomplete beyond those limits and does not implement general type
-subtraction or complement. Exact structural operations on arbitrary caller-supplied
-types still have no global work cap. The inference budgets and summary choices
-remain provisional compiler policy.
+subtraction or complement. Exact structural operations now share per-operation
+resource limits; those budgets and the inference summary choices remain provisional
+compiler policy. They bound individual operations, not total compilation time.
 
 Exposing proof signatures as user-facing declarations requires a separate syntax
 and boundary design. Registry closure alone grants neither a new contract nor

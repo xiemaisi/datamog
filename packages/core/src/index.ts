@@ -148,6 +148,8 @@ export {
   ANY_VALUE,
   NEVER,
   ProofTypeRegistry,
+  SemanticTypeLimitError,
+  type SemanticTypeWorkOptions,
   fromPrimitiveType,
   normalizeType,
   projectType,

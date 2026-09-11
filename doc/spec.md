@@ -1863,7 +1863,8 @@ precision limits do not restrict the size or shape of runtime values. A structur
 contract that inference cannot establish is rejected with a mismatch path and the
 expected/inferred types; a failure to prove union coverage is not necessarily a
 counterexample. Exact compiler budgets are implementation policy, not language
-syntax.
+syntax. If exact structural checking exceeds a compiler resource limit, it reports
+that failure explicitly rather than silently weakening the declared contract.
 
 ### 5.2 Type Inference
 
