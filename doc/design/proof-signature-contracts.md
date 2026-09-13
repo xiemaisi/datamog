@@ -5,6 +5,62 @@ types below are proposed syntax. Existing programs retain their current behavior
 This extends the [semantic type foundation](semantic-types.md); it does not add
 independent datatypes, freely constructible terms, or a finiteness guarantee.
 
+## Motivation: what does a constructor promise its callers?
+
+Suppose a module produces invoice proofs. The invoice's total lives in the
+constructor payload, rather than an ordinary predicate column:
+
+```prolog
+output predicate invoice() :: Invoice({"total": 42}).
+```
+
+A caller matches the proof and uses that total in arithmetic:
+
+```prolog
+tax(Total * 0.05) :- P : invoice, P = invoice::Invoice(Details), Total = Details["total"].
+```
+
+This already works. Inference discovers that `Invoice` carries a record with an
+integer `total`, and the caller can use that field as an integer. No signature is
+needed to infer or run this program.
+
+But suppose the module author intends to promise: **every `Invoice` payload has a
+numeric `total`, and callers must allow fractional totals**. Today that promise
+is not written anywhere the type checker can enforce. Callers see the current
+implementation's integer type. Changing `42` to `42.5` changes their inferred
+contract; accidentally changing it to `"42"` makes the caller's arithmetic fail
+type checking. The producer alone still checks, since deriving an invoice with a
+string total is a valid program. Nothing states that it broke its intended API.
+
+The proposed signature makes that promise explicit at the producer:
+
+```prolog
+proof predicate invoice {
+  Invoice({total: float});
+}.
+
+output predicate invoice() :: Invoice({"total": 42}).
+```
+
+The checker would accept the integer payload, since integer is a subtype of float,
+and publish the declared float field to callers. A later fractional total would
+still satisfy the same contract. A string total or a missing `total` field would
+be rejected at the producer, even when checking the module without any callers.
+The declaration does not change the stored payload or construct another proof.
+
+An ordinary head annotation cannot express this particular promise: `invoice()`
+has no ordinary head arguments to annotate. The record belongs to `:: Invoice(...)`,
+and its inferred signature lives in the proof registry. This proposal adds the
+corresponding place to write and check a public payload contract. It also lets an
+author publish a payload as `value` when callers should not depend on its current
+shape; callers would then need explicit extraction before scalar operations.
+
+This is an optional API-design feature, not a missing requirement for using proof
+terms. Small programs can keep relying on inference. An author could also move the
+total into an ordinary annotated column or route payload construction through a
+typed helper predicate. The motivation for new syntax is to state the contract
+directly on the constructor when proof payloads are the interface a module exposes.
+
 ## Problem and first-version scope
 
 Today constructor payload types are inferred and propagated through private and
