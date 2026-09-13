@@ -1,10 +1,13 @@
 /** Metadata on lowered nodes, retained separately from their JSON representation. */
 import type { Equality, Expression, ObjectLiteral, Subscript } from "./generated/ast.js";
 
+import type { ConstructorAnnotation } from "./post-process.js";
+
 export interface ProofConstruction {
   readonly predicate: string;
   readonly name: string;
   readonly payload: readonly Expression[];
+  readonly annotations?: readonly (ConstructorAnnotation | undefined)[];
 }
 export interface ProofProjection {
   readonly predicate: string;

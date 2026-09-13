@@ -371,7 +371,12 @@ function inRule(program: Program, rule: Rule, offset: number): Definition | unde
     if (found) return found;
   }
   for (const arg of rule.ctorArgs) {
-    const found = inExpression(program, rule, arg, offset);
+    const found = inExpression(
+      program,
+      rule,
+      arg.$type === "AnnotatedConstructorArgument" ? arg.expr : arg,
+      offset,
+    );
     if (found) return found;
   }
   return inScopeBody(program, rule, offset);

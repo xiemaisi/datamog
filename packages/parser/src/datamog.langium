@@ -94,7 +94,7 @@ PrimitiveType returns string:
 Rule:
     ((output?='output' | error?='error') 'predicate')?
     head=HeadAtom
-        ('::' ruleName=Identifier (ctorParens?='(' (ctorArgs+=Expression (',' ctorArgs+=Expression)*)? ')')?)?
+        ('::' ruleName=Identifier (ctorParens?='(' (ctorArgs+=ConstructorArgument (',' ctorArgs+=ConstructorArgument)*)? ')')?)?
         (':' '-' body+=BodyElement (',' body+=BodyElement)*)? '.';
 
 // Queries are syntactically (almost) the same as rule bodies — a
@@ -143,6 +143,11 @@ HeadTerm:
     Expression ({infer AnnotatedHeadTerm.expr=current}
         ('as' name=Identifier (':' (type=PrimitiveType | shape=StructuralType | alias=Identifier) (nullable?='?')?)?
         | ':' ((type=PrimitiveType | shape=StructuralType | alias=Identifier) (nullable?='?')? | refinement=Expression)))?;
+
+// Payload annotations belong only to the rule suffix, never to constructor matches.
+ConstructorArgument:
+    Expression ({infer AnnotatedConstructorArgument.expr=current}
+        ':' (type=PrimitiveType | shape=StructuralType | alias=Identifier) (nullable?='?')?)?;
 
 // Not referenced directly by the grammar — synthesised by post-processing
 // so downstream stages (analyzer, translator) can rely on the AggregateCall

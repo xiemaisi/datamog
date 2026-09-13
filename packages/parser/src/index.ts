@@ -91,6 +91,8 @@ export type { Refinement } from "./refinements.ts";
 export {
   defaultColumnTypes,
   type HeadAnnotation,
+  type ConstructorAnnotation,
+  constructorAnnotations,
   liftHeadAnnotations,
   normalizeOperatorAliases,
   postProcess,

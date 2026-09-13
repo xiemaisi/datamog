@@ -11,6 +11,7 @@ import type {
   ObjectEntry,
   ObjectLiteral,
   Program,
+  Rule,
   Slice,
   StringLiteral,
   Subscript,
@@ -386,6 +387,39 @@ export interface HeadAnnotation {
   nullable: boolean;
 }
 
+/** A checked payload annotation, retaining its original diagnostic span. */
+export interface ConstructorAnnotation extends HeadAnnotation {
+  offset?: number;
+  end?: number;
+}
+
+/** Attached before elaboration so ordinary AST cloning preserves contracts. */
+export function constructorAnnotations(
+  rule: Rule,
+): readonly (ConstructorAnnotation | undefined)[] | undefined {
+  return (rule as Rule & { ctorArgTypes?: (ConstructorAnnotation | undefined)[] }).ctorArgTypes;
+}
+
+function liftConstructorAnnotations(rule: Rule): void {
+  if (!rule.ctorArgs.some((arg) => arg.$type === "AnnotatedConstructorArgument")) return;
+  const annotations: (ConstructorAnnotation | undefined)[] = rule.ctorArgs.map((arg, i) => {
+    if (arg.$type !== "AnnotatedConstructorArgument") return undefined;
+    const annotation: ConstructorAnnotation = {
+      type: arg.type ?? "value",
+      nullable: arg.nullable || arg.type === "null",
+      ...(arg.shape ? { shape: arg.shape } : {}),
+      offset: arg.$cstNode?.offset,
+      end: arg.$cstNode?.end,
+    };
+    const inner = arg.expr;
+    setContainer(inner, rule, "ctorArgs", i);
+    rule.ctorArgs[i] = inner;
+    return annotation;
+  });
+  (rule as Rule & { ctorArgTypes?: (ConstructorAnnotation | undefined)[] }).ctorArgTypes =
+    annotations;
+}
+
 /**
  * Lift optional head-term type annotations onto the head. The grammar wraps an
  * annotated head term `h(x: integer)` in an
@@ -401,6 +435,7 @@ export interface HeadAnnotation {
 export function liftHeadAnnotations(program: Program): void {
   for (const stmt of program.statements) {
     if (!isRule(stmt)) continue;
+    liftConstructorAnnotations(stmt);
     const args = stmt.head.args;
     let annotated = false;
     const argTypes: (HeadAnnotation | undefined)[] = new Array(args.length).fill(undefined);
@@ -803,6 +838,7 @@ export function postProcess(program: Program): void {
       predicate: stmt.head.predicate,
       name: ctor,
       payload: argExprs,
+      annotations: constructorAnnotations(stmt),
     });
     setContainer(proofTerm, stmt.head, "args", stmt.head.args.length);
     (stmt.head.args as Expression[]).push(proofTerm);

@@ -1,5 +1,6 @@
 import { type AstNode, AstUtils, GrammarUtils } from "langium";
 import type {
+  AnnotatedConstructorArgument,
   AnnotatedHeadTerm,
   ColumnDecl,
   Program,
@@ -38,10 +39,11 @@ function retainReferences(program: Program): void {
     if (
       node.$type !== "TypeValue" &&
       node.$type !== "ColumnDecl" &&
-      node.$type !== "AnnotatedHeadTerm"
+      node.$type !== "AnnotatedHeadTerm" &&
+      node.$type !== "AnnotatedConstructorArgument"
     )
       continue;
-    const site = node as TypeValue | ColumnDecl | AnnotatedHeadTerm;
+    const site = node as TypeValue | ColumnDecl | AnnotatedHeadTerm | AnnotatedConstructorArgument;
     if (!site.alias) continue;
     if (
       site.$type === "AnnotatedHeadTerm" &&
@@ -143,7 +145,7 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
       nullable: value.nullable || value.type === "null",
     };
   };
-  const apply = (site: ColumnDecl | AnnotatedHeadTerm): void => {
+  const apply = (site: ColumnDecl | AnnotatedHeadTerm | AnnotatedConstructorArgument): void => {
     // A bare Boolean refinement was parsed as a type reference by lookahead.
     // Preserve that existing syntax on an erased witness when no alias has that
     // name. Parenthesising the expression always selects the refinement form.
@@ -189,7 +191,10 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
   }
   for (const statement of program.statements) {
     if (statement.$type === "ExtDecl") statement.columns.forEach(apply);
-    else if (statement.$type === "Rule")
+    else if (statement.$type === "Rule") {
       for (const arg of statement.head.args) if (arg.$type === "AnnotatedHeadTerm") apply(arg);
+      for (const arg of statement.ctorArgs)
+        if (arg.$type === "AnnotatedConstructorArgument") apply(arg);
+    }
   }
 }
