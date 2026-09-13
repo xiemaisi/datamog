@@ -1,4 +1,4 @@
-import { proofConstruction } from "datamog-parser";
+import { type ProofConstruction, proofConstruction } from "datamog-parser";
 /** Structural inference for implementation facts and published semantic contracts. */
 import { BUILTIN_BODY_ATOMS } from "./analyzer.ts";
 import type { HeadTerm, Rule } from "./ast.ts";
@@ -11,6 +11,7 @@ import {
   ProofTypeRegistry,
   type SemanticType,
   fromPrimitiveType,
+  isSemanticSubtype,
   sameSemanticType,
   scalarType,
   unionType,
@@ -18,6 +19,11 @@ import {
 import { widenSemanticType } from "./semantic-widening.ts";
 import { declaredColumnType } from "./structural-declarations.ts";
 import { type TypedProgram, inferTermType, rebuildVarTypes } from "./types.ts";
+
+export interface ConstructorContribution {
+  readonly types: readonly SemanticType[];
+  readonly nullable: readonly boolean[];
+}
 
 export type SemanticInferenceInput = Omit<
   TypedProgram,
@@ -33,13 +39,15 @@ export type SemanticInferenceInput = Omit<
 export function inferSemanticColumns(
   program: SemanticInferenceInput,
   inferred?: ReadonlyMap<string, readonly SemanticType[]>,
-  options: { maxRuleEvaluations?: number } = {},
+  options: { maxRuleEvaluations?: number; inferredProofTypes?: ProofTypeRegistry } = {},
 ): {
   semanticColumnTypes: Map<string, SemanticType[]>;
   proofTypes: ProofTypeRegistry;
   headContributions: Map<Rule, SemanticType[]>;
+  constructorContributions: Map<ProofConstruction, ConstructorContribution>;
 } {
   const headContributions = new Map<Rule, SemanticType[]>();
+  const constructorContributions = new Map<ProofConstruction, ConstructorContribution>();
   const signatures = new Map<string, Map<string, SemanticType[]>>();
   for (const rules of program.rules.values()) {
     for (const rule of rules) {
@@ -67,7 +75,12 @@ export function inferSemanticColumns(
       );
     }
     proofTypes.validateReferences();
-    return { semanticColumnTypes: columns, proofTypes, headContributions };
+    return {
+      semanticColumnTypes: columns,
+      proofTypes,
+      headContributions,
+      constructorContributions,
+    };
   };
   const columns = new Map<string, SemanticType[]>();
   for (const [name, storage] of program.columnTypes) {
@@ -146,7 +159,9 @@ export function inferSemanticColumns(
         primitive: (expr) => inferTermType(expr, legacyVars.get(rule)!, legacyContext),
         payload: (id, name) => {
           dependOn(id.predicate);
-          return signatures.get(id.predicate)?.get(name);
+          return inferred && id.predicate === rule.head.predicate && options.inferredProofTypes
+            ? options.inferredProofTypes.payload(id, name)
+            : signatures.get(id.predicate)?.get(name);
         },
         fallback: (expr) => {
           const coarse = inferTermType(expr, legacyVars.get(rule)!, legacyContext);
@@ -178,8 +193,24 @@ export function inferSemanticColumns(
       const proof = term.$type === "ObjectLiteral" ? proofConstruction(term) : undefined;
       if (!proof) continue;
       const payload = signatures.get(proof.predicate)!.get(proof.name)!;
-      for (const [i, expr] of proof.payload.entries()) {
-        const next = widenSemanticType(payload[i]!, infer(expr) ?? ANY_VALUE);
+      const types = proof.payload.map((expr) => infer(expr) ?? ANY_VALUE);
+      if (proof.annotations)
+        constructorContributions.set(proof, {
+          types,
+          nullable: proof.payload.map(
+            (expr, i) =>
+              !!proof.annotations?.[i] &&
+              mayBeNull(expr, nonNull, rule, nullContext) &&
+              isSemanticSubtype(scalarType("null"), types[i]!),
+          ),
+        });
+      for (const [i, contribution] of types.entries()) {
+        const annotation = inferred ? proof.annotations?.[i] : undefined;
+        // Keep the contribution separately: publication must not prove its own contract.
+        const advertised = annotation
+          ? widenSemanticType(contribution, declaredColumnType(annotation))
+          : contribution;
+        const next = widenSemanticType(payload[i]!, advertised);
         if (!sameSemanticType(payload[i]!, next)) {
           payload[i] = next;
           changed = true;
@@ -224,11 +255,20 @@ export function inferSemanticColumns(
     );
     // All siblings contribute to a predicate's contract. Even a completed rule
     // must not leave a narrow contribution behind for an affected predicate.
-    for (const rule of program.rules.get(name)!)
+    for (const rule of program.rules.get(name)!) {
       headContributions.set(
         rule,
         rule.head.args.map(() => ANY_VALUE),
       );
+      for (const term of rule.head.args) {
+        const proof = term.$type === "ObjectLiteral" ? proofConstruction(term) : undefined;
+        if (proof)
+          constructorContributions.set(proof, {
+            types: proof.payload.map(() => ANY_VALUE),
+            nullable: proof.payload.map(() => true),
+          });
+      }
+    }
     for (const [ctorName, payload] of signatures.get(name) ?? [])
       signatures.get(name)!.set(
         ctorName,

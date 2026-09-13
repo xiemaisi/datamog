@@ -330,3 +330,19 @@ describe("DatamogRepl", () => {
     }
   });
 });
+
+test("incremental constructor annotations use earlier aliases and reject failed contracts", async () => {
+  const repl = makeRepl();
+  try {
+    expect(findEvent(await repl.feed("type Amount = float."), "error")).toBeUndefined();
+    expect(
+      findEvent(await repl.feed("p() :: C(3: Amount). answer(X/2) :- P:p, P=C(X)."), "error"),
+    ).toBeUndefined();
+    expect(findEvent(await repl.feed('bad() :: B("three": Amount).'), "error")?.message).toContain(
+      "payload 1",
+    );
+    expect(findEvent(await repl.feed("?- answer(N)."), "result")?.rows).toEqual([{ N: 1.5 }]);
+  } finally {
+    await repl.close();
+  }
+});

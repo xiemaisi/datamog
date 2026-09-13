@@ -9,6 +9,7 @@ import type { AnalyzedProgram, BuiltinBodyAtomSpec } from "./analyzer.ts";
 import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } from "./ast.ts";
 import { BITWISE_OPS, COMPARISON_OPS, EQUALITY_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
+import { validateConstructorAnnotations } from "./constructor-annotations.ts";
 import { findNullableOperands } from "./nullable-operands.ts";
 import { type BodyOwner, type NullnessInfo, inferNullness } from "./nullness.ts";
 import { inferSemanticColumns } from "./semantic-inference.ts";
@@ -269,7 +270,9 @@ function inferTypesImpl(analyzed: AnalyzedProgram, preliminary = false): TypedPr
 
   const typed = { ...analyzed, columnTypes, publishedTypes, functionOverloads, nullness };
   const semantic = inferSemanticColumns(typed);
-  const publishedSemantic = inferSemanticColumns(typed, semantic.semanticColumnTypes);
+  const publishedSemantic = inferSemanticColumns(typed, semantic.semanticColumnTypes, {
+    inferredProofTypes: semantic.proofTypes,
+  });
   const result = {
     ...typed,
     semanticColumnTypes: semantic.semanticColumnTypes,
@@ -290,6 +293,7 @@ function inferTypesImpl(analyzed: AnalyzedProgram, preliminary = false): TypedPr
     );
   }
   if (!preliminary) {
+    validateConstructorAnnotations(publishedSemantic.constructorContributions);
     validateStructuralHeadAnnotations(publishedSemantic.headContributions);
     validateSemanticTypes(result);
   }

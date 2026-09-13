@@ -52,4 +52,5 @@ test("bare and nullary constructors remain unannotated; matches cannot carry ann
   }
   expect(() => parseRaw("p() :: C(1). q(X) :- P : p, P = C(X: integer).")).toThrow();
   expect(() => parseRaw("p() :: C(1 as X).")).toThrow();
+  expect(() => parseRaw("p() :: C(1: proof p).")).toThrow();
 });

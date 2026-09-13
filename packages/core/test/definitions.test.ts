@@ -431,3 +431,11 @@ describe("type aliases", () => {
     expect(findTypeAliasDefinitions(parseRawLenient(source))).toEqual([]);
   });
 });
+
+test("constructor payload annotations navigate aliases and expression bindings", () => {
+  const source = "type Amount = float. input predicate n(x: integer). p() :: C(X: Amount) :- n(X).";
+  expect(targetsAt(source, "Amount", 1)).toEqual(["Amount"]);
+  expect(targetsAt(source, "X")).toEqual(["X"]);
+  const broken = "type Bad = Missing. type Amount = float. p() :: C(3: Amount).";
+  expect(targetsAt(broken, "Amount", 1)).toEqual(["Amount"]);
+});

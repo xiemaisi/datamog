@@ -184,3 +184,16 @@ test("type aliases are expanded before editor contract validation", () => {
   );
   expect(errors("input predicate p(x: Missing).")[0]?.message).toContain("Unknown type alias");
 });
+
+test("editor checks inline constructor contracts after alias expansion", () => {
+  const errors = (source: string) => runValidator(source).filter((d) => d.severity === "error");
+  expect(
+    errors(
+      'type Payload = {total: float}. p() :: C({"total":3}: Payload). answer(X/2) :- P:p, P=C(D), X=D["total"].',
+    ),
+  ).toEqual([]);
+  const diagnostics = errors('type Payload = {total: float}. p() :: C({"total":"bad"}: Payload).');
+  expect(diagnostics).toHaveLength(1);
+  expect(diagnostics[0]!.message).toContain("Constructor 'p::C' payload 1");
+  expect(diagnostics[0]!.node.$type).not.toBe("Program");
+});

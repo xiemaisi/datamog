@@ -48,6 +48,27 @@ for (const [name, create] of engines)
         await backend.close();
       }
     }
+    test("constructor contracts publish scalar operands without changing proof payloads", async () => {
+      const source = 'p() :: C(3: float, "label"). answer(X/2, L) :- P:p, P=C(X,L).';
+      expect(await run(`${source} ?- answer(N,L).`)).toEqual([[{ N: 1.5, L: "label" }]]);
+      expect(await run(`${source} proof(P) :- P:p. ?- proof(P).`)).toEqual([
+        [{ P: { $proof: "p::C", args: [3, "label"] } }],
+      ]);
+    });
+    test("constructor structural aliases and nullable payloads work across backends", async () => {
+      expect(
+        await run(
+          'type Payload = {total: float}. invoice() :: Invoice({"total":3}: Payload). tax(N/2) :- P:invoice, P=Invoice(D), N=D["total"]. ?- tax(T).',
+        ),
+      ).toEqual([[{ T: 1.5 }]]);
+      expect(
+        await run("p() :: C(null: integer?). answer(X) :- P:p, P=C(X). ?- answer(N)."),
+      ).toEqual([[{ N: null }]]);
+      await expect(run('p() :: C("3": integer). ?- P:p.')).rejects.toThrow("payload 1");
+      await expect(
+        run("p() :: C(3: value). answer(X*2) :- P:p, P=C(X). ?- answer(N)."),
+      ).rejects.toThrow("numeric operands");
+    });
     test("dynamic projections forward shapes, null values and absence", async () => {
       expect(
         await run(`

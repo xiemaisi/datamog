@@ -369,7 +369,8 @@ These declarations retain `value` storage and publish their shape to consumers,
 so proven scalar fields can be used in typed operations (§5.1). Loaders validate
 nested values before insertion and report the offending column and JSON path.
 Module bindings check structural contracts against the supplied predicate's
-published type. The same structural syntax is available in rule-head annotations (§5.10).
+published type. The same structural syntax is available in rule-head annotations (§5.10) and
+explicit constructor payload annotations (§8.2).
 Tuple declarations, open records and JSON Schema import are not supported.
 
 #### Type aliases
@@ -3104,6 +3105,38 @@ ast(i, k) :: Add(L, R) :- L : ast(i, j), token(j, "plus", _), R : ast(j + 1, k).
 The split point `j` is a body variable that auto-derivation would record;
 `:: Add(L, R)` lists only the two captured sub-parses, so the AST stays clean.
 Explicit `:: Ctor()` forces a nullary proof term even for a rule with witnesses.
+
+**Optional payload type annotations.** An explicit constructor argument may carry
+`: type`, using the same primitive, structural and alias types as head annotations
+(§5.10):
+
+```prolog
+type InvoiceDetails = {total: float}.
+invoice() :: Invoice({"total": 42}: InvoiceDetails, "receipt").
+```
+
+Each annotated argument is checked against its own inferred payload contribution.
+The declared type must equal or widen the inferred one: an integer can satisfy
+float, but a string cannot. Structural fields must satisfy their declared types
+and required presence. A null payload needs a nullable annotation, such as
+`X: integer?` or `X: value?` (`null` itself also accepts null).
+
+Annotations are independent per argument. Here the first argument publishes the
+declared record shape; the second retains its inferred string type. Callers use
+published payload types, including through forwarding predicates and unannotated
+constructor payloads. A producer's own rules retain their inferred self types.
+For example, `p() :: C(3: value).` hides the integer payload from callers: matching
+`C(X)` does not justify arithmetic on X without explicit extraction. Declaring
+`3: float` instead lets callers use X as float, including float operand extraction
+from its JSON storage.
+
+The annotation does not replace or cast the stored constructor argument, add an
+argument, or change the constructor's identity. Unannotated constructors retain
+inference. Bare `:: Ctor` still derives its payload automatically; to annotate any
+position, spell out the explicit argument list. `:: Ctor()` remains nullary and
+needs no annotation. This syntax belongs only to the rule's constructor suffix;
+ordinary constructor-match terms cannot carry payload annotations. No standalone
+signature declaration or nominal `proof P` type syntax is introduced.
 
 Because the proof term distinguishes derivations, a proof-carrying predicate is
 evaluated as a set of (head-argument, proof-term) rows: two different

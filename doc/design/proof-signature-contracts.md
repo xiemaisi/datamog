@@ -1,8 +1,9 @@
 # Constructor payload contracts
 
-Status: proposal, not implemented. Type annotations on constructor arguments after
-`::`, and the companion `proof P` type syntax below, are proposed extensions.
-Existing programs retain their current behavior.
+Status: inline constructor payload annotations are implemented for existing types
+and aliases (spec §8.2). The companion `proof P` syntax and the additional nominal
+boundary/loading rules below remain proposals, not implemented. Unannotated programs
+retain their current behavior.
 This extends the [semantic type foundation](semantic-types.md); it does not add
 independent datatypes, freely constructible terms, or a finiteness guarantee.
 
@@ -26,7 +27,7 @@ integer `total`, and the caller can use that field as an integer. No signature i
 needed to infer or run this program.
 
 But suppose the module author intends to promise: **every `Invoice` payload has a
-numeric `total`, and callers must allow fractional totals**. Today that promise
+numeric `total`, and callers must allow fractional totals**. Without an annotation, that promise
 is not written anywhere the type checker can enforce. Callers see the current
 implementation's integer type. Changing `42` to `42.5` changes their inferred
 contract; accidentally changing it to `"42"` makes the caller's arithmetic fail
@@ -40,8 +41,8 @@ output predicate invoice()
   :: Invoice({"total": 42}: {total: float}).
 ```
 
-The checker would accept the integer payload, since integer is a subtype of float,
-and publish the declared float field to callers. A later fractional total would
+The checker accepts the integer payload, since integer is a subtype of float,
+and publishes the declared float field to callers. A later fractional total would
 still satisfy the same contract. A string total or a missing `total` field would
 be rejected at the producer, even when checking the module without any callers.
 The annotation does not change the stored payload or construct another proof.
@@ -77,7 +78,7 @@ themselves. Nominal `proof P` references are a companion type extension, describ
 below, and can follow separately. Per-consumer signature views, constructor hiding
 and interfaces declared separately from their rules are outside this proposal.
 
-## Proposed syntax
+## Payload annotation syntax
 
 An explicit argument after `::` may carry `: type`, just like a head argument:
 
@@ -147,7 +148,7 @@ aliases. Self and mutual references resolve after collecting all predicate ident
 Validate registry closure without unfolding those edges. An annotation does not
 assert that its constructor has a nonempty extension.
 
-## Nominal identity and module boundaries
+## Proposed nominal identity and module boundaries
 
 `proof P` resolves to an elaborated predicate identity, never merely a source name
 or matching constructor spelling. Elaborate these references using exactly the
@@ -169,7 +170,7 @@ A receiving declaration still counts the implicit trailing proof column. For the
 `nat` module above, the proposed receiving contract is:
 
 ```prolog
-input predicate local(n: integer, evidence: proof local) := nat from "nat.dl"().
+input predicate local(n: integer, evidence: proof local) := nat from "nat.dl".
 ```
 
 Here `proof local` names the selected output after renaming; it does not introduce
@@ -194,7 +195,7 @@ to private helpers remain freshened internal identities; their source names do n
 become names importers can write. This proposal does not promise constructor privacy
 beyond the module system's existing behavior.
 
-## Proof membership and external data
+## Proposed nominal annotations and external data
 
 A nominal annotation checks provenance already established by semantic inference.
 It never casts a JSON object to a proof, tests a tag at runtime, or inserts the
@@ -242,24 +243,24 @@ names as the only explanation.
 
 ## Implementation sequence
 
-1. Extend only the rule suffix's explicit constructor arguments with optional type
+1. **Implemented.** Extend only the rule suffix's explicit constructor arguments with optional type
    annotations. Reuse the existing declaration-type and alias machinery. Lift wrappers
    into per-argument metadata before proof lowering, preserving source spans and the
    original payload expression list. Carry annotations into proof-construction metadata;
    type-only syntax must never become a runtime argument. Test partial annotations,
    aliases, nullable/structural types, and unchanged bare and nullary constructors.
-2. Check annotated payload contributions and publish their contracts in the proof
+2. **Implemented.** Check annotated payload contributions and publish their contracts in the proof
    registry. Test widening, hidden precision through forwarders and unannotated sibling
    positions, inferred-self behavior, nullability and repeated analysis. Check all
    backends for unchanged stored payloads and construction, and appropriate consumer
    operand extraction. These first two steps deliver the motivating feature without
    introducing nominal type syntax.
-3. Add the companion nominal type-reference AST form. Resolve and freshen references
+3. **Deferred.** Add the companion nominal type-reference AST form. Resolve and freshen references
    during elaboration, including aliases and shared-instance name aliases. Add nominal
    payload/column/head checking and boundaries, overrides of module defaults, and
    rejection on external loading/insertion paths. Test recursive references, compatible
    and incompatible modules, quoted names and editor navigation.
-4. Document each implemented extension in the language spec only after its checks
+4. **Completed for payload annotations.** Document each implemented extension in the language spec only after its checks
    exist; add examples and editor diagnostics. Run the full suite and commit each step.
 
 The main implementation dependency is publication: a payload annotated `value` must

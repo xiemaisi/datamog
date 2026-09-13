@@ -192,8 +192,9 @@ conservative, since a JSON tag alone does not establish proof membership. An
 opaque or structural receiver falls back to `value`; known incompatible scalars,
 arrays and tuples have no successful proof payload. A tagged JSON shape never
 grants membership. Ordinary user-written
-JSON access on proofs remains conservatively typed as `value`. Registry signatures
-are inferred implementation facts, not new datatype declarations or contracts.
+JSON access on proofs remains conservatively typed as `value`. Private registry signatures remain inferred implementation facts. Optional inline
+payload annotations publish checked contracts in the separate published registry;
+they do not declare new datatypes.
 
 ## Implementation inference
 
@@ -315,6 +316,28 @@ integer division/remainder, missing and nullable fields, guarded extraction,
 dynamic indexing, nested string access, aggregates, and dependent wrappers.
 Regression tests also check repeated analysis and widened contracts.
 
+## Constructor payload annotations
+
+Explicit `:: Ctor(expr: type, ...)` arguments accept existing primitive, structural
+and alias types. Parsing lifts wrappers into per-argument metadata, retaining the
+original expression and diagnostic span; proof lowering carries that metadata on
+the generated construction node. Unannotated positions, bare constructors and
+nullary constructors retain their existing behavior. Alias navigation and editor
+validation cover the new annotation location.
+
+Semantic inference retains each annotated constructor's pre-publication payload
+contribution and nullability for final checking. The private registry remains
+inferred; the published pass widens annotated positions by their contracts and
+propagates those types through forwarding rules and unannotated payloads. Own-rule
+lookups in that pass use the inferred proof registry, matching inferred-self column
+contracts. Work exhaustion clears affected constructor contributions too, so an
+unfinished result cannot establish a narrow annotation. Reanalysis proves all
+consumer operand conversions again. Runtime proof construction and storage remain
+unchanged; consumers extract operands according to the published payload types.
+
+See [Constructor payload contracts](proof-signature-contracts.md) and spec §8.2.
+Nominal `proof P` syntax remains deferred.
+
 ## Storage and structural declarations
 
 The primitive bridge preserves all existing primitive names. Structured values,
@@ -395,10 +418,10 @@ subtraction or complement. Exact structural operations now share per-operation
 resource limits; those budgets and the inference summary choices remain provisional
 compiler policy. They bound individual operations, not total compilation time.
 
-The proposed [constructor payload contracts](proof-signature-contracts.md) describe
-inline annotations on explicit `:: Ctor(...)` arguments, companion nominal type
-references and module-boundary rules.
-That syntax and behavior are not implemented. Registry closure alone grants neither a new contract nor
+[Constructor payload contracts](proof-signature-contracts.md) now implement inline
+annotations on explicit `:: Ctor(...)` arguments using existing types and aliases.
+The companion nominal type syntax and its additional boundary/loading rules remain
+proposed, not implemented. Registry closure alone grants neither a new contract nor
 proof membership. General union syntax, tuple contracts, open-record declarations
 and parameterized aliases are possible future extensions; the internal type domain
 does not by itself expose those features as declaration syntax.
