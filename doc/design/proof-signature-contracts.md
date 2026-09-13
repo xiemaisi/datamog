@@ -1,7 +1,8 @@
-# Proof-signature contracts
+# Constructor payload contracts
 
-Status: proposal, not implemented. All `proof predicate` declarations and `proof P`
-types below are proposed syntax. Existing programs retain their current behavior.
+Status: proposal, not implemented. Type annotations on constructor arguments after
+`::`, and the companion `proof P` type syntax below, are proposed extensions.
+Existing programs retain their current behavior.
 This extends the [semantic type foundation](semantic-types.md); it does not add
 independent datatypes, freely constructible terms, or a finiteness guarantee.
 
@@ -32,27 +33,24 @@ contract; accidentally changing it to `"42"` makes the caller's arithmetic fail
 type checking. The producer alone still checks, since deriving an invoice with a
 string total is a valid program. Nothing states that it broke its intended API.
 
-The proposed signature makes that promise explicit at the producer:
+An annotation on the constructor argument makes that promise explicit at the producer:
 
 ```prolog
-proof predicate invoice {
-  Invoice({total: float});
-}.
-
-output predicate invoice() :: Invoice({"total": 42}).
+output predicate invoice()
+  :: Invoice({"total": 42}: {total: float}).
 ```
 
 The checker would accept the integer payload, since integer is a subtype of float,
 and publish the declared float field to callers. A later fractional total would
 still satisfy the same contract. A string total or a missing `total` field would
 be rejected at the producer, even when checking the module without any callers.
-The declaration does not change the stored payload or construct another proof.
+The annotation does not change the stored payload or construct another proof.
 
 An ordinary head annotation cannot express this particular promise: `invoice()`
 has no ordinary head arguments to annotate. The record belongs to `:: Invoice(...)`,
-and its inferred signature lives in the proof registry. This proposal adds the
-corresponding place to write and check a public payload contract. It also lets an
-author publish a payload as `value` when callers should not depend on its current
+and its inferred signature lives in the proof registry. Allowing the same annotation
+syntax on that argument gives it a public contract beside its implementation. It
+also lets an author publish a payload as `value` when callers should not depend on its current
 shape; callers would then need explicit extraction before scalar operations.
 
 This is an optional API-design feature, not a missing requirement for using proof
@@ -61,89 +59,93 @@ total into an ordinary annotated column or route payload construction through a
 typed helper predicate. The motivation for new syntax is to state the contract
 directly on the constructor when proof payloads are the interface a module exposes.
 
-## Problem and first-version scope
+## Scope
 
-Today constructor payload types are inferred and propagated through private and
-published proof registries. A producer cannot explicitly promise a payload shape
-or deliberately publish less payload precision. Ordinary head annotations describe
-value columns, not the implicit proof column's constructor signature.
+Extend the existing head-annotation model to explicit constructor payload arguments:
+check each annotation against inference, then publish its declared generality to
+callers. Annotations are optional and independent per argument. Unannotated arguments
+retain their inferred publication policy, including when another argument of the
+same constructor is annotated.
 
-The first version adds producer-owned signatures and nominal proof references in
-type positions. A signature checks existing derivations and supplies their public
-payload contract. It neither supplies rules nor creates a proof-carrying predicate.
-Consumers use the producer's published signature. Per-consumer signature views,
-constructor hiding and abstract signature imports are deferred.
+There is no standalone signature declaration or repeated list of constructors.
+The rules continue to determine which constructors exist and their payload arities.
+The existing rule that a constructor tag is unique within its predicate remains;
+this proposal does not allow several rules to define the same constructor.
+
+Primitive, structural and alias annotations solve the motivating problem by
+themselves. Nominal `proof P` references are a companion type extension, described
+below, and can follow separately. Per-consumer signature views, constructor hiding
+and interfaces declared separately from their rules are outside this proposal.
 
 ## Proposed syntax
 
-A standalone declaration names an existing locally defined proof-carrying predicate:
+An explicit argument after `::` may carry `: type`, just like a head argument:
 
 ```prolog
-proof predicate nat {
-  Zero();
-  Succ(proof nat);
-}.
-
-output predicate nat(0) :: Zero().
-nat(N + 1) :: Succ(P) :- P : nat(N), N < 2.
+item() :: Item({"name": "Ada", "score": 1}: {name: string, score?: float}, "receipt").
 ```
 
-Constructor entries give payload types in their encoded order, not the predicate's
-ordinary column types. Parentheses are required even for nullary constructors;
-semicolons separate entries and the declaration ends with `}.`. The declaration
-may precede the rules. `proof` should be contextual, preserving existing identifiers
-where the parser can distinguish the declaration or type position.
+Here the first payload argument publishes the declared record shape, with a float
+score that may be absent; the second retains its inferred string type. The annotation
+applies to the payload expression immediately before it. Nullable and alias types
+use their existing spelling, for example `X: integer?` or `Details: InvoiceDetails`.
+The constructor builds exactly the payload expressions specified by its rule.
 
-`proof P` denotes the nominal proof type of predicate `P`. It is allowed wherever
-a declaration type is allowed, including aliases and nested records/arrays;
-`proof P?` includes null. Field optionality and expression absence remain separate.
+Annotations are legal only on the explicit payload list in a rule's `:: Ctor(...)`
+suffix. They do not add annotations or casts to ordinary constructor-match terms in
+heads, equalities or nested expressions. Existing matches remain matches.
+
+Bare `:: Ctor` continues to select witnesses and sub-proofs automatically. To
+annotate one of those payloads, write the explicit argument list in the desired
+order. There is no annotation of an implicit payload position in the first version.
+`:: Ctor()` still specifies an empty payload and has nothing to annotate; a rule
+using that form or the bare form needs no declaration elsewhere.
+
+The companion `proof P` type denotes the nominal proof type of predicate `P`:
 
 ```prolog
-proof predicate item { Item({name: string, score?: float}); }.
-item() :: Item({"name": "Ada", "score": 1}).
+output predicate nat(0) :: Zero().
+nat(N + 1) :: Succ(P: proof nat) :- P : nat(N), N < 2.
 
 type NatProof = proof nat.
 selected(P: NatProof) :- P : nat(_).
 ```
 
-The item signature widens the integer score to float and permits its absence.
-The constructor still builds exactly the payload specified by its rule. Bare
-`:: Ctor` rules also work, but their automatically selected witnesses and sub-proofs
-must match the declared payload order. Explicit constructor arguments are preferable
-when that order is part of a public interface.
+Once added, `proof P` is allowed wherever a declaration type is allowed, including
+aliases and nested records/arrays; `proof P?` includes null. `proof` should be
+contextual in type positions. Field optionality and expression absence remain
+separate. Without the annotation, `Succ(P)` already infers its nominal payload type;
+the annotation expresses a checked promise rather than creating that identity.
 
 ## Checking and publication
 
-A predicate has at most one signature declaration per source module. Its constructor
-set must exactly equal the set of constructors in its rules, with matching payload
-arities. Duplicate entries, missing entries, extra entries, declarations without
-proof-carrying rules, and unknown proof references are errors. This first version
-has no partial signature or hidden-constructor mechanism.
-
-Each constructor's inferred payload contribution must satisfy its declared payload
+Each annotated argument's inferred payload contribution must satisfy its declared
 type directionally: inferred is a subtype of declared. Check contributions before
 publication replaces them with their contracts. A required record field must be
 proved present; a nullable contribution cannot satisfy a non-null claim. Work-limit
-fallback supplies no additional evidence. Signature checking must not use a
-constructor's own declaration as evidence that its payload meets that declaration.
+fallback supplies no additional evidence. Checking must not use the argument's own
+annotation as evidence that its expression satisfies that annotation.
 
-Keep the private registry inferred. Build the published registry with declared
-payload types, retaining exact nominal identities. Other predicates, transitive
-forwarders, operand lowering and module boundaries consume published payloads.
-The producer's own rules retain the existing inferred-self treatment; calls to other
-predicates, including mutually recursive ones, use those predicates' contracts.
-Predicates without declarations retain today's inferred publication policy.
+Keep the private registry inferred. Build the published registry with the declared
+types at annotated positions and the published-context inferred types elsewhere,
+retaining exact nominal identities. Other predicates, transitive forwarders, operand
+lowering and module boundaries consume published payloads. The producer's own rules
+retain the existing inferred-self treatment; calls to other predicates, including
+mutually recursive ones, use those predicates' contracts. A predicate may have a
+mix of annotated and unannotated constructors without requiring a complete interface.
 
-For example, `proof predicate item { Item(value); }.` may publish an integer payload
-as opaque `value`. A caller matching `item::Item(X)` must then explicitly extract
-an integer before arithmetic on `X`; private knowledge of the literal cannot leak
-through forwarding rules or the constructor registry. This applies even when the
-same nominal proof is carried by an ordinary, non-proof-carrying predicate.
+For example, `item() :: Item(42: value).` publishes its integer payload as opaque
+`value`. A caller matching `item::Item(X)` must explicitly extract an integer before
+arithmetic on `X`; private knowledge of the literal cannot leak through forwarding
+rules or the constructor registry. This applies even when the same nominal proof
+is carried by an ordinary, non-proof-carrying predicate. Unannotated positions must
+also respect contracts of producers they consume; omitting an annotation does not
+recover hidden private precision.
 
 Recursive payload references remain nominal graph edges, not recursive structural
 aliases. Self and mutual references resolve after collecting all predicate identities.
-Validate registry closure without unfolding those edges. A signature does not assert
-that any constructor has a nonempty extension.
+Validate registry closure without unfolding those edges. An annotation does not
+assert that its constructor has a nonempty extension.
 
 ## Nominal identity and module boundaries
 
@@ -151,7 +153,7 @@ that any constructor has a nonempty extension.
 or matching constructor spelling. Elaborate these references using exactly the
 same substitutions as proof captures and constructor qualifiers:
 
-- Freshen private predicates and their signature references per module instance.
+- Freshen private predicates and their annotation references per module instance.
 - Rewrite self references when a selected proof-carrying output is renamed to its
   receiving predicate.
 - Apply final shared-instance name aliases to all nominal references, including
@@ -161,7 +163,7 @@ same substitutions as proof captures and constructor qualifiers:
 
 Identical module identity and input wiring share the existing instance and proof
 identity. Different instances have different identities even when their signatures
-are structurally identical. Signature declarations do not change instance keys.
+are structurally identical. Payload annotations do not change instance keys.
 
 A receiving declaration still counts the implicit trailing proof column. For the
 `nat` module above, the proposed receiving contract is:
@@ -181,8 +183,8 @@ proof type. A predicate that merely forwards proofs of another predicate does no
 satisfy a self-proof requirement; its proof identity remains the original one.
 Ordinary column arity, primitive storage and nullness checks still apply.
 
-A consumer cannot redeclare a wired producer's signature to change its published
-view in this version. Signature declarations attach only to local producer rules.
+A consumer cannot annotate a constructor match to change a wired producer's
+published signature. Payload annotations attach to the producer's rule suffix.
 Later support for abstract input signatures would require contracts on boundary
 views, not overwriting a global registry entry keyed by the actual identity:
 several consumers may require different views of the same producer.
@@ -220,36 +222,46 @@ existing behavior and gain no nominal evidence from their contents.
 | Integer payload declared string | Reject at the constructor payload position |
 | Nullable payload declared integer | Reject unless non-nullness is proved |
 | Record payload missing a declared required field | Reject with the field path |
-| `Succ(proof nat)` receiving a captured proof of nat | Accept |
+| `Succ(P: proof nat)` with P captured from nat | Accept |
 | Same-shaped proof from a different module instance | Reject the nominal contract |
 | Repeated import with identical module and wiring | Accept the shared identity |
 | Published `value` payload used implicitly as integer by a caller | Reject scalar use |
-| Missing constructor entry or wrong payload arity | Reject at the signature |
-| Constructor entry with no corresponding rule | Reject; entries cannot mint nodes |
-| Proof signature reference cycle between existing producers | Accept registry closure; do not unfold |
+| Only some explicit payload arguments annotated | Accept; infer the other positions |
+| Bare `:: Ctor` without explicit arguments | Keep automatic payload inference |
+| Nullary `:: Ctor()` | Accept; no annotation is required |
+| Annotation inside an ordinary constructor-match term | Reject the syntax |
+| Repeated constructor tag within one predicate | Retain the existing rejection |
+| Nominal annotation reference cycle between existing producers | Accept registry closure; do not unfold |
 | JSON tag claiming a declared constructor | No nominal evidence |
 | Data-loaded `[proof nat]`, including an empty batch | Reject the declaration |
 
 Diagnostics should identify the producer, constructor, payload index and nested
-mismatch path, with spans on the signature and offending contribution when available.
+mismatch path, with spans on the payload annotation and expression when available.
 Nominal mismatches should distinguish module instances without exposing generated
 names as the only explanation.
 
 ## Implementation sequence
 
-1. Add raw signature/type-reference AST forms, alias expansion support and source
-   spans. Resolve/freshen nominal references during elaboration, before proof lowering.
-   Preserve signature metadata when stripping declaration-only statements. Add parser
-   tests, quoted-identifier cases and editor keyword/navigation coverage.
-2. Add producer signature validation and published-registry overrides. Test payload
-   widening, recursive references, hidden precision through forwarders, nullability
-   and unchanged rule execution. Keep stored representations and construction unchanged.
-3. Add nominal column/head checking and boundary handling, including shared instances,
-   overrides of module defaults, and rejection on all external loading/insertion paths.
-   Test both compatible and incompatible modules and every evaluation backend.
-4. Document implemented syntax in the language spec only after these checks exist;
-   add examples and editor diagnostics. Run the full suite and commit each step.
+1. Extend only the rule suffix's explicit constructor arguments with optional type
+   annotations. Reuse the existing declaration-type and alias machinery. Lift wrappers
+   into per-argument metadata before proof lowering, preserving source spans and the
+   original payload expression list. Carry annotations into proof-construction metadata;
+   type-only syntax must never become a runtime argument. Test partial annotations,
+   aliases, nullable/structural types, and unchanged bare and nullary constructors.
+2. Check annotated payload contributions and publish their contracts in the proof
+   registry. Test widening, hidden precision through forwarders and unannotated sibling
+   positions, inferred-self behavior, nullability and repeated analysis. Check all
+   backends for unchanged stored payloads and construction, and appropriate consumer
+   operand extraction. These first two steps deliver the motivating feature without
+   introducing nominal type syntax.
+3. Add the companion nominal type-reference AST form. Resolve and freshen references
+   during elaboration, including aliases and shared-instance name aliases. Add nominal
+   payload/column/head checking and boundaries, overrides of module defaults, and
+   rejection on external loading/insertion paths. Test recursive references, compatible
+   and incompatible modules, quoted names and editor navigation.
+4. Document each implemented extension in the language spec only after its checks
+   exist; add examples and editor diagnostics. Run the full suite and commit each step.
 
-The main implementation dependency is publication: a payload declared `value` must
-stay opaque along every consumer path. Boundary-specific signature views should be
-a separate design, after producer contracts establish that invariant.
+The main implementation dependency is publication: a payload annotated `value` must
+stay opaque along every consumer path. Standalone interfaces or boundary-specific
+signature views would need a separate motivation and design.

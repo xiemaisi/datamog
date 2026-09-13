@@ -395,8 +395,9 @@ subtraction or complement. Exact structural operations now share per-operation
 resource limits; those budgets and the inference summary choices remain provisional
 compiler policy. They bound individual operations, not total compilation time.
 
-The proposed [proof-signature contracts](proof-signature-contracts.md) describe
-producer-owned declarations, nominal type references and module-boundary rules.
+The proposed [constructor payload contracts](proof-signature-contracts.md) describe
+inline annotations on explicit `:: Ctor(...)` arguments, companion nominal type
+references and module-boundary rules.
 That syntax and behavior are not implemented. Registry closure alone grants neither a new contract nor
 proof membership. General union syntax, tuple contracts, open-record declarations
 and parameterized aliases are possible future extensions; the internal type domain
