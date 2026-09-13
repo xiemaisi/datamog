@@ -215,22 +215,23 @@ function semanticSubtype(
     semanticSubtype(a, b, budget, work, depth + 1);
   const a = source;
   const b = target;
-  // Different kinds cannot have equal structural keys. In particular, avoid
-  // reading a whole target-union key for every product branch tested against it.
-  if (
-    a.kind === "never" ||
-    b.kind === "value" ||
-    (a.kind === b.kind && typeKey(a, work) === typeKey(b, work))
-  )
+  // Compare products componentwise below: whole-product equality keys add work
+  // before repeating the same traversal, especially across Cartesian branches.
+  if (a.kind === "never" || b.kind === "value" || a === b) return true;
+  if (a.kind === "scalar" && b.kind === "scalar")
+    return a.name === b.name || (a.name === "integer" && b.name === "float");
+  if (a.kind === "proof" && b.kind === "proof") {
+    work.spend(a.id.predicate.length + b.id.predicate.length);
+    return a.id.predicate === b.id.predicate;
+  }
+  // Equal wide unions should not search their alternatives quadratically.
+  if (a.kind === "union" && b.kind === "union" && typeKey(a, work) === typeKey(b, work))
     return true;
   if (a.kind === "union") return a.members.every((member) => recurse(member, b));
   if (b.kind === "union") {
     if (b.members.some((member) => recurse(a, member))) return true;
     const alternatives = splitProductType(a, budget, work);
     return alternatives?.every((member) => recurse(member, b)) ?? false;
-  }
-  if (a.kind === "scalar" && b.kind === "scalar") {
-    return a.name === "integer" && b.name === "float";
   }
   if (a.kind === "array" && b.kind === "array") {
     return recurse(a.element, b.element);

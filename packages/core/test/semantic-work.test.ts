@@ -143,3 +143,21 @@ test("tuple-to-array checks spend work on elements rather than impossible key eq
       isSemanticSubtype(tuple, { kind: "array", element: scalarType(name) }, { maxWork: 15_000 }),
     ).toBe(expected);
 });
+
+test("equal wide unions retain their equality shortcut within a bounded operation", () => {
+  const source = unionType(
+    ...Array.from(
+      { length: 128 },
+      (_, i): SemanticType => ({
+        kind: "proof",
+        id: { predicate: `module_${i}` },
+      }),
+    ),
+  );
+  expect(
+    isSemanticSubtype(source, structuredClone(source), {
+      maxWork: 100_000,
+      maxUnionSplits: 0,
+    }),
+  ).toBe(true);
+});

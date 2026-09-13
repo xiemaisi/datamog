@@ -70,6 +70,12 @@ work. Split-budget exhaustion declines to establish the contract, while structur
 work exhaustion raises `SemanticTypeLimitError`. Partial coverage never counts as
 success. The algorithm remains sound but incomplete, so a false result means a
 guarantee was not established, not necessarily that a counterexample exists.
+Subtype comparison descends through product components directly, avoiding a
+whole-product equality-key comparison before checking the same components again.
+Scalar names and exact nominal proof identities have direct comparisons; input
+normalization and the shared work/split limits still apply. Equal unions retain
+a whole-union equality shortcut to avoid a quadratic alternative search. The six-choice tuple
+benchmark now establishes its 64-alternative coverage within the default budget.
 Widening uses the same API to retain existing alternatives that collectively cover
 a contribution. Published semantic contracts propagate through a separate pass;
 structural annotations and module boundaries use semantic subtype checks alongside
@@ -428,6 +434,6 @@ require a new syntax feature merely to finish the existing foundation.
 The first measurement follow-up is recorded in
 [Semantic type benchmark baseline](semantic-types-benchmarks.md). Run
 `bun run bench:semantic-types` to reproduce the separated workloads; the report
-includes a concrete union-coverage work-limit case and a measured follow-up that
-skips impossible equality-key comparisons between different type kinds. The
-remaining union limit is documented; compiler budgets are unchanged.
+records a union-coverage work-limit case and the measured improvements that now
+establish that coverage using componentwise comparisons. Compiler budgets are
+unchanged; larger cases can still exceed them.

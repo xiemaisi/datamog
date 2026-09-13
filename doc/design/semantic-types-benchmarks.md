@@ -49,10 +49,10 @@ recommendations. Differences between small timings can be dominated by JIT and G
 
 ## Follow-up supported by this baseline
 
-The six-choice tuple case has 64 alternatives and exhausts the default 1,000,000
+In this baseline, the six-choice tuple case has 64 alternatives and exhausts the default 1,000,000
 work units; with 16,000,000 explicit units it establishes coverage. The larger
 budget is a benchmark comparison only, not a change to compiler policy.
-Inspect repeated work before increasing limits: the subtype relation currently
+Inspect repeated work before increasing limits: the baseline subtype relation
 requested equality keys even for different top-level kinds, including a tuple
 against its target union. Their keys cannot be equal. The follow-up below removes
 that work.
@@ -64,8 +64,8 @@ tested depth. Neither observation calls for a default-budget change.
 
 ## Follow-up: skip equality keys for different kinds
 
-The subtype fast path now compares structural equality keys only when the two
-normalized types have the same kind. Normalization, element checks, union coverage
+At `a75ac98d`, the subtype fast path compared structural equality keys only when
+the two normalized types had the same kind. Normalization, element checks, union coverage
 and all default budgets remain in place. This also avoids constructing a whole
 tuple key before checking whether its elements fit an array contract.
 
@@ -77,7 +77,7 @@ accepts the numeric contracts and rejects the string contract within the budget.
 Repeating the same seven-sample benchmark in the same environment gave the
 following medians. Before measurements used the baseline above; after measurements
 include only the kind guard. These are separate runs, not a controlled speedup
-estimate. The remaining six-choice work-limit outcome is explicit and unchanged.
+estimate. At that revision, the six-choice work-limit outcome remained unchanged.
 
 | Choices | Work budget | Outcome (both runs) | Before ms | After ms |
 | ---: | ---: | --- | ---: | ---: |
@@ -91,3 +91,38 @@ estimate. The remaining six-choice work-limit outcome is explicit and unchanged.
 Further optimization should account for repeated same-kind product comparisons
 before reconsidering default limits. These measurements do not establish a need
 for larger budgets or additional declaration syntax.
+
+
+## Follow-up: compare product components directly
+
+Subtype checks now compare normalized product components directly, without first
+constructing or comparing whole-product equality keys. Scalars compare their fixed
+names; proof references compare exact nominal identities with charged string work.
+Normalization still validates every input before the comparison, and exact key
+construction remains in the operations that require it, including union deduplication.
+Equal union types retain a whole-union equality shortcut to avoid a quadratic
+alternative search; a 128-proof union regression checks it within 100,000 work
+units. No default budget changed.
+
+The six-choice, 64-alternative tuple now establishes coverage within the default
+1,000,000 work units. Regressions use independently allocated leaves, reject a
+missing alternative with a concrete witness, and require failure when fewer than
+126 split alternatives can be generated. Separate reflexivity checks cover fresh
+copies of structural types with a zero split budget.
+
+A seven-sample run of the final implementation on the same Bun/Linux arm64
+environment produced the following results. Other validation checks were running
+concurrently, so the timing ranges also include possible resource contention.
+
+| Choices | Work budget | Outcome | Median ms | Min–max ms |
+| ---: | ---: | --- | ---: | ---: |
+| 2 | 1,000,000 | accepted | 0.0061 | 0.0050–0.0088 |
+| 2 | 16,000,000 | accepted | 0.0064 | 0.0053–0.0073 |
+| 4 | 1,000,000 | accepted | 0.0362 | 0.0332–0.0495 |
+| 4 | 16,000,000 | accepted | 0.0334 | 0.0324–0.0356 |
+| 6 | 1,000,000 | accepted | 0.3619 | 0.3543–0.6117 |
+| 6 | 16,000,000 | accepted | 0.3405 | 0.3396–0.5441 |
+
+The stable improvement is completion under the existing work limit; these separate
+microbenchmark runs do not establish an end-to-end speedup. Larger products can
+still exhaust work or split budgets, and no general completeness claim follows.

@@ -296,3 +296,34 @@ test("additional record fields may choose different union alternatives independe
   expect(contains(target, { x: 1, y: "s" })).toBe(false);
   expect(isSemanticSubtype(source, target)).toBe(false);
 });
+
+test("six-choice coverage fits default work while preserving correlations and split limits", () => {
+  // Fresh leaves prevent object identity from standing in for a structural proof.
+  const source = tuple(
+    ...Array.from({ length: 6 }, () => unionType(scalarType("integer"), scalarType("string"))),
+  );
+  const alternatives = Array.from({ length: 64 }, (_, mask) =>
+    tuple(
+      ...Array.from({ length: 6 }, (_, bit) =>
+        scalarType(mask & (1 << bit) ? "integer" : "string"),
+      ),
+    ),
+  );
+  const target = unionType(...alternatives);
+  expect(isSemanticSubtype(source, target)).toBe(true);
+  expect(isSemanticSubtype(source, target, { maxUnionSplits: 124 })).toBe(false);
+  expect(isSemanticSubtype(source, target, { maxUnionSplits: 126 })).toBe(true);
+  const incomplete = unionType(...alternatives.slice(1));
+  const missing = Array.from({ length: 6 }, () => "s");
+  expect(contains(source, missing)).toBe(true);
+  expect(contains(incomplete, missing)).toBe(false);
+  expect(isSemanticSubtype(source, incomplete)).toBe(false);
+});
+
+test("equal structural types remain reflexive without splits or shared object identity", () => {
+  for (const type of [...types, unionType(...types.filter((t) => t.kind !== "value"))]) {
+    const copy = structuredClone(type);
+    expect(isSemanticSubtype(type, copy, { maxUnionSplits: 0 })).toBe(true);
+    expect(isSemanticSubtype(copy, type, { maxUnionSplits: 0 })).toBe(true);
+  }
+});
