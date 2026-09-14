@@ -79,3 +79,10 @@ import { createDatamogServices } from "datamog-parser";
 
 const services = createDatamogServices();
 ```
+
+The throwing entry points accept inherited aliases and a fourth `context`
+argument for incremental sessions. `parseRaw` uses the context for type names;
+`parse` also passes it to `postProcess`. This context contains previously lowered
+statements. Proof lowering reads their retained construction metadata to resolve
+captures, patterns and arities, and mutates only the new program. Do not lower
+accumulated rules a second time: their implicit proof columns already exist.

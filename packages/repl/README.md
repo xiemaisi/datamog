@@ -39,8 +39,20 @@ statement been typed?) and `offsetToLineColumn`.
 Successful chunks make their type aliases and predicate names available to later
 type annotations. Failed chunks publish neither, and reset clears the context.
 For example, after `nat(0) :: Zero.`, a later chunk can declare `type N = nat.`.
-Proof capture and constructor-match lowering still needs the producer in the same
-chunk; cross-chunk type-name resolution does not remove that limitation.
+Proof captures and constructor matches also resolve earlier successful chunks:
+
+```prolog
+p() :: C(7: float).
+# Enter this as a later chunk:
+answer(X / 2) :- P : p, P = C(X).
+?- answer(N).
+```
+
+This returns 3.5. Captures, nested and qualified patterns, constructor payload
+contracts, and `:sql` use the same accumulated context. A bare constructor becomes
+ambiguous if a later producer introduces the same tag; qualify it with `p::C(...)`.
+Reset clears this context. Existing predicates still cannot be extended in later
+chunks: enter all rules of a recursive predicate together.
 
 ## Drivers
 

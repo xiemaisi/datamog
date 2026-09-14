@@ -362,3 +362,22 @@ test("nominal type names resolve against earlier successful REPL chunks", async 
     await repl.close();
   }
 });
+
+test("proof captures and patterns persist across chunks and reset clears them", async () => {
+  const repl = makeRepl();
+  try {
+    expect(findEvent(await repl.feed("p() :: C(7:float)."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("answer(X/2) :- P:p, P=C(X)."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("?- answer(N)."), "result")?.rows).toEqual([{ N: 3.5 }]);
+    expect(findEvent(await repl.feed(":sql ?- P:p."), "error")).toBeUndefined();
+    const error = findEvent(await repl.feed("?- P=C()."), "error");
+    expect(error).toBeDefined();
+    expect(findEvent(await repl.feed("?- P:p."), "result")?.rows).toHaveLength(1);
+    await repl.feed(":reset");
+    expect(findEvent(await repl.feed("?- P:p."), "error")?.message).toContain("no named rules");
+    expect(findEvent(await repl.feed("p() :: C(9:float)."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("?- P=C(X)."), "result")?.rows).toHaveLength(1);
+  } finally {
+    await repl.close();
+  }
+});

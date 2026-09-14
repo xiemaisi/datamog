@@ -35,7 +35,12 @@ import {
 import { substituteHeadNames } from "./head-names.ts";
 import type { NominalTypeMetadata } from "./nominal-types.js";
 import { ParseError } from "./parse-error.js";
-import { markProofConstruction, markProofMatch, markProofProjection } from "./proof-metadata.ts";
+import {
+  markProofConstruction,
+  markProofMatch,
+  markProofProjection,
+  proofConstruction,
+} from "./proof-metadata.ts";
 import { extractRefinements, refinementFormulas, synthesiseContractChecks } from "./refinements.ts";
 
 // Post-processing attaches the original source text of numeric literals on
@@ -535,7 +540,11 @@ export function normalizeOperatorAliases(program: Program): void {
   }
 }
 
-export function postProcess(program: Program): void {
+/** Context contains previously lowered statements; only the new program is mutated. */
+export function postProcess(
+  program: Program,
+  context: readonly import("./generated/ast.js").Statement[] = [],
+): void {
   // Before anything else walks the tree: a contract check is an ordinary `!-`
   // once synthesised, so it must be in place for the passes below to treat it
   // like one (don't-care desugaring, literal tagging, alias rewriting).
@@ -701,6 +710,22 @@ export function postProcess(program: Program): void {
   // synthesises the `scrut : Pred(_)` capture that range-restricts the match.
   const ctorTags = new Map<string, Set<string>>();
   const predArity = new Map<string, number>();
+  // An incremental session keeps already-lowered rules. Read their retained
+  // construction metadata rather than lowering them again or guessing arities
+  // from constructor syntax (bare constructors derive their payload implicitly).
+  for (const stmt of context) {
+    if (!isRule(stmt) || stmt.ruleName === undefined) continue;
+    const last = stmt.head.args.at(-1);
+    const proof = last?.$type === "ObjectLiteral" ? proofConstruction(last) : undefined;
+    if (!proof) continue;
+    proofCarrying.add(proof.predicate);
+    predArity.set(proof.predicate, stmt.head.args.length - 1);
+    const preds = ctorTags.get(proof.name) ?? new Set<string>();
+    preds.add(proof.predicate);
+    ctorTags.set(proof.name, preds);
+    ctorArity.set(`${proof.predicate}::${proof.name}`, proof.payload.length);
+  }
+
   for (const stmt of program.statements) {
     if (!isRule(stmt) || !proofCarrying.has(stmt.head.predicate)) continue;
     const pred = stmt.head.predicate;

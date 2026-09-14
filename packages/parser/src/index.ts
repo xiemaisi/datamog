@@ -278,7 +278,7 @@ export function parse(
   // `postProcess` throws `ParseError`s (via `parseErrorAtNode`) that only know
   // their node position, so stamp the source file here at the parse boundary.
   try {
-    postProcess(program);
+    postProcess(program, context);
   } catch (e) {
     if (e instanceof ParseError) e.file ??= file;
     throw e;

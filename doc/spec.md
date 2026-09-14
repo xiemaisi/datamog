@@ -3181,6 +3181,12 @@ declarations and direct insertions are rejected even for empty batches. Inputs o
 `value` retain their existing behavior. Module-bound inputs are checked against
 their inferred source instead. In incremental sessions, earlier successful chunks'
 predicate names are available in later type annotations and alias definitions.
+Proof captures and constructor matches can also refer to earlier successful
+chunks, including nested and predicate-qualified patterns. Constructor payload
+contracts remain in force, and `:sql` uses the same context. A later declaration
+sharing an earlier constructor tag makes subsequent bare uses ambiguous; qualify
+them with their predicate. Reset clears the context. All rules for a predicate
+must still be entered together: later chunks cannot extend an existing predicate.
 
 Because the proof term distinguishes derivations, a proof-carrying predicate is
 evaluated as a set of (head-argument, proof-term) rows: two different

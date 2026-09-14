@@ -7,7 +7,7 @@ import {
   analyze,
   inferTypes,
 } from "datamog-core";
-import { parse } from "datamog-parser";
+import { parse, parseRaw, postProcess, typeAliasName } from "datamog-parser";
 import type { Backend, QueryResult } from "./backend.ts";
 import {
   type ConstraintViolation,
@@ -110,7 +110,7 @@ export class IncrementalSession {
    * the state is left untouched and the error propagates.
    */
   async addStatements(source: string): Promise<IncrementalResult> {
-    const fragment = parse(
+    const fragment = parseRaw(
       source,
       undefined,
       this.statements.filter((s) => s.$type === "TypeAlias"),
@@ -118,6 +118,7 @@ export class IncrementalSession {
     );
 
     this.checkRedefinition(fragment.statements);
+    postProcess(fragment, this.statements);
 
     // Build a synthetic Program for re-analysis. The analyzer reads only
     // `program.statements`; downstream stages key off the resulting maps,
@@ -209,9 +210,11 @@ export class IncrementalSession {
     }
     for (const stmt of stmts) {
       if (stmt.$type === "ExtDecl") {
-        if (defined.has(stmt.predicate)) throw redefinitionError(stmt.predicate, stmt);
+        const name = typeAliasName(stmt.predicate);
+        if (defined.has(name)) throw redefinitionError(name, stmt);
       } else if (stmt.$type === "Rule") {
-        if (defined.has(stmt.head.predicate)) throw redefinitionError(stmt.head.predicate, stmt);
+        const name = typeAliasName(stmt.head.predicate);
+        if (defined.has(name)) throw redefinitionError(name, stmt);
       }
     }
   }

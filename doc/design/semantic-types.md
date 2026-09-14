@@ -403,6 +403,9 @@ contextual keyword.
 Parsed alias declarations retain expanded definitions so successful incremental
 session chunks can supply them to later chunks. Failed chunks publish no aliases,
 redefinition is rejected, and reset discards them with the rest of the program.
+Incremental proof lowering reads earlier rules' retained construction metadata to
+resolve captures and patterns without appending their proof columns again. The
+normal inference pipeline still checks the merged program and published contracts.
 Modules expand aliases in their own files, so no alias import/export mechanism or
 freshening is necessary. Module contracts compare expanded shapes as before.
 Editor completion offers alias names, and editor validation runs the same
