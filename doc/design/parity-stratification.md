@@ -10,8 +10,7 @@ The feature is one postfix sigil, `p^`, plus an alternating fixed-point driver
 in the in-memory evaluators. Nothing about the SQL backends changed except a
 new rejection message.
 
-Where the code lives: the sigil in `parser/src/datamog.langium` (three optional
-assignments), the polarity and spelling checks plus `maximalPredicates` in
+Where the code lives: the sigil in `parser/src/datamog.langium` (optional flags on heads, literals, and input declarations), the polarity and spelling checks plus `maximalPredicates` in
 `core/src/analyzer.ts`, the inert-sigil warning in `core/src/polarity.ts`, the
 driver in `backend/native/src/base-evaluator.ts` (`runParityStratum`, shared by
 both evaluators, which supply only `runFixpoint`), the ⊤ marker in
@@ -534,8 +533,8 @@ Phased so each phase is separately testable and committable.
   sigil (§3). Replace the stratification loop with the polarity check of §3,
   keeping the `NegationCycle` payload on both new error shapes so the
   playground's "Show cycle" keeps working. Reject the sigil on an
-  `error predicate` head. An `input predicate` needs no check: the declaration
-  has no sigil slot, so it is a parse error.
+  `error predicate` head. An `input predicate` now accepts the sigil too: check consistency with
+  its occurrences and check actual/receiving polarity at module boundaries (§8).
 - Error text: the same-polarity negation error should point at the fix, e.g.
   "... are mutually recursive. If this is recursion through a universal
   quantification, mark one of them with `^`."
@@ -879,10 +878,10 @@ nothing minimal in it).
 
 ## 12 Decisions
 
-Deferred: the sigil on `input predicate` declarations. Without it a parity SCC
-cannot close through a module boundary (§8), which stays a hard polarity error.
-Revisit if a real program wants it; nothing else in the design depends on the
-answer.
+Implemented: the sigil on `input predicate` declarations and module boundaries
+(§8). Expansion preserves polarity, aliases carry it, and actual/receiving
+contracts are checked. The former deferral is closed; SQL evaluation of parity
+SCCs remains deliberately unsupported.
 
 Settled:
 

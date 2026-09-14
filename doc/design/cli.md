@@ -1,4 +1,4 @@
-# Design proposal: CLI runner redesign
+# Design notes: CLI runner redesign
 
 Status: implemented (see `packages/cli/src/main.ts`).
 

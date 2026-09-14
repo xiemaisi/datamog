@@ -418,6 +418,11 @@ copies never supply navigation spans, and Boolean refinements are not alias link
 
 ## Remaining scope
 
+The planned foundation and constructor contracts are complete. This is not a
+claim of complete inference: in particular, null-only columns still fail to
+propagate through a forwarding predicate in the primitive pipeline (spec §5.6).
+Fixing that limitation is separate from exposing additional declaration syntax.
+
 The foundation keeps inferred facts, published contracts, nullness and partiality
 separate. Work-budget fallback preserves completed types outside the dependency
 closure of unfinished predicates. Its treatment of affected predicates remains
@@ -444,8 +449,10 @@ work; this foundation neither accepts schemas nor claims schema conformance.
 ## Continuation checkpoint
 
 The foundation, structural aliases, constructor payload contracts, and bare
-nominal references are implemented. At `956ebf23`, validation passed 2,357 tests
-with 72 skips, 27 browser tests, typechecking, linting, and packaging builds.
+nominal references are implemented. At `194a9daf`, diagnostics and REPL proof consistency were also complete:
+2,376 tests passed with 72 skips, plus typechecking, linting, docs and CLI builds.
+The earlier `956ebf23` checkpoint also passed 27 browser tests and packaging builds;
+those counts record their respective revisions, not later reruns.
 The benchmark baseline below records the earlier performance work.
 
 Suggested follow-up work, rather than outstanding requirements for this foundation:

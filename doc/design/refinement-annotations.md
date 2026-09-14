@@ -1,6 +1,13 @@
 # Design notes: refinement annotations on rule heads
 
-Status: **all six phases implemented**.
+Status: **runtime contracts and integer-fragment verification implemented;
+full proposed static reasoning remains incomplete.** The six delivery phases
+below shipped, but that does not implement every proof rule discussed here.
+Range bounds are not yet used as solver hypotheses; aggregate rules (including
+empty-group obligations) and non-integer goals are skipped. Obligation blocks
+use rule order rather than the proposed SCC order. These conservative limitations
+are recorded in phase 2 and §11; runtime checking remains available. Tier 2
+predicate-based refinements (§7) remain designed but unimplemented.
 Refinements parse, the position erases, and a contract is checked against the
 derived tuples; spec §5.11 and walkthrough chapter 7 describe it.
 `--obligations` writes the obligations out as SMT-LIB 2 and `--verify` runs

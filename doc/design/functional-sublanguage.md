@@ -2,7 +2,9 @@
 
 Status: **proposal, step 1 implemented.** The conditional expression is in
 (spec §2.6); it was always independent of the rest, and the ladder's own advice was
-to build it regardless. Nothing else here is built. The four boundary decisions a
+to build it regardless. User-defined functions and the proposed datatype syntax are unimplemented.
+Existing rule-derived proof types and their contracts are separate features,
+described in [constructor contracts](proof-signature-contracts.md). The four boundary decisions a
 review raised are answered below; the datatype half stays deferred. Datamog already
 has an implicit functional sub-language: the inline arithmetic, string and `value`
 expressions of spec §2.6 and §2.9, plus the built-in registry in

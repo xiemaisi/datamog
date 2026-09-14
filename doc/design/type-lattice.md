@@ -1,7 +1,7 @@
 # Design notes: the type lattice and head annotations
 
-Status: implemented, with one addition. `null-as-a-value.md` added a sixth type,
-`null`, as a sibling atom below nothing and above nothing; the annotations below
+Status: **implemented primitive layer; extended by later null and semantic-type work.** `null-as-a-value.md` added a sixth type,
+`null`, as an atom distinct from the other primitives; the annotations below
 mark where that changes this doc. The normative rules live in the spec (§5.2
 inference, §5.6 widening, §5.10 head annotations, §9.3 module boundaries); read
 those for *what*. This doc only covers the decisions and the alternatives we

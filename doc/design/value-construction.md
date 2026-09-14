@@ -1,14 +1,16 @@
 # Design proposal: constructing values
 
-Status: **proposal, nothing implemented.** Two gaps that arrived together and should
+Status: **unimplemented proposal for computed keys and ordered aggregates.** Two gaps that arrived together and should
 not ship together: the ordered aggregate (gap 2) is implementation-ready, while
 computed object keys (gap 1) need runtime object canonicalisation on SQLite and belong
 in their own proposal. See [the recommendation](#recommendation-ship-gap-2-split-gap-1-out).
 
-The shape of the hole: a program can destructure a `value` arbitrarily deeply
-(subscript, slice, `array_element`, `object_entry`, the coercion builtins) but can
-only *construct* fixed shapes. Nothing built from data can have a computed key or a
-chosen element order.
+The remaining gaps are computed object keys and caller-selected aggregate order.
+Programs already construct arrays and objects from expressions, and `list` collects
+a data-dependent number of elements in its defined canonical order. This proposal
+would add control over keys and ordering; it does not introduce value construction
+itself. Structural contracts and nominal proof annotations are implemented separately
+in [semantic types](semantic-types.md) and do not fill these two gaps.
 
 ## Gap 1: object keys must be literals
 

@@ -1,6 +1,13 @@
 # Design notes: null as an ordinary value, undefinedness as partiality
 
-Status: **all five stages built and green on `max/partial-expressions`** (§15.1;
+Status: **core semantics implemented and merged; known inference limitations and
+conservative checks remain.** The stage reports and audit findings below are a
+chronological record, not a claim that every proposed simplification shipped.
+Current limits include null-only pass-through inference (§15.30) and deliberately
+conservative null/type checks. See the language spec (§5.4, §5.6) for current rules
+and [semantic types](semantic-types.md) for the later structural/nominal layer.
+
+Historical delivery: all five stages were built on `max/partial-expressions` (§15.1;
 stage 4 turned out to be an audit rather than a build, §15.24). Partiality,
 the `null` type, the `value` accessors and the 60-test sweep are done on every
 runnable backend, with the example suite green across all five backends. The
@@ -28,7 +35,7 @@ that shared a premise this branch changed and was not opened by the change that
 changed it. §15.32 is a fourth audit, angled by premise rather than by file for that
 reason, which found four more unsoundnesses and applied §15.31's lesson to §15.31:
 the emit sites were made to share one predicate and nobody re-audited the predicate.
-It leaves five items open with reasons, and adds the three property-shaped tests
+At that checkpoint it left five items open with reasons, and adds the three property-shaped tests
 that make a fifth audit worth less. §15.33 then closes the structural half of §9.4:
 a lift site that does not say what a NULL means there is now a compile error. §2, §4.4, §5, §6, §9.4, §10 and §14 carry its
 corrections in place.** This is the design

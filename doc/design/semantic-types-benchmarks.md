@@ -1,5 +1,10 @@
 # Semantic type benchmark baseline
 
+Status: **measurement report, not a pending implementation plan.** The benchmark
+script and the subtype improvements discussed below are implemented. Timings
+refer to the recorded revisions and environment, not to a fresh measurement of
+current `main`; further tuning is optional follow-up work.
+
 Baseline: runtime implementation at `471a7c14` (documentation checkpoint
 `94d91de7`). Run with `bun run bench:semantic-types > baseline.json`; set
 `DATAMOG_BENCH_SAMPLES` to change the default seven samples (1–100).

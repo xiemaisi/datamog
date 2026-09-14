@@ -256,7 +256,7 @@ constraints below are the only exceptions.
   name is `predicate::Ctor`, referenced bare (`Ctor(...)`) when unambiguous or
   qualified (`p::Ctor(...)`) otherwise.
 
-**Two reservation mechanisms.** Keywords and type names are rejected by the
+**Two reservation mechanisms.** Reserved keywords and primitive type keywords are rejected by the
 *parser*, a hard syntax error in any position (predicate, column, or variable).
 Built-in operation names are rejected by the *analyzer*, and only as predicate
 names: written `f(...)`, a predicate named after a built-in operation would be
@@ -275,7 +275,7 @@ type keyword.
 | Word W                            | predicate | extensional column / variable | escaped as `` `W` `` |
 |-----------------------------------|:---------:|:-----------------------------:|:--------------------:|
 | a plain identifier (`foo`, `p2`)  | yes       | yes                           | not needed           |
-| a reserved keyword or type name   | no        | no                            | yes                  |
+| a reserved keyword or primitive type keyword | no        | no                            | yes                  |
 | a built-in operation name         | no        | yes                           | yes (as a predicate) |
 
 Because roles are position-based, one spelling can name both a predicate and a
@@ -328,7 +328,7 @@ PrimitiveType ::= 'string' | 'integer' | 'float' | 'boolean' | 'value' | 'null'
 An input predicate declaration introduces an **extensional predicate** (EDB): a
 predicate supplied from outside the program's rules. Each column has a name and
 a type. At execution time the predicate is populated from an external data
-source (CSV, JSONL, JSON, Google Sheets, or Mermaid diagram) via a loader
+source (CSV, JSONL, JSON, Google Sheets, Mermaid diagram, or Parquet) via a loader
 plugin.
 
 The type annotation is optional; a column declared without one defaults to
@@ -1497,7 +1497,7 @@ Program        ::= Statement*
 
 Statement      ::= TypeAlias | ExtDecl | Rule | Query | Constraint
 
-ExtDecl        ::= 'input' 'predicate' Identifier '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
+ExtDecl        ::= 'input' 'predicate' Identifier '^'? '(' ColumnDecl (',' ColumnDecl)* ')' (':=' Binding)? '.'
 ColumnDecl     ::= Identifier (':' (PrimitiveType | StructuralType | Identifier))? ('?')?
 StructuralType ::= '{' (TypeField (',' TypeField)*)? '}' | '[' TypeValue ']'
 TypeField      ::= (Identifier | StringLiteral) '?'? ':' TypeValue
@@ -1728,9 +1728,9 @@ SQLite, and sql.js all reject non-linearly recursive predicates at
 translation time, because their `WITH RECURSIVE` semantics would
 silently miss derivations that combine an "old" tuple with a "new"
 one. The non-SQL `native` and `seminaive` evaluators accept it —
-their delta-aware iteration fires every recursive rule once per
-recursive body atom with that atom reading from the previous
-iteration's delta, computing the correct fixed point.
+the naive evaluator repeats rules against all known tuples, while the
+seminaive evaluator fires each recursive rule once per recursive body-atom
+position with that position reading the previous iteration's delta.
 
 **Mutually recursive** predicates (predicates that depend on each other)
 are compiled together into a shared recursive CTE block.
@@ -1793,7 +1793,8 @@ held when written is not re-checked against later additions.
 
 ### 5.1 Types
 
-Datamog has six basic types:
+Datamog has six basic types. The table also shows `value?`, an example of the
+nullable suffix described below, rather than a seventh basic type:
 
 | Type      | Description           | SQL type                                  |
 |-----------|-----------------------|-------------------------------------------|
@@ -1900,8 +1901,8 @@ predicate dependency graph (processed stratum-by-stratum):
    the least upper bound.
 4. **Equality types** propagate through a bare-variable side: in `Z = expr`
    or `expr = Z`, `Z` gets the type of `expr`.
-5. **Range types** propagate: in `V in [low .. high]`, `V` gets the joined
-   type of the bounds.
+5. **Binding ranges** require integer bounds and bind `V` as `integer`. A
+   range used as a filter may compare numeric expressions (§2.5).
 
 It is an error if a column's type cannot be inferred from its context.
 
@@ -1931,8 +1932,8 @@ It is an error if a column's type cannot be inferred from its context.
 | `sqrt(x)`, `ln(x)`, `exp(x)` | `float`                              |
 | `x[i]` (subscript), `x` is `string`         | `string`                     |
 | `x[i:j]` (slice), `x` is `string`           | `string`                     |
-| `x[i]` (subscript), `x` is `value`        | `value`                    |
-| `x[i:j]` (slice), `x` is `value`          | `value`                    |
+| `x[i]` (subscript), `x` is opaque `value` | `value`                    |
+| `x[i:j]` (slice), `x` is opaque `value`   | `value`                    |
 | `as_string(j)`              | `string`                                     |
 | `as_integer(j)`               | `integer`                                  |
 | `as_float(j)`              | `float`                                     |
@@ -2290,8 +2291,12 @@ error. See the type-lattice design note (`doc/design/type-lattice.md`) for the
 full rationale.
 
 The primitive storage component and nullness analysis (§5.4) coexist with the
-semantic types of §5.1. A null-only column has semantic type `null`; its chosen
-primitive storage carrier is unobservable because it stores only nulls.
+semantic types of §5.1. A null-only producer can execute, and its chosen storage
+carrier is unobservable because it stores only nulls. However, the current
+inference pipeline cannot propagate a null-only column through another predicate:
+`p(null). q(X) :- p(X).` is rejected with “Cannot infer type of column 1 of
+predicate 'q'”. A head annotation does not supply that missing inference. This is
+an implementation limitation; it does not mean null is an absent value.
 Structured columns retain JSON storage while semantic inference tracks field,
 element, and proof types.
 
@@ -2662,6 +2667,14 @@ mistranslated: non-linear recursion (§4.4) and parity-stratified recursion
 between rounds, where `WITH RECURSIVE` computes one least fixed point of a
 monotone body and cannot delete. A sigil whose stratum holds only one polarity
 has no effect on evaluation and compiles normally.
+
+Backend limits are distinct from the static language rules. SQL engines can hit
+parser/expression-depth limits on deeply nested proof matches (§8.7), and not all
+mutually recursive storage shapes are supported. Floating-point results are not
+promised bit-identical across backends: library math and aggregate intermediates
+can differ, and lifting a float into JSON can lose precision on SQLite/sql.js.
+See [Postgres backend alignment](design/postgres-alignment.md) for the measured
+cases and their status.
 
 ### 6.2 Rule Translation
 
@@ -3689,7 +3702,7 @@ integration:
 |-----------------|-------------------------------------------------------------|
 | **Parse error** | Missing period, unexpected token, malformed expression       |
 | **Analyzer error** | Undefined predicate, arity mismatch, unsafe variable, unstratifiable negation, duplicate input predicate declaration, EDB/IDB conflict, aggregate constraint violation, unknown function, function arity mismatch |
-| **Type error**  | Non-numeric range bounds, unary minus on string, subscript/slice on non-string, wrong function argument type |
+| **Type error**  | Invalid range bounds, unary minus on string, invalid subscript/slice receiver, wrong function argument type, structural/nominal contract mismatch |
 | **Nullable operand** | A nullable expression in a position that computes: arithmetic, negation, a bitwise operator, string concatenation, a subscript or slice index, a range bound, a builtin with a primitive parameter, either branch of a conditional, or `sum` / `avg` / `min` / `max` / `concat` (§5.4). Narrow with `<> null` first |
 | **Module error** | Import cycle, missing default output, unknown named export, boundary type/arity mismatch (§9), unreadable module reference |
 | **Translation error** | Non-linear recursion, parity-stratified recursion (SQL backends only — `native` and `seminaive` accept both) |

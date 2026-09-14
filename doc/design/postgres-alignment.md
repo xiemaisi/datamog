@@ -63,9 +63,9 @@ WITH RECURSIVE t(n) AS (
 
 The CTE is named once, in `FROM t`; each recursive rule becomes a branch of the
 `LATERAL` subquery, reading the previous iteration through `t`'s columns rather
-than through another mention of `t`. Recursion in Datamog is linear, checked by
-the analyzer, so every recursive rule has exactly one recursive body atom and
-this shape always applies. The rest of a rule's body joins inside the subquery.
+than through another mention of `t`. The SQL translator accepts only linear recursion, so each recursive rule
+in this encoding has one recursive body atom. The in-memory backends also
+support non-linear recursion. The rest of a rule's body joins inside the subquery.
 
 ### How it is implemented
 

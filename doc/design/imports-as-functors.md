@@ -1,6 +1,7 @@
-# Design proposal: modules as functors (inputs and outputs)
+# Design notes: modules as functors (inputs and outputs)
 
-Status: proposal, largely implemented. The grammar (the `:=` source binding on
+Status: **module core implemented; REPL/playground import integration and other
+extensions deferred.** The grammar (the `:=` source binding on
 input predicates), the per-instance expansion (`expandModule`), the elaborator
 (`elaborate`: the entry's bindings and, recursively, nested module imports, with
 the instantiation-graph acyclicity check; named exports and the unnamed `?-`
@@ -10,7 +11,10 @@ boundary type-and-polarity checking (actual vs callee input, selected output vs
 receiving declaration), and VS Code wiring (the language-server validator and the
 `datamog.run` command both elaborate imports from disk) all exist. A violated
 constraint already names the instance it came from (`engine/src/constraints.ts`).
-Still to come: REPL and playground wiring (see *Deferred*). A `:=`
+Still to come: REPL and playground **module-binding** wiring (see *Deferred*).
+This is separate from the implemented REPL support for proof captures, constructor
+matches and nominal type names from earlier chunks. Structural and nominal boundary
+contracts are also implemented; see [constructor contracts](proof-signature-contracts.md). A `:=`
 binding that reaches analysis (i.e. one the elaborator did not handle) is
 rejected.
 

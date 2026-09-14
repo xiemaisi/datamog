@@ -1,10 +1,14 @@
 # Design notes: typing and safety as one constraint problem
 
-Status: **model implemented, structure not.** This recasts what `checkSafety`
+Status: **historical primitive constraint model; proposed unified solver not
+implemented.** The primitive semantics largely match the implementation, with
+the null exceptions explained below. The later [semantic type layer](semantic-types.md)
+adds structural and nominal constraints but does not merge safety and typing
+into the single solver proposed here. This recasts what `checkSafety`
 (`core/src/analyzer.ts`) and `rebuildVarTypes` + `validateTypes`
 (`core/src/types.ts`) compute as a single constraint system over a single
-lattice, solved once. The *semantics* described here is what the
-implementation now does, with one exception: the one behaviour this document
+lattice, solved once. For that primitive fragment, the original model matched
+the implementation with one exception: the one behaviour this document
 argued for was built and then reverted, `null` having since become a type of its
 own (§8). Writing it exposed one bug, since fixed. The *structure* is still two
 passes rather than one solve, which is why §8 lists what merging them would

@@ -64,16 +64,18 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
   The in-memory evaluators also support non-linear and parity-stratified
   recursion and are handy for tracing the semantics step by step. See the
   [language spec](doc/spec.md).
-- **Nested data, first-class.** JSON values include primitives, arrays, objects, and null
-  (`value?` admits a top-level null) with subscript, slice, iteration, and
-  structural equality that agree byte-for-byte across every backend. See
+- **Nested data, first-class.** JSON values include primitives, arrays, objects,
+  and null (`value?` admits a top-level null). Read and build nested values with
+  subscripts, slices, iteration, and array/object expressions. Static contracts
+  can describe their shapes. See
   [Working with values](doc/walkthrough/14-json.md).
 - **Algebraic data types via proof terms.** Name a rule `p(...) :: Ctor` and the
   predicate becomes an ADT whose derivations are its values: enums, pairs, Peano
   naturals, lists, parse trees. See [Proof terms](doc/walkthrough/15-proof-terms.md).
 - **A module system.** A file is a function from its input predicates to its
   outputs; bind an input with `:=` to a data file or to an instance of another
-  module. See [Modules](doc/walkthrough/16-modules.md).
+  module. Module imports work in the CLI and VS Code; REPL and playground
+  import wiring remains unsupported. See [Modules](doc/walkthrough/16-modules.md).
 - **Structural and nominal types.** Inference tracks record fields, array elements,
   and proof identities while keeping JSON storage. Declare reusable aliases
   (`type Person = {name: string, age?: integer}.`) or use a proof-carrying
@@ -85,12 +87,12 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
   including nullability (`?`). For example, `invoice() :: Invoice(42: float).`
   promises callers a float payload. Annotations may widen inferred types;
   they cannot cast a value to a narrower type. A head position can carry a
-  *proposition* rather than a type
-  (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
+  *proposition* rather than a type (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
   derives. The witness itself is erased and adds no column. With an SMT solver
   installed, `--verify` attempts to prove supported integer-arithmetic
   contracts for all inputs rather than checking them against the data at hand;
-  obligations outside that fragment are reported as skipped. See
+  obligations outside that fragment, including aggregate rules, are reported as
+  skipped. These contracts can still be checked at runtime. See
   [Contracts and refinements](doc/walkthrough/07-safety.md).
 - **Integrity constraints.** Declare a conjunction that must have no solutions
   (`!- p(X), not q(X).`) and its tuples become the counterexamples, reported

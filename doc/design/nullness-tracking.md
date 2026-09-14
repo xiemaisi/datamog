@@ -4,7 +4,7 @@ Status: **partly superseded by [null-as-a-value.md](./null-as-a-value.md)**,
 which is implemented. The machinery here still runs: nullness is still a bit
 beside the base type, still inferred per column, still checked at annotations and
 module boundaries, and still selects between the two equality lowerings. The
-normative rules are spec §5.4 ("Nullness") and §5.10.
+normative rules are spec §5.4 ("Partiality and NULL") and §5.10.
 
 Two things about it have moved.
 

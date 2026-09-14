@@ -1,8 +1,8 @@
 # Design notes: partial expressions instead of NULL
 
-Status: **exploration; nothing implemented, the change as asked is not
-recommended, and the doc is superseded by
-[null-as-a-value.md](./null-as-a-value.md).** A cheaper variant is recommended in
+Status: **superseded exploration; this proposal was not adopted as written.**
+Partial expressions did ship under the different design in
+[null-as-a-value.md](./null-as-a-value.md). A cheaper variant is recommended in
 §8, and that doc then finds a better one again: this doc treats `null` and
 undefinedness as one thing throughout, which is why its Axis 1 ends up
 distinguishing what a column carries from what a variable carries. Splitting them
