@@ -54,3 +54,14 @@ test("collectively covered tuple contracts have no diagnostic", () => {
   );
   expect(semanticContractMismatch(source, target)).toBeUndefined();
 });
+
+test("module display labels use provenance, not guesses about dollar names", async () => {
+  const { formatModuleDiagnostic } = await import("../src/module-diagnostics.ts");
+  const labels = new Map([
+    ["a$0$p", 'p (module "m", binding "a", instance 0)'],
+    ["a$1$p", 'p (module "m", binding "a", instance 1)'],
+  ]);
+  expect(formatModuleDiagnostic("expected 'a$0$p', got 'a$1$p'", labels)).toContain("instance 1");
+  expect(formatModuleDiagnostic("'a$0$pp'", labels)).toBe("'a$0$pp'");
+  expect(formatModuleDiagnostic("'a$0$p'")).toBe("'a$0$p'");
+});

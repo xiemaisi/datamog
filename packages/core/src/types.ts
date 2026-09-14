@@ -10,12 +10,17 @@ import type { BodyElement, FunctionCall, HeadTerm, PrimitiveType, RangeAtom } fr
 import { BITWISE_OPS, COMPARISON_OPS, EQUALITY_OPS, isFloatLiteral } from "./ast.ts";
 import { type Overload, type ResolutionError, resolveCall } from "./builtins.ts";
 import { validateConstructorAnnotations } from "./constructor-annotations.ts";
+import { formatModuleDiagnostic } from "./module-diagnostics.ts";
 import { findNullableOperands } from "./nullable-operands.ts";
 import { type BodyOwner, type NullnessInfo, inferNullness } from "./nullness.ts";
+import { formatSemanticType } from "./semantic-diagnostics.ts";
 import { inferSemanticColumns } from "./semantic-inference.ts";
 import type { ProofTypeRegistry, SemanticType } from "./semantic-type.ts";
 import { validateSemanticTypes } from "./semantic-validation.ts";
-import { validateStructuralHeadAnnotations } from "./structural-declarations.ts";
+import {
+  declaredColumnType,
+  validateStructuralHeadAnnotations,
+} from "./structural-declarations.ts";
 import { lowerTypedOperands, restoreTypedOperands } from "./typed-operands.ts";
 
 export interface TypedProgram extends AnalyzedProgram {
@@ -72,7 +77,10 @@ export function inferTypes(analyzed: AnalyzedProgram): TypedProgram {
     }
     return inferTypesImpl(analyzed);
   } catch (e) {
-    if (e instanceof AnalyzerError) e.file ??= analyzed.sourceFile;
+    if (e instanceof AnalyzerError) {
+      e.file ??= analyzed.sourceFile;
+      e.message = formatModuleDiagnostic(e.message, analyzed.moduleDiagnosticNames);
+    }
     throw e;
   }
 }
@@ -1442,20 +1450,26 @@ function checkHeadAnnotations(
         const annotation = argTypes[i];
         if (annotation === undefined) continue; // this position is unannotated in this rule
         const declared = annotation.type as PrimitiveType;
+        const declarationLabel =
+          annotation.shape || annotation.nominal
+            ? formatSemanticType(declaredColumnType(annotation))
+            : declared;
         const cst = rule.head.args[i]!.$cstNode ?? rule.head.$cstNode;
         const inferredType = inferTermType(rule.head.args[i]!, varTypes, types);
         // An unconstrained type is reported by the finalize step; skip the type
         // half here but still check the nullness half, which does not need it.
         if (inferredType !== undefined && !columnTypesCompatible(inferredType, declared)) {
           throw new AnalyzerError(
-            `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but inferred as '${inferredType}'`,
+            `Predicate '${pred}' column ${i + 1} is annotated '${declarationLabel}' but inferred as '${inferredType}'`,
             cst?.offset,
             cst?.end,
           );
         }
         if (argNullness?.[i] === true && !annotation.nullable) {
           throw new AnalyzerError(
-            `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but this rule can produce NULL; annotate '${declared}?'`,
+            annotation.shape || annotation.nominal
+              ? `Predicate '${pred}' column ${i + 1} is annotated ${declarationLabel} but this rule can produce NULL; add '?' to this annotation`
+              : `Predicate '${pred}' column ${i + 1} is annotated '${declared}' but this rule can produce NULL; annotate '${declared}?'`,
             cst?.offset,
             cst?.end,
           );

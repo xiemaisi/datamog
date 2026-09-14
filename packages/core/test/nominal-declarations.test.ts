@@ -135,3 +135,23 @@ test("unused aliases cannot collide with wired proof producers", () => {
     }),
   ).toThrow("Ambiguous type name");
 });
+
+test("nullable nominal heads report the proof type rather than its storage carrier", () => {
+  expect(() => typed("nat() :: Z. bad(null:nat).")).toThrow("annotated proof of 'nat'");
+  expect(() => typed("nat() :: Z. bad(null:nat).")).toThrow("add '?' to this annotation");
+  expect(() => typed("nat() :: Z. bad(null:[nat]).")).toThrow("[proof of 'nat']");
+});
+
+test("private module proof mismatches name the source, binding and instance", () => {
+  try {
+    modules('input predicate result(e:value) := out from "producer.dl".', {
+      "producer.dl": "p() :: C. q() :: Q. output predicate out(P:p) :- P:q.",
+    });
+    throw new Error("expected a mismatch");
+  } catch (error) {
+    const message = (error as Error).message;
+    expect(message).toContain('p (module "producer.dl", binding "result", instance 0)');
+    expect(message).toContain('q (module "producer.dl", binding "result", instance 0)');
+    expect(message).not.toContain("result$0$");
+  }
+});

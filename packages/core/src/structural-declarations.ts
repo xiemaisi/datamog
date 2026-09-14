@@ -186,7 +186,7 @@ export function validateStructuralHeadAnnotations(
       if (mismatch) {
         const cst = rule.head.args[i]?.$cstNode ?? rule.head.$cstNode;
         throw new AnalyzerError(
-          `Predicate '${rule.head.predicate}' column ${i + 1} does not satisfy its structural annotation: ${mismatch}`,
+          `Predicate '${rule.head.predicate}' column ${i + 1} does not satisfy its ${annotation.nominal ? "nominal" : "structural"} annotation: ${mismatch}`,
           cst?.offset,
           cst?.end,
         );

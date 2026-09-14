@@ -259,8 +259,10 @@ existing behavior and gain no nominal evidence from their contents.
 
 Diagnostics should identify the producer, constructor, payload index and nested
 mismatch path, with spans on the payload annotation and expression when available.
-Nominal mismatches should distinguish module instances without exposing generated
-names as the only explanation.
+Nominal mismatches identify private predicates by their module file, receiving
+binding and instance number, using provenance retained during elaboration. Public
+names stay as written. Nullable nominal/structural head errors display the declared
+contract rather than its `value` storage carrier.
 
 ## Implementation sequence
 

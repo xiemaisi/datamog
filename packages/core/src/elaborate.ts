@@ -4,6 +4,7 @@ import { AnalyzerError, queryProjection } from "./analyzer.ts";
 import { asCoreRule } from "./ast.ts";
 import type { Binding, ExtDecl, PrimitiveType, Program, Query, Rule, Statement } from "./ast.ts";
 import { expandModule } from "./expand.ts";
+import { formatModuleDiagnostic, setModuleDiagnosticNames } from "./module-diagnostics.ts";
 import { semanticContractMismatch } from "./semantic-diagnostics.ts";
 import type { SemanticType } from "./semantic-type.ts";
 import { declaredColumnType } from "./structural-declarations.ts";
@@ -103,6 +104,7 @@ interface Context {
    * whole merged program once every binding is resolved.
    */
   nameAliases: Map<string, string>;
+  diagnosticNames: Map<string, string>;
 }
 
 /** One expansion of a module, shared by every binding that agrees on the wiring. */
@@ -154,6 +156,7 @@ export function elaborate(
     counter: { n: 0 },
     instances: new Map(),
     nameAliases: new Map(),
+    diagnosticNames: new Map(),
   };
 
   for (const stmt of entry.statements) {
@@ -214,6 +217,7 @@ export function elaborate(
     );
   }
   entry.statements = ctx.out;
+  setModuleDiagnosticNames(entry, ctx.diagnosticNames);
   checkElaboratedPolarities(entry, ctx.boundaries);
   return { program: entry, dataSources: ctx.dataSources, boundaries: ctx.boundaries };
 }
@@ -411,6 +415,16 @@ function checkBoundaryPolarity(actualMaximal: boolean, boundary: BoundaryConstra
  * because the declarations were dropped when the binding was elaborated away.
  */
 export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryConstraint[]): void {
+  try {
+    checkModuleBoundariesImpl(typed, boundaries);
+  } catch (error) {
+    if (error instanceof AnalyzerError)
+      error.message = formatModuleDiagnostic(error.message, typed.moduleDiagnosticNames);
+    throw error;
+  }
+}
+
+function checkModuleBoundariesImpl(typed: TypedProgram, boundaries: BoundaryConstraint[]): void {
   for (const b of boundaries) {
     for (const ref of b.nominalReferences ?? []) {
       const isProof = typed.rules.get(ref.predicate)?.some((rule) => rule.ruleName !== undefined);
@@ -591,6 +605,13 @@ function instantiate(
   }
 
   const rename = exportAs && { export: exportAs.export, as: exportAs.as };
+  for (const name of localNames) {
+    if (Object.hasOwn(inputSubst, name) || name === exportAs?.export) continue;
+    ctx.diagnosticNames.set(
+      `${prefix}${name}`,
+      `${typeAliasName(name)} (module ${JSON.stringify(file ?? sourceRef)}, binding ${JSON.stringify(nameHint)}, instance ${prefix.slice(nameHint.length + 1, -1)})`,
+    );
+  }
   const expanded = expandModule(module, { prefix, inputs: inputSubst, exportAs: rename });
   // A renamed (not aliased) output has no alias rule to name its columns, so its
   // head variables are relabelled to the importer's declared column names.

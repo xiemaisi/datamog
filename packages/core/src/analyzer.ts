@@ -15,6 +15,7 @@ import type {
 } from "./ast.ts";
 import { asCoreRule } from "./ast.ts";
 import { BUILTINS, resolveCall } from "./builtins.ts";
+import { formatModuleDiagnostic, moduleDiagnosticNames } from "./module-diagnostics.ts";
 import { type NegationCycle, buildNegationCycle } from "./negation-cycle.ts";
 import { validateNominalDeclarations } from "./nominal-declarations.ts";
 
@@ -183,6 +184,8 @@ export interface AnalyzedProgram {
    *  errors (type inference, translation) can name it. Undefined for file-less
    *  input (a REPL chunk, stdin, an in-memory buffer). */
   sourceFile?: string;
+  /** Display names for generated module predicates; identity remains unchanged. */
+  moduleDiagnosticNames?: ReadonlyMap<string, string>;
 }
 
 /** Collect all variable names from an expression tree. */
@@ -231,7 +234,10 @@ export function analyze(program: Program, file?: string): AnalyzedProgram {
   try {
     return analyzeImpl(program, file);
   } catch (e) {
-    if (e instanceof AnalyzerError) e.file ??= file;
+    if (e instanceof AnalyzerError) {
+      e.file ??= file;
+      e.message = formatModuleDiagnostic(e.message, moduleDiagnosticNames(program));
+    }
     throw e;
   }
 }
@@ -888,6 +894,7 @@ function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgra
     nonLinearPredicates,
     maximalPredicates,
     sourceFile: file,
+    moduleDiagnosticNames: moduleDiagnosticNames(program),
   };
 }
 
