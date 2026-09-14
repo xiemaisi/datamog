@@ -15,7 +15,8 @@ So Datamog adds a fifth type, `value` — a union that covers
 objects — plus a small toolkit for picking it apart from inside
 a rule body. The name "JSON" is reserved here for the syntax
 (JSONL files, parsing strings) and the on-the-wire / on-disk
-representation; the language-level type is just `value`.
+representation. Static inference can retain more precise record and array shapes
+without changing that storage.
 
 The design is **primarily destructure**: most data enters a
 program through the EDB as a `value` and gets read, projected,
@@ -127,9 +128,9 @@ their row.
 
 ## Coercing leaves to primitive types
 
-The values you get out of subscripts are always `value` — even
-when the underlying leaf is a string or a number. To work with
-primitives you need an explicit coercion:
+A subscript on opaque `value` data, such as the loaded events above, does not
+prove the leaf's type. Use an explicit extraction to work with primitives:
+
 
 | Function         | Returns   | has no value when                                       |
 |------------------|-----------|---------------------------------------------------------|
@@ -150,6 +151,36 @@ that a value is `null` is the question it exists to answer.
 rather than yielding `1`. If you want truncation, do it explicitly with
 `as_float` and `floor`. (Datamog won't smuggle silent precision
 loss past you.)
+
+## Declaring and inferring shapes
+
+A structural input contract validates the data as it is loaded and lets later
+rules use its known fields directly:
+
+```prolog
+type Person = {name: string, age?: integer, scores: [float?]}.
+input predicate people(person: Person).
+next_age(P["age"] + 1) :- people(P).
+```
+
+Records are closed: extra fields are rejected. `age?: integer` allows the field
+to be missing; `age: integer?` requires it but permits null. A missing age makes
+`next_age` derive no row. A nullable age instead needs a bound-variable guard
+(`A = P["age"], A <> null`) before arithmetic. `[float?]` allows null elements;
+`[float]?` allows a null array. Nested `value` accepts any JSON value.
+
+Inference also discovers shapes without declarations:
+
+```prolog
+person({"age": 41}).
+next_age(P["age"] + 1) :- person(P).
+```
+
+The result is 42. Declaring that producer as `person({"age": 41}: value).`
+hides the field type from callers, so they must use `as_integer(P["age"])`.
+Annotations check and publish a promise; they do not cast or alter stored JSON.
+Inference uses bounded summaries, so explicit extraction remains useful when
+it cannot prove a scalar type. See [spec §5](../spec.md#5-type-system).
 
 ## Object projection and serialisation
 
@@ -394,9 +425,9 @@ bun run datamog doc/walkthrough/code/ch14/events.dl
 
 ## Recap
 
-- A `value`-typed column carries the union of every shape:
-  `null`, booleans, integers, floats, strings, arrays, and
-  objects. Datamog reads them with subscript / iteration /
+- JSON storage carries booleans, integers, floats, strings, arrays, objects,
+  and null. A top-level null needs `value?` in a column contract; null inside
+  an object or array does not. Datamog reads them with subscript / iteration /
   coercion, and constructs new ones via auto-lift (anywhere a
   `value` slot meets a primitive), `parse_json(s)` (parse a
   string, no value on malformed input), and array / object

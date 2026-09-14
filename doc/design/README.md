@@ -5,10 +5,10 @@ it is, which alternatives were rejected, and where the sharp edges are. The
 normative description of the language is `doc/spec.md`; when the two disagree, the
 spec wins and the doc needs updating.
 
-Every doc states its status near the top, since they do not all describe shipped
-behaviour: one records a design that was turned down, three are superseded or partly so, two are mostly unbuilt, and
-another a model whose structure was never built and one of whose denotations has
-since been overtaken.
+The status column distinguishes implemented behavior, historical designs, and
+future proposals. Older primitive-type designs describe that layer's rationale;
+[semantic types](semantic-types.md) describes the additional structural and
+nominal analysis now used alongside it.
 
 | Doc | Status | Covers |
 |---|---|---|
@@ -18,6 +18,8 @@ since been overtaken.
 | [`parity-stratification.md`](./parity-stratification.md) | implemented | Recursion through an even number of negations, the `^` sigil, the alternating fixed point |
 | [`qualified-constructors.md`](./qualified-constructors.md) | implemented | Why a proof-term constructor is scoped to its predicate (`opt::Some`) |
 | [`semantic-types.md`](./semantic-types.md) | implemented | Structural contracts, validated nominal proof signatures, shared expression typing, bounded inference, aliases and editor navigation |
+| [`proof-signature-contracts.md`](./proof-signature-contracts.md) | implemented | Inline constructor contracts, bare nominal type names, module identity, and external-input restrictions |
+| [`semantic-types-benchmarks.md`](./semantic-types-benchmarks.md) | measured baseline | Reproducible inference, subtype, and loading workloads; compiler work limits |
 | [`type-lattice.md`](./type-lattice.md) | implemented, annotated for the `null` type | The six types, `value` as the top and `null` as a sibling of the primitives, meet within a rule vs join across rules, head annotations |
 | [`imports-as-functors.md`](./imports-as-functors.md) | largely implemented | A file as a function from its input relations to its output relations, wired with `:=` |
 | [`typing-and-safety-constraints.md`](./typing-and-safety-constraints.md) | model implemented bar `⟦null⟧`, structure not | Recasting safety checking and type inference as one constraint system over one lattice |

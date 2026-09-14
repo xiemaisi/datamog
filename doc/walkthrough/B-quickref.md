@@ -14,6 +14,8 @@ definition, see [`doc/spec.md`](../spec.md).
 | `p("value", 42).`                          | assert a ground fact                             |
 | `h(X, Y) :- body.`                         | rule defining an IDB predicate                   |
 | `h(X: integer) :- body.`                   | head argument with a checked type annotation     |
+| `type Name = {field: integer}.`           | transparent type alias                          |
+| `p() :: C(X: float) :- body.`              | checked constructor payload contract            |
 | `h(X, Y) :: Ctor :- body.`                 | proof-carrying rule: `h` becomes an ADT          |
 | `output predicate h(X) :- body.`           | rule whose predicate is also a named result      |
 | `error predicate bad(X) :- body.`          | named integrity constraint: `bad` must be empty  |
@@ -25,12 +27,12 @@ definition, see [`doc/spec.md`](../spec.md).
 
 ## Identifiers
 
-- Unquoted predicate, function, and column names start with lowercase:
-  `parent`, `all_prereqs`, `length`.
-- Variables start with uppercase or `_`: `X`, `Score`, `_`, `_0`.
-- Predicate and column names can be backtick-quoted when they contain
-  punctuation or reserved words: `` `http-event`(`content-type`: string) ``.
-  Function names are not quoted.
+- Identifiers are case-sensitive: `x` and `X` are distinct.
+  Case does not determine the role; position does. Both are valid predicate or
+  variable names.
+- Backticks quote punctuation or reserved words: `` `http-event`(`content-type`: string) ``.
+- A bare name in a type position denotes an alias or proof-carrying predicate;
+  if it denotes both, the name is ambiguous and rejected.
 
 ## Types
 
@@ -40,8 +42,15 @@ definition, see [`doc/spec.md`](../spec.md).
 | `integer` | `42`, `-3`                    | whole numbers                               |
 | `float`    | `3.14`                        | floating point                              |
 | `boolean` | `true`, `false`               | equality-only — no `<` / `>` ordering       |
-| `value`   | (loaded via JSONL / `.json`)  | union of `null` / boolean / integer / float / string / array / object. Equality-only — no ordering. Destructure via `V["k"]`, `V[i]`, `V[i:j]`, the iteration primitives, and the `as_*` / `length` / `type_of` builtins. |
-| `null`    | `null`                        | the one value `null`, a type beside the primitives rather than under them. Declarable on a column, which is only useful with a `?` |
+| `value`   | (loaded via JSONL / `.json`)  | JSON booleans, numbers, strings, arrays and objects; top-level null needs `value?`. Equality-only — no ordering. Destructure via `V["k"]`, `V[i]`, `V[i:j]`, the iteration primitives, and the `as_*` / `length` / `type_of` builtins. |
+| `null`    | `null`                        | the one value `null`, a type beside the primitives rather than under them. A column declared `null` accepts only null |
+
+Additional contracts: `{name: string, age?: integer}` (closed record), `[float]`
+(homogeneous array), and `nat` (proofs of the proof-carrying predicate `nat`).
+`age?: integer` permits absence; `age: integer?` permits null. Aliases work in
+all type positions. External inputs cannot claim nominal proof membership.
+Proven scalar fields and payloads work directly in arithmetic; an explicit
+`value` contract hides that precision. Top-level null requires `value?`.
 
 Any type takes a `?` suffix (`age: integer?`) to admit `null` as well as
 its own values. A `?` column is checked statically, not only at load
@@ -147,6 +156,8 @@ to the other rules).
 
 | Syntax                        | Meaning                                                   |
 | ----------------------------- | --------------------------------------------------------- |
+| `type Name = {field: integer}.`           | transparent type alias                          |
+| `p() :: C(X: float) :- body.`              | checked constructor payload contract            |
 | `h(X, Y) :: Ctor :- body.`    | constructor args derived (witnesses, then sub-proofs)     |
 | `h(X, Y) :: Ctor(A, B) :- body.` | constructor args listed explicitly                     |
 | `V : p(X, Y)`                 | capture `p`'s proof term into `V`                         |

@@ -83,17 +83,17 @@ atoms have the same flavour of requirement: you can't safely say
 
 ## The type system
 
-Datamog gives every column of every predicate a type drawn from
-five basic types, plus `null` for the literal (chapter 6) and an
-optional `?` for a column that can hold one:
+Datamog has five basic storage types, plus `null` for the literal (chapter 6)
+and an optional `?` for a column that can hold one. Semantic inference also
+tracks nested shapes and proof identities (chapters 14–16):
 
 - `string` — strings,
 - `integer` — whole numbers,
 - `float` — floating-point,
 - `boolean` — `true` / `false`,
-- `value` — the union of `null`, booleans, integers, floats,
-  strings, arrays, and objects; opaque to the type system but
-  destructurable via subscript and the iteration primitives. See
+- `value` — JSON booleans, integers, floats, strings, arrays, and objects
+  (`value?` also admits top-level null). An explicit `value` contract hides structure;
+  inference and structural declarations can retain field and element types. See
   the [working with values chapter](14-json.md) for the full story.
 
 Extensional declarations state column types explicitly. Intensional
@@ -383,16 +383,12 @@ the first place.
 > more), so they have no well-defined meaning in a "schema first,
 > data later" world.
 >
-> The type system is a shallow Hindley-Milner-style inference:
-> one type per column, with `integer ⊑ float` and primitive
-> `⊑ value` as the only subtyping edges. That minimalism is
-> deliberate — a richer type
-> system, one that folded per-column constraints into the lattice
-> itself, would make the translation to SQL much harder, since
-> SQL's type system is equally minimal. The refinements above are
-> the workaround: a proposition sits *beside* the type rather than
-> inside it, and it lowers to a constraint check rather than to a
-> SQL type, so nothing in codegen has to know about it.
+> The primitive storage lattice has `integer ⊑ float` and primitives below
+> `value`. A semantic layer also tracks records, arrays, and nominal proof
+> identities. These richer contracts do not require new SQL storage types:
+> structures stay JSON, and proven scalar operands use checked extraction.
+> Refinement propositions remain separate obligations and lower to constraint
+> checks. See chapters 14–16 for structural and proof contracts.
 
 > **SQL lens.** Safety is exactly what guarantees the generated
 > SQL is *finite*. Every body atom becomes a `FROM` alias drawn

@@ -64,8 +64,8 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
   The in-memory evaluators also support non-linear and parity-stratified
   recursion and are handy for tracing the semantics step by step. See the
   [language spec](doc/spec.md).
-- **Nested data, first-class.** A `value` type is the union of every JSON shape
-  (null, primitives, arrays, objects) with subscript, slice, iteration, and
+- **Nested data, first-class.** JSON values include primitives, arrays, objects, and null
+  (`value?` admits a top-level null) with subscript, slice, iteration, and
   structural equality that agree byte-for-byte across every backend. See
   [Working with values](doc/walkthrough/14-json.md).
 - **Algebraic data types via proof terms.** Name a rule `p(...) :: Ctor` and the
@@ -74,9 +74,18 @@ bun run datamog ancestor.dl   # parent data loads from ./parent.csv by conventio
 - **A module system.** A file is a function from its input predicates to its
   outputs; bind an input with `:=` to a data file or to an instance of another
   module. See [Modules](doc/walkthrough/16-modules.md).
-- **Optional, checked contracts.** Column types are inferred; annotate a column
-  or a rule head when you want to pin one down, including whether it may be
-  NULL. A head position can carry a *proposition* rather than a type
+- **Structural and nominal types.** Inference tracks record fields, array elements,
+  and proof identities while keeping JSON storage. Declare reusable aliases
+  (`type Person = {name: string, age?: integer}.`) or use a proof-carrying
+  predicate's name as a type (`P: nat`). Proven scalar fields work directly in
+  arithmetic; opaque `value` data needs explicit extraction. See the
+  [type system](doc/spec.md#5-type-system).
+- **Optional, checked contracts.** Input declarations specify loaded types;
+  rule heads and explicit constructor payloads accept checked annotations,
+  including nullability (`?`). For example, `invoice() :: Invoice(42: float).`
+  promises callers a float payload. Annotations may widen inferred types;
+  they cannot cast a value to a narrower type. A head position can carry a
+  *proposition* rather than a type
   (`span(X, Y, _: Y > X)`), which is checked against the tuples the predicate
   derives. The witness itself is erased and adds no column. With an SMT solver
   installed, `--verify` attempts to prove supported integer-arithmetic

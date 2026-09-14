@@ -2,9 +2,10 @@
 
 Status: implemented. The foundation includes structural/proof inference,
 published semantic contracts, structural input and head declarations, transparent
-file-local aliases, and typed scalar operands. Proof registries validate their
+file-local aliases, bare nominal type references, inline constructor payload
+contracts, and typed scalar operands. Proof registries validate their
 references. Inference uses dependency-driven propagation and bounded widening;
-structural errors report mismatch paths and editors navigate alias references.
+structural errors report mismatch paths and editors navigate alias and proof type references.
 
 The scope is richer structural JSON types and static types for existing proof
 terms. Independent datatype declarations and freely constructible ADTs are
@@ -439,11 +440,10 @@ work; this foundation neither accepts schemas nor claims schema conformance.
 
 ## Continuation checkpoint
 
-At `471a7c14`, the foundation and the hardening work described above are
-implemented. Validation at that revision: `bun run test` passed 2,306 tests
-with 72 skips and no failures; `bun run typecheck` and `bun run check` passed.
-The most recent step prepares structural input validators once per batch and
-removes repeated traversal when reporting nested nullable failures.
+The foundation, structural aliases, constructor payload contracts, and bare
+nominal references are implemented. At `956ebf23`, validation passed 2,357 tests
+with 72 skips, 27 browser tests, typechecking, linting, and packaging builds.
+The benchmark baseline below records the earlier performance work.
 
 Suggested follow-up work, rather than outstanding requirements for this foundation:
 

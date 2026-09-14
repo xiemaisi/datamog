@@ -7,6 +7,11 @@ inference, §5.6 widening, §5.10 head annotations, §9.3 module boundaries); re
 those for *what*. This doc only covers the decisions and the alternatives we
 rejected, because none of that survives in a rule list.
 
+This document covers the primitive storage lattice. The implemented
+[semantic type layer](semantic-types.md) additionally tracks structural shapes
+and nominal proof identities; [constructor contracts](proof-signature-contracts.md)
+can publish those types without adding SQL storage types.
+
 ## The types form a lattice
 
 There are six column types: `string`, `integer`, `float`, `boolean`, `value` and
@@ -172,31 +177,23 @@ a definition is checked against reality, its consumers against its advertised
 contract. An external consumer of `p` above still sees `value` and still cannot
 do `K + 1`; only `p`'s own recursion sees the integer.
 
-## The invariant: annotations never affect codegen
+## The invariant: annotations do not change producer storage
 
-This is the decision that made the whole feature cheap, so it is worth stating
-plainly: **annotations only affect checking. Codegen always uses the inferred
-type.** A column declared `value` that a rule fills with integers is still stored
-and returned as integers; the annotation is a compile-time contract, never a
-storage directive.
+A column declared `value` that a rule fills with integers is still stored and
+returned as integers. The inferred primitive type determines its storage; the
+annotation is a checked promise to consumers, not a storage directive.
 
-Why this matters, concretely: the tempting alternative is to make the *published*
-type (the declared, possibly wider one) the column's real type. But then a
-`value`-declared recursive predicate would have to store JSON physically, and its
-own recursive step would have to **down-cast** JSON back to an integer to do
-`Y + 1`, then re-lift the result. That down-cast (`value -> integer`) does not
-exist in the translator, which only ever lifts *up* (`liftToJsonIfNeeded`). It
-would be new machinery on the hottest path (once per recursive iteration), and it
-is exactly what the invariant avoids.
+Using the wider published type as physical storage would make a recursive
+integer producer annotated `value` store JSON and extract the integer again in
+its own recursive step. Keeping inferred storage avoids that conversion.
 
-The invariant is sound because the two views never contradict each other.
-Checking uses the wider (published) type, so it rejects more; codegen uses the
-narrower (inferred) type, which supports every operation the wider one did and
-only ever lifts up. A program that type-checks can never fail codegen, and the
-contract is honoured observationally: a consumer only ever uses the predicate in
-ways the published type allows, and codegen lifts the inferred value up wherever
-the published type is expected, so it behaves as the contract everywhere the
-contract is relied on, today and after any future widening.
+The original primitive-only implementation described this as “annotations never
+affect codegen.” With the semantic type layer, that wording is too strong:
+published record and constructor contracts guide consumer operand extraction.
+A field published as `float` uses float extraction; an opaque `value` field
+requires explicit extraction. Producer storage and proof construction remain
+unchanged. The contract is enforced by checking the producer's contribution and
+letting consumers use only the published precision.
 
 ## Module boundaries use the published type too
 

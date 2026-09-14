@@ -10,6 +10,7 @@ The core AST re-exports Langium-generated types from `datamog-parser`. A Datamog
 
 - **`Expression`** (aliased as `Term`): `Variable`, `StringLiteral`, `NumberLiteral`, `NullLiteral`, `ArrayLiteral`, `ObjectLiteral`, `BinaryExpr`, `UnaryExpr`, `FunctionCall`, `Subscript`, and `Slice`. The `HeadTerm` union additionally includes the synthesised `AggregateCall` shape for aggregate-position rule heads
 - **`Literal`**: a body atom — a predicate applied to expressions, e.g. `ancestor(X, Y)`, `not composite(X)`. Carries `negated`, `maximal` (the parity `^` sigil), and `proofVar` (the `V : p(...)` proof capture)
+- **`TypeAlias`**: a transparent file-local type alias
 - **`ExtDecl`**: extensional predicate declaration with typed columns
 - **`Rule`**: a Horn clause with a head atom and body elements (empty body = fact)
 - **`Query`**: a `?-` query against a predicate
@@ -48,11 +49,22 @@ import { analyze, inferTypes } from "datamog-core";
 const typed = inferTypes(analyze(program));
 typed.columnTypes;      // Map<string, PrimitiveType[]>, column types per predicate — what codegen uses
 typed.publishedTypes;   // the same, widened by head annotations — the contract consumers see
+typed.semanticColumnTypes;          // inferred structural and nominal column types
+typed.publishedSemanticColumnTypes; // semantic contracts consumers see
+typed.proofTypes;                   // inferred constructor payload registry
+typed.publishedProofTypes;          // published constructor payload contracts
 typed.functionOverloads;// Map<FunctionCall, Overload>, the hand-off to backend dispatch
 typed.nullness;         // which columns can hold the `null` value, and which variables each body proves cannot
 ```
 
-Types are: `string`, `integer`, `float`, `boolean`, `value`, and `null` (the literal's own type), each optionally nullable. Type inference is a fixed-point iteration; columns that the iteration leaves un-pinned are reported as a type-inference error (rather than silently defaulted).
+Primitive types are `string`, `integer`, `float`, `boolean`, `value`, and `null`.
+A semantic layer additionally tracks records, arrays, tuples, unions, and nominal
+proof identities. Declaration syntax exposes closed records, homogeneous arrays,
+transparent aliases, bare proof predicate names, and nullability (`?`); general
+union and tuple declarations are not yet supported. Head and constructor payload
+annotations are checked against inferred contributions and published to consumers.
+Proven scalar projections lower to type-strict extraction builtins; structured
+values keep JSON storage. Type inference is a fixed-point iteration; columns that the iteration leaves un-pinned are reported as a type-inference error (rather than silently defaulted).
 
 ## Other analyses
 
@@ -71,4 +83,4 @@ Each is a pull-based call the CLI, the playground, and the VS Code extension mak
 
 ## Modules
 
-`elaborate(program, resolve, file)` expands a program's `:=` bindings into one flat program, resolving imports through a caller-supplied `ModuleResolver` so core stays filesystem-free. `expandModule` does one instantiation; `checkModuleBoundaries(typed, boundaries)` checks the wiring against each predicate's `publishedTypes` after inference. See spec §9.
+`elaborate(program, resolve, file)` expands a program's `:=` bindings into one flat program, resolving imports through a caller-supplied `ModuleResolver` so core stays filesystem-free. `expandModule` does one instantiation; `checkModuleBoundaries(typed, boundaries)` checks primitive, nullness, structural, and nominal contracts against each predicate's published types after inference. See spec §9.

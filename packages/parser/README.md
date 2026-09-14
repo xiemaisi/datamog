@@ -17,7 +17,7 @@ const program = parse(`
 `);
 
 for (const stmt of program.statements) {
-  console.log(stmt.$type); // "ExtDecl", "Rule", or "Query"
+  console.log(stmt.$type); // "ExtDecl", "Rule", "Query", or "TypeAlias"
 }
 ```
 
@@ -37,7 +37,12 @@ error predicate <head>(<args>) :- ... .       # a named integrity constraint
 <name>^(<args>)                               # the parity sigil: this predicate is maximal
 ```
 
-Column types are `string`, `integer`, `float`, `boolean`, or `value`, each optionally suffixed `?` for a column that can hold `null`; the annotation is optional and defaults to `string`.
+Declaration types include `string`, `integer`, `float`, `boolean`, `value`, `null`,
+closed records (`{name: string, age?: integer}`), arrays (`[float]`), transparent
+aliases (`type N = nat.`), and bare proof-carrying predicate names (`nat`). `?`
+admits null; an unannotated input column defaults to `string`. Nominal types are
+checked after module elaboration and are not allowed on external data inputs.
+Explicit constructor arguments also accept contracts: `p() :: C(42: float).`
 
 ## Post-processing
 
@@ -51,7 +56,8 @@ Column types are `string`, `integer`, `float`, `boolean`, or `value`, each optio
 
 6. **Contract lowering:** `synthesiseContractChecks` turns each refinement-carrying predicate into one synthesised `!-`, so no stage after parsing sees a refinement.
 
-`parseRaw` itself applies the normalisations that must precede everything else (lifting optional head type annotations onto `head.argTypes`, extracting refinements, substituting `as` head-argument names away, and defaulting an unannotated column type to `string`), so every consumer, including the module elaborator that runs before `postProcess`, sees them.
+`parseRaw` expands aliases while retaining symbolic nominal references, lifts
+constructor argument contracts onto `rule.ctorArgTypes`, and applies the normalisations that must precede everything else (lifting optional head type annotations onto `head.argTypes`, extracting refinements, substituting `as` head-argument names away, and defaulting an unannotated column type to `string`), so every consumer, including the module elaborator that runs before `postProcess`, sees them.
 
 ## Parse entry points
 

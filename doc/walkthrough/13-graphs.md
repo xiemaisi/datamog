@@ -158,7 +158,7 @@ the unique one.
 ---
 
 Next: **[Chapter 14 — Working with values](14-json.md)**, which
-adds the `value` column type and a destructure-only toolkit for
+adds the `value` column type and a toolkit for reading, constructing, and checking
 ingesting heterogeneous nested data — useful when the records you
 receive arrive as deeply-nested blobs and you don't want to flatten
 them in some other language first.

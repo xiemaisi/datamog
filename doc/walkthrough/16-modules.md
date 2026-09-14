@@ -221,6 +221,21 @@ publishes, so a wider declaration (up to `value`) passes but a narrower one is
 rejected. That is a subtype check, not the symmetric cross-rule widening from
 Chapter 7.
 
+Structural and proof contracts cross the same boundary. For a module exporting
+`nat(0) :: Zero.` and its recursive successor rule, a receiver can write:
+
+```prolog
+input predicate local(n: integer, evidence: local) := nat from "nat.dl".
+```
+
+`local` names that output's proof type after renaming. Equal module and input
+wiring share the identity, including when imported under two names; different
+instances have distinct proof types. A forwarding predicate preserves the
+original proof identity rather than creating its own. Aliases expand within
+their source file, so they do not introduce an alias import/export mechanism.
+Constructor payload contracts are published by the producing module; consumers
+cannot recover precision it deliberately hides with `value`.
+
 ## Boundary polarity
 
 Polarity is part of the interface too. If a module input or output is maximal

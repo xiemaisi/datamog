@@ -61,7 +61,7 @@ extensibility that production engines carry.
 
 | System | Recursion | Negation | Aggregation | Types | Standout feature |
 |---|---|---|---|---|---|
-| **Datamog** | General (in-memory) / linear only (SQL backends) | Parity-stratified (in-memory) / stratified (SQL backends) | count, sum, avg, min, max, concat, list | Static inference (annotations optional): string/integer/float/boolean/value (JSON); algebraic datatypes as proof terms | Multiple cross-checked backends; compiles Datalog to SQL |
+| **Datamog** | General (in-memory) / linear only (SQL backends) | Parity-stratified (in-memory) / stratified (SQL backends) | count, sum, avg, min, max, concat, list | Static inference: primitives/null, structural JSON shapes, nominal proof types; aliases and optional head/constructor contracts | Multiple cross-checked backends; compiles Datalog to SQL |
 | **DES** | General | Stratified | Yes, with `group_by` | Optional, declared as integrity constraints | One database queried via Datalog, SQL, and relational algebra; tracers and declarative debuggers; nulls and duplicates |
 | **Soufflé** | General | Stratified | count, sum, min, max, mean | Static: number/unsigned/float/symbol plus records and ADTs | Subsumption, choice domains, generic components, C++ foreign functors |
 | **CodeQL** | General, plus `+`/`*` transitive-closure operators | Parity-stratified (recursion through an even number of negations) | Yes, plus monotonic aggregates usable inside recursion | Static OO: int/float/string/boolean/date/bigint, classes, and algebraic datatypes (`newtype`) | First-order-logic bodies (not just Horn clauses); OO classes plus ADTs; no nulls |

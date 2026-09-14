@@ -5,11 +5,12 @@ Language support for the [Datamog](../../README.md) Datalog dialect.
 ## Features
 
 - **Syntax highlighting** for `.dl` files: keywords, predicates, variables, aggregates, types, strings, numbers, and comments
-- **Live diagnostics**: parse errors from the Langium parser and semantic errors from the Datamog analyzer (arity mismatches, unsafe variables, unstratifiable negation, aggregate validation)
-- **Smart auto-complete**: context-aware completions for predicate names, built-in functions, and keywords
+- **Live diagnostics**: parse errors from the Langium parser and semantic errors from the Datamog analyzer (arity mismatches, unsafe variables, unstratifiable negation, aggregate validation, structural and nominal type contracts, constructor payload contracts)
+- **Smart auto-complete**: context-aware completions for predicate names, built-in functions, keywords, type aliases, and proof type names
 - **Go to definition** (`F12`, `Ctrl/Cmd+click`) for:
   - a predicate, to its `input predicate` declaration and every rule that derives it (a predicate with several rules offers them all)
   - a variable, to where it is bound within its own rule: a positive body atom, a proof capture, an equality's left side, a range atom, or a constructor pattern
+  - a type name, to its alias declaration or proof producer
   - a constructor term, to the rule carrying the matching `:: Ctor` marker, qualified by predicate when several share the tag
   - a `:=` binding, into the imported module at the output it selects, or to the bound data file. Module inputs wired as actuals resolve on both sides, and a constructor of an imported ADT lands on its rule in the module
 - **Bracket matching** and auto-closing for `()`, `[]`, `""`

@@ -40,3 +40,12 @@ An empty cell is a `null`, and a column has to say it accepts one. Declare it wi
 ## Platform-neutral parsing
 
 The root entry reads files, so it imports `node:path` and `Bun.file`. Consumers that already hold the text — the browser playground, the VS Code extension — import `datamog-csv/parse-content` instead, which exports `csvRowsFromKeyed` and `csvRowsFromPositional` and pulls in nothing Bun-specific.
+
+## Structural contracts
+
+Columns can declare closed records and homogeneous arrays, directly or through
+`type` aliases. They retain `value` storage and are validated on loading; errors
+identify the column and nested field/index path. Optional fields (`age?: integer`)
+and nullable fields (`age: integer?`) have different meanings. Nominal proof
+types are not valid external input contracts, including inside arrays or optional
+fields. See [the language specification](../../../doc/spec.md#22-extensional-declarations).

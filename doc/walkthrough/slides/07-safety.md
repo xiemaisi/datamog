@@ -79,7 +79,7 @@ A negated body atom has the same flavour: `not p(X)` requires `X` to be bound el
 | `integer` | Whole numbers |
 | `float` | Floating-point |
 | `boolean` | `true` / `false` |
-| `value` | union of `null` / boolean / integer / float / string / array / object (destructured via subscript, iteration, coercion) |
+| `value` | JSON booleans, numbers, strings, arrays and objects; `value?` also admits top-level null |
 
 EDBs declare types explicitly. IDBs have types **inferred** by a fixed-point walk over the rules.
 
@@ -240,9 +240,10 @@ If any fails, Datamog refuses to translate.
 
 Safety ↔ **domain independence**. The truth of a safe formula `φ(x̄)` on a structure `M` depends only on the *relations* in `M`, not on which other objects sit in `M`'s universe.
 
-The type system is a shallow Hindley-Milner-style inference: one type per column, with `integer ⊑ float` and primitive `⊑ value` as the only subtyping edges.
+Primitive storage types have `integer ⊑ float` and primitives below `value`.
 
-The minimalism is deliberate — a richer type system would express more, but make SQL translation harder. SQL's type system is equally minimal.
+A semantic layer tracks **record fields, array elements, and proof identities**.
+Structures keep JSON storage; proven scalar operands use checked extraction.
 
 Refinements are the escape hatch, and a **refinement type** in the usual sense: the witness is proof-irrelevant, so it erases, which is exactly why the position cannot be a column.
 
@@ -262,7 +263,7 @@ A type-rejected rule is one Datamog *can't* compile, not one that compiles badly
 
 - A rule is **safe** when every head variable (and every variable in a comparison, arithmetic, or negation) is bound by a positive body atom, range, or equality with a safe other side.
 - Safety ↔ domain independence — answer depends only on the data, not on the universe.
-- Datamog has **five basic types**: `string`, `integer`, `float`, `boolean`, `value`, plus `null` for the literal and a `?` for a column that can hold one. Two widenings: `integer → float`, and primitive → `value` via auto-lift.
+- Datamog has **five basic types**: `string`, `integer`, `float`, `boolean`, `value`, plus `null` for the literal and a `?` for a column that can hold one. Storage widens via `integer → float` and primitive → `value`; semantic inference also retains shapes and proof identities.
 - A `_` head position can carry a **proposition** instead of a type. It is checked against the derived tuples and erases; `--verify` proves it instead. A contract is the disjunction over a predicate's rules, so one unannotated sibling makes it vacuous.
 - Both checks run **before** SQL is emitted. Bad programs get line-numbered errors, not runtime nonsense.
 

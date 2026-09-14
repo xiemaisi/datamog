@@ -190,8 +190,8 @@ list_sum(Cons(H, T), S + as_integer(H)) :- list_sum(T, S).
 
 The `Nil` rule is the base case; the `Cons` rule matches off the head `H`,
 recurses on the tail `T` for its sum `S`, and adds the two right in the head. A
-matched component comes out as a `value`, so `H` needs an explicit `as_integer`
-before the arithmetic. `list_sum`'s first column already ranges over `num_list`
+matched component retains its published payload type. Here `H` is known to be
+an integer, so `S + H` also works; the explicit extraction remains valid. `list_sum`'s first column already ranges over `num_list`
 proofs, so pairing each list with its sum needs no capture:
 
 ```prolog
@@ -271,6 +271,41 @@ The grammar is ambiguous, so `2 + 3 * 4` yields both parses: `(2+3)*4 = 20` and
 Both examples thread proofs through recursion (the parser also branches on two
 sub-spans), so run them on `native` / `seminaive`. See the *Peano Naturals* and
 *Expression Evaluator* examples.
+
+## Naming proof types and publishing payload contracts
+
+The predicate name is also the type of its proofs. An annotation checks that a
+value came from that producer, and an alias can give the type another name:
+
+```prolog
+nat(0) :: Zero().
+nat(N + 1) :: Succ(P: nat) :- P : nat(N), N < 2.
+type NatProof = nat.
+selected(P: NatProof) :- P : nat(_).
+```
+
+`nat` names the proof type, not the ordinary integer column. You can write
+`[nat]`, `{previous?: nat}`, and `nat?` too. The annotation does not build or
+cast a proof: a lookalike JSON object and another predicate's proof both fail
+this contract. Alias and proof-predicate names must not be ambiguous.
+
+Contracts also belong directly on explicit constructor arguments:
+
+```prolog
+invoice() :: Invoice({"total": 42}: {total: float}).
+tax(D["total"] * 0.05) :- P : invoice, P = invoice::Invoice(D).
+```
+
+Inference checks the integer total against the promised float. Callers see the
+float contract, even though this implementation stores 42. Changing the total
+to a string is rejected at the producer. Declaring the argument `value` instead
+would hide its fields and require callers to extract them explicitly. Without
+annotations, known payload types are inferred and usable directly.
+
+These annotations go after `::`, on the expressions the rule records. They do
+not extend constructor-match syntax or change the rule that terms are matches.
+Proof types cannot be declared on externally loaded inputs; module wiring can
+supply them because the checker knows the producing predicate (chapter 16).
 
 ## A few rules of the road
 

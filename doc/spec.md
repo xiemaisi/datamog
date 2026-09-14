@@ -235,8 +235,10 @@ constraints below are the only exceptions.
   complete list is in §1.6. Lexically these are ordinary identifiers; they are
   reserved only against predicate names, and may be used freely as extensional
   columns and as variables.
-- **Type aliases**: file-local names for types (§2.2), separate from predicates
-  and variables. Aliases cannot redefine primitive type names, even when quoted.
+- **Type names**: a type position can name a file-local alias (§2.2) or a
+  proof-carrying predicate (§8.2). A name denoting both is ambiguous and rejected,
+  including after module wiring. Ordinary predicates and variables may share
+  alias names. Aliases cannot redefine primitive type names, even when quoted.
 - **Predicate names**: a single namespace shared by extensional (EDB) and
   intensional (IDB) predicates. Each name is one or the other, never both
   (§4.6), and carries a fixed arity (§4.2).
@@ -375,7 +377,7 @@ Tuple declarations, open records and JSON Schema import are not supported.
 
 #### Type aliases
 
-A `type` declaration gives a reusable name to a primitive or structural type:
+A `type` declaration gives a reusable name to a primitive, structural, or nominal proof type:
 
 ```prolog
 type Person = {name: string, age?: Age, scores: [Age?]}.
@@ -394,8 +396,9 @@ element, or another alias. `?` composes with nullability in the definition:
 
 Names are case-sensitive and local to their source file. Forward references are
 allowed; unknown names, duplicate aliases and direct or indirect cycles are
-errors, including in unused declarations. A module resolves its aliases before
-its predicates are elaborated. Aliases are neither imported nor exported; module
+errors, including in unused declarations. A module expands its aliases before
+its predicates are elaborated, retaining nominal references for resolution after
+wiring and predicate renaming. Aliases are neither imported nor exported; module
 boundaries compare their expanded contracts, so files may use the same alias name
 for different types. In an incremental session, a successful chunk's aliases are
 available to later chunks; redefinition is rejected and reset clears them.
@@ -431,11 +434,13 @@ supplied explicitly (wired or `:=`-bound); a module never auto-loads (§9).
 ### 2.3 Rules
 
 ```
-Rule        ::= (('output' | 'error') 'predicate')? HeadAtom (':-' BodyElement (',' BodyElement)*)? '.'
+Rule        ::= (('output' | 'error') 'predicate')? HeadAtom ConstructorSuffix? (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom    ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm    ::= Expression ( 'as' Identifier (':' TypeValue)?
                            | ':' (TypeValue | Refinement) )?
 Refinement  ::= Expression
+ConstructorSuffix ::= '::' Identifier ('(' (ConstructorArgument (',' ConstructorArgument)*)? ')')?
+ConstructorArgument ::= Expression (':' TypeValue)?
 ```
 
 A refinement attaches only to the bare `:` branch, so a named position takes a
@@ -1504,12 +1509,14 @@ Binding        ::= (Identifier? 'from' STRING ('(' Actual (',' Actual)* ')')?)  
 Actual         ::= Identifier '=' Identifier
 
 Rule           ::= (('output' | 'error') 'predicate')? HeadAtom
-                   ('::' Identifier ('(' (Expression (',' Expression)*)? ')')?)?
+                   ConstructorSuffix?
                    (':-' BodyElement (',' BodyElement)*)? '.'
 HeadAtom       ::= Identifier '^'? '(' (HeadTerm (',' HeadTerm)*)? ')'
 HeadTerm       ::= (AggregateCall | Expression)
                    ( 'as' Identifier (':' TypeValue)?
                    | ':' (TypeValue | Expression) )?
+ConstructorSuffix ::= '::' Identifier ('(' (ConstructorArgument (',' ConstructorArgument)*)? ')')?
+ConstructorArgument ::= Expression (':' TypeValue)?
 AggregateCall  ::= IDENT '(' (Expression | '*') ')'
 
 Query          ::= '?-' BodyElement (',' BodyElement)* '.'
@@ -1806,7 +1813,7 @@ between two *nullable* columns can only be `null`. Which storage carries a
 there.
 
 A column that can hold `null` **as well as** other values is written with a
-`?` suffix (`age: integer?`, §2.2). That is not a sixth kind of type but the
+`?` suffix (`age: integer?`, §2.2). That denotes the
 union of the base type and `null`, so `integer?` accepts an integer or a
 `null` and `integer` accepts integers only.
 
@@ -2282,11 +2289,11 @@ that a mistyped sibling rule silently produces a `value` column instead of an
 error. See the type-lattice design note (`doc/design/type-lattice.md`) for the
 full rationale.
 
-Every column of every predicate is typed with exactly one of the six types of
-§5.1, plus a nullness bit inferred separately (§5.4). A column that only ever
-receives a bare `null` has no base type of its own; one is picked to carry the
-nulls and is unobservable there, but a rule reading such a column cannot infer a
-type for it, so it needs a sibling rule contributing a real type.
+The primitive storage component and nullness analysis (§5.4) coexist with the
+semantic types of §5.1. A null-only column has semantic type `null`; its chosen
+primitive storage carrier is unobservable because it stores only nulls.
+Structured columns retain JSON storage while semantic inference tracks field,
+element, and proof types.
 
 ### 5.7 Type Validation
 
@@ -2487,15 +2494,14 @@ rule's contribution the same way -- callees contribute their published type, the
 predicate's own references their inferred type.
 
 Because annotations do not influence inference, a column whose type inference
-cannot determine is still an error (§5.2) even when annotated. Annotations carry
-no runtime effect and do not change the emitted SQL: codegen uses the inferred
-type, so declaring a column `value` that a rule fills with integers documents
-intended generality and constrains consumers, but the column is still stored and
-returned as integers. This invariant -- annotations affect only checking, never
-codegen -- is deliberate: keeping codegen on the inferred type means it never has
-to down-cast a wider declared type (say `value`) back to the narrower value a
-recursive body computes with. See the type-lattice design note
-(`doc/design/type-lattice.md`).
+cannot determine is still an error (§5.2) even when annotated. Annotations do not
+cast stored values or add runtime validation. Codegen
+uses inferred primitive storage types, so a column declared `value` that produces
+integers is still stored and returned as integers. Semantic contracts do control
+consumer operand extraction: a JSON field published as `float` is extracted as a
+float, while a field hidden by `value` needs an explicit extraction. Thus an
+annotation can affect consumer SQL without changing the producer's representation.
+See the [semantic type design](design/semantic-types.md).
 
 Module boundaries (§9.3) apply this same directional subtype check: the value
 flowing across a boundary must fit within the type declared for it.
@@ -3229,7 +3235,7 @@ opt_value(V) :- P = Some(V).
 
 `P = Ctor(p1, ..., pn)` desugars to the capture `P : Pred(_)` (`Pred` being the
 predicate `Ctor` names a rule of), the tag guard
-`as_string(P["$proof"]) = "Ctor"`, and one match per argument against the
+`as_string(P["$proof"]) = "Pred::Ctor"`, and one match per argument against the
 accessor `P["args"][i]`: a variable binds (via `=`), a literal becomes a guard,
 `_` ignores the position, and a nested pattern recurses. Because the capture is
 part of the desugaring, the scrutinee is range-restricted to `Pred`'s proofs
@@ -3238,8 +3244,9 @@ one is harmless).
 
 A pattern's arity must match the constructor's, and a constructor name may not
 collide with a built-in operation, so `Ctor(...)` is unambiguous. Extracted
-components are `value`-typed, so an explicit coercion (`as_integer(...)` below)
-is still needed to use one as a primitive.
+components retain the constructor's published payload types. A proven scalar can
+be used directly in a primitive operation; an opaque `value` payload requires
+explicit extraction. The `as_integer(...)` below remains valid either way.
 
 **A constructor term is always a match, never a value builder**, and this holds
 wherever it appears. In a head argument or a body-atom argument it is read as an
@@ -3527,6 +3534,11 @@ proof column is named only for the declaration's own sake, since a query hides i
   declaring `integer` for a column contracted `value` is a static error, since
   the declaration would promise more than the contract guarantees. A mismatch
   either way is a static error.
+
+  Structural and nominal contracts are checked too: required fields must be
+  present, element types must fit, and proof identities must match after wiring,
+  freshening, and shared-instance renaming (§8.2). An annotation cannot recover
+  structure or proof precision hidden by a producer's published `value` contract.
 
   Nullness travels the same contract (§5.4). A column whose published nullness
   admits a NULL may not cross a boundary whose declaration omits `?`, in either

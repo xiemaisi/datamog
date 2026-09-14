@@ -34,6 +34,14 @@ consumers that render or serialise it.
 CLI to decide when to submit a multi-line entry: `isInputComplete` (has a full
 statement been typed?) and `offsetToLineColumn`.
 
+## Type contracts across chunks
+
+Successful chunks make their type aliases and predicate names available to later
+type annotations. Failed chunks publish neither, and reset clears the context.
+For example, after `nat(0) :: Zero.`, a later chunk can declare `type N = nat.`.
+Proof capture and constructor-match lowering still needs the producer in the same
+chunk; cross-chunk type-name resolution does not remove that limitation.
+
 ## Drivers
 
 - [`packages/cli/src/repl-driver.ts`](../cli/src/repl-driver.ts) wraps this

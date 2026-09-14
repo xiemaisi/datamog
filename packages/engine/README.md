@@ -88,6 +88,11 @@ const myLoader: ExtensionalLoader = {
 };
 ```
 
+The shared `insertRows` path prepares record/array validators once per batch,
+checks every row, and reports nested field/index paths on failure. Nominal proof contracts
+are rejected before insertion, even for empty batches: external JSON cannot
+establish proof membership. Use module wiring for statically checked proof inputs.
+
 `load` returns a `LoadResult` (`{ rowsLoaded }`). Use `coerceValue` for string sources (CSV, Google Sheets) and `checkValue` for sources that already carry native types (JSONL).
 
 ## Subpath entries

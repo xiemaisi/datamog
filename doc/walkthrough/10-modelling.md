@@ -34,10 +34,9 @@ there:
   predicate participate in joins with any other. (When you genuinely
   need to ingest deeply-nested data without flattening it first,
   Datamog does have a `value` column type that supports
-  destructuring; see [Chapter 14](14-json.md). The "destructure-only"
-  design keeps the rest of this chapter's advice intact —
-  `value` columns are an escape hatch for opaque payloads, not a
-  replacement for flat-tuple modelling.)
+  destructuring, construction, and structural contracts; see
+  [Chapter 14](14-json.md). Nested data is useful when a whole document belongs
+  together; flat columns still make join keys and relationships explicit.)
 - **No composite keys hidden inside the schema.** Keys are just
   columns with a role. `id` in `employee` is the key because other
   predicates refer to it.

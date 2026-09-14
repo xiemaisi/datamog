@@ -6,7 +6,7 @@ tight: true
 ---
 
 Standard Datalog has only flat, atomic values.
-**Datamog** adds one more type, `value`: the union of every JSON shape (null, numbers, strings, booleans, **arrays** and **objects**), enough to hold a whole **syntax tree**.
+**Datamog** adds one more type, `value`: JSON storage for numbers, strings, booleans, **arrays** and **objects** (a top-level null needs `value?`), enough to hold a whole **syntax tree**.
 
 Make each node an **object** tagged with its `type`, put its children in an **args** array, and let a variable carry its `name`.
 So `p & q` becomes:
