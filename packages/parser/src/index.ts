@@ -107,7 +107,7 @@ export {
 import type { AstNode } from "langium";
 import { GrammarUtils } from "langium";
 import { createDatamogServices } from "./datamog-module.js";
-import type { Program, TypeAlias } from "./generated/ast.js";
+import type { Program, Statement, TypeAlias } from "./generated/ast.js";
 import {
   defaultColumnTypes,
   liftHeadAnnotations,
@@ -221,6 +221,7 @@ export function parseRaw(
   source: string,
   file?: string,
   aliases: readonly TypeAlias[] = [],
+  context: readonly Statement[] = [],
 ): Program {
   const result = parser.parse<Program>(source);
   if (result.lexerErrors.length > 0) {
@@ -256,7 +257,7 @@ export function parseRaw(
   // `string`. Alias rewriting goes first because `liftHeadAnnotations` moves each
   // refinement formula off the container tree, out of reach of a `streamAll` walk.
   try {
-    resolveTypeAliases(result.value, aliases);
+    resolveTypeAliases(result.value, aliases, context);
   } catch (error) {
     if (error instanceof ParseError) error.file ??= file;
     throw error;
@@ -267,8 +268,13 @@ export function parseRaw(
   return result.value;
 }
 
-export function parse(source: string, file?: string, aliases: readonly TypeAlias[] = []): Program {
-  const program = parseRaw(source, file, aliases);
+export function parse(
+  source: string,
+  file?: string,
+  aliases: readonly TypeAlias[] = [],
+  context: readonly Statement[] = [],
+): Program {
+  const program = parseRaw(source, file, aliases, context);
   // `postProcess` throws `ParseError`s (via `parseErrorAtNode`) that only know
   // their node position, so stamp the source file here at the parse boundary.
   try {
@@ -287,3 +293,10 @@ export {
   type ProofConstruction,
   type ProofProjection,
 } from "./proof-metadata.ts";
+
+export {
+  type NominalReference,
+  type NominalTypeMetadata,
+  visitNominalReferences,
+  containsNominalType,
+} from "./nominal-types.js";

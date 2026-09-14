@@ -1,4 +1,4 @@
-import { compileStructuralColumnValidator } from "datamog-core";
+import { compileStructuralColumnValidator, rejectNominalInput } from "datamog-core";
 import type { ColumnDecl, ExtDecl, PrimitiveType, TypedProgram } from "datamog-core";
 import type { Backend } from "./backend.ts";
 import { ident } from "./dialect.ts";
@@ -50,6 +50,7 @@ export async function insertRows(
   decl: ExtDecl,
   rows: Record<string, unknown>[],
 ): Promise<void> {
+  rejectNominalInput(decl);
   if (rows.length === 0) return;
   // Canonicalise every value-typed column on insert so cross-backend
   // textual equality coincides with structural equality (SQLite/sql.js

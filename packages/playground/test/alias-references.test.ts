@@ -13,3 +13,10 @@ test("alias navigation survives expansion and unrelated validation errors", () =
     ]);
   }
 });
+
+test("bare nominal type navigation targets the proof producer", () => {
+  const source = "nat(0) :: Zero. type N = nat.";
+  expect(collectAliasReferences(source)).toEqual([
+    { start: source.lastIndexOf("nat"), end: source.lastIndexOf("nat") + 3, target: 0 },
+  ]);
+});

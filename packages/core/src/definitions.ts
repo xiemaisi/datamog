@@ -249,7 +249,7 @@ function findVariableBindings(scope: Rule | Query, name: string): SourceSpan[] {
 
 // --- Cursor resolution ------------------------------------------------------
 
-/** Alias links are file-local and use retained source spans, never expanded copies. */
+/** Type-name links use original spans and resolve to aliases or predicate declarations. */
 export function findTypeAliasDefinitions(
   program: Program,
 ): Extract<Definition, { kind: "local" }>[] {
@@ -266,7 +266,17 @@ export function findTypeAliasDefinitions(
   return typeAliasReferences(program).map((reference) => ({
     kind: "local",
     origin: { offset: reference.offset, end: reference.end },
-    targets: definitions.get(reference.name) ?? [],
+    targets:
+      definitions.get(reference.name) ??
+      program.statements.flatMap((stmt) => {
+        const node =
+          stmt.$type === "Rule" ? stmt.head : stmt.$type === "ExtDecl" ? stmt : undefined;
+        const span =
+          node && typeAliasName(node.predicate) === reference.name
+            ? propertySpan(node, "predicate")
+            : undefined;
+        return span ? [span] : [];
+      }),
   }));
 }
 

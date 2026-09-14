@@ -1,5 +1,6 @@
+import { containsNominalType } from "datamog-parser";
 import { AnalyzerError } from "./analyzer.ts";
-import type { ColumnDecl, Rule } from "./ast.ts";
+import type { ColumnDecl, ExtDecl, Rule } from "./ast.ts";
 /** Structural input-column declarations and validation of their JSON values. */
 import { semanticContractMismatch } from "./semantic-diagnostics.ts";
 import {
@@ -15,7 +16,11 @@ type Shape = NonNullable<ColumnDecl["shape"]>;
 type TypeValue = Extract<Shape, { $type: "ArrayType" }>["element"];
 
 function valueType(value: TypeValue): SemanticType {
-  const type = value.shape ? shapeType(value.shape) : fromPrimitiveType(value.type!);
+  const type: SemanticType = value.nominal
+    ? { kind: "proof", id: { predicate: value.nominal.predicate } }
+    : value.shape
+      ? shapeType(value.shape)
+      : fromPrimitiveType(value.type!);
   return value.nullable ? unionType(type, scalarType("null")) : type;
 }
 
@@ -38,9 +43,13 @@ function shapeType(shape: Shape): SemanticType {
 
 /** Column storage stays primitive; the schema is a separate semantic contract. */
 export function declaredColumnType(
-  column: Pick<ColumnDecl, "type" | "shape" | "nullable">,
+  column: Pick<ColumnDecl, "type" | "shape" | "nullable" | "nominal">,
 ): SemanticType {
-  const type = column.shape ? shapeType(column.shape) : fromPrimitiveType(column.type ?? "string");
+  const type: SemanticType = column.nominal
+    ? { kind: "proof", id: { predicate: column.nominal.predicate } }
+    : column.shape
+      ? shapeType(column.shape)
+      : fromPrimitiveType(column.type ?? "string");
   return column.nullable ? unionType(type, scalarType("null")) : type;
 }
 
@@ -143,6 +152,10 @@ export type StructuralColumnValidator = (value: unknown, context: string) => voi
  * Primitive columns remain the responsibility of primitive validation.
  */
 export function compileStructuralColumnValidator(column: ColumnDecl): StructuralColumnValidator {
+  if (containsNominalType(column))
+    throw new Error(
+      `Column '${column.name}': external JSON cannot establish nominal proof membership`,
+    );
   if (!column.shape) return () => {};
   const match = compileMatcher(declaredColumnType(column));
   const name = column.name;
@@ -167,7 +180,7 @@ export function validateStructuralHeadAnnotations(
 ): void {
   for (const [rule, types] of contributions) {
     for (const [i, annotation] of (rule.head.argTypes ?? []).entries()) {
-      if (!annotation?.shape) continue;
+      if (!annotation?.shape && !annotation?.nominal) continue;
       const declared = declaredColumnType(annotation);
       const mismatch = semanticContractMismatch(types[i]!, declared);
       if (mismatch) {
@@ -180,4 +193,13 @@ export function validateStructuralHeadAnnotations(
       }
     }
   }
+}
+
+/** Reject before looking at rows, including empty batches and nested nominal types. */
+export function rejectNominalInput(decl: Pick<ExtDecl, "predicate" | "columns">): void {
+  for (const column of decl.columns)
+    if (containsNominalType(column))
+      throw new Error(
+        `Predicate '${decl.predicate}', column '${column.name}': external JSON cannot establish nominal proof membership`,
+      );
 }

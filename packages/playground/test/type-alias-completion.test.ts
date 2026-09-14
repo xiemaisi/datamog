@@ -9,3 +9,12 @@ test("type aliases remain completion candidates in an unfinished type annotation
     detail: "type alias",
   });
 });
+
+test("proof producers are type completion candidates", () => {
+  const source = "nat(0) :: Zero. out(P: na";
+  expect(collectCompletionCandidates(source, source.length)).toContainEqual({
+    label: "nat",
+    kind: "type",
+    detail: "nominal proof type",
+  });
+});

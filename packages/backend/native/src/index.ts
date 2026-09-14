@@ -1,4 +1,4 @@
-import { compileStructuralColumnValidator } from "datamog-core";
+import { compileStructuralColumnValidator, rejectNominalInput } from "datamog-core";
 // Native in-memory Datalog backend. See ./evaluator.ts for the evaluation
 // algorithm and ./values.ts for term evaluation semantics.
 
@@ -139,6 +139,7 @@ export function createEvaluatorBackend<E extends DatalogEvaluator>(
 
     async insertRows(decl: ExtDecl, rows: Record<string, unknown>[]): Promise<void> {
       assertOpen();
+      rejectNominalInput(decl);
       // Direct backend inserts bypass the shared loader helper. Validate the
       // entire structural batch before buffering/appending any rows.
       const structuralColumns =

@@ -16,6 +16,7 @@ import type {
 import { asCoreRule } from "./ast.ts";
 import { BUILTINS, resolveCall } from "./builtins.ts";
 import { type NegationCycle, buildNegationCycle } from "./negation-cycle.ts";
+import { validateNominalDeclarations } from "./nominal-declarations.ts";
 
 export const AGGREGATE_NAMES: ReadonlySet<string> = new Set([
   "count",
@@ -236,6 +237,7 @@ export function analyze(program: Program, file?: string): AnalyzedProgram {
 }
 
 function analyzeImpl(program: Program, file: string | undefined): AnalyzedProgram {
+  validateNominalDeclarations(program);
   const extDecls = new Map<string, ExtDecl>();
   const rules = new Map<string, Rule[]>();
   const arities = new Map<string, number>();

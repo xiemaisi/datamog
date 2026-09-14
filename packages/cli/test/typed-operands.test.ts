@@ -6,7 +6,7 @@ import { create as sqlite } from "datamog-backend-sqlite";
 import { create as sqljs } from "datamog-backend-sqljs";
 import { analyze, inferTypes } from "datamog-core";
 import { type Backend, DatamogExecutor, type ExtensionalLoader, insertRows } from "datamog-engine";
-import { parse } from "datamog-parser";
+import { parse, parseRaw } from "datamog-parser";
 
 const engines: [string, () => Promise<Backend>][] = [
   ["native", native],
@@ -48,6 +48,20 @@ for (const [name, create] of engines)
         await backend.close();
       }
     }
+    test("bare nominal types check heads, payloads and nested aliases without changing proofs", async () => {
+      expect(
+        await run(
+          "type Proofs = [p]. p() :: C(3). box() :: B([P]:Proofs) :- P:p. answer(P:p) :- P:p. ?- answer(P).",
+        ),
+      ).toEqual([[{ P: { $proof: "p::C", args: [3] } }]]);
+      await expect(run("p() :: C. q() :: C. answer(P:p) :- P:q. ?- answer(P).")).rejects.toThrow(
+        "expected proof of 'p'",
+      );
+      await expect(
+        run('p() :: C. answer({"$proof":"p::C","args":[]}:p). ?- answer(P).'),
+      ).rejects.toThrow("expected proof of 'p'");
+      await expect(run("p() :: C. input predicate data(x: [p]).")).rejects.toThrow("external JSON");
+    });
     test("constructor contracts publish scalar operands without changing proof payloads", async () => {
       const source = 'p() :: C(3: float, "label"). answer(X/2, L) :- P:p, P=C(X,L).';
       expect(await run(`${source} ?- answer(N,L).`)).toEqual([[{ N: 1.5, L: "label" }]]);
@@ -335,4 +349,30 @@ test("shared insertion preserves late nested errors without inserting a batch pr
     `row 101, column 'x': $[0]["child"]["n"]: expected integer`,
   );
   expect(calls).toBe(0);
+});
+
+test("shared and direct interpreter insertions reject nominal declarations before empty batches", async () => {
+  const decl = parseRaw("p() :: C. input predicate data(x: {optional?: [p]}).").statements[1]!;
+  if (decl.$type !== "ExtDecl") throw new Error("expected input");
+  let calls = 0;
+  const sqlBackend: Backend = {
+    sqlDialect: null,
+    async execute() {
+      calls++;
+      return [];
+    },
+    close() {},
+  };
+  await expect(insertRows(sqlBackend, decl, [])).rejects.toThrow("external JSON");
+  await expect(insertRows(sqlBackend, decl, [{ x: {} }])).rejects.toThrow("external JSON");
+  expect(calls).toBe(0);
+  for (const create of [native, seminaive]) {
+    const backend = await create();
+    try {
+      await expect(backend.insertRows!(decl, [])).rejects.toThrow("external JSON");
+      await expect(backend.insertRows!(decl, [{ x: {} }])).rejects.toThrow("external JSON");
+    } finally {
+      await backend.close();
+    }
+  }
 });

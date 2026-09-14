@@ -197,3 +197,14 @@ test("editor checks inline constructor contracts after alias expansion", () => {
   expect(diagnostics[0]!.message).toContain("Constructor 'p::C' payload 1");
   expect(diagnostics[0]!.node.$type).not.toBe("Program");
 });
+
+test("editor validates bare nominal contracts and rejects alias ambiguity", () => {
+  const errors = (source: string) => runValidator(source).filter((d) => d.severity === "error");
+  expect(errors("p() :: C. q(P:p) :- P:p.")).toEqual([]);
+  expect(errors("p() :: C. other() :: D. q(P:p) :- P:other.")[0]?.message).toContain(
+    "expected proof of 'p'",
+  );
+  expect(errors("type p = integer. p() :: C. q(1:p).")[0]?.message).toContain(
+    "Ambiguous type name",
+  );
+});

@@ -100,6 +100,7 @@ export {
   BUILTIN_FUNCTION_NAMES,
   collectUserPredicates,
   collectTypeAliases,
+  collectProofTypeNames,
   collectVariablesInRule,
   findEnclosingRule,
   type PredicateInfo,
@@ -177,6 +178,7 @@ export {
 export {
   type StructuralColumnValidator,
   compileStructuralColumnValidator,
+  rejectNominalInput,
   declaredColumnType,
   validateStructuralColumn,
 } from "./structural-declarations.ts";

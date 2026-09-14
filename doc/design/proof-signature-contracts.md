@@ -1,9 +1,8 @@
 # Constructor payload contracts
 
-Status: inline constructor payload annotations are implemented for existing types
-and aliases (spec §8.2). The companion `P` as a nominal type syntax and the additional nominal
-boundary/loading rules below remain proposals, not implemented. Unannotated programs
-retain their current behavior.
+Status: inline constructor payload annotations and bare predicate names as nominal
+proof types are implemented, including module boundaries and external-input checks.
+Unannotated programs retain their current behavior.
 This extends the [semantic type foundation](semantic-types.md); it does not add
 independent datatypes, freely constructible terms, or a finiteness guarantee.
 
@@ -74,8 +73,8 @@ The existing rule that a constructor tag is unique within its predicate remains;
 this proposal does not allow several rules to define the same constructor.
 
 Primitive, structural and alias annotations solve the motivating problem by
-themselves. Nominal `P` as a nominal type references are a companion type extension, described
-below, and can follow separately. Per-consumer signature views, constructor hiding
+themselves. Bare predicate names provide a companion nominal type extension, described
+below. Per-consumer signature views, constructor hiding
 and interfaces declared separately from their rules are outside this proposal.
 
 ## Payload annotation syntax
@@ -102,7 +101,7 @@ order. There is no annotation of an implicit payload position in the first versi
 `:: Ctor()` still specifies an empty payload and has nothing to annotate; a rule
 using that form or the bare form needs no declaration elsewhere.
 
-The companion `P` as a nominal type type denotes the nominal proof type of predicate `P`:
+A bare predicate name `P` denotes the nominal proof type of predicate `P`:
 
 ```prolog
 output predicate nat(0) :: Zero().
@@ -112,7 +111,7 @@ type NatProof = nat.
 selected(P: NatProof) :- P : nat(_).
 ```
 
-Once added, `P` as a nominal type is allowed wherever a declaration type is allowed, including
+`P` is allowed wherever a declaration type is allowed, including
 aliases and nested records/arrays; `P?` includes null. No new keyword is needed. Field optionality and expression absence remain
 separate. Without the annotation, `Succ(P)` already infers its nominal payload type;
 the annotation expresses a checked promise rather than creating that identity.
@@ -170,9 +169,9 @@ aliases. Self and mutual references resolve after collecting all predicate ident
 Validate registry closure without unfolding those edges. An annotation does not
 assert that its constructor has a nonempty extension.
 
-## Proposed nominal identity and module boundaries
+## Nominal identity and module boundaries
 
-`P` as a nominal type resolves to an elaborated predicate identity, never merely a source name
+A nominal type reference `P` resolves to an elaborated predicate identity, never merely a source name
 or matching constructor spelling. Elaborate these references using exactly the
 same substitutions as proof captures and constructor qualifiers:
 
@@ -189,7 +188,7 @@ identity. Different instances have different identities even when their signatur
 are structurally identical. Payload annotations do not change instance keys.
 
 A receiving declaration still counts the implicit trailing proof column. For the
-`nat` module above, the proposed receiving contract is:
+`nat` module above, the receiving contract is:
 
 ```prolog
 input predicate local(n: integer, evidence: local) := nat from "nat.dl".
@@ -217,7 +216,7 @@ to private helpers remain freshened internal identities; their source names do n
 become names importers can write. This proposal does not promise constructor privacy
 beyond the module system's existing behavior.
 
-## Proposed nominal annotations and external data
+## Nominal annotations and external data
 
 A nominal annotation checks provenance already established by semantic inference.
 It never casts a JSON object to a proof, tests a tag at runtime, or inserts the
@@ -277,12 +276,12 @@ names as the only explanation.
    backends for unchanged stored payloads and construction, and appropriate consumer
    operand extraction. These first two steps deliver the motivating feature without
    introducing nominal type syntax.
-3. **Deferred.** Add the companion nominal type-reference AST form. Resolve and freshen references
+3. **Implemented.** Preserve bare predicate names as nominal type-reference metadata. Resolve and freshen references
    during elaboration, including aliases and shared-instance name aliases. Add nominal
    payload/column/head checking and boundaries, overrides of module defaults, and
    rejection on external loading/insertion paths. Test recursive references, compatible
    and incompatible modules, quoted names and editor navigation.
-4. **Completed for payload annotations.** Document each implemented extension in the language spec only after its checks
+4. **Implemented.** Document each implemented extension in the language spec only after its checks
    exist; add examples and editor diagnostics. Run the full suite and commit each step.
 
 The main implementation dependency is publication: a payload annotated `value` must

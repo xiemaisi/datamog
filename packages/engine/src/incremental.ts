@@ -114,6 +114,7 @@ export class IncrementalSession {
       source,
       undefined,
       this.statements.filter((s) => s.$type === "TypeAlias"),
+      this.statements,
     );
 
     this.checkRedefinition(fragment.statements);
@@ -179,6 +180,7 @@ export class IncrementalSession {
       source,
       undefined,
       this.statements.filter((s) => s.$type === "TypeAlias"),
+      this.statements,
     );
     if (fragment.statements.length !== 1 || fragment.statements[0]!.$type !== "Query") {
       throw new Error(":sql expects a single query of the form '?- atom.'");

@@ -171,3 +171,18 @@ function collectVarsInTerm(term: HeadTerm, into: Set<string>): void {
       return;
   }
 }
+
+/** Known proof producers and module-bound candidates available in type positions. */
+export function collectProofTypeNames(program: Program): string[] {
+  return [
+    ...new Set(
+      program.statements.flatMap((stmt) =>
+        stmt.$type === "Rule" && stmt.ruleName !== undefined
+          ? [stmt.head.predicate]
+          : stmt.$type === "ExtDecl" && stmt.binding?.isModule
+            ? [stmt.predicate]
+            : [],
+      ),
+    ),
+  ];
+}

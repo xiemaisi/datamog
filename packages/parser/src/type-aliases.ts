@@ -4,10 +4,12 @@ import type {
   AnnotatedHeadTerm,
   ColumnDecl,
   Program,
+  Statement,
   StructuralType,
   TypeAlias,
   TypeValue,
 } from "./generated/ast.js";
+import type { NominalReference } from "./nominal-types.js";
 import { ParseError } from "./parse-error.js";
 
 export interface TypeAliasReference {
@@ -32,6 +34,10 @@ function retainReferences(program: Program): void {
   const names = new Set(
     program.statements.filter((s) => s.$type === "TypeAlias").map((s) => typeAliasName(s.name)),
   );
+  for (const statement of program.statements) {
+    if (statement.$type === "Rule") names.add(typeAliasName(statement.head.predicate));
+    if (statement.$type === "ExtDecl") names.add(typeAliasName(statement.predicate));
+  }
   const found: TypeAliasReference[] = [];
   // Capture the whole source tree before validation can fail, so navigation
   // survives unknown aliases, cycles and unrelated syntax errors mid-edit.
@@ -61,8 +67,21 @@ function retainReferences(program: Program): void {
 }
 
 /** Aliases are transparent syntax: resolve them in their file before elaboration. */
-export function resolveTypeAliases(program: Program, inherited: readonly TypeAlias[] = []): void {
+export function resolveTypeAliases(
+  program: Program,
+  inherited: readonly TypeAlias[] = [],
+  context: readonly Statement[] = [],
+): void {
   retainReferences(program);
+  const predicates = new Set<string>();
+  const proofs = new Set<string>();
+  for (const statement of [...context, ...program.statements]) {
+    if (statement.$type === "Rule") {
+      const name = typeAliasName(statement.head.predicate);
+      predicates.add(name);
+      if (statement.ruleName !== undefined) proofs.add(name);
+    } else if (statement.$type === "ExtDecl") predicates.add(typeAliasName(statement.predicate));
+  }
   const definitions = new Map<string, TypeAlias>();
   const resolved = new Map<string, TypeValue>();
   const visiting: string[] = [];
@@ -100,7 +119,20 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
     const cached = resolved.get(key);
     if (cached) return cached;
     const declaration = definitions.get(key);
-    if (!declaration) return fail(`Unknown type alias '${key}'`, site);
+    if (!declaration) {
+      if (!predicates.has(key))
+        return fail(`Unknown type alias '${key}' or proof-carrying predicate`, site);
+      return {
+        $type: "TypeValue",
+        $container: site as TypeValue["$container"],
+        $cstNode: site.$cstNode,
+        nullable: false,
+        type: "value",
+        nominal: { predicate: name, offset: site.$cstNode?.offset, end: site.$cstNode?.end },
+      };
+    }
+    if (proofs.has(key))
+      fail(`Ambiguous type name '${key}': both a type alias and a proof-carrying predicate`, site);
     if (visiting.includes(key))
       fail(`Recursive type alias: ${[...visiting, key].join(" -> ")}`, site);
     if (visiting.length >= 128) fail("Type alias nesting exceeds 128 levels", site);
@@ -111,7 +143,11 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
     return value;
   };
   const expand = (
-    value: Pick<TypeValue, "type" | "shape" | "alias" | "nullable"> & AstNode,
+    value: Pick<
+      TypeValue,
+      "type" | "shape" | "alias" | "nullable" | "nominal" | "nominalConflicts"
+    > &
+      AstNode,
     depth: number,
   ): TypeValue => {
     if (--remaining < 0 || depth >= 128)
@@ -120,6 +156,16 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
       const target = resolve(value.alias, value);
       const expanded = expand(target, depth + 1);
       expanded.nullable ||= value.nullable;
+      const key = typeAliasName(value.alias);
+      if (definitions.has(key) && predicates.has(key)) {
+        const ref: NominalReference = {
+          predicate: value.alias,
+          aliasName: key,
+          offset: value.$cstNode?.offset,
+          end: value.$cstNode?.end,
+        };
+        expanded.nominalConflicts = [...(expanded.nominalConflicts ?? []), ref];
+      }
       return expanded;
     }
     let shape: StructuralType | undefined;
@@ -143,6 +189,10 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
       type: shape ? undefined : value.type,
       shape,
       nullable: value.nullable || value.type === "null",
+      ...(value.nominal ? { nominal: { ...value.nominal } } : {}),
+      ...(value.nominalConflicts
+        ? { nominalConflicts: value.nominalConflicts.map((ref) => ({ ...ref })) }
+        : {}),
     };
   };
   const apply = (site: ColumnDecl | AnnotatedHeadTerm | AnnotatedConstructorArgument): void => {
@@ -156,7 +206,8 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
       !site.nullable &&
       site.expr.$type === "Variable" &&
       site.expr.name === "_" &&
-      !definitions.has(nameOf(site.alias, site))
+      !definitions.has(nameOf(site.alias, site)) &&
+      !predicates.has(typeAliasName(site.alias))
     ) {
       site.refinement = {
         $type: "Variable",
@@ -173,6 +224,8 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
     site.shape = value.shape;
     site.nullable = value.nullable;
     site.alias = undefined;
+    site.nominal = value.nominal;
+    site.nominalConflicts = value.nominalConflicts;
     if (site.shape) {
       AstUtils.linkContentToContainer(site);
       for (const node of AstUtils.streamAllContents(site.shape))
@@ -185,6 +238,19 @@ export function resolveTypeAliases(program: Program, inherited: readonly TypeAli
   // the parsed program lets an incremental session reuse them in later chunks.
   for (const declaration of locals) {
     declaration.value = resolve(declaration.name, declaration);
+    // A formal input may only become proof-carrying after module wiring. Keep
+    // its collision check even when this alias is never referenced.
+    if (predicates.has(typeAliasName(declaration.name))) {
+      declaration.value.nominalConflicts = [
+        ...(declaration.value.nominalConflicts ?? []),
+        {
+          predicate: declaration.name,
+          aliasName: typeAliasName(declaration.name),
+          offset: declaration.$cstNode?.offset,
+          end: declaration.$cstNode?.end,
+        },
+      ];
+    }
     AstUtils.linkContentToContainer(declaration);
     for (const node of AstUtils.streamAllContents(declaration))
       AstUtils.linkContentToContainer(node);

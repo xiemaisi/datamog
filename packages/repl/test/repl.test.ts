@@ -346,3 +346,19 @@ test("incremental constructor annotations use earlier aliases and reject failed 
     await repl.close();
   }
 });
+
+test("nominal type names resolve against earlier successful REPL chunks", async () => {
+  const repl = makeRepl();
+  try {
+    expect(findEvent(await repl.feed("p() :: C. saved(P) :- P:p."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("type N = p."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("out(P:N) :- saved(P)."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("type p = value."), "error")?.message).toContain(
+      "Ambiguous type name",
+    );
+    expect(findEvent(await repl.feed("type Good = p."), "error")).toBeUndefined();
+    expect(findEvent(await repl.feed("?- out(P)."), "result")?.rows).toHaveLength(1);
+  } finally {
+    await repl.close();
+  }
+});

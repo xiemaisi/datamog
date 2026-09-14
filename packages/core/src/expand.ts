@@ -1,4 +1,10 @@
-import { isExtDecl, isFunctionCall, isLiteral, isRule } from "datamog-parser";
+import {
+  isExtDecl,
+  isFunctionCall,
+  isLiteral,
+  isRule,
+  visitNominalReferences,
+} from "datamog-parser";
 import type { Program, Statement } from "./ast.ts";
 
 export interface ExpandOptions {
@@ -105,6 +111,9 @@ export function expandModule(
   };
 
   for (const stmt of module.statements) {
+    visitNominalReferences(stmt, (ref) => {
+      ref.predicate = renamePredicate(ref.predicate);
+    });
     for (const node of walk(stmt)) {
       if (isRule(node)) {
         // The constructor tag (`ruleName`) is left as-is; renaming the head
@@ -117,7 +126,10 @@ export function expandModule(
         // Freshen the surviving declaration itself (its references go through
         // `renamePredicate` via `localNames`).
         node.predicate = `${prefix}${node.predicate}`;
-      } else if (isFunctionCall(node) && ctorNames.has(node.name)) {
+      } else if (
+        isFunctionCall(node) &&
+        (ctorNames.has(node.name) || node.qualifier !== undefined)
+      ) {
         // A constructor term `Ctor(...)` (a match). Qualify it with its owning
         // predicate's new name so it stays unambiguous once several instances
         // merge (an already-qualified term just has its qualifier renamed).

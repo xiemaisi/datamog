@@ -336,8 +336,12 @@ consumer operand conversions again. Runtime proof construction and storage remai
 unchanged; consumers extract operands according to the published payload types.
 
 See [Constructor payload contracts](proof-signature-contracts.md) and spec §8.2.
-Bare predicate names as nominal types are the next proposed extension; see the
-constructor payload contract design.
+Bare predicate names now denote nominal proof types in all declaration positions.
+The parser expands aliases while preserving symbolic predicate references; module
+elaboration rewrites those references with wiring, freshening and shared-instance
+aliases. Analysis then validates the final proof identities. External declarations
+and insertion paths reject nominal contracts, even inside optional fields or empty
+arrays; structural JSON never establishes proof membership.
 
 ## Storage and structural declarations
 
@@ -390,9 +394,10 @@ explicitly rather than widening a declaration to `value`.
 
 The grammar uses lookahead to distinguish alias references from compound
 refinements. On an erased witness a bare unknown alias-like name remains a
-Boolean refinement, preserving `_: B`. If `B` is also an alias, `_: (B)` explicitly
-selects the expression. Alias names otherwise occupy a separate namespace from
-predicates and variables, and `type` is a contextual keyword.
+Boolean refinement, preserving `_: B`. If `B` is an alias or candidate predicate type, `_: (B)` explicitly
+selects the expression. A name denoting both an alias and a proof-carrying predicate
+is rejected as ambiguous; ordinary predicates can share alias names. `type` is a
+contextual keyword.
 
 Parsed alias declarations retain expanded definitions so successful incremental
 session chunks can supply them to later chunks. Failed chunks publish no aliases,
@@ -421,8 +426,8 @@ compiler policy. They bound individual operations, not total compilation time.
 
 [Constructor payload contracts](proof-signature-contracts.md) now implement inline
 annotations on explicit `:: Ctor(...)` arguments using existing types and aliases.
-The companion nominal type syntax and its additional boundary/loading rules remain
-proposed, not implemented. Registry closure alone grants neither a new contract nor
+Bare predicate names also express nominal contracts, checked through module
+boundaries and rejected on external loading paths. Registry closure alone grants neither a new contract nor
 proof membership. General union syntax, tuple contracts, open-record declarations
 and parameterized aliases are possible future extensions; the internal type domain
 does not by itself expose those features as declaration syntax.
@@ -446,10 +451,9 @@ Suggested follow-up work, rather than outstanding requirements for this foundati
    changing the provisional work budgets. Separate inference, exact relation
    checks, validator preparation and row validation so the measurements explain
    which limit or repeated work matters.
-2. If proof signatures are to become declarations, write the syntax and module
-   boundary design first. Specify nominal identity across module instances,
-   constructor payload contracts and how published contracts hide inferred facts;
-   retain the distinction between a JSON shape and established proof membership.
+2. Constructor payload contracts and bare nominal references are now implemented.
+   Any later standalone interfaces or per-consumer signature views need a separate
+   design that preserves proof identity and published-contract opacity.
 3. Choose any additional structural declaration syntax explicitly. Internal unions,
    tuples and open records are not a commitment to expose all three at once.
 

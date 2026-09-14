@@ -3,6 +3,7 @@ import {
   BUILTIN_BODY_ATOM_NAMES,
   BUILTIN_FUNCTION_NAMES,
   type PredicateInfo,
+  collectProofTypeNames,
   collectTypeAliases,
   collectUserPredicates,
   collectVariablesInRule,
@@ -82,6 +83,13 @@ export class DatamogCompletionProvider extends DefaultCompletionProvider {
           sortText: `1_${name}`,
         });
       }
+      for (const name of collectProofTypeNames(program))
+        acceptor(context, {
+          label: name,
+          kind: CompletionItemKind.TypeParameter,
+          detail: "nominal proof type",
+          sortText: `1_${name}`,
+        });
       this.proposePredicates(context, program, acceptor);
       this.proposeVariables(context, program, acceptor);
       return;

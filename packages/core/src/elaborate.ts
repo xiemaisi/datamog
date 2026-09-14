@@ -1,3 +1,4 @@
+import { type NominalReference, typeAliasName, visitNominalReferences } from "datamog-parser";
 import { isExtDecl, isFunctionCall, isLiteral, isRule } from "datamog-parser";
 import { AnalyzerError, queryProjection } from "./analyzer.ts";
 import { asCoreRule } from "./ast.ts";
@@ -50,6 +51,8 @@ export interface BoundaryConstraint {
   expected: PrimitiveType[];
   /** Retained structural contracts from declarations erased by elaboration. */
   expectedShapes?: (SemanticType | undefined)[];
+  /** Type-name checks survive declarations removed during wiring. */
+  nominalReferences?: NominalReference[];
   /** Whether the declaration on the other side of the boundary carries `^`. */
   expectedMaximal: boolean;
   /**
@@ -108,6 +111,7 @@ interface Instance {
   prefix: string;
   /** Outputs renamed out of the prefix scheme: export name -> merged predicate. */
   renamed: Map<string, string>;
+  resolveName: (name: string) => string;
 }
 
 /**
@@ -168,7 +172,14 @@ export function elaborate(
     const id = mod.file ?? binding.source;
     checkCycle(id, [entryFile], stmt);
     const selected = prepareModule(mod.program, binding.export, stmt, true);
-    collectActualBoundaries(ctx, mod.program, binding, stmt, entryFile, (a) => a);
+    const actualBoundaries = collectActualBoundaries(
+      ctx,
+      mod.program,
+      binding,
+      stmt,
+      entryFile,
+      (a) => a,
+    );
     const wiring: Record<string, string> = {};
     for (const actual of binding.actuals) wiring[actual.param] = actual.arg;
     const columns = stmt.columns.map((c) => c.name);
@@ -184,6 +195,7 @@ export function elaborate(
       ctx,
       binding.source,
     );
+    remapBoundaryShapes(actualBoundaries, instance.resolveName);
     const output = bindLocalName(ctx, instance, selected, stmt, columns);
     ctx.boundaries.push(outputBoundary(binding, stmt, entryFile, output));
   }
@@ -192,6 +204,15 @@ export function elaborate(
   // body atom, a proof capture, or a constructor qualifier — reaches the shared
   // predicate no matter which binding it was written against.
   for (const stmt of ctx.out) applyNameAliases(stmt, ctx.nameAliases);
+  for (const boundary of ctx.boundaries) {
+    boundary.predicate = ctx.nameAliases.get(boundary.predicate) ?? boundary.predicate;
+    for (const ref of boundary.nominalReferences ?? [])
+      ref.predicate = typeAliasName(ctx.nameAliases.get(ref.predicate) ?? ref.predicate);
+    boundary.expectedShapes = boundary.expectedShapes?.map(
+      (shape) =>
+        shape && mapProofNames(shape, (name) => typeAliasName(ctx.nameAliases.get(name) ?? name)),
+    );
+  }
   entry.statements = ctx.out;
   checkElaboratedPolarities(entry, ctx.boundaries);
   return { program: entry, dataSources: ctx.dataSources, boundaries: ctx.boundaries };
@@ -231,6 +252,7 @@ function bindLocalName(
   // rename it now, everywhere it is already referenced, and expose it so it
   // prints under this site's name.
   const freshened = `${instance.prefix}${selected.name}`;
+  ctx.nameAliases.set(freshened, decl.predicate);
   for (const stmt of ctx.out) renamePredicate(stmt, freshened, decl.predicate);
   relabelOutputColumns(ctx.out, decl.predicate, columns);
   for (const stmt of ctx.out) {
@@ -297,17 +319,21 @@ function collectActualBoundaries(
   importerDecl: ExtDecl,
   importerFile: string | undefined,
   mergedActual: (name: string) => string,
-): void {
+): BoundaryConstraint[] {
+  const collected: BoundaryConstraint[] = [];
   const inputs = new Map<string, ExtDecl>();
   for (const s of module.statements) if (isExtDecl(s)) inputs.set(s.predicate, s);
   for (const actual of binding.actuals) {
     const inputDecl = inputs.get(actual.param);
     if (!inputDecl) continue;
-    ctx.boundaries.push({
+    collected.push({
       predicate: mergedActual(actual.arg),
       // An unannotated column defaults to `string` (parseRaw already sets this).
       expected: inputDecl.columns.map((c) => c.type ?? "string"),
-      expectedShapes: inputDecl.columns.map((c) => (c.shape ? declaredColumnType(c) : undefined)),
+      nominalReferences: nominalReferences(inputDecl.columns),
+      expectedShapes: inputDecl.columns.map((c) =>
+        c.shape || c.nominal ? declaredColumnType(c) : undefined,
+      ),
       expectedMaximal: inputDecl.maximal === true,
       expectedNullable: inputDecl.columns.map((c) => c.nullable === true),
       note: `actual '${actual.arg}' wired to input '${actual.param}' of "${binding.source}"`,
@@ -315,6 +341,8 @@ function collectActualBoundaries(
       file: importerFile,
     });
   }
+  ctx.boundaries.push(...collected);
+  return collected;
 }
 
 /**
@@ -331,7 +359,10 @@ function outputBoundary(
   return {
     predicate: output,
     expected: importerDecl.columns.map((c) => c.type ?? "string"),
-    expectedShapes: importerDecl.columns.map((c) => (c.shape ? declaredColumnType(c) : undefined)),
+    nominalReferences: nominalReferences(importerDecl.columns),
+    expectedShapes: importerDecl.columns.map((c) =>
+      c.shape || c.nominal ? declaredColumnType(c) : undefined,
+    ),
     expectedMaximal: importerDecl.maximal === true,
     expectedNullable: importerDecl.columns.map((c) => c.nullable === true),
     note: `output of "${binding.source}" bound to '${importerDecl.predicate}'`,
@@ -381,6 +412,20 @@ function checkBoundaryPolarity(actualMaximal: boolean, boundary: BoundaryConstra
  */
 export function checkModuleBoundaries(typed: TypedProgram, boundaries: BoundaryConstraint[]): void {
   for (const b of boundaries) {
+    for (const ref of b.nominalReferences ?? []) {
+      const isProof = typed.rules.get(ref.predicate)?.some((rule) => rule.ruleName !== undefined);
+      if (ref.aliasName && isProof)
+        throw boundaryError(
+          `Ambiguous type name '${ref.aliasName}': both a type alias and a proof-carrying predicate`,
+          b,
+        );
+      if (!ref.aliasName && !isProof)
+        throw boundaryError(
+          `Type name '${ref.predicate}' does not identify a proof-carrying predicate`,
+          b,
+        );
+    }
+
     // Compare against the published type (the predicate's advertised contract),
     // not its inferred type, so a predicate declared wider than it currently
     // produces is held to its declaration across the boundary — the same
@@ -473,10 +518,13 @@ function instantiate(
   const renameName = (name: string): string =>
     Object.hasOwn(inputSubst, name)
       ? inputSubst[name]!
-      : localNames.has(name)
-        ? `${prefix}${name}`
-        : name;
+      : exportAs && name === exportAs.export
+        ? exportAs.as
+        : localNames.has(name)
+          ? `${prefix}${name}`
+          : name;
 
+  const nestedOutputBoundaries: BoundaryConstraint[] = [];
   for (const s of module.statements) {
     if (!isExtDecl(s) || !s.binding?.isModule) continue;
     // A `:=` binding on an input is a *default*: an actual the importer wired
@@ -489,7 +537,14 @@ function instantiate(
     const id = child.file ?? binding.source;
     checkCycle(id, stack, s);
     const childExport = prepareModule(child.program, binding.export, s, false);
-    collectActualBoundaries(ctx, child.program, binding, s, file, renameName);
+    const actualBoundaries = collectActualBoundaries(
+      ctx,
+      child.program,
+      binding,
+      s,
+      file,
+      renameName,
+    );
     const childWiring: Record<string, string> = {};
     for (const actual of binding.actuals) childWiring[actual.param] = renameName(actual.arg);
     // A nested instance's output feeds a parent input, so it is not renamed: the
@@ -504,8 +559,11 @@ function instantiate(
       ctx,
       binding.source,
     );
+    remapBoundaryShapes(actualBoundaries, childInstance.resolveName);
     const childOutput = outputName(childInstance, childExport.name);
-    ctx.boundaries.push(outputBoundary(binding, s, file, childOutput));
+    const boundary = outputBoundary(binding, s, file, childOutput);
+    ctx.boundaries.push(boundary);
+    nestedOutputBoundaries.push(boundary);
     inputSubst[s.predicate] = childOutput;
   }
 
@@ -543,8 +601,16 @@ function instantiate(
     if (isExtDecl(s) && s.binding) recordDataSource(s, s.binding, file, ctx.dataSources);
   }
   ctx.out.push(...expanded);
-  const instance: Instance = { prefix, renamed: new Map() };
+  const instance: Instance = {
+    prefix,
+    renamed: new Map(),
+    resolveName: (name) =>
+      inputSubst[name] ??
+      instance.renamed.get(name) ??
+      (localNames.has(name) ? `${prefix}${name}` : name),
+  };
   if (exportAs) instance.renamed.set(exportAs.export, exportAs.as);
+  remapBoundaryShapes(nestedOutputBoundaries, instance.resolveName);
   // Registered after expanding, so an instance under construction is invisible:
   // a wiring cycle stays a cycle to be rejected rather than resolving to itself.
   ctx.instances.set(key, instance);
@@ -679,6 +745,9 @@ function eachNode(node: unknown, fn: (n: Record<string, unknown>) => void): void
  * that declares it.
  */
 function renamePredicate(stmt: Statement, from: string, to: string): void {
+  visitNominalReferences(stmt, (ref) => {
+    if (ref.predicate === from) ref.predicate = to;
+  });
   eachNode(stmt, (n) => {
     if (isRule(n) && n.head.predicate === from) n.head.predicate = to;
     else if (isLiteral(n) && n.predicate === from) n.predicate = to;
@@ -689,6 +758,9 @@ function renamePredicate(stmt: Statement, from: string, to: string): void {
 /** Apply every name-level alias (see `bindLocalName`) to one statement. */
 function applyNameAliases(stmt: Statement, aliases: Map<string, string>): void {
   if (aliases.size === 0) return;
+  visitNominalReferences(stmt, (ref) => {
+    ref.predicate = aliases.get(ref.predicate) ?? ref.predicate;
+  });
   eachNode(stmt, (n) => {
     if (isLiteral(n)) {
       const to = aliases.get(n.predicate);
@@ -774,4 +846,43 @@ function recordDataSource(
     baseFile,
   });
   decl.binding = undefined;
+}
+
+function mapProofNames(type: SemanticType, rename: (name: string) => string): SemanticType {
+  switch (type.kind) {
+    case "proof":
+      return { kind: "proof", id: { predicate: rename(type.id.predicate) } };
+    case "array":
+      return { ...type, element: mapProofNames(type.element, rename) };
+    case "tuple":
+      return { ...type, elements: type.elements.map((t) => mapProofNames(t, rename)) };
+    case "union":
+      return { ...type, members: type.members.map((t) => mapProofNames(t, rename)) };
+    case "record":
+      return {
+        ...type,
+        fields: type.fields.map((f) => ({ ...f, type: mapProofNames(f.type, rename) })),
+        additional: mapProofNames(type.additional, rename),
+      };
+    default:
+      return type;
+  }
+}
+
+function remapBoundaryShapes(
+  boundaries: BoundaryConstraint[],
+  rename: (name: string) => string,
+): void {
+  for (const boundary of boundaries) {
+    boundary.expectedShapes = boundary.expectedShapes?.map(
+      (shape) => shape && mapProofNames(shape, rename),
+    );
+    for (const ref of boundary.nominalReferences ?? []) ref.predicate = rename(ref.predicate);
+  }
+}
+
+function nominalReferences(value: unknown): NominalReference[] {
+  const references: NominalReference[] = [];
+  visitNominalReferences(value, (ref) => references.push({ ...ref }));
+  return references;
 }

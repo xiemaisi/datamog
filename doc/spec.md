@@ -400,9 +400,12 @@ boundaries compare their expanded contracts, so files may use the same alias nam
 for different types. In an incremental session, a successful chunk's aliases are
 available to later chunks; redefinition is rejected and reset clears them.
 
-A bare name after a head's `:` denotes an alias. On an erased witness, `_: B`
-retains its Boolean-refinement meaning when no alias `B` is declared. Write
-`_: (B)` to explicitly select the expression when a type alias has the same name.
+A bare name in a type position denotes an alias or a proof-carrying predicate
+(§8.2). If both have that name, the reference is ambiguous and rejected. Ordinary
+predicates can share alias names but cannot themselves be used as types. On an
+erased witness, `_: B` retains its Boolean-refinement meaning when neither an
+alias nor a candidate predicate `B` is declared. Write `_: (B)` to explicitly
+select the expression when a type with that name exists.
 Compound refinement expressions retain their existing meaning.
 
 Recursive aliases and parameterized aliases are not supported. Expansion is
@@ -3136,7 +3139,42 @@ inference. Bare `:: Ctor` still derives its payload automatically; to annotate a
 position, spell out the explicit argument list. `:: Ctor()` remains nullary and
 needs no annotation. This syntax belongs only to the rule's constructor suffix;
 ordinary constructor-match terms cannot carry payload annotations. No standalone
-signature declaration or nominal `proof P` type syntax is introduced.
+signature declaration or `proof` keyword is introduced.
+
+A proof-carrying predicate's bare name denotes its nominal proof type in any type
+position, including nested record fields, arrays, aliases, and nullable contracts:
+
+```prolog
+nat(0) :: Zero().
+nat(N + 1) :: Succ(P: nat) :- P : nat(N), N < 2.
+type NatProof = nat.
+selected(P: NatProof, [P]: [nat]) :- P : nat(_).
+```
+
+`nat` denotes proofs produced by `nat`, not its ordinary columns. The annotation
+checks inferred provenance; a different producer's proof or a JSON object with
+matching `$proof` and `args` fields cannot satisfy it. `nat?` also accepts null.
+Forward and recursive nominal references are allowed: they name existing producers
+without unfolding their payloads. Recursive structural aliases remain forbidden.
+
+Module elaboration substitutes and freshens these references with the predicates.
+Identical module and input wiring share an identity; different instances retain
+distinct identities. A receiving contract can name the selected output locally:
+
+```prolog
+input predicate local(n: integer, evidence: local) := nat from "nat.dl".
+```
+
+A wired input may similarly name its actual proof producer. An ordinary predicate
+forwarding another producer's proofs preserves that original identity. Every
+receiving contract is checked, including repeated bindings of a shared instance.
+
+Free inputs and data-file bindings cannot declare nominal proof types, even inside
+optional fields or arrays. External JSON cannot establish proof membership; these
+declarations and direct insertions are rejected even for empty batches. Inputs of
+`value` retain their existing behavior. Module-bound inputs are checked against
+their inferred source instead. In incremental sessions, earlier successful chunks'
+predicate names are available in later type annotations and alias definitions.
 
 Because the proof term distinguishes derivations, a proof-carrying predicate is
 evaluated as a set of (head-argument, proof-term) rows: two different

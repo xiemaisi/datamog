@@ -439,3 +439,13 @@ test("constructor payload annotations navigate aliases and expression bindings",
   const broken = "type Bad = Missing. type Amount = float. p() :: C(3: Amount).";
   expect(targetsAt(broken, "Amount", 1)).toEqual(["Amount"]);
 });
+
+test("bare nominal type references navigate producers, aliases and module declarations", () => {
+  const source =
+    "type N = `node-kind`. `node-kind`() :: C. result(P:`node-kind`) :- P:`node-kind`.";
+  expect(targetsAt(source, "`node-kind`")).toEqual(["`node-kind`"]);
+  expect(targetsAt(source, "`node-kind`", 2)).toEqual(["`node-kind`"]);
+  const imported = 'input predicate local(e:local) := p from "m". result(P:local) :- P:local.';
+  expect(targetsAt(imported, "local", 1)).toEqual(["local"]);
+  expect(targetsAt(imported, "local", 2)).toEqual(["local"]);
+});

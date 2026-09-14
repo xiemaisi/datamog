@@ -4,6 +4,7 @@ import {
   BUILTIN_FUNCTION_NAMES,
   BUILTIN_TYPE_NAMES,
   RESERVED_KEYWORDS,
+  collectProofTypeNames,
   collectTypeAliases,
   collectUserPredicates,
   collectVariablesInRule,
@@ -77,6 +78,8 @@ export function collectCompletionCandidates(source: string, offset: number): Com
   for (const name of collectTypeAliases(program)) {
     candidates.push({ label: name, kind: "type", detail: "type alias" });
   }
+  for (const name of collectProofTypeNames(program))
+    candidates.push({ label: name, kind: "type", detail: "nominal proof type" });
   const rule = findEnclosingRule(program, offset);
   if (rule) {
     for (const v of collectVariablesInRule(rule)) {

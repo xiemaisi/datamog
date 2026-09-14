@@ -25,3 +25,20 @@ for (const invalid of [false, true]) {
       .toBe("type Age = integer.");
   });
 }
+
+test("Ctrl-click navigates from a nominal type to its proof producer", async ({ page }) => {
+  const source = "nat(0) :: Zero.\ntype N = nat.";
+  await page.goto(`/#p=${encodeURIComponent(source)}&norun`);
+  const reference = page.locator(".cm-pred-ref").filter({ hasText: /^nat$/ });
+  await expect(reference).toBeVisible();
+  await reference.click({ modifiers: ["Control"] });
+  await expect
+    .poll(() =>
+      page
+        .locator(".cm-content")
+        .evaluate(
+          () => window.getSelection()?.anchorNode?.parentElement?.closest(".cm-line")?.textContent,
+        ),
+    )
+    .toBe("nat(0) :: Zero.");
+});

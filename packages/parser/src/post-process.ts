@@ -33,6 +33,7 @@ import {
   isVariable,
 } from "./generated/ast.js";
 import { substituteHeadNames } from "./head-names.ts";
+import type { NominalTypeMetadata } from "./nominal-types.js";
 import { ParseError } from "./parse-error.js";
 import { markProofConstruction, markProofMatch, markProofProjection } from "./proof-metadata.ts";
 import { extractRefinements, refinementFormulas, synthesiseContractChecks } from "./refinements.ts";
@@ -381,7 +382,7 @@ function replaceNode(oldNode: AstNode, newNode: AstNode): void {
  * parallel arrays, which would be free to drift out of step at the same
  * argument position.
  */
-export interface HeadAnnotation {
+export interface HeadAnnotation extends NominalTypeMetadata {
   type: import("./generated/ast.js").PrimitiveType;
   shape?: import("./generated/ast.js").StructuralType;
   nullable: boolean;
@@ -408,6 +409,8 @@ function liftConstructorAnnotations(rule: Rule): void {
       type: arg.type ?? "value",
       nullable: arg.nullable || arg.type === "null",
       ...(arg.shape ? { shape: arg.shape } : {}),
+      ...(arg.nominal ? { nominal: arg.nominal } : {}),
+      ...(arg.nominalConflicts ? { nominalConflicts: arg.nominalConflicts } : {}),
       offset: arg.$cstNode?.offset,
       end: arg.$cstNode?.end,
     };
@@ -457,12 +460,14 @@ export function liftHeadAnnotations(program: Program): void {
       // A wrapper may carry a name, a type, or both. Only a type marks the
       // position annotated; a name is substituted away below and leaves no
       // trace for `checkHeadAnnotations` to check.
-      if (arg.type !== undefined || arg.shape !== undefined) {
+      if (arg.type !== undefined || arg.shape !== undefined || arg.nominal !== undefined) {
         annotated = true;
         argTypes[i] = {
           type: arg.type ?? "value",
           nullable: arg.nullable === true,
           ...(arg.shape ? { shape: arg.shape } : {}),
+          ...(arg.nominal ? { nominal: arg.nominal } : {}),
+          ...(arg.nominalConflicts ? { nominalConflicts: arg.nominalConflicts } : {}),
         };
       }
       const inner = arg.expr;
