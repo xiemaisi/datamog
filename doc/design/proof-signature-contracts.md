@@ -1,7 +1,7 @@
 # Constructor payload contracts
 
 Status: inline constructor payload annotations are implemented for existing types
-and aliases (spec §8.2). The companion `proof P` syntax and the additional nominal
+and aliases (spec §8.2). The companion `P` as a nominal type syntax and the additional nominal
 boundary/loading rules below remain proposals, not implemented. Unannotated programs
 retain their current behavior.
 This extends the [semantic type foundation](semantic-types.md); it does not add
@@ -74,7 +74,7 @@ The existing rule that a constructor tag is unique within its predicate remains;
 this proposal does not allow several rules to define the same constructor.
 
 Primitive, structural and alias annotations solve the motivating problem by
-themselves. Nominal `proof P` references are a companion type extension, described
+themselves. Nominal `P` as a nominal type references are a companion type extension, described
 below, and can follow separately. Per-consumer signature views, constructor hiding
 and interfaces declared separately from their rules are outside this proposal.
 
@@ -102,21 +102,43 @@ order. There is no annotation of an implicit payload position in the first versi
 `:: Ctor()` still specifies an empty payload and has nothing to annotate; a rule
 using that form or the bare form needs no declaration elsewhere.
 
-The companion `proof P` type denotes the nominal proof type of predicate `P`:
+The companion `P` as a nominal type type denotes the nominal proof type of predicate `P`:
 
 ```prolog
 output predicate nat(0) :: Zero().
-nat(N + 1) :: Succ(P: proof nat) :- P : nat(N), N < 2.
+nat(N + 1) :: Succ(P: nat) :- P : nat(N), N < 2.
 
-type NatProof = proof nat.
+type NatProof = nat.
 selected(P: NatProof) :- P : nat(_).
 ```
 
-Once added, `proof P` is allowed wherever a declaration type is allowed, including
-aliases and nested records/arrays; `proof P?` includes null. `proof` should be
-contextual in type positions. Field optionality and expression absence remain
+Once added, `P` as a nominal type is allowed wherever a declaration type is allowed, including
+aliases and nested records/arrays; `P?` includes null. No new keyword is needed. Field optionality and expression absence remain
 separate. Without the annotation, `Succ(P)` already infers its nominal payload type;
 the annotation expresses a checked promise rather than creating that identity.
+
+## Resolving bare type names
+
+A name in a type position denotes either a file-local type alias or the nominal
+proof type of a proof-carrying predicate. For example, `P: nat` and
+`type NatProof = nat.` both name nat's proofs, not its ordinary columns.
+Ordinary predicates cannot be used as nominal types. Quoted identifiers follow
+the same rules as other predicate and alias names.
+
+If an alias and a proof-carrying predicate have the same name, reject the ambiguity
+rather than silently choosing one. An ordinary predicate may still share a name
+with an alias. This rule also applies when a module-bound input resolves to a
+proof-carrying producer. An erased head witness `_: B` retains its Boolean-refinement
+meaning when B is neither an alias nor a candidate predicate type; use `_: (B)` to
+select the expression explicitly when a type with that name exists.
+
+Expand aliases in their source file, preserving nominal references as symbolic
+predicate references. Resolve those references after module wiring, freshening and
+shared-instance aliasing establish predicate identities. Names absent from the
+source file's alias and predicate namespaces can be rejected early; a reference
+to a module input must wait for its actual producer. Validate unused aliases too.
+Recursive aliases remain forbidden; nominal self-references and mutual references
+between existing proof-carrying predicates do not unfold and remain valid.
 
 ## Checking and publication
 
@@ -150,7 +172,7 @@ assert that its constructor has a nonempty extension.
 
 ## Proposed nominal identity and module boundaries
 
-`proof P` resolves to an elaborated predicate identity, never merely a source name
+`P` as a nominal type resolves to an elaborated predicate identity, never merely a source name
 or matching constructor spelling. Elaborate these references using exactly the
 same substitutions as proof captures and constructor qualifiers:
 
@@ -170,10 +192,10 @@ A receiving declaration still counts the implicit trailing proof column. For the
 `nat` module above, the proposed receiving contract is:
 
 ```prolog
-input predicate local(n: integer, evidence: proof local) := nat from "nat.dl".
+input predicate local(n: integer, evidence: local) := nat from "nat.dl".
 ```
 
-Here `proof local` names the selected output after renaming; it does not introduce
+Here `local` names the selected output after renaming; it does not introduce
 a fresh datatype. Every receiving boundary is checked, including a second binding
 that shares the first binding's instance. Elaboration must retain each boundary's
 contract even though the selected relation and its final name are shared.
@@ -204,7 +226,7 @@ matches, including when they appear in heads or nested constructor arguments.
 
 ```prolog
 # Rejected: structural JSON cannot establish the nominal type.
-forged(P: proof nat) :- P = {"$proof": "nat::Zero", "args": []}.
+forged(P: nat) :- P = {"$proof": "nat::Zero", "args": []}.
 ```
 
 A data-file binding or free externally loaded input cannot declare a nominal proof
@@ -223,7 +245,7 @@ existing behavior and gain no nominal evidence from their contents.
 | Integer payload declared string | Reject at the constructor payload position |
 | Nullable payload declared integer | Reject unless non-nullness is proved |
 | Record payload missing a declared required field | Reject with the field path |
-| `Succ(P: proof nat)` with P captured from nat | Accept |
+| `Succ(P: nat)` with P captured from nat | Accept |
 | Same-shaped proof from a different module instance | Reject the nominal contract |
 | Repeated import with identical module and wiring | Accept the shared identity |
 | Published `value` payload used implicitly as integer by a caller | Reject scalar use |
@@ -234,7 +256,7 @@ existing behavior and gain no nominal evidence from their contents.
 | Repeated constructor tag within one predicate | Retain the existing rejection |
 | Nominal annotation reference cycle between existing producers | Accept registry closure; do not unfold |
 | JSON tag claiming a declared constructor | No nominal evidence |
-| Data-loaded `[proof nat]`, including an empty batch | Reject the declaration |
+| Data-loaded `[nat]`, including an empty batch | Reject the declaration |
 
 Diagnostics should identify the producer, constructor, payload index and nested
 mismatch path, with spans on the payload annotation and expression when available.

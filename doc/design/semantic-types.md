@@ -336,7 +336,8 @@ consumer operand conversions again. Runtime proof construction and storage remai
 unchanged; consumers extract operands according to the published payload types.
 
 See [Constructor payload contracts](proof-signature-contracts.md) and spec §8.2.
-Nominal `proof P` syntax remains deferred.
+Bare predicate names as nominal types are the next proposed extension; see the
+constructor payload contract design.
 
 ## Storage and structural declarations
 
