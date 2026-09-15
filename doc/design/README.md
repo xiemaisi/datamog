@@ -25,6 +25,7 @@ nominal analysis now used alongside it.
 | [`parity-stratification.md`](./parity-stratification.md) | implemented | Recursion through an even number of negations, the `^` sigil, the alternating fixed point |
 | [`qualified-constructors.md`](./qualified-constructors.md) | implemented | Why a proof-term constructor is scoped to its predicate (`opt::Some`) |
 | [`semantic-types.md`](./semantic-types.md) | implemented scope; bounded inference and null-only forwarding limitation remain | Structural and nominal contracts, aliases, typed operands, diagnostics, and REPL proof context |
+| [`body-type-guards.md`](./body-type-guards.md) | unimplemented proposal; syntax and nominal membership open | Runtime type guards versus static assertions, ambiguity with proof captures, and compatibility alternatives |
 | [`proof-signature-contracts.md`](./proof-signature-contracts.md) | implemented | Inline constructor contracts, bare nominal type names, module identity, and external-input restrictions |
 | [`semantic-types-benchmarks.md`](./semantic-types-benchmarks.md) | measured baseline | Reproducible inference, subtype, and loading workloads; compiler work limits |
 | [`type-lattice.md`](./type-lattice.md) | implemented primitive layer; extended by null and semantic types | The six types, `value` as the top and `null` as a sibling of the primitives, meet within a rule vs join across rules, head annotations |
