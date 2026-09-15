@@ -25,9 +25,12 @@ For investigation techniques, recurring bug patterns, and historical caveats, se
 ## Prerequisites
 
 - Bun 1.3 or newer.
-- Node.js/npm for commands that invoke `node`, `npx`, or VS Code packaging.
+- Node.js with `npx` for parser generation, documentation builds, and VS Code
+  packaging. Use Bun to install workspace dependencies.
 - Python 3.10 or newer, only for `python/datamog-magic`.
-- PostgreSQL, only when developing or testing the Postgres backend.
+- PostgreSQL for running or testing the Postgres backend. The `test:pg` helper
+  requires `initdb`, `pg_ctl`, and `createdb` on PATH and must run as a non-root user.
+- Z3 on PATH for solver-backed verification tests and the default `--verify` solver.
 
 Install TypeScript workspace dependencies with:
 
@@ -50,7 +53,7 @@ bun install --frozen-lockfile
   result coercion.
 - `packages/backend/*`: Postgres, SQLite, sql.js, native, and seminaive
   backends.
-- `packages/loader/*`: CSV, JSON, JSONL, Google Sheets, and Mermaid loaders.
+- `packages/loader/*`: CSV, JSON, JSONL, Google Sheets, Mermaid, and Parquet loaders.
 - `packages/repl`: incremental REPL support used by the CLI and notebook magic.
 - `packages/cli`: command-line interface and examples.
 - `packages/playground`: browser playground built with Vite, Preact, CodeMirror,
@@ -65,6 +68,7 @@ Run these from the repository root:
 
 ```bash
 bun test                 # TypeScript tests across packages
+bun run test:pg           # full TypeScript suite with a throwaway Postgres cluster
 bun run test:coverage    # TypeScript tests with coverage
 bun run typecheck        # TypeScript project-reference build
 bun run check            # Biome lint/format check
@@ -99,14 +103,24 @@ DATABASE_URL=postgres://localhost:5432/datamog_test bun run datamog --backend po
 
 `bun test` runs the TypeScript unit tests recursively. The Postgres backend tests
 are skipped unless `DATABASE_URL` is set. Point `DATABASE_URL` only at a
-dedicated development or test database because those tests create and drop their
-own tables.
+dedicated test database because the suites drop and recreate the `public` schema.
+Set `DATAMOG_EXAMPLES_DATABASE_URL` to a separate test database to isolate the
+examples suite.
+
+With local Postgres binaries installed, `bun run test:pg` creates two temporary
+test databases in a fresh cluster, runs the suite, and removes the cluster.
+Override `PGTESTPORT` if port 55432 is occupied. To narrow the run, use
+`bun run test:pg -- packages/backend/postgres`.
+
+Solver-backed verification tests skip when Z3 is unavailable. A successful
+`bun test` without Postgres or Z3 does not cover those integrations.
 
 Codespaces and the devcontainer include Z3 and a Postgres sidecar. Setup creates
 separate test databases and enables the Postgres environment guards, so ordinary
 `bun test` runs the solver and database suites. After updating the container
-configuration, rebuild the container to install the tools and run setup. Only
-examples unsupported by SQL backends remain intentionally skipped.
+configuration, rebuild the container to install the tools and run setup. Check
+the test summary for skips and expected failures; backend limitations
+are recorded in the examples suite’s failure maps and `native-only` markers.
 
 The playground end-to-end tests use Playwright:
 
@@ -115,10 +129,10 @@ bun run e2e
 bun run e2e:ui
 ```
 
-The e2e script installs Chromium on first run and starts the playground dev
+The e2e script ensures Chromium is installed and starts the playground dev
 server through Playwright's `webServer` configuration.
 
-For the Python package:
+For the Python package (this suite is separate from `bun test`):
 
 ```bash
 python3 -m venv .venv
@@ -200,14 +214,16 @@ Build the extension bundle:
 bun --filter datamog-vscode build
 ```
 
-Build a `.vsix` from the repository root:
+Build `packages/vscode-extension/datamog.vsix` from the repository root:
 
 ```bash
 bun run build:vscode
 ```
 
-For interactive extension development, open `packages/vscode-extension` in VS
-Code and start an Extension Development Host.
+For interactive extension development, open the repository root in VS Code and
+launch **Run Datamog Extension** (F5). The root `.vscode/launch.json` configuration
+builds the extension before opening the Extension Development Host. For a watch
+loop, run the `watch-vscode-extension` task and use the no-prebuild configuration.
 
 ## Tutorial Slides
 
@@ -231,10 +247,12 @@ Generated slide PDFs are written under `doc/walkthrough/slides/pdf`.
   The devcontainer sets both URLs to separate test databases.
 - `DATAMOG_REQUIRE_POSTGRES`: set to `1` to fail if the Postgres test environment
   is unavailable. Enabled in the devcontainer and Postgres CI job.
-- `GOOGLE_API_KEY`: lets the CLI load private Google Sheets through the Google
-  Sheets loader.
-- `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`: alternative Google
-  Sheets credentials for service-account access.
+- `GOOGLE_API_KEY`: API-key access to public Google Sheets (read-only). It does
+  not grant access to private sheets.
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`: service-account credentials
+  for private sheets shared with that service account. Public sheet CSV export
+  can also work without authentication.
+- `PGTESTPORT`: port for the throwaway `test:pg` cluster (default 55432).
 - `DATAMOG_CMD`: command used by `datamog-magic` to start the Datamog CLI.
 - `DATAMOG_REPO`: checkout the `datamog-magic` subprocess tests launch the CLI
   from. Unset, they derive it from the test file's own location, which is right
@@ -250,16 +268,17 @@ bun run typecheck
 bun run check
 ```
 
-Also run `bun run e2e` for playground behavior changes, Postgres tests with
-`DATABASE_URL` for Postgres backend changes, and `python -m pytest
+Also run `bun run e2e` for playground behavior changes, `bun run test:pg`
+(or tests against dedicated configured databases) for Postgres backend changes, and `python -m pytest
 python/datamog-magic` for notebook magic changes.
 
 ## CI Workflows
 
-- `CI`: required fast gate for linting, typechecking, TypeScript tests, CLI
+- `CI`: runs the Quality Gate for linting, typechecking, TypeScript tests, CLI
   executable build, VS Code package build, and playground production build.
-- `Postgres Backend`: runs the Postgres backend tests against a GitHub Actions
-  Postgres service with `DATABASE_URL` set.
+- `Postgres Backend`: runs the full TypeScript suite against a GitHub Actions
+  Postgres service, with separate backend/examples databases and
+  `DATAMOG_REQUIRE_POSTGRES=1`.
 - `Python Magic`: tests `python/datamog-magic` on supported Python versions with
   Bun installed for subprocess-backed CLI tests.
 - `Playground E2E`: runs Playwright against the playground and uploads the
