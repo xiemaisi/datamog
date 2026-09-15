@@ -1,8 +1,12 @@
-# Datamog — Project Instructions
+# Development Reference
 
-Educational Datalog implementation with multiple evaluation backends — SQL (Postgres, SQLite via bun:sqlite, sql.js/WASM) and pure-TS in-memory interpreters (naive, seminaive). Every backend honours the same language semantics; the SQL ones go via a translator, the interpreters evaluate the AST directly. TypeScript/Bun monorepo. Uses **bun** as package manager and runtime — do not use pnpm/npm/yarn.
-
-Before running anything, verify `bun` is on PATH (`which bun`). If it is not, install via `curl -fsSL https://bun.sh/install | bash` and add `$HOME/.bun/bin` to PATH for the session (`export PATH="$HOME/.bun/bin:$PATH"`). The installer does not persist PATH, so export it on every new shell.
+Detailed implementation and documentation maintenance notes. Read the sections
+relevant to your change; repository-wide working rules live in
+[AGENTS.md](../AGENTS.md), and setup workflows in [DEVELOPMENT.md](../DEVELOPMENT.md).
+Paths in code spans below are relative to the repository root unless qualified
+by their surrounding package or section. Keep these notes in sync with changes;
+[the specification](spec.md) describes the language and
+[the design index](design/README.md) records proposal status.
 
 ## Commands
 
@@ -170,19 +174,6 @@ The SQL translator and the native interpreter's `values.ts` both implement these
 - **Set semantics**: duplicate rows in EDB tables are deduplicated (SQL backends use `SELECT DISTINCT` against EDBs; interpreters dedup their tuple sets). IDB results are sets, not bags
 - **Recursive-only predicates**: a predicate whose every rule is self-referential evaluates to the empty set. SQL: synthesised empty anchor (`SELECT CAST(NULL AS …) WHERE 1 = 0`) in `WITH RECURSIVE`. Interpreter: starts from `∅` and stays there
 
-## Adding a new language feature
-
-Typical touch points (in dependency order):
-
-1. **Grammar** (`parser/src/datamog.langium`): add/modify rules; run `bunx langium generate` to regenerate `parser/src/generated/`
-2. **Post-processing** (`parser/src/post-process.ts`): add transforms if the new feature needs AST normalization (name desugaring, type rewriting, …)
-3. **Core re-exports** (`core/src/ast.ts`, `core/src/index.ts`): re-export new types from the generated AST; if the post-processed shape differs from the raw grammar shape (`AggregateCall`, `Subscript`/`Slice`), widen the relevant union here
-4. **Analyzer** (`core/src/analyzer.ts`): update `checkSafety()` — phase 1 collects safe vars (fixed-point iteration over atoms + equalities + ranges), phase 2 walks body elements and reports unsafe variables with a source position
-5. **Type inference** (`core/src/types.ts`): update var-type environment building in the fixed-point loop, add validation if needed. Column types must unify to a single basic type; `unifyColumnType` reports conflicts
-6. **SQL translator** (`engine/src/translator.ts`): update `translateRule()` — Pass 1 registers bindings from positive atoms, Pass 2 iterates to a fixed point over equalities / range atoms; comparisons and non-binding equalities are collected and emitted as WHERE conditions at the end
-7. **In-memory interpreters** (`backend/native/src/{planner,values}.ts`): mirror the new feature in the planner/value model so the native and seminaive backends produce the same results. `planner.ts` is shared with seminaive; `values.ts` is the place to land any new runtime invariant (NULL propagation, partial function, etc.)
-8. **Lexical surface**, if the feature adds a keyword or operator: `core/src/keywords.ts` (feeds the playground highlighter and completion), `playground/src/lib/highlight.ts` (the CodeMirror stream tokenizer, which needs a hand-written branch for anything that is not a plain keyword), and `vscode-extension/syntaxes/datamog.tmLanguage.json` (hard-codes its keyword alternation, so it does not pick up `keywords.ts` automatically)
-
 ## SQL backends — compilation strategy and dialect differences
 
 Each SQL backend implements `SqlDialect` (in `engine/src/dialect.ts`) and goes through `translator.ts`. Compilation maps:
@@ -228,10 +219,6 @@ A lightweight embed, separate from the SPA, for inlining live programs into tuto
 
 Langium-based language server providing syntax highlighting (TextMate grammar), semantic validation (runs analyzer + type inference), smart auto-complete, and go-to-definition. Completion and definition both **replace** their Langium defaults rather than extending them, because the grammar has no cross-references (`predicate=Identifier` is a plain string, not `[Predicate:IDENT]`) and both default providers work off resolved cross-references. `src/datamog-definition-provider.ts` delegates the lookup to core's `findDefinition` and adds only LSP range conversion plus disk reads for imported modules; it re-parses the buffer with `parseRawLenient` instead of reusing the Langium document, since the validator post-processes that AST **in place** (which is also why `completions.ts` filters `$anon` names). Built with `bun run build:vscode` → produces `datamog.vsix`. Also contributes a `datamog.run` command (`src/run-command.ts`) that evaluates the active buffer in-process via `DatamogExecutor` + the seminaive backend and prints its default output to a "Datamog" Output channel. It filters to the default the way the CLI does when given no output to select, since `analyzed.queries` holds one result per `output predicate` as well as one for the `?-` query, and the command has no flags to pick among them. Extensional data is loaded from sibling files next to a saved program by `src/disk-loader.ts` (a Node counterpart to the Bun-only directory loader: reads with `node:fs`, parses via the `datamog-{csv,json,jsonl,parquet}/parse-content` subpaths), one file per predicate (`<predicate>.csv`/`.json`/`.jsonl`/`.parquet`). Both the run command and the validator resolve `:=` module imports from disk (via `DatamogExecutor.prepareElaborated` + `createNodeModuleResolver`, relative to the saved file); the validator re-parses a binding-using document into a throwaway AST so a `:=` binding is validated rather than flagged as an error.
 
-## Language Specification
-
-`doc/spec.md` is the detailed language specification. Keep it in sync when adding or changing language features, semantic rules, type system behavior, or SQL translation logic.
-
 ## Tutorial and other documentation
 
 The `doc/` tree holds several standalone tutorials and course materials plus the spec:
@@ -250,22 +237,3 @@ Per-chapter Marp decks live under `doc/walkthrough/slides/<NN-name>.md`, one per
 - **Style**: condensed — roughly 10–17 slides per chapter, summarising the chapter rather than reproducing it. Keep code listings and lens callouts that earn their slide; drop the rest.
 - **Build**: `bun run slides:build` (one-shot) and `bun run slides:watch` invoke `bunx @marp-team/marp-cli` and write PDFs to `doc/walkthrough/slides/pdf/`. PDFs are gitignored — only the `.md` sources are committed, since PDF output is not byte-stable across Marp/Chromium versions.
 - **Fences and capitalisation**: same as the rest of the walkthrough — ```` ```prolog ```` for Datalog, "Datamog" always capitalised in prose.
-
-## Documentation style
-
-- Fence Datalog / Datamog source code in Markdown as ```` ```prolog ```` — it's not really Prolog, but the Prolog highlighter is a close enough fit to syntax-colour atoms, variables, and operators correctly. Keep other fences language-appropriate (```` ```sql ````, ```` ```bash ````, ```` ```csv ```` or plain ```` ``` ```` for tabular data).
-- Always capitalise "Datamog" in prose (the product name), including mid-sentence. The CLI command and package names stay lowercase as code identifiers (`datamog`, `datamog-*`).
-- Prefer ```` ```mermaid ```` diagrams over ASCII art for graphs, trees, and other structural pictures. GitHub renders them natively, and a `graph TD`/`graph LR` Mermaid block doubles as valid input for Datamog's own `MermaidLoader` — so the same source can be an illustration and a data file.
-
-## Conventions
-
-- Parser uses Langium grammar (`datamog.langium`) with generated lexer/parser/AST; post-processing in `post-process.ts`
-- Source positions available via Langium's `$cstNode` on AST nodes
-- `ParseError` with line/column for user-facing error messages, `AnalyzerError` for semantic errors
-- Tests use `bun:test` with TDD approach
-- `Backend` is the abstraction for evaluation targets — implement it to add new databases (with `sqlDialect` + `execute`) or new non-SQL evaluators (with `evaluateProgram` + `insertRows`)
-- Loaders use `coerceValue` (string → typed, for CSV/GSheet) or `checkValue` (native type validation, for JSONL)
-- Example tests (`cli/test/examples.test.ts`) auto-generate `expected.json` if missing; delete it to regenerate. Examples no SQL backend can run (non-linear recursion, parity-stratified recursion) carry an empty `native-only` marker file in their dir: the sqlite run is skipped and seminaive becomes the canonical `expected.json` source
-- The examples suite also runs every example on **sqljs**, whose one gap is recorded in `SQLJS_KNOWN_FAILURES`: sql.js's stock WASM build omits SQLite's math extension, so `LN` is missing, which takes out `ln`, `**` and `exp` (the last two guard against overflow with `LN(MAX_FLOAT)`). sql.js also defines `LOG` as the natural log where SQLite's extension makes it base 10; nothing emits `LOG`, so that one is latent
-- The examples suite also runs every example on **postgres** when `DATABASE_URL` is set (skipped otherwise). That block shares one backend on a dedicated `new Bun.SQL(...)` connection (the global `Bun.sql` belongs to `backend/postgres/test`, and a closed connection cannot be reopened) and wipes the `public` schema between examples, since Postgres keeps tables and views across runs. Examples Postgres cannot run are listed in `POSTGRES_KNOWN_FAILURES` with the reason and marked `test.failing`, so the suite stays green and a fix forces the entry's removal. One entry is left, `shannon-entropy`, a last-bit float difference that will not be fixed; see `doc/design/postgres-alignment.md`
-- Examples run through `prepareElaborated`, so one may import modules with `:=` (see `examples/modular-order`). Keep the imported `.dl` files in the same directory; the entry point is then `<dir>.dl`, since a directory with several `.dl` files is otherwise ambiguous. The playground has no module resolver, so a module example cannot carry a `playground.json`

@@ -11,6 +11,14 @@ compiled Node build. The VS Code extension is built from this Bun workspace, but
 the packaged extension runs as bundled JavaScript inside VS Code's extension
 host and should not require Bun from end users.
 
+## Agent Instructions and Implementation Reference
+
+[AGENTS.md](AGENTS.md) holds the shared coding-agent instructions. Root
+[CLAUDE.md](CLAUDE.md) imports it using Claude Code's `@AGENTS.md` syntax. Update
+AGENTS.md for shared rules; keep CLAUDE.md as the small tool-specific entry point.
+The [development reference](doc/development-reference.md) contains detailed
+architecture, runtime, backend, editor, and documentation maintenance notes.
+
 ## Prerequisites
 
 - Bun 1.3 or newer.

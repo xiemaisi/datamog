@@ -161,5 +161,5 @@ convention as declarations arrive.
 - The executor already supported selecting one output (each output is a query in
   `analyzed.queries`, keyed by `outputName`); the CLI filters to the chosen one
   rather than running all.
-- Usage text, `.claude/CLAUDE.md`, and the walkthrough's `bun run datamog ...`
+- Usage text, `doc/development-reference.md`, and the walkthrough's `bun run datamog ...`
   invocations track this surface.

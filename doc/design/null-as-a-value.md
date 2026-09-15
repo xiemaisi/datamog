@@ -2098,7 +2098,7 @@ found by reading rather than by running.
 
 **Since verified by running.** A throwaway cluster is two commands
 (`initdb` into `/tmp`, `pg_ctl` on a spare port), which is cheap enough that the
-skip is no longer an excuse; the recipe is in `.claude/CLAUDE.md`. With
+skip is no longer an excuse; the recipe is in `doc/development-reference.md`. With
 `DATABASE_URL` set the whole suite is **1925 pass, 66 skip, 0 fail**, against 1850
 pass and 145 skip without it, so the 75 tests this branch could not run all pass:
 17 in `backend/postgres/test` and 58 example runs. And every case from §15.25
