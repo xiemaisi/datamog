@@ -35,7 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Claude Code
 .claude/*
-!.claude/bug-hunt.md
 CLAUDE.local.md
 
 # Codex local tooling; shared project instructions live in tracked AGENTS.md.

@@ -19,6 +19,9 @@ AGENTS.md for shared rules; keep CLAUDE.md as the small tool-specific entry poin
 The [development reference](doc/development-reference.md) contains detailed
 architecture, runtime, backend, editor, and documentation maintenance notes.
 
+For investigation techniques, recurring bug patterns, and historical caveats, see
+[Bug Hunting in Datamog](doc/bug-hunting.md).
+
 ## Prerequisites
 
 - Bun 1.3 or newer.

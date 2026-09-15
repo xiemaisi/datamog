@@ -16,6 +16,8 @@ runtime invariants, SQL dialects, interpreters, editors, examples, and tutorials
 Consult the [language specification](doc/spec.md) for current semantics and the
 [design index](doc/design/README.md) for proposal status and remaining work.
 
+For bug investigations, read [the bug-hunting guide](doc/bug-hunting.md).
+
 ## Essential commands and validation
 
 Run commands from the repository root. Bun 1.3 or newer is required.
