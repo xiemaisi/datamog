@@ -16,23 +16,25 @@ the Sources section links the authoritative references for each system.
 ## Datamog in one paragraph
 
 Datamog is an educational Datalog dialect implemented in TypeScript/Bun. It has
-one language and five interchangeable backends that all agree on the same
-semantics: three that compile a program to SQL (`CREATE TABLE` / `CREATE VIEW` /
+one language and five backends targeting the same semantics, with documented
+feature restrictions and numeric differences: three that compile a program to SQL (`CREATE TABLE` / `CREATE VIEW` /
 `SELECT`) and run it on a relational database (PostgreSQL, SQLite, and sql.js,
 the WASM build of SQLite), and two pure in-memory interpreters (a naive and a
 seminaive bottom-up evaluator) that serve as readable reference implementations.
 The surface is Prolog-like Horn clauses with `input predicate` declarations,
-parity-stratified negation, aggregates, and static type inference over five column
-types, one of which (`value`) is a first-class JSON/nested type; type
-annotations are optional and, on rule heads, checked against inference, as is
-whether a column may be NULL. A head position may also carry a proposition
-instead of a type, checked against the tuples the predicate derives. Integrity
+parity-stratified negation, aggregates, and static inference of primitive/null
+types, structural JSON shapes, and nominal proof identities. The `value` type
+provides JSON storage; semantic types describe shapes and proofs above that
+representation. Aliases and optional head/constructor annotations express checked
+contracts, including nullability. Null is a value, distinct from an expression
+having no value. A head position may also carry a proposition
+instead of a type, checked against the tuples the predicate derives; a supported
+integer fragment can also be verified with an external SMT solver. Integrity
 constraints (`!- ...`) declare conjunctions that must have no solutions, and
 their counterexamples are reported before any query runs. A small
 functor-style module system lets one file act as a function from its input
 predicates to its outputs, bound to data files or other modules with `:=`. It is
-built for
-teaching and experimentation: it ships a browser playground, a VS Code
+built for teaching and experimentation: it ships a browser playground, a VS Code
 extension, and step-through tracing, and it deliberately stops short of the
 extensibility that production engines carry.
 
@@ -46,11 +48,11 @@ extensibility that production engines carry.
 | **CodeQL (QL)** | Production (commercial) | Proprietary engine; compiles QL and evaluates bottom-up (parity-stratified least fixed point) over an extracted snapshot database | Object-oriented first-order logic; SQL-like `from` / `where` / `select` |
 | **Flix** | Research language | Scala compiler to JVM bytecode; bottom-up lattice fixpoint | Functional (ML-like) with `#{ }` Datalog constraint blocks |
 | **Datomic** | Production database | Clojure/JVM; Datalog query evaluated client-side over an immutable entity-attribute-value store | EDN data (queries-as-data), `:find` / `:where` |
-| **Datafrog** | Embedded library | Rust; hand-assembled semi-naive joins, no runtime | None (Rust API) |
+| **Datafrog** | Embedded library | Rust library; hand-assembled semi-naive joins and fixpoint loop | None (Rust API) |
 | **DDlog** | Research/production (archived) | Rust, compiled onto differential dataflow; incremental | `input`/`output relation` declarations + `:-` rules |
 | **Z3 muZ** | Solver / verification | C++ (Z3); bottom-up Datalog, or Spacer/PDR for constrained Horn clauses over SMT theories | SMT-LIB `declare-rel` / `rule` / `query` |
 | **LogicBlox (LogiQL)** | Commercial (dormant) | Native engine; bottom-up with incremental maintenance and worst-case-optimal (leapfrog-triejoin) joins over a transactional store | Datalog with `P[keys] = value` notation; `<-` rules, `->` constraints |
-| **RelationalAI (Rel)** | Commercial (active) | Cloud knowledge-graph coprocessor; runs in-database (Snowflake native app); incremental maintenance | Relational language; `def Name(args): body`, first-order-logic bodies, first-class relations |
+| **RelationalAI** | Commercial | Snowflake Native App accessed through PyRel; Rel language documented separately | Current product: Python API (PyRel); Rel: `def Name(args): body` and first-order-logic bodies |
 | **Cozo** | Production, embeddable | Rust; bottom-up semi-naive; pluggable storage (in-memory / SQLite / RocksDB / Sled / TiKV), ACID | CozoScript: `head[args] := body`, `?[...]` query, `*rel` stored relations |
 | **Nemo** | Research | Rust; in-memory forward-chaining materialisation (semi-naive plus the restricted chase) | Datalog `:-` rules; `?` vars, `!` existentials, `~` negation, RDF literals |
 | **Ascent** | Research / embedded library | Rust procedural macro; expands to native Rust at compile time; semi-naive (optional parallel) | `ascent!{ relation ...; head <-- body }` inside Rust; lattice columns |
@@ -67,16 +69,21 @@ extensibility that production engines carry.
 | **CodeQL** | General, plus `+`/`*` transitive-closure operators | Parity-stratified (recursion through an even number of negations) | Yes, plus monotonic aggregates usable inside recursion | Static OO: int/float/string/boolean/date/bigint, classes, and algebraic datatypes (`newtype`) | First-order-logic bodies (not just Horn clauses); OO classes plus ADTs; no nulls |
 | **Flix** | General (stratified) | Stratified | Expressed through lattices | Static Hindley-Milner inference, effects, ADTs, traits | First-class Datalog values; least fixed points over lattices |
 | **Datomic** | Via named rules | `not` / `not-join` | Rich (sum, count, avg, min, max, ...) | Per-attribute schema | Datalog over immutable, time-travelling data; Pull API |
-| **Datafrog** | Manual fixpoint loop | None built in | None built in | Rust tuple types (must be `Ord`) | Minimal embeddable engine: you assemble the joins yourself |
+| **Datafrog** | Manual fixpoint loop | Antijoins against fixed relations; caller manages strata | None built in | Rust tuple types (must be `Ord`) | Minimal embeddable engine: you assemble the joins yourself |
 | **DDlog** | General | Yes | Yes, with grouping | Rich (ints, bitvectors, floats, strings, tuples, tagged unions, collections) | Incremental by construction (recomputes deltas on input change) |
 | **Z3 muZ** | General (constrained Horn clauses) | Stratified (finite mode) | Not a first-class layer | SMT sorts (int, real, bitvector, array, ADT) | Datalog as a front-end to an SMT fixed-point / verification solver |
 | **LogicBlox (LogiQL)** | General | Stratified | Yes (`agg<< >>`) | Static entity types; value constructors | Integrity constraints as language constructs; incremental maintenance; worst-case-optimal joins |
-| **RelationalAI (Rel)** | General (no linearity limit) | Yes, with quantifier safety | From a single `reduce` primitive | Typed; relations as the sole primitive | First-class / higher-order relations; first-order-logic bodies; in-database cloud engine |
+| **Rel (RelationalAI language)** | General (no linearity limit) | Yes, with quantifier safety | From a single `reduce` primitive | Typed; relations as the sole primitive | First-class / higher-order relations; first-order-logic bodies; in-database cloud engine |
 | **Cozo** | General | Stratified (`not`) | Yes, in rule heads | Typed columns incl. JSON and float vectors | Embeddable multi-backend DB; built-in graph algorithms + HNSW vector search; time travel |
 | **Nemo** | General | Stratified (`~`) | Yes | RDF datatypes plus named nulls | Existential rules (labelled nulls via the chase); knowledge-graph reasoning |
 | **Ascent** | General | Stratified | Built-in and user-defined; also lattices | Any Rust type (`Clone+Eq+Hash`); lattice columns | Lattice fixpoints (like Flix) as a Rust macro; native-Rust interop |
 | **Crepe** | General | Stratified | Not built in | Any suitable Rust type | Minimal proc-macro Datalog; calls host Rust functions in bodies |
 | **Formulog** | General | Stratified | Not a focus | ML-style ADTs plus SMT-LIB sorts | Builds and solves SMT formulas mid-evaluation; ML functional sublanguage |
+
+The Rel feature row describes the [Rel language](https://rel.relational.ai/).
+The current [RelationalAI product documentation](https://docs.relational.ai/)
+introduces PyRel, its Python API for the Snowflake Native App; the two surfaces
+should not be treated as interchangeable.
 
 ## The same problem in several syntaxes
 
@@ -291,9 +298,12 @@ and now looks dormant as a public product.
 relation variables are first-class; rule bodies are first-order-logic formulas;
 recursion carries no linearity restriction; and aggregation is derived from a
 single `reduce` primitive, alongside quantifiers and declarative integrity
-constraints. It ships as a managed knowledge-graph coprocessor that runs
-in-database (currently a Snowflake native app), maintaining a materialised graph
-incrementally. Both sit at the opposite end from Datamog: where Datamog is a
+constraints. These are properties of the Rel language. Current product
+documentation instead presents PyRel, a Python API that sends queries to the
+RelationalAI Native App within Snowflake; see the separate
+[Rel reference](https://rel.relational.ai/) and
+[PyRel product documentation](https://docs.relational.ai/). Both commercial
+platforms sit at the opposite end from Datamog: where Datamog is a
 small, local, educational Datalog that compiles to SQL, these are large
 proprietary engines whose reason for being is incremental maintenance of a
 materialised store at production scale.
@@ -303,8 +313,11 @@ materialised store at production scale.
 **Datafrog** is Frank McSherry's lean Datalog engine for Rust, best known as the
 core of an early version of the Rust compiler's Polonius borrow checker. It has
 no surface language at all: you construct the semi-naive fixpoint by hand out of
-`Variable`s and `from_join` calls, and there is no built-in negation or
-aggregation. It is the minimalist extreme, a toolkit rather than a system, and
+`Variable`s and `from_join` calls. Its
+[`from_antijoin`](https://docs.rs/datafrog/latest/datafrog/struct.Variable.html#method.from_antijoin)
+operation excludes keys found in a fixed relation, providing a building block
+for negation; callers arrange the strata and fixpoint loops. It has no
+standalone aggregation language. It is the minimalist extreme, a toolkit rather than a system, and
 about as far from Datamog's batteries-included teaching setup as a Datalog can
 get while still being one.
 
@@ -324,8 +337,11 @@ The neighbouring **DDlog** (Differential Datalog, from VMware) is a real
 Datalog-like language that compiles onto McSherry's *differential dataflow*
 substrate and is therefore incremental by construction: it ingests streams of
 input changes and recomputes only the output deltas. It is now archived, but it
-represents an axis Datamog does not attempt at all, incremental maintenance;
-Datamog always evaluates from scratch. (Differential dataflow itself is the
+represents an axis Datamog does not provide: general incremental maintenance
+of derived results under streams of input insertions and deletions. Datamog
+does have an incremental REPL that accumulates declarations, rules, and queries,
+and its seminaive evaluator uses deltas within a fixed-point computation. Neither
+is the same capability as DDlog’s maintenance under changing inputs. (Differential dataflow itself is the
 underlying engine, not a Datalog language.)
 
 ### Existential rules
@@ -364,9 +380,10 @@ relation (for example an error state) is derivable. Its default finite mode is a
 bottom-up Datalog engine, but the interesting mode is Spacer, a PDR-style solver
 for constrained Horn clauses whose relations range over SMT theories (integers,
 reals, bitvectors, arrays), which lets it reason about infinite-state programs.
-Datamog and muZ share the Horn-clause skeleton and essentially nothing else:
-Datamog computes finite relations over stored data, muZ solves for the existence
-of a model over theories.
+Datamog normally computes relations over stored data; muZ can instead solve
+constrained Horn clauses over theories. Datamog’s external-solver refinement
+verification is a separate contract-checking path, not a muZ-style evaluation
+backend for the Datalog program.
 
 **Formulog** approaches the same border from the other side. Where Z3's muZ is a
 solver with a Datalog front-end, Formulog is a Datalog that *embeds* a solver: it
@@ -378,12 +395,21 @@ with a newer Soufflé/C++ compiled backend, built for SMT-based static analyses
 such as symbolic execution and refinement typing. Datamog has algebraic
 datatypes of its own — proof terms, where a named rule is a constructor — and
 refinement annotations, where a head position carries a proposition rather than
-a type. But it bundles no solver: a refinement is *checked* against the tuples a
-predicate derived, and proving it for all inputs means supplying one.
-`--obligations` writes the proof obligations out as SMT-LIB and `--verify` runs
-them through the solver `--solver` names. It also has no ML-style
-functional sublanguage; its datatypes also desugar to the dynamically-shaped
-`value` type rather than Formulog's statically-typed ADTs.
+a type. Refinements are checked at runtime against derived tuples. Separately,
+`--obligations` emits SMT-LIB obligations and `--verify` invokes an external solver
+(default `z3 -in`, overridable with `--solver`). The implemented verification
+covers an integer fragment: range-bound hypotheses are omitted, and aggregate
+rules and non-integer goals are skipped. This is limited contract verification,
+not first-class SMT formulas or solver calls inside ordinary rule evaluation.
+See the [refinement design’s status and limitations](design/refinement-annotations.md).
+
+Datamog also has no ML-style functional sublanguage or independent, freely
+constructible datatype declarations. Its proof values have static nominal
+identities and inferred/declared constructor payload contracts even though their
+runtime representation lowers to JSON `value`. Structural records and arrays
+likewise have static semantic types above JSON storage; that representation does
+not make them dynamically typed. See [semantic types](design/semantic-types.md)
+and [constructor contracts](design/proof-signature-contracts.md).
 
 ## Where Datamog fits
 
@@ -396,10 +422,11 @@ small set of deliberate choices:
   something you can read in the generated output rather than take on faith.
 - **It runs several backends against each other.** The two in-memory
   interpreters are readable reference semantics; the SQL backends are checked
-  against them. Divergence is a bug, so the SQL backends cannot quietly drift
-  from the readable reference.
-- **It has a first-class JSON `value` type.** Nested data is handled directly,
-  which most classical Datalogs (flat, typed or untyped tuples) do not offer.
+  against them and the specification. Unexpected divergence is investigated as a
+  bug; documented feature restrictions and accepted numeric differences remain.
+  See the [backend alignment notes](design/postgres-alignment.md).
+- **It has typed nested data.** JSON `value` storage is complemented by bounded
+  inference of record/array shapes, aliases, and optional published contracts.
 - **It presents algebraic datatypes as proof terms.** Naming a rule turns its
   predicate into a datatype whose values are the derivations — a concrete
   Curry-Howard reading you can compute with, unusual among Datalogs.
@@ -412,11 +439,12 @@ small set of deliberate choices:
 
 The flip side is everything it leaves out on purpose: no user-defined or foreign
 functions (Soufflé) or host-language interop (Ascent, Crepe), no lattices (Flix,
-Ascent), no statically typed record/ADT type system (Soufflé, Formulog), no
-incremental maintenance (DDlog, LogicBlox, RelationalAI), no persistence or time
-travel (Datomic, Cozo), no existential rules (Nemo), no SMT or theory reasoning
-(Z3, Formulog), and linear-recursion-only on the SQL path. It does construct
-values (JSON objects, arrays, `parse_json`, and proof-term datatypes), so it is
+Ascent), no independent, freely constructible datatype declarations (Soufflé,
+Formulog), no general incremental maintenance under input changes (DDlog,
+LogicBlox, RelationalAI), no managed temporal database (Datomic, Cozo), and no
+existential rules (Nemo). Its limited external-solver contract verification is
+not an SMT-backed rule evaluator (Z3, Formulog), and SQL execution still requires
+linear recursion. It does construct values (JSON objects, arrays, `parse_json`, and proof-term datatypes), so it is
 not value-free; what it lacks is the *existential*
 positing of unnamed ones. Those richer features are what turn a Datalog into a
 research or production system; leaving them out is what keeps Datamog a teaching
@@ -531,11 +559,11 @@ systems:
 - **Ciao**: <https://ciao-lang.org/>, example collection <https://github.com/ciao-lang/ciao/tree/master/core/examples>
 - **Logtalk**: <https://logtalk.org/>, example collection <https://github.com/LogtalkDotOrg/logtalk3/blob/master/examples/NOTES.md>
 - **Datomic**: <https://docs.datomic.com/query/query-data-reference.html>, <https://blog.datomic.com/2023/04/datomic-is-free.html>
-- **Datafrog**: <https://github.com/rust-lang/datafrog>, McSherry's blog <https://github.com/frankmcsherry/blog>
+- **Datafrog**: <https://github.com/rust-lang/datafrog>, [antijoin API](https://docs.rs/datafrog/latest/datafrog/struct.Variable.html#method.from_antijoin), McSherry's blog <https://github.com/frankmcsherry/blog>
 - **DDlog / differential dataflow**: <https://github.com/vmware/differential-datalog>, <https://github.com/frankmcsherry/differential-dataflow>
 - **Z3 muZ**: <https://microsoft.github.io/z3guide/docs/fixedpoints/basicdatalog/>, "muZ" (CAV 2011)
 - **LogicBlox / LogiQL**: "Design and Implementation of the LogicBlox System" (SIGMOD 2015) <https://dl.acm.org/doi/10.1145/2723372.2742796>, <https://en.wikipedia.org/wiki/LogicBlox>
-- **RelationalAI / Rel**: "Rel: A Programming Language for Relational Data" <https://arxiv.org/abs/2504.10323>, <https://www.relational.ai/>
+- **RelationalAI / Rel**: "Rel: A Programming Language for Relational Data" <https://arxiv.org/abs/2504.10323>, [Rel language reference](https://rel.relational.ai/), [current PyRel product documentation](https://docs.relational.ai/)
 - **Cozo**: <https://github.com/cozodb/cozo>, <https://docs.cozodb.org/>
 - **Nemo**: <https://github.com/knowsys/nemo>, "Nemo: A Scalable and Versatile Datalog Engine" <https://ceur-ws.org/Vol-3801/short3.pdf>
 - **Ascent**: <https://github.com/s-arash/ascent>, "Seamless Deductive Inference via Macros" (CC 2022)
