@@ -27,9 +27,10 @@ ways, and the distinction drives every design choice here:
   each iteration (transitive closure that nests a sub-proof, a rule that
   re-wraps an extracted value one level deeper). This is the local analogue of
   fresh-value creation in the chase / existential rules.
-- **Scalar arithmetic invention.** `Y = X + 1` draws from an infinite scalar
-  domain. The term stays atomic (an integer is one value), but the *set* of
-  reachable values is unbounded.
+- **Scalar arithmetic invention.** `Y = X + 1` can keep producing new integers
+  until safe-integer overflow withholds the next tuple. This domain is finite
+  but too large to make exhaustive iteration practical; string concatenation
+  can grow without a language-level bound.
 
 The static check folds both into one "a value was manufactured" signal, which is
 fine for a warning. Telling them apart only matters if we ever want to stop

@@ -3,15 +3,15 @@
 Datamog is an educational Datalog dialect. Programs declare table-backed
 predicates, define derived predicates via rules, and issue queries.
 
-Datamog ships with five backends. All of them implement the same
-language semantics and agree on runtime invariants (divide-by-zero and
-domain errors having no value, slice bounds, integer vs float division); they
-differ only in how rules are evaluated.
+Datamog ships with five backends targeting the same language semantics,
+including divide-by-zero and domain errors having no value, slice bounds,
+and integer vs float division. Their supported fragments and numerical
+behavior differ; backend limitations are called out below and in §6.1.
 
 The **SQL backends** — PostgreSQL, SQLite, and sql.js (WASM SQLite) —
 translate programs into standard SQL (CREATE TABLE, CREATE VIEW,
-SELECT) and execute them against a relational database. Dialect
-differences only affect the generated SQL.
+SELECT) and execute them against a relational database. The translator
+handles dialect differences within each backend's supported fragment.
 
 The **in-memory backends** evaluate Datalog directly, without going
 through SQL:
@@ -514,16 +514,17 @@ ancestor(X: string, Y: string) :- parent(X, Y).
 class_totals(Class: string, sum(Fee): float) :- enrolment(_, Class, Fee).
 ```
 
-Annotations are optional: they never drive inference or code generation, but they
-are not inert. Inference runs exactly as it would without them, and each declared
+Annotations are optional: they do not supply missing inference or cast the
+producer's stored values, but they are not inert. Each declared
 type is verified against the inferred one; beyond that, a predicate advertises a
 *published* type (its inferred type widened by its annotations) against which its
-consumers and any module boundary are type-checked (§5.10).
+consumers and any module boundary are type-checked (§5.10). Published semantic
+contracts also control consumer operand extraction and can affect its SQL.
 They are **per rule and per argument** -- a rule may annotate any subset of its
 head arguments, and sibling rules of the same predicate may annotate
 differently or omit annotations entirely. Each annotated position is checked
 against that rule's own inferred contribution: the declared type must equal or
-widen it, so you may annotate a column `value` to document that it holds
+widen it, so you may annotate a nonnullable column `value` to document that it holds
 arbitrary shapes, but claiming a type narrower than the rule proves (for example
 `integer` on a position inferred as `value`) is rejected. See §5.10.
 
@@ -818,11 +819,13 @@ Three rules complete it.
 
 - **The condition must be `boolean`**, exactly as `!`'s operand and `&&`'s
   two must be.
-- **The result's type is the join of the branches** (§5.6), so
+- **The branches must have compatible types**, with `integer`/`float`
+  widening and primitive-to-`value` lifting, so
   `c ? [1] : 2` is a `value` and the primitive branch takes the same
   lift a `value`-typed position gives it elsewhere. Two branches with no
   join, such as `integer` and `string`, are an error rather than a
-  widening to `value`.
+  widening to `value`. This is stricter than the total join across sibling
+  rules in §5.6.
 - **It is strict in the condition and lazy in the branches.** A condition
   that is a null or has no value leaves the whole conditional with no
   value, the same strictness the four orderings and the connectives have
@@ -1013,8 +1016,10 @@ stays integer, `round(float, integer)` stays float. Positive `n` rounds to
 that many fractional digits; negative `n` rounds to tens, hundreds, and so
 on. Arity-1 always returns integer (rounding to the nearest whole number).
 
-All listed functions are portable across PostgreSQL and SQLite (and sql.js,
-which uses SQLite's JSON1 implementation).
+The stock sql.js build lacks `LN`. Consequently `ln`, `exp`, and `**` fail
+on that backend: the latter two also emit `LN` in their overflow guards.
+Use SQLite, PostgreSQL, `native`, or `seminaive` for these operations.
+Floating-point results can differ across supported backends (§6.1).
 
 ```
 contribution(C, X) :- prob(C, P), X = -1.0 * P * ln(P) / ln(2).
@@ -1136,6 +1141,13 @@ identity where the domain has one, and has **no value** where it does not:
 | `list(e)` | `[]` | `[]` |
 | `avg(e)`, `min(e)`, `max(e)` | none in the domain | undefined |
 
+**Implementation limitation — integer `sum`.** Every backend separately bounds
+the sum of positive contributions and the magnitude of negative contributions by
+`2^53 - 1`. If either subtotal exceeds that bound, the aggregate has no value,
+even when cancellation would leave a safe final result. For example, summing
+`9007199254740991`, `1`, and `-1` withholds the tuple. This conservative check is
+stricter than checking only the mathematical final sum.
+
 An aggregate with no value withholds its tuple, like any other undefined head
 expression (§5.4). So a rule with no grouping columns derives one tuple when
 every one of its aggregates has an identity, and none otherwise; a rule with at
@@ -1185,10 +1197,10 @@ the values fed to the aggregate are a bag.
 `concat` translates to `GROUP_CONCAT(expr, ',' ORDER BY expr)` on
 SQLite/sql.js and `STRING_AGG(expr::TEXT, ',' ORDER BY expr)` on
 PostgreSQL. The native evaluator sorts the per-group values
-the same way before joining. Output is therefore deterministic and
-identical across every backend: numeric values come out in numeric
-order (`"2,7,10"`, not `"10,2,7"`), strings in Unicode-code-point
-lexicographic order.
+the same way before joining. Ordering is therefore deterministic: numeric
+values come out in numeric order (`"2,7,10"`, not `"10,2,7"`), strings in Unicode-code-point
+lexicographic order. Numeric rendering and JSON float precision can still
+differ across backends (§§2.6 and 6.1).
 
 `list(expr)` collects values into an array `value`. Primitive
 arguments are auto-lifted to a `value` (`integer` / `float` → number
@@ -1208,8 +1220,8 @@ Per-element order depends on the argument's type:
   diverges between backends, so the canonical form is the only stable
   cross-backend choice.
 
-In both cases the same program produces the same array on every
-backend. A `null` input is collected like any other value and sorts before all
+These ordering rules are shared across backends, subject to the JSON float
+precision limitations in §6.1. A `null` input is collected like any other value and sorts before all
 of them, whatever the argument's type; the array therefore has one element per
 row whose argument is defined, so `length(list(V))` equals `count(V)`. Only an
 *undefined* contribution is left out, and a group with none left to collect
@@ -1238,7 +1250,7 @@ multiple uses of `_` are independent. User-written variables such as `_0` or
 
 ```
 composite(X) :- divides(_, X).    # _ is an independent unnamed variable
-record_count(count(*)) :- scores(_, _, _).   # four independent _'s
+record_count(count(*)) :- scores(_, _, _).   # three independent _'s
 ```
 
 ### 2.9 Value Operations
@@ -1650,12 +1662,17 @@ frontier(X) :- reachable(X), not has_outgoing(X).
 # depend on frontier.
 ```
 
-**Forbidden** (one negation around the cycle):
+**Forbidden** (two negations, but no opposite-polarity sigil):
 
+```prolog
+domain(1).
+p(X) :- domain(X), not q(X).
+q(X) :- domain(X), not p(X).  # ERROR: same polarity on both ends of a negated call
 ```
-p(X) :- not q(X).
-q(X) :- not p(X).     # ERROR: same polarity on both ends of a negated call
-```
+
+The positive `domain` atoms make these rules safe; the rejection is about
+polarity, not unbound variables. A cycle with an odd number of negations
+cannot satisfy the polarity rules under any assignment of sigils.
 
 **Allowed** (parity-stratified: two negations around the cycle):
 
@@ -2126,13 +2143,14 @@ guard at all:
   `false` by dominance. So a connective, like a comparison, never *returns* a
   null, which is what keeps the rule below true of it.
 - **`value` operands.** A `value` spells its null inside the value (as JSON
-  `null`), so nothing is ambiguous about it and it propagates: `V["k"]` on a
-  `null` leaf is a `null`, and `type_of` of one is `"null"`. `count` and `list`
+  `null`), so it is distinct from absence. A present key holding null makes
+  `V["k"]` yield null, while indexing a null receiver has no value.
+  `type_of` of a null value is `"null"`. `count` and `list`
   are exempt for a related reason: `count` counts a `null` and `list` collects
   one, so neither has to compute with it.
 
-The point of the rule is to keep a SQL NULL single-valued. A `T?`-typed
-expression is therefore never undefined, so a NULL in a `T?` context means the
+The point of the rule is to keep a SQL NULL single-valued. A nullable primitive
+expression is therefore never undefined, so a NULL in a primitive `T?` context means the
 `null` value and nothing else; let arithmetic take a `T?` and that stops being
 true, `X + 1` being a `T?`-typed expression with no value at the top of the
 integer domain.
@@ -2191,8 +2209,8 @@ skips it.
 
 Whether a column can hold `null` is inferred per column, as a fixed point over
 the dependency graph seeded non-null. An extensional column is nullable exactly
-when declared `?`; an intensional one is nullable when some rule for it can
-contribute a `null`. Head annotations may declare it (§5.10), module boundaries
+when declared `?` or with the `null` type; an intensional one is nullable when
+some rule for it can contribute a `null`. Head annotations may declare it (§5.10), module boundaries
 are checked against it (§9.3), and it selects between the two equality lowerings
 so a join over provably non-null columns keeps a plain `=`.
 
@@ -2239,8 +2257,8 @@ for partiality's one real cost: where a `NULL` used to appear in the output, the
 row is now simply absent and nothing says so, so a warning before the run beats
 counting rows after it. It is off by default because partial operations are
 pervasive and usually deliberate — a program writing `Y = 10 / X` generally knows
-`X` can be zero and wants those rows gone — and it fires 236 times across the
-single-file examples. It is the flag to reach for when rows you expected are
+`X` can be zero and wants those rows gone. Programs with many partial operations
+can produce many warnings. It is the flag to reach for when rows you expected are
 missing.
 
 It reports the positions that use a value: head arguments, both sides of an
@@ -2378,8 +2396,11 @@ without bound across recursive iterations. Pure Datalog terminates
 because every value reachable in the fixed point is drawn from the
 extensional input — but Datamog adds arithmetic, string concat, and
 `parse_json`, which can manufacture values outside that input set,
-so a recursive rule like `s(Y) :- s(X), Y = X + 1.` does not
-terminate, and neither does `g(parse_json(as_string(J))) :- g(J).`.
+so recursion can require impractically many iterations or construct values
+of unbounded depth. For example, `s(0). s(Y) :- s(X), Y = X + 1.`
+keeps growing until safe-integer overflow withholds the next tuple, while
+`g([0]). g([J]) :- g(J).` nests arrays without a language-level depth bound.
+A recursive rule without a seed derives nothing.
 
 The analysis builds a single program-wide dataflow graph:
 
@@ -2475,7 +2496,8 @@ annotated position of each rule is validated:
 **Soundness.** For an annotated head position, the declared type `D` must equal
 or widen that rule's own inferred contribution `I` for the position:
 `widen(I, D) = D` (widening per §5.6, extended with the primitive/`value` lift).
-So `value` may be declared for any position, `integer` may be declared `float`,
+So `value` may be declared for any nonnullable position (`value?` also admits
+null), `integer` may be declared `float`,
 but a type narrower than the rule proves (for example `integer` for a position
 the rule infers as `value`) is rejected.
 
@@ -2609,8 +2631,10 @@ evaluating the program.
 script instead of evaluating: one `push` / `assert` / `check-sat` / `pop` block
 per refinement, where `unsat` discharges the obligation. The logic is `QF_LIA`,
 widening to `QF_NIA` if the program multiplies or divides by a variable. No
-solver ships with Datamog; the script is the deliverable, so that any solver can
-consume it. The encoding writes out what SMT-LIB spells differently: division
+solver ships with Datamog; the script is the deliverable, so that any compatible
+SMT-LIB solver can consume it. The encoder supports an integer-arithmetic
+fragment, not all well-typed expressions: float, string and value reasoning,
+range atoms, and aggregate rules can cause an obligation to be skipped. The encoding writes out what SMT-LIB spells differently: division
 and modulo truncate toward zero (§5.3) rather than being Euclidean, `null` is
 modelled as a value paired with a null-condition so the null-aware comparisons of
 §5.4 hold, and partiality is modelled separately from that, as a definedness
@@ -2785,7 +2809,7 @@ is needed.
 ### 6.5 Mutually Recursive Views
 
 Neither backend can express an SCC as several CTEs referring to each other:
-SQLite does not support multiple recursive CTEs, and PostgreSQL reports
+SQLite rejects circular references between CTEs, and PostgreSQL reports
 `mutual recursion between WITH items is not implemented`. Both therefore merge
 the whole SCC into one self-recursive CTE with a `__tag` discriminator column,
 and separate non-recursive views filter by tag:
@@ -2842,7 +2866,9 @@ dialect-specific SQL:
 
 - **PostgreSQL:** `generate_series(low, high)` as a table source
 - **SQLite / sql.js:** A recursive CTE that generates values from `low` to
-  `high`
+  `high`. Literal bounds use a subquery directly; correlated bounds build
+  a per-row JSON array in a scalar CTE and expose it through `json_each`.
+  There is no fixed one-million bound.
 
 ### 6.8 SQL Dialect Summary
 
@@ -2929,9 +2955,10 @@ Values are type-checked (not coerced): a JSON string is not accepted for an
 and loaded as runtime `NULL`.
 
 **Single-`value`-column special case.** When the extensional declaration
-has exactly one column, and that column is typed `value`, each
-non-blank line is consumed as the column's contents directly — any
-JSON shape (object, array, primitive, null). This is the natural way
+has exactly one column with `value` storage (including structural contracts),
+each non-blank line is consumed as the column's contents directly.
+Objects, arrays and primitives must satisfy the column's contract; a top-level
+null requires a nullable declaration such as `value?`. This is the natural way
 to ingest a stream of heterogeneous self-describing records:
 
 ```prolog
@@ -2972,8 +2999,8 @@ HTTPS instead, mapping each predicate to a configured URL; both
 loaders share parsing and error semantics — they only differ in where
 the bytes come from.
 
-The extensional declaration must have exactly one column, and that
-column must be typed `value`:
+The extensional declaration must have exactly one column with `value`
+storage, including record or array contracts and aliases for those types:
 
 ```prolog
 input predicate config(blob: value).
@@ -2981,8 +3008,9 @@ input predicate config(blob: value).
 
 The whole file is parsed as a single JSON value (any shape — object,
 array, primitive, or null) and inserted as the sole row's column
-value. The natural use is "load this configuration blob and let rules
-destructure it":
+value, subject to its declared contract. A top-level null requires `value?`
+or another nullable structural contract. The natural use is "load this
+configuration blob and let rules destructure it":
 
 ```prolog
 app_name(N) :- config(C), N = as_string(C["name"]).
@@ -3017,7 +3045,7 @@ nullable column (`type?`), and a repeated or nested column (`LIST`, `MAP`,
 a struct) needs a `value` column, whose contents it becomes.
 
 Three of Parquet's physical types have no direct counterpart in the type
-lattice (§3):
+system (§5.1):
 
 - **`INT64`** — the default integer width of most writers — is decoded as
   an `integer`, so a value outside `[-(2^53 - 1), 2^53 - 1]` is a

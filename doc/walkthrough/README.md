@@ -54,9 +54,9 @@ Useful flags while working through the tutorial:
 
 - `--dry-run` — print the generated SQL instead of executing it.
 - `--backend <name>` — pick a backend. `sqlite` (via `bun:sqlite`)
-  is the CLI default; `sqljs` is the [playground][pg] default.
-  Either is a good general-purpose choice. `native` and `seminaive`
-  run a pure-Datalog evaluator with no SQL involved.
+  is the CLI default unless `DATABASE_URL` selects Postgres.
+  `native` is the [playground][pg] default; it and `seminaive` run
+  in-memory evaluators with no SQL. `sqljs` provides WASM SQLite.
 
 The [playground][pg] runs the same pipeline client-side in a Web
 Worker — useful when you want to tweak a program without leaving
@@ -124,7 +124,7 @@ Two standalone tutorials live alongside this walkthrough:
 This tutorial teaches *Datamog*-flavoured Datalog. Most of what you
 learn transfers directly to other Datalog dialects (Soufflé, LogicBlox,
 `datalog` in Clojure, Cozo, ...). Places where Datamog diverges from
-"textbook Datalog" — e.g. its rejection of non-linear recursion,
+"textbook Datalog" — e.g. its SQL backends' rejection of non-linear recursion,
 or its strict type system — are flagged in the relevant chapter.
 
 For a precise description of the language, see

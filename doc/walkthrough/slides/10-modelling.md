@@ -140,7 +140,7 @@ Then nothing else — no query results, non-zero exit. Results derived from data
 Recursion is fine in the middle of a schema as long as you remember Chapter 4's rules:
 
 - One base case, at least one recursive step.
-- Linear recursion only.
+- SQL backends: linear recursion only; in-memory backends also accept non-linear recursion.
 - Recursion must be monotone — no `not reports_to(...)` inside a `reports_to` rule.
 
 For something that feels like negation inside recursion, push the negated concept to a different stratum.

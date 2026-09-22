@@ -289,9 +289,10 @@ while the precision case still diverged. Pre-existing, and independent of the
 
 ## Not Postgres: sql.js
 
-For contrast, sql.js diverges in exactly one place. Its stock SQLite WASM build
+In addition to the SQLite JSON float differences above, sql.js has a
+math-function availability gap. Its stock SQLite WASM build
 omits the math extension `bun:sqlite` enables, so `LN` is missing, which takes
-out `ln` and `**` (whose overflow guard is `EXP(exp * LN(base))`). `SQRT`,
+out `ln`, `exp`, and `**` (the latter two also emit `LN` in their overflow guards). `SQRT`,
 `EXP`, `ABS`, and `ROUND` are all present. Note also that sql.js defines `LOG`
 as the natural logarithm where SQLite's extension makes it base 10; nothing
 emits `LOG` today, so that one is a trap for later rather than a current bug.

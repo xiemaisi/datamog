@@ -8,12 +8,12 @@ AST type definitions, semantic analyzer, and type inference for the Datamog Data
 
 The core AST re-exports Langium-generated types from `datamog-parser`. A Datamog program is a list of statements:
 
-- **`Expression`** (aliased as `Term`): `Variable`, `StringLiteral`, `NumberLiteral`, `NullLiteral`, `ArrayLiteral`, `ObjectLiteral`, `BinaryExpr`, `UnaryExpr`, `FunctionCall`, `Subscript`, and `Slice`. The `HeadTerm` union additionally includes the synthesised `AggregateCall` shape for aggregate-position rule heads
+- **`Expression`** (aliased as `Term`): `Variable`, `StringLiteral`, `NumberLiteral`, `BooleanLiteral`, `NullLiteral`, `ArrayLiteral`, `ObjectLiteral`, `BinaryExpr`, `UnaryExpr`, `Conditional`, `FunctionCall`, `Subscript`, and `Slice`. The `HeadTerm` union additionally includes the synthesised `AggregateCall` shape for aggregate-position rule heads
 - **`Literal`**: a body atom — a predicate applied to expressions, e.g. `ancestor(X, Y)`, `not composite(X)`. Carries `negated`, `maximal` (the parity `^` sigil), and `proofVar` (the `V : p(...)` proof capture)
 - **`TypeAlias`**: a transparent file-local type alias
 - **`ExtDecl`**: extensional predicate declaration with typed columns
 - **`Rule`**: a Horn clause with a head atom and body elements (empty body = fact)
-- **`Query`**: a `?-` query against a predicate
+- **`Query`**: a `?-` query over a conjunction of body elements
 - **`Program`**: a list of statements
 
 All nodes carry source positions via Langium's `$cstNode`.
@@ -68,7 +68,10 @@ values keep JSON storage. Type inference is a fixed-point iteration; columns tha
 
 ## Other analyses
 
-Each is a pull-based call the CLI, the playground, and the VS Code extension make separately; none is wired into `inferTypes`.
+`inferTypes` runs `inferNullness` and rejects the errors found by
+`findNullableOperands`; partiality also supports inference and code generation.
+The diagnostic, verification, finiteness, polarity, and editor entry points below
+are available to frontends as separate calls.
 
 | Entry point | Module | What it answers |
 | ----------- | ------ | --------------- |

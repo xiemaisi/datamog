@@ -201,10 +201,11 @@ for the keys of a non-object simply derives nothing for that row.
 
 `to_json` returns a value's canonical JSON text, which makes it
 useful as a hash key, a dedup key, or a stable identifier for
-canonical values. One v1 backend variance remains: SQLite / sql.js
-`parse_json` minifies objects without sorting their keys, so
-`to_json(parse_json(...))` can preserve source key order on those
-backends.
+canonical values. `parse_json` canonicalises object keys recursively,
+including on SQLite and sql.js, so equivalent objects parsed from differently
+ordered source text join and deduplicate. Canonical JSON key order is UTF-8
+byte length first, then byte value; `keys` and `values` instead order keys
+by Unicode code point. Float-to-JSON precision differences remain (spec §6.1).
 
 ## Iterating
 

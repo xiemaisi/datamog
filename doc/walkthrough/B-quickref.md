@@ -73,7 +73,7 @@ to the other rules).
 | `not p(X, Y)`                  | negated atom (stratified)     |
 | `expr`                         | filter: holds where the expression is `true` |
 | `not expr`                     | negation as failure over any body element, comparisons included: holds wherever `expr` does not hold, an absence included. Not the operator `!expr`, which propagates the absence |
-| `defined(expr)`, `not defined(expr)` | whether `expr` has a value. `defined` is `true` or undefined, never `false`, so `not defined(e)` names the rows `e` lost. `defined(X)` on a bare **variable** is always `true` (a variable is bound to a value, and `null` is one) — for "is this null" you want `X <> null` |
+| `defined(expr)`, `not defined(expr)` | whether `expr` has a value. `defined` is `true` or undefined, never `false`, so `not defined(e)` names the rows `e` lost. `defined(X)` on a bare **variable** is always `true` (a variable is bound to a value, and `null` is one) — for "is this non-null" you want `X <> null` |
 | `X = expr`, `expr = X`         | equality (binds a bare variable or filters) |
 | `X = Y`, `X <> Y` | equality / inequality over values, `null` included (filter or binding); `!=` spells `<>`. `X <> Y` needs both sides to have a value, so it is not `not (X = Y)` where one can be undefined |
 | `X < Y`, `X <= Y`, `X > Y`, `X >= Y` | ordering comparisons (filter); strict at `null`, which is outside the order, so they have no value there and the row drops |
@@ -111,11 +111,12 @@ to the other rules).
 - Nullability is part of the annotation: `x: integer?` declares the column may
   hold `null`, spelled the way an input column spells it. `null` is also a type
   in its own right, so `x: null` is a column holding nothing else.
-- No runtime effect; codegen ignores them.
+- No runtime assertion or producer cast; published semantic contracts can
+  affect consumer operand extraction and its SQL.
 
 ## Head argument names
 
-- `e as N` names a head position so later positions can refer to it:
+- `e as N` names a head position so other positions can refer to it, including earlier ones:
   `p(count(*) as N, N + 1) :- ...`.
 - The name is head-scoped and substituted away at parse time; nothing below the
   `:-` can see it.
@@ -181,7 +182,7 @@ A file is a function: its `input predicate`s are parameters, its
 
 | Syntax                                          | Meaning                                |
 | ----------------------------------------------- | -------------------------------------- |
-| `:= "data/x.tsv" as csv.`                       | data file, loader forced (`csv`, `jsonl`, `json`, `mermaid`) |
+| `:= "data/x.tsv" as csv.`                       | data file, loader forced (`csv`, `jsonl`, `json`, `mermaid`, `parquet`) |
 | `:= reach from "m.dl"(edge = road).`            | instance of `m.dl`, taking output `reach`, wiring `edge` to `road` |
 | `:= from "m.dl"(edge = road).`                  | same, taking the module's `?-` default output |
 
@@ -201,9 +202,14 @@ A file is a function: its `input predicate`s are parameters, its
   instance against the data wired in — an interface can enforce its own laws.
 - The **instantiation graph must be acyclic**: mutually recursive predicates share
   a file. Recursion inside a module is fine.
-- Multi-file programs need the CLI; the browser playground runs single files.
+- Multi-file programs work in the CLI and VS Code. The REPL and browser
+  playground do not resolve module bindings.
 
 ## Cross-backend runtime guarantees
+
+These describe the shared semantics within each backend's supported fragment.
+Stock sql.js lacks `LN`, so `ln`, `exp`, and `**` fail there; see Appendix C
+and spec §6.1 for numerical and other backend limitations.
 
 - Division / modulo by zero → no value, so the row is withheld
 - `sqrt(negative)`, `ln(≤ 0)`, `0 ** negative`, `negative ** fractional` → no value
@@ -222,12 +228,13 @@ A file is a function: its `input predicate`s are parameters, its
 
 - Rules must be **safe**: every head variable bound by a positive
   body atom (or a range, or an equality to an already-safe side).
-- Recursion must be **linear** on SQL backends: each recursive body
-  atom appears at most once. The non-SQL `native` and `seminaive`
+- Recursion must be **linear** on SQL backends: a rule has at most one
+  body atom referencing its own strongly connected component. The non-SQL `native` and `seminaive`
   evaluators accept non-linear recursion (their delta-aware iteration
   computes the correct fixed point).
-- Negation must be **stratified**: no cycle through a negative
-  edge in the predicate dependency graph.
+- Negation must be **stratified** on SQL backends: no cycle through a
+  negative edge. The in-memory backends additionally accept parity-stratified
+  recursion with explicit `^` sigils.
 - Aggregate predicates cannot be recursive.
 - At most one **default output** per file: a `?-` query, or a rule named
   `output predicate default`. Further results must be named outputs.

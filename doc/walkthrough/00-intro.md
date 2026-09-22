@@ -146,8 +146,8 @@ Two flags worth knowing now:
   program. This is how we will look through the SQL lens.
 - **`--backend <name>`** picks the engine. Datamog ships several:
   `sqlite` (via `bun:sqlite`; the CLI default), `sqljs` (WASM
-  SQLite; the [playground][pg]'s default), `postgres`, and two
-  non-SQL pure-Datalog evaluators: `native` and `seminaive`. Most of the
+  SQLite), `postgres`, and two non-SQL pure-Datalog evaluators:
+  `native` (the [playground][pg]'s default) and `seminaive`. Most of the
   tutorial works with any SQL backend; chapters that depend on a
   particular backend say so up front.
 

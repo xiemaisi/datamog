@@ -75,7 +75,7 @@ await backend.close();
 Implement `ExtensionalLoader` to add custom data sources:
 
 ```ts
-import type { ExtensionalLoader, Backend } from "datamog-engine";
+import { insertRows, type ExtensionalLoader } from "datamog-engine";
 
 const myLoader: ExtensionalLoader = {
   name: "my-loader",
@@ -83,7 +83,8 @@ const myLoader: ExtensionalLoader = {
   async load(decl, backend) {
     // `insertRows` routes to SQL INSERTs or to the interpreter's own
     // ingestion, so a loader works on every backend.
-    return insertRows(backend, decl, rows);
+    await insertRows(backend, decl, rows);
+    return { rowsLoaded: rows.length };
   },
 };
 ```
@@ -93,7 +94,7 @@ checks every row, and reports nested field/index paths on failure. Nominal proof
 are rejected before insertion, even for empty batches: external JSON cannot
 establish proof membership. Use module wiring for statically checked proof inputs.
 
-`load` returns a `LoadResult` (`{ rowsLoaded }`). Use `coerceValue` for string sources (CSV, Google Sheets) and `checkValue` for sources that already carry native types (JSONL).
+`load` returns a `LoadResult` (`{ rowsLoaded }`). Use `coerceColumnValue` for string sources (CSV, Google Sheets) and `checkColumnValue` for sources that already carry native types (JSONL), passing the column declaration so nullable primitives are handled correctly. The lower-level `coerceValue` / `checkValue` helpers accept a primitive storage type; shared insertion enforces nullability and structural contracts.
 
 ## Subpath entries
 

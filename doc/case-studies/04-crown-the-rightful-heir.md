@@ -353,11 +353,11 @@ ancestor(X, Y) :- ancestor(X, Z), ancestor(Z, Y).     # double-recursive — non
 
 All three produce the same results logically. The first two are *linear* —
 each recursive rule body mentions `ancestor` once — and compile via
-`WITH RECURSIVE` on every backend. The double-recursive form is *non-linear*
+`WITH RECURSIVE` on every SQL backend. The double-recursive form is *non-linear*
 (two `ancestor` atoms in one body); SQL's `WITH RECURSIVE` semantics can't
 express it, so every SQL backend rejects it at translation time. The pure
 in-memory evaluators `--backend native` and `--backend seminaive` accept it,
-since their delta-aware iteration computes the correct fixed point either way.
+since their naive or seminaive iteration computes the correct fixed point either way.
 
 ## Concepts introduced
 

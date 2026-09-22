@@ -170,7 +170,7 @@ Arithmetic compiles to SQL expressions directly: `P / 10` → `"P" / 10`.
 Ranges compile differently per backend:
 
 - **Postgres** — `generate_series(lo, hi)`.
-- **SQLite / sql.js** — recursive CTE counting `lo..hi` (literal bounds inlined; correlated bounds capped at 1 000 000 since SQLite has no `LATERAL`).
+- **SQLite / sql.js** — recursive CTE counting `lo..hi` (literal bounds inlined; correlated bounds generated per row in a scalar CTE and exposed by `json_each`).
 
 Cross-backend invariants — `NULLIF` around division, `CASE` around `sqrt`/`ln`/`**`/slice — keep behaviour identical across backends.
 

@@ -13,7 +13,7 @@ etc.
 | Backend      | Where it runs                        | Best for                                   | Notes                                     |
 | ------------ | ------------------------------------ | ------------------------------------------ | ----------------------------------------- |
 | `sqlite`     | native SQLite via `bun:sqlite`       | the CLI default; very small deployments    | combined recursive CTE with `__tag` for mutual recursion |
-| `sqljs`      | WASM SQLite in-process               | browser-portable; the playground default   | same CTE encoding as `sqlite`             |
+| `sqljs`      | WASM SQLite in-process               | browser-portable SQL option   | same CTE encoding as `sqlite`             |
 | `postgres`   | external Postgres (`DATABASE_URL`)   | production / shared data; native JSON      | `CREATE RECURSIVE VIEW`; `JSONB` columns give native structural equality |
 
 Differences that matter:
@@ -25,23 +25,23 @@ Differences that matter:
   the per-rule branches are folded into a `LATERAL`, and its
   padding NULLs are cast because it types the CTE from the anchor.
 - **Ranges**: Postgres uses `generate_series`. SQLite and sql.js
-  emit a recursive CTE with a literal or fixed-cap bound.
+  emit a recursive CTE; correlated bounds build the exact per-row range
+  and expose it through `json_each`, without a fixed cap.
 - **`concat`**: SQLite/sql.js use `GROUP_CONCAT(expr, ',' ORDER BY expr)`.
   Postgres uses `STRING_AGG(expr::TEXT, ',' ORDER BY expr)`. The
-  explicit `ORDER BY` makes per-group output deterministic and
-  identical across backends.
+  explicit `ORDER BY` makes per-group order deterministic; numeric
+  rendering and float precision can still differ (spec §§2.6 and 6.1).
 - **`CREATE VIEW`**: Postgres uses `CREATE OR REPLACE VIEW`;
   SQLite/sql.js use `CREATE VIEW IF NOT EXISTS`.
 - **`value` equality**: Postgres `jsonb` compares structurally
   natively. SQLite/sql.js store `value`s as TEXT and would
   compare textually, so Datamog canonicalises (sorts object keys,
   normalises numbers) on insert — making textual equality
-  coincide with structural equality. The one v1 cross-backend
-  variance is `parse_json` on SQLite/sql.js: `json()` minifies but
-  does not sort object keys, so two textually-different but
-  structurally-equal parse results don't unify under SQLite/sql.js's
-  textual equality. EDB-loaded values and Postgres `parse_json`
-  results are unaffected.
+  coincide with structural equality. `parse_json` also canonicalises
+  object keys recursively. SQLite/sql.js can still lose precision when
+  lifting floats into JSON; see spec §6.1.
+- **Math**: stock sql.js lacks `LN`, so `ln`, `exp`, and `**` fail there.
+  The other four backends support them, with possible last-bit float differences.
 
 ## Non-SQL backends
 
@@ -65,8 +65,8 @@ backend.
 If you're developing locally and don't care about the specifics:
 use `sqlite` (the CLI default — runs in-process via `bun:sqlite`,
 no external server needed). For production use against an
-existing database, use `postgres`. For browser deployments, use
-`sqljs`.
+existing database, use `postgres`. The browser playground defaults to
+`native`; choose `sqljs` when you want to inspect and execute generated SQL.
 
 ## Feature support matrix
 

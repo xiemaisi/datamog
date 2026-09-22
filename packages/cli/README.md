@@ -36,7 +36,7 @@ bun run datamog --data-dir ./data program.dl
 bun run datamog program.dl --parent /path/to/parents.csv
 bun run datamog program.dl --parent https://example.com/parents.csv
 
-# Load a predicate from a Google Sheet (requires GOOGLE_API_KEY)
+# Load a public Google Sheet through API-key access
 GOOGLE_API_KEY=... bun run datamog \
   program.dl \
   --scores https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
@@ -77,18 +77,19 @@ bun run datamog --solver "cvc5 --lang smt2" program.dl
 
 Each obligation is reported as `proved`, `FAILED` with the assignment that
 falsifies the claim, or `skipped` where the claim is outside the solver
-fragment (which is linear integer arithmetic, so a `float`, `string` or `value`
-position cannot be proved about). The exit status is non-zero unless every
+fragment (integer arithmetic, using `QF_LIA` or `QF_NIA` as needed).
+Float, string and value reasoning, as well as aggregate rules, is outside that
+fragment and is reported as skipped. The exit status is non-zero unless every
 obligation is discharged. Use `--obligations` to print the script instead of
 running it.
 
 A contract that will not discharge is not thereby false. It may be a property of
 the data rather than a theorem, or it may need a bound the program has not
-stated: a free variable ranges over an unbounded SMT integer, so a claim about one
-is provable only where the program bounds it. A *computed* term needs no such bound,
-its tuple witnessing its own definedness, since arithmetic leaving the integer domain
-has no value and derives nothing. The counterexample is usually the missing
-precondition.
+stated: free integer variables are constrained to Datamog's safe-integer domain,
+but a stronger property such as non-negativity needs a program hypothesis.
+A *computed* head term contributes its definedness as a hypothesis, since
+arithmetic leaving the integer domain has no value and derives no tuple.
+The counterexample is usually the missing precondition.
 
 ## Loading data
 
@@ -96,7 +97,7 @@ By default, the CLI looks for data files in the data directory (the directory co
 
 A program can also name its own sources with `:=` bindings, either a data file (`input predicate p(...) := "parents.csv"`) or an instance of another module (`:= from "mod.dl"(...)`, resolved relative to the program file). Precedence: an explicit `--<input>` flag beats a `:=` data binding, which beats auto-loading by convention.
 
-Five formats are supported:
+Five file formats and Google Sheets sources are supported:
 
 ### CSV
 
@@ -117,7 +118,9 @@ Place a file named `<predicate>.jsonl` in the data directory. Each line is a JSO
 {"name": "bob", "follows": "carol"}
 ```
 
-A single-`value`-column extensional consumes each line as the column's whole contents (any JSON shape goes), bypassing the field-mapping step.
+A single-`value`-column extensional consumes each line as the column's whole
+contents, bypassing the field-mapping step. The contents must satisfy the column contract;
+a top-level null requires `value?`.
 
 ### JSON (whole file)
 
@@ -143,13 +146,13 @@ bun run datamog \
   program.dl \
   --scores https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
 
-# For private sheets, set GOOGLE_API_KEY or service account credentials
-GOOGLE_API_KEY=... bun run datamog \
+# For private sheets, share the sheet with a service account
+GOOGLE_SERVICE_ACCOUNT_EMAIL=... GOOGLE_PRIVATE_KEY=... bun run datamog \
   program.dl \
   --scores https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
 ```
 
-The sheet must have a header row with column names matching the `input predicate` declaration. Public spreadsheets are fetched via CSV export and require no credentials. For private sheets, set `GOOGLE_API_KEY` or `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_PRIVATE_KEY`.
+The sheet must have a header row with column names matching the `input predicate` declaration. Public spreadsheets are fetched via CSV export and require no credentials. For private sheets, share the spreadsheet with a service account and set `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_PRIVATE_KEY`. `GOOGLE_API_KEY` supports public-sheet API access; it does not grant access to private sheets.
 
 ## Options
 

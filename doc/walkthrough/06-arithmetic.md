@@ -116,7 +116,7 @@ lost(X) :- n(X), not (10 / X = 10 / X).   # {0}
 
 One trap, and it is one keystroke wide. `defined(X)` on a bare **variable** is
 always `true`: a variable is bound to a value, and `null` is a value. If you
-meant "is this null", you want `X <> null`. Datamog warns when it sees the
+meant "is this non-null", you want `X <> null`. Datamog warns when it sees the
 first spelling on a variable, because only one of the two is ever meant there.
 
 Overflow is worth a second look, because it is the one that surprises:
@@ -283,16 +283,15 @@ yellow squiggle.
 > SQLite/sql.js, which have no `generate_series`, Datamog
 > emits a recursive CTE that counts from `lo` to `hi`; if the
 > bounds are literals they're inlined, and if they're correlated
-> to the outer query Datamog uses a fixed cap of 1 000 000 (since
-> SQLite also has no `LATERAL`). The spec's §6.7 has the
+> to the outer query a scalar CTE builds the per-row range as a JSON
+> array, which `json_each` exposes as rows. There is no fixed cap. The spec's §6.7 has the
 > gritty detail.
 >
 > The cross-backend normalisations (`NULLIF` around division,
 > `CASE` around `sqrt`/`ln`/`**`, explicit `CASE` for slice
-> bounds) are what make these operators behave *identically*
-> across every backend. Runtime semantics parity is a design goal
-> — it's the reason you can develop locally on sqljs and deploy on
-> Postgres without meaning changing underfoot.
+> bounds) implement the shared runtime semantics. Backend limits still
+> apply: stock sql.js lacks `LN`, so `ln`, `exp`, and `**` fail there;
+> floating-point results can also differ. See Appendix C and spec §6.1.
 
 > **Imperative lens.** Python list comprehensions are the closest
 > match:
