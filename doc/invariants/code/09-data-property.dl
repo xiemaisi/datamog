@@ -1,0 +1,4 @@
+input predicate sample(n: integer).
+
+nonnegative(X, _: X >= 0) :- sample(X).
+?- nonnegative(X).

@@ -1,0 +1,3 @@
+interval(9 as S, 11 as E, _: S < E).
+interval(12, 10).
+?- interval(S, E).

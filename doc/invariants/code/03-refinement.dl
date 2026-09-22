@@ -1,0 +1,4 @@
+input predicate booking(id: string, start: integer?, finish: integer?).
+
+interval(Id, S, E, _: S < E) :- booking(Id, S, E).
+?- interval(Id, S, E).

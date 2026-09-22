@@ -2633,9 +2633,12 @@ per refinement, where `unsat` discharges the obligation. The logic is `QF_LIA`,
 widening to `QF_NIA` if the program multiplies or divides by a variable. No
 solver ships with Datamog; the script is the deliverable, so that any compatible
 SMT-LIB solver can consume it. The encoder supports an integer-arithmetic
-fragment, not all well-typed expressions: float, string and value reasoning,
-range atoms, and aggregate rules can cause an obligation to be skipped. The encoding writes out what SMT-LIB spells differently: division
-and modulo truncate toward zero (§5.3) rather than being Euclidean, `null` is
+fragment, not all well-typed expressions: unsupported goals involving float,
+string or value reasoning, and aggregate rules, cause obligations to be skipped.
+Body hypotheses outside the fragment are omitted; range bounds currently supply
+no hypotheses. This can leave a valid claim unproved. The encoding writes out
+what SMT-LIB spells differently: division and modulo truncate toward zero (§5.3)
+rather than being Euclidean, `null` is
 modelled as a value paired with a null-condition so the null-aware comparisons of
 §5.4 hold, and partiality is modelled separately from that, as a definedness
 condition.

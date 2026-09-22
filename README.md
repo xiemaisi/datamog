@@ -194,6 +194,8 @@ A sibling Python package, [`datamog-magic`](python/datamog-magic), provides a
   semantics, the type system, and SQL translation.
 - [Language walkthrough](doc/walkthrough/README.md): the feature-by-feature
   tutorial (chapters 00-17 plus appendices), with runnable code and exercises.
+- [Checking and proving invariants](doc/invariants/README.md): a tutorial comparing
+  types, guards, constraints, refinements, solver verification, and proof evidence.
 - [Case studies](doc/case-studies/README.md): a puzzle-driven companion that
   builds end-to-end solutions to bigger problems.
 - [Comparison with other Datalog systems](doc/comparison.md): how Datamog

@@ -1,0 +1,4 @@
+input predicate booking(id: string, start: integer?, finish: integer?).
+
+error predicate invalid_booking(Id, S, E) :- booking(Id, S, E), not (S < E).
+?- booking(Id, S, E).

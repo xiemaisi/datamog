@@ -1,0 +1,8 @@
+type Request = {room: string, start: integer, finish: integer,
+                organizer: string?, note?: string}.
+input predicate request(payload: Request).
+
+summary(upper(R["room"]): string, R["start"] + 1: integer) :- request(R).
+notes(R["room"], R["note"]) :- request(R).
+?- summary(Room, Next).
+output predicate optional_notes(Room, Note) :- notes(Room, Note).

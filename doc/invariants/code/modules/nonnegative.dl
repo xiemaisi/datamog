@@ -1,0 +1,3 @@
+input predicate point(n: integer).
+error predicate negative(X) :- point(X), X < 0.
+output predicate accepted(X: integer) :- point(X).

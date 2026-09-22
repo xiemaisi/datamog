@@ -1,0 +1,2 @@
+bounded(N, _: N >= 0) :- N in [0 .. 3].
+?- bounded(N).

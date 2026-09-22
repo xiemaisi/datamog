@@ -1,0 +1,6 @@
+amount("ok", 8, 2).
+amount("zero", 8, 0).
+
+ratio(Id, N / D) :- amount(Id, N, D).
+output predicate lost(Id) :- amount(Id, N, D), not defined(N / D).
+?- ratio(Id, Q).

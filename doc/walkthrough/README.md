@@ -99,8 +99,11 @@ the browser.
 
 ### Companion tutorials
 
-Two standalone tutorials live alongside this walkthrough:
+Three standalone tutorials live alongside this walkthrough:
 
+- [Checking and proving invariants](../invariants/README.md) — compare types,
+  runtime selection, integrity constraints, refinements, solver verification,
+  proof captures, and module contracts through runnable examples.
 - [Case studies](../case-studies/README.md) — a puzzle-driven companion
   track adapted from the CodeQL, DES, and Soufflé tutorials (detective,
   heir, river crossing, shortest path, points-to analysis, and more).

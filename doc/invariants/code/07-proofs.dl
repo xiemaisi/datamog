@@ -1,0 +1,8 @@
+booking("ok", 9, 11).
+booking("reversed", 12, 10).
+
+valid(Id, S, E) :: Checked(S: integer, E: integer) :-
+    booking(Id, S, E), S < E.
+
+evidence(Id: string, P: valid) :- P : valid(Id, _, _).
+?- evidence(Id, P).

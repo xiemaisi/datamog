@@ -1,0 +1,4 @@
+input predicate sample(n: integer).
+
+total(sum(N) as T, _: T >= 0) :- sample(N).
+?- total(T).

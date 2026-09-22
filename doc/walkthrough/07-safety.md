@@ -4,7 +4,7 @@ Every rule we've written so far has followed an unspoken discipline.
 This chapter names it, and explains what the engine does when you
 break it.
 
-There are two static checks that every Datamog program passes
+There are two important static checks that every Datamog program passes
 through before it runs: **safety** (variables must be bound by
 something) and **type inference** (columns of each predicate must
 have a consistent type). Both run before a single SQL statement is
@@ -70,14 +70,15 @@ infer `X`.
 Without safety, the meaning of a rule could depend on "the set of
 all strings" or "the set of all integers", which is infinite — and
 so the answer would be infinite too. SQL can't represent that; a
-naive evaluator can't enumerate it. The safety rule is exactly the
-check that guarantees the answer is finite *and* computable from the
-data you've actually got.
+naive evaluator can't enumerate it. The safety rule ensures each rule
+application obtains its bindings from available sources. Recursion can still keep constructing new values, so safety
+alone is not a termination proof.
 
-Mathematically, safety is equivalent to **domain independence**: the
-answer doesn't change if you extend the domain of discourse beyond
-what appears in the input. Safe rules are domain-independent;
-unsafe rules aren't. (In Chapter 8 we'll see that negated body
+For the ordinary relational fragment, safety provides a syntactic way to
+establish **domain independence**: answers do not depend on unrelated values
+in the surrounding universe. Datamog rejects unsafe rules instead of trying
+to prove domain independence separately for each program. (In Chapter 8 we'll
+see that negated body
 atoms have the same flavour of requirement: you can't safely say
 "not `p(X)`" unless `X` is already bound.)
 
@@ -140,12 +141,12 @@ carries as JSON:
 input predicate a(x: integer).
 input predicate b(x: string).
 
-c(X) :- a(X).    % c's column is value: integers from a and
-c(X) :- b(X).    % strings from b, side by side as JSON
+c(X) :- a(X).    # c's column is value: integers from a and
+c(X) :- b(X).    # strings from b, side by side as JSON
 ```
 
-Stacking rules never fails: across rules a column always has a least
-upper bound (`value` at worst).
+Joining column types across rules always has a result (`value` at worst).
+The rules must still satisfy arity, annotation and aggregate checks.
 
 ### When types really do conflict
 
@@ -158,10 +159,10 @@ both a string and an integer:
 input predicate a(x: integer).
 input predicate b(x: string).
 
-both(X) :- a(X), b(X).    % X must be a's integer AND b's string
+both(X) :- a(X), b(X).    # X must be a's integer AND b's string
 ```
 
-Datamog rejects this at translation time, before any SQL is emitted:
+Datamog rejects this during type analysis, before any SQL is emitted:
 
 ```
 Variable 'X' has conflicting types 'integer' and 'string'
@@ -247,6 +248,11 @@ null-aware: `null = null` is `true`. Chapter 6 introduced the value it
 compares; the orderings, which are strict at it, are there too.
 
 ## Claiming more than a type
+
+For a comparison of all the checking mechanisms, with runnable examples, see
+[Checking and proving invariants](../invariants/README.md). It contrasts the
+checks below with runtime filtering, integrity constraints, proof captures, and
+module contracts.
 
 A type says what shape a column has. Sometimes you know something
 sharper, and there is a place to write it: a `_` head position can
@@ -344,7 +350,7 @@ and the fix is a refinement too. See
 whose loop invariant discharges in full.
 
 You could write the same check by hand as
-`!- slot(_, S, E), S >= E.`, and for a one-off that is fine. What the
+`!- slot(_, S, E), not (S < E).`, and for a one-off that is fine. What the
 annotation buys is that the claim lives next to the definition it is
 about, so it is read and maintained together with the rule rather than
 drifting away from it. See
@@ -374,7 +380,7 @@ You never get a runtime-SQL "column c.col1 is of type string, expected
 integer" — because the translator wouldn't have emitted that SQL in
 the first place.
 
-> **Logic lens.** Safety ↔ **domain independence**: the value of
+> **Logic lens.** Safety supports **domain independence**: the value of
 > a safe formula `φ(x̄)` on a structure `M` depends only on which
 > tuples populate the *relations* in `M`, not on which other
 > objects happen to sit in `M`'s universe. Unsafe formulas can
@@ -390,9 +396,9 @@ the first place.
 > Refinement propositions remain separate obligations and lower to constraint
 > checks. See chapters 14–16 for structural and proof contracts.
 
-> **SQL lens.** Safety is exactly what guarantees the generated
-> SQL is *finite*. Every body atom becomes a `FROM` alias drawn
-> from a finite source (a table or a generated series); an unsafe
+> **SQL lens.** Safety grounds each rule application in available sources.
+> Ordinary positive body atoms become `FROM` aliases drawn
+> from finite relations; an unsafe
 > variable would be a column with no `FROM` alias at all, which
 > SQL can't express. Types become SQL column types (`TEXT`,
 > `INTEGER`, `REAL`, `BOOLEAN`) in the generated `CREATE TABLE`
@@ -408,9 +414,9 @@ the first place.
 - A rule is **safe** when every head variable (and every variable
   used in a comparison or arithmetic) is bound by a positive body
   atom, a range, or an equality with an already-safe side.
-- Safety is equivalent to domain-independence: the answer doesn't
-  depend on what values exist "out there in the universe",
-  only on what's in the input.
+- Safety grounds rule applications in available sources. It supports
+  domain independence in the relational fragment, but does not prove that
+  recursion which constructs new values will terminate.
 - Datamog has six column types (`string`, `integer`, `float`,
   `boolean`, `value`, `null`) and two widenings (`integer → float`, and
   primitive → `value` via auto-lift); `null` joins with anything and
@@ -427,10 +433,9 @@ the first place.
   calls positively, its own included, which is the induction
   hypothesis. What will not discharge is usually missing a
   precondition, and the counterexample names it.
-- Both checks run *before* any SQL is emitted. Programs that
-  pass them are guaranteed to have finite, well-typed SQL behind
-  them; programs that don't are rejected with a line-numbered
-  error.
+- Safety and type checks run before evaluation. Passing them does not
+  guarantee termination, application invariants, or support by every SQL
+  backend; those are separate questions.
 
 ## Exercises
 

@@ -1,0 +1,5 @@
+input predicate raw(payload: value?).
+
+integers(N) :- raw(X), N = as_integer(X).
+output predicate unusable(X) :- raw(X), not defined(as_integer(X)).
+?- integers(N).

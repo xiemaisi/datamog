@@ -1,0 +1,5 @@
+candidate(2).
+candidate(4).
+
+input predicate checked(n: integer) := accepted from "nonnegative.dl"(point = candidate).
+?- checked(N).

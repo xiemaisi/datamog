@@ -1,0 +1,4 @@
+input predicate sample(n: integer).
+
+successor(X, X + 1 as Y, _: Y > X) :- sample(X).
+?- successor(X, Y).

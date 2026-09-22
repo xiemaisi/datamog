@@ -1,0 +1,4 @@
+input predicate booking(id: string, start: integer?, finish: integer?).
+
+valid(Id, S, E) :- booking(Id, S, E), S < E.
+?- valid(Id, S, E).
