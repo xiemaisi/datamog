@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { parse } from "datamog-parser";
+import { parse, parseRaw, postProcess } from "datamog-parser";
 import { analyze } from "../src/analyzer.ts";
+import { elaborate } from "../src/elaborate.ts";
 import { generateObligations, obligationScript } from "../src/obligations.ts";
 import { inferTypes } from "../src/types.ts";
 
@@ -265,4 +266,93 @@ describe("what it declines to emit", () => {
       `),
     ).toEqual([]);
   });
+});
+
+describe("obligation provenance and dependencies", () => {
+  test("retains omitted range and string hypotheses with source locations", () => {
+    const source = 'q(X, S, _: X > 0) :- X in [1 .. 10], S = "x".';
+    const [goal] = obligations(source);
+    const omitted = goal!.hypotheses.filter((h) => h.status === "omitted");
+    expect(omitted.map((h) => h.kind)).toContain("range");
+    const equality = omitted.find((h) => h.kind === "equality")!;
+    expect(source.slice(equality.offset, equality.end)).toBe('S = "x"');
+    expect(script(source)).toContain("omitted range");
+    expect(script(source)).toContain("dropping a premise strengthens the obligation");
+  });
+
+  test("records all sibling refinements as dependencies, without duplicate calls", () => {
+    const goals = obligations(`
+      p(1 as X, _: X > 0, _: X < 10).
+      p(2 as X, _: X > 0).
+      q(X, _: X > 0) :- p(X), p(X).
+    `);
+    expect(goals[3]!.dependencies).toEqual(goals.slice(0, 3).map((o) => o.id));
+    expect(
+      goals[3]!.hypotheses.filter((h) => h.status === "included" && h.kind === "relation-contract"),
+    ).toHaveLength(2);
+  });
+
+  test("omitted unsupported contracts and vacuous contracts create no dependencies", () => {
+    for (const producer of [
+      'p(1 as X, "a" as S, _: S = "a").',
+      'p(1 as X, "a", _: X > 0). p(2, "b").',
+    ]) {
+      const goals = obligations(`${producer} q(X, _: X > 0) :- p(X, S).`);
+      const consumer = goals.at(-1)!;
+      expect(consumer.dependencies).toEqual([]);
+      expect(
+        consumer.hypotheses.some((h) => h.kind === "relation-contract" && h.status === "omitted"),
+      ).toBe(true);
+    }
+  });
+
+  test("tracks included guards and computed head definedness", () => {
+    const [goal] = obligations("p(1). q(X + 1 as Y, _: Y > 0) :- p(X), X > 0.");
+    expect(goal!.hypotheses.filter((h) => h.status === "included").map((h) => h.kind)).toEqual([
+      "filter",
+      "head-definedness",
+      "head-binding",
+    ]);
+  });
+
+  test("parity components are unsupported, including their non-maximal side", () => {
+    const goals = obligations(`
+      input predicate n(x: integer).
+      p^(X, _: X > 0) :- n(X), not q(X).
+      q(X, _: X > 0) :- n(X), not p^(X).
+    `);
+    expect(goals).toHaveLength(2);
+    expect(goals.every((o) => o.logic === null && o.script.includes("parity-stratified"))).toBe(
+      true,
+    );
+  });
+});
+
+test("module instances keep contract dependency identities separate", () => {
+  const entry = parseRaw(`
+    left(1). right(2).
+    input predicate a(x: integer) := out from "m.dl"(base = left).
+    input predicate b(x: integer) := out from "m.dl"(base = right).
+  `);
+  const { program } = elaborate(
+    entry,
+    () => ({
+      file: "m.dl",
+      program: parseRaw(`
+      input predicate base(x: integer).
+      seed(X, _: X > 0) :- base(X), X > 0.
+      output predicate out(X, _: X > 0) :- seed(X).
+    `),
+    }),
+    "main.dl",
+  );
+  postProcess(program);
+  const goals = generateObligations(inferTypes(analyze(program)));
+  const consumers = goals.filter((o) => o.dependencies.length > 0);
+  expect(consumers).toHaveLength(2);
+  expect(consumers[0]!.dependencies).not.toEqual(consumers[1]!.dependencies);
+  expect(new Set(goals.map((o) => o.id)).size).toBe(goals.length);
+  for (const goal of consumers) {
+    expect(goal.dependencies.every((id) => goals.some((o) => o.id === id))).toBe(true);
+  }
 });

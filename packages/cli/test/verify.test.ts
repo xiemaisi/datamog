@@ -6,7 +6,7 @@ import { create as createNative } from "datamog-backend-native";
 import { analyze, generateObligations, inferTypes } from "datamog-core";
 import { ConstraintViolationError, DatamogExecutor } from "datamog-engine";
 import { parse } from "datamog-parser";
-import { DEFAULT_SOLVER, verifyObligations } from "../src/verify.ts";
+import { DEFAULT_SOLVER, resolveDependencies, verifyObligations } from "../src/verify.ts";
 
 const solver = DEFAULT_SOLVER.split(/\s+/)[0]!;
 const withSolver = Bun.which(solver) ? describe : describe.skip;
@@ -45,7 +45,7 @@ withSolver(`with ${solver}`, () => {
     // claim is about the data, not a theorem, so it is not discharged.
     expect(verdicts.map((v) => [v.obligation.predicate, v.status])).toEqual([
       ["slot", "counterexample"],
-      ["merged", "discharged"],
+      ["merged", "conditional"],
     ]);
   });
 
@@ -266,5 +266,64 @@ describe("solver process boundaries", () => {
       signal: AbortSignal.abort(),
     });
     expect(verdict!.detail).toBe("cancelled");
+  });
+});
+
+describe("contract dependency closure", () => {
+  const recursive = generateObligations(
+    inferTypes(
+      analyze(
+        parse(`
+    p(0 as X, _: X >= 0).
+    p(X, _: X >= 0) :- q(X).
+    q(X, _: X >= 0) :- p(X).
+    r(X, _: X >= 0) :- q(X).
+  `),
+      ),
+    ),
+  );
+  const localResults = () =>
+    recursive.map((obligation) => ({
+      obligation,
+      status: "discharged" as const,
+    }));
+
+  test("complete mutual recursion discharges together", () => {
+    expect(resolveDependencies(localResults()).map((v) => v.status)).toEqual([
+      "discharged",
+      "discharged",
+      "discharged",
+      "discharged",
+    ]);
+  });
+
+  test("a partial cycle cannot discharge without its base rule", () => {
+    expect(resolveDependencies(localResults().slice(1)).map((v) => v.status)).toEqual([
+      "conditional",
+      "conditional",
+      "conditional",
+    ]);
+  });
+
+  test.each(["counterexample", "skipped", "unknown", "timeout", "error"] as const)(
+    "%s propagates through cycles and their consumers",
+    (status) => {
+      const results = localResults();
+      const resolved = resolveDependencies([{ ...results[0]!, status }, ...results.slice(1)]);
+      expect(resolved.map((v) => v.status)).toEqual([
+        status,
+        "conditional",
+        "conditional",
+        "conditional",
+      ]);
+      expect(resolveDependencies(resolved)).toEqual(resolved);
+    },
+  );
+
+  test("duplicate identities cannot fill a missing obligation", () => {
+    const results = localResults();
+    expect(
+      resolveDependencies([...results, results[0]!]).every((v) => v.status === "conditional"),
+    ).toBe(true);
   });
 });

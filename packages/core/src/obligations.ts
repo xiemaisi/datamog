@@ -135,6 +135,8 @@ export interface ObligationContext {
    * to widen to match what the program actually needs.
    */
   nonlinear: boolean;
+  provenance: HypothesisProvenance[];
+  dependencies: Set<string>;
 }
 
 /**
@@ -352,6 +354,11 @@ function contractHypothesis(
     );
     return conjuncts.length === 1 ? conjuncts[0]! : `(and ${conjuncts.join(" ")})`;
   });
+  rules.forEach((rule, index) => {
+    rule.head.refinements!.forEach((_, refinement) => {
+      ctx.dependencies.add(obligationId(atom.predicate, index, refinement));
+    });
+  });
   return disjuncts.length === 1 ? disjuncts[0]! : `(or ${disjuncts.join(" ")})`;
 }
 
@@ -368,19 +375,50 @@ function hypotheses(
   // Hypotheses are best effort: one outside the fragment is dropped rather
   // than failing the obligation, since omitting a hypothesis only weakens the
   // goal. A goal outside the fragment is a different matter and is reported.
-  const attempt = (build: () => string | undefined) => {
+  const record = (kind: HypothesisProvenance["kind"], node: SourceNode) => ({
+    kind,
+    ...sourceOf(node),
+  });
+  const omit = (kind: HypothesisProvenance["kind"], node: SourceNode, reason: string) => {
+    ctx.provenance.push({ ...record(kind, node), status: "omitted", reason });
+  };
+  const attempt = (
+    kind: HypothesisProvenance["kind"],
+    node: SourceNode,
+    build: () => string | undefined,
+  ) => {
+    const declared = new Map(ctx.declared);
+    const nonlinear = ctx.nonlinear;
     try {
       const built = build();
-      if (built !== undefined) out.add(built);
+      if (built !== undefined) {
+        out.add(built);
+        ctx.provenance.push({ ...record(kind, node), status: "included", formula: built });
+      } else if (kind === "relation-contract") {
+        omit(
+          kind,
+          node,
+          "no nonvacuous published refinement contract; relation membership is abstracted",
+        );
+      }
     } catch (e) {
       if (!(e instanceof UnsupportedTerm)) throw e;
+      ctx.declared = declared;
+      ctx.nonlinear = nonlinear;
+      omit(kind, node, e.message);
     }
   };
   for (const element of rule.body) {
     if (element.$type === "Literal") {
       // A negated atom says the tuple is absent, which promises nothing about
       // the values, so only a positive one contributes.
-      if (!element.negated) attempt(() => contractHypothesis(element, ctx.types, ctx, vars));
+      if (!element.negated) {
+        attempt("relation-contract", element, () =>
+          contractHypothesis(element, ctx.types, ctx, vars),
+        );
+      } else {
+        omit("relation-contract", element, "negative relation membership is not encoded");
+      }
     } else if (element.$type === "Filter") {
       // A conjunct holds only where it has a value, so its definedness joins it.
       // A negated one is negation as failure over that whole reading: `not e`
@@ -388,14 +426,14 @@ function hypotheses(
       // it has no value. So the negation goes outside the definedness. Asserting
       // `(not value)` instead would assert something the program never promised,
       // and it is why the definedness of a connective has to be exact.
-      attempt(() => {
+      attempt("filter", element, () => {
         const t = toSmt(element.expr as HeadTerm, ctx, vars);
         const holds = and(t.def, t.v);
         return element.negated ? `(not ${holds})` : holds;
       });
     } else if (element.$type === "Equality") {
       // The grammar calls the right-hand side `expr`.
-      attempt(() => {
+      attempt("equality", element, () => {
         const eq = binary(
           "=",
           toSmt(element.left as HeadTerm, ctx, vars),
@@ -404,6 +442,8 @@ function hypotheses(
         );
         return and(eq.def, eq.v);
       });
+    } else {
+      omit("range", element, "range bounds are not encoded");
     }
     // A range atom bounds its variable and could contribute those bounds; it
     // does not yet. Omitting a hypothesis only weakens a goal.
@@ -416,7 +456,7 @@ function hypotheses(
   // side-condition on the goal, because the goal is about the tuple.
   for (const arg of rule.head.args) {
     if (containsAggregate(arg)) continue;
-    attempt(() => {
+    attempt("head-definedness", arg, () => {
       const def = toSmt(arg as HeadTerm, ctx, vars).def;
       return def === DEFINED ? undefined : def;
     });
@@ -431,11 +471,16 @@ function hypotheses(
     if (arg.$type === "Variable" && arg.name === name) return; // `X = X`
     // Only an `integer` name can be declared faithfully in QF_LIA; for
     // anything else the goal mentioning it is already being dropped.
-    if (vars.get(name) !== "integer") return;
+    if (vars.get(name) !== "integer") {
+      omit("head-binding", arg, "non-integer head binding is not encoded");
+      return;
+    }
     ctx.declared.set(name, "integer");
     // Just the equality: the expression's definedness is asserted by the
     // head-argument pass above, which sees this same argument.
     attempt(
+      "head-binding",
+      arg,
       () =>
         binary(
           "=",
@@ -448,8 +493,34 @@ function hypotheses(
   return [...out];
 }
 
+interface SourceNode {
+  $cstNode?: { text: string; offset: number; end: number };
+}
+
+function sourceOf(node: SourceNode) {
+  const cst = node.$cstNode;
+  return { text: cst?.text ?? "(generated)", offset: cst?.offset, end: cst?.end };
+}
+
+export type HypothesisProvenance = {
+  kind: "relation-contract" | "filter" | "equality" | "range" | "head-definedness" | "head-binding";
+  text: string;
+  offset?: number;
+  end?: number;
+} & ({ status: "included"; formula: string } | { status: "omitted"; reason: string });
+
+/** An identity within this generated batch, never a persistent proof/cache key. */
+function obligationId(predicate: string, rule: number, refinement: number): string {
+  return JSON.stringify([predicate, rule + 1, refinement + 1]);
+}
+
 /** One obligation: a named goal with its hypotheses. */
 export interface Obligation {
+  /** Batch-local identity; includes the elaborated predicate/module identity. */
+  id: string;
+  /** All defining refinements of each successfully assumed contract. */
+  dependencies: string[];
+  hypotheses: HypothesisProvenance[];
   predicate: string;
   /** 1-based, matching the order the rules are written in. */
   rule: number;
@@ -471,6 +542,11 @@ export interface Obligation {
  */
 export function generateObligations(typed: TypedProgram): Obligation[] {
   const out: Obligation[] = [];
+  const parityPredicates = new Set(
+    typed.sortedStrata.flatMap((stratum) =>
+      stratum.some((p) => typed.maximalPredicates.has(p)) ? stratum : [],
+    ),
+  );
   for (const [predicate, rules] of typed.rules) {
     if (!rules.every((r) => (r.head.refinements?.length ?? 0) > 0)) continue;
     for (const [index, rule] of rules.entries()) {
@@ -484,16 +560,21 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
         const type = inferTermType(arg, vars, typed.columnTypes);
         if (type) vars.set(name, type);
       });
-      for (const refinement of rule.head.refinements!) {
+      for (const [refinementIndex, refinement] of rule.head.refinements!.entries()) {
         const ctx: ObligationContext = {
           types: typed,
           declared: new Map(),
           nonNull,
           nonlinear: false,
+          provenance: [],
+          dependencies: new Set(),
         };
         let block: string;
         let emitted = true;
         try {
+          if (parityPredicates.has(predicate)) {
+            throw new UnsupportedTerm("parity-stratified recursion");
+          }
           if (rule.head.args.some(containsAggregate)) {
             throw new UnsupportedTerm("an aggregate in the head");
           }
@@ -537,6 +618,9 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
           block = `; ${predicate} rule ${index + 1}: ${refinement.text}\n; not emitted, ${e.message}`;
         }
         out.push({
+          id: obligationId(predicate, index, refinementIndex),
+          dependencies: [...ctx.dependencies],
+          hypotheses: ctx.provenance,
           predicate,
           rule: index + 1,
           claim: refinement.text,
@@ -562,10 +646,21 @@ export function obligationScript(typed: TypedProgram & AnalyzedProgram): string 
   const logic = obligations.some((o) => o.logic === "QF_NIA") ? "QF_NIA" : "QF_LIA";
   return [
     "; Datamog refinement obligations.",
-    "; Each block is unsat exactly when its contract holds for that rule.",
+    "; An unsat block discharges the abstract local goal, conditional on its contract dependencies.",
     `(set-logic ${logic})`,
     "",
-    ...obligations.map((o) => o.script),
+    ...obligations.map((o) =>
+      [
+        ...o.dependencies.map((id) => `; assumes obligation ${id}`),
+        ...o.hypotheses
+          .filter((h) => h.status === "omitted")
+          .map(
+            (h) =>
+              `; omitted ${h.kind}: ${h.text.replace(/\s+/g, " ")} — ${h.status === "omitted" ? h.reason : ""}; dropping a premise strengthens the obligation`,
+          ),
+        o.script,
+      ].join("\n"),
+    ),
     "",
   ].join("\n");
 }

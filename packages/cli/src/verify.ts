@@ -13,7 +13,16 @@ export const DEFAULT_SOLVER = "z3 -in";
 export interface Verdict {
   obligation: Obligation;
   /** `discharged` is unsat: no tuple satisfies the body and breaks the claim. */
-  status: "discharged" | "counterexample" | "unknown" | "skipped" | "error" | "timeout";
+  status:
+    | "discharged"
+    | "counterexample"
+    | "unknown"
+    | "skipped"
+    | "error"
+    | "timeout"
+    | "conditional";
+  /** A solver answer is not an independently checked certificate. */
+  assurance?: "solver-trusted";
   /** The solver's own words, on anything other than a clean discharge. */
   detail?: string;
 }
@@ -140,7 +149,8 @@ export async function verifyObligations(
       continue;
     }
     const answer = result.stdout.trim();
-    if (answer === "unsat") verdicts.push({ obligation, status: "discharged" });
+    if (answer === "unsat")
+      verdicts.push({ obligation, status: "discharged", assurance: "solver-trusted" });
     else if (answer === "sat") {
       // Re-run only satisfiable goals with a model request. Never accept an
       // error after unsat as an expected side effect of asking for a model.
@@ -168,11 +178,53 @@ export async function verifyObligations(
         detail: `Unexpected solver response: ${answer}`,
       });
   }
-  return verdicts;
+  return resolveDependencies(verdicts);
+}
+
+/**
+ * Remove locally discharged results whose dependency closure is incomplete.
+ * A complete positive recursive component survives together: every defining
+ * rule is checked, so its contracts can be used by induction on derivations.
+ * Missing or failed members invalidate their consumers to a fixed point.
+ * Batch-local IDs are meaningful only for results from the same generation.
+ */
+export function resolveDependencies(verdicts: Verdict[]): Verdict[] {
+  const counts = new Map<string, number>();
+  for (const { obligation } of verdicts) {
+    counts.set(obligation.id, (counts.get(obligation.id) ?? 0) + 1);
+  }
+  const complete = new Set(
+    verdicts
+      .filter((v) => v.status === "discharged" && counts.get(v.obligation.id) === 1)
+      .map((v) => v.obligation.id),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const { obligation } of verdicts) {
+      if (complete.has(obligation.id) && obligation.dependencies.some((id) => !complete.has(id))) {
+        complete.delete(obligation.id);
+        changed = true;
+      }
+    }
+  }
+  return verdicts.map((v) => {
+    if (v.status !== "discharged" || complete.has(v.obligation.id)) return v;
+    const missing = v.obligation.dependencies.filter((id) => !complete.has(id));
+    return {
+      ...v,
+      status: "conditional",
+      detail:
+        counts.get(v.obligation.id) !== 1
+          ? "Duplicate obligation identity in result batch"
+          : `Unresolved contract obligations: ${missing.join(", ")}`,
+    };
+  });
 }
 
 /** Report the verdicts, returning true if every obligation was discharged. */
-export function reportVerdicts(verdicts: Verdict[]): boolean {
+export function reportVerdicts(results: Verdict[]): boolean {
+  const verdicts = resolveDependencies(results);
   if (verdicts.length === 0) {
     console.log("No refinement contracts to discharge.");
     return true;
@@ -184,11 +236,19 @@ export function reportVerdicts(verdicts: Verdict[]): boolean {
     skipped: "skipped ",
     error: "ERROR   ",
     timeout: "timeout ",
+    conditional: "conditional",
   };
   for (const { obligation, status, detail } of verdicts) {
     const { predicate, rule, claim } = obligation;
     console.log(`${mark[status]} ${predicate} rule ${rule}: ${claim}`);
     if (detail) console.log(`         ${detail}`);
+    for (const hypothesis of obligation.hypotheses) {
+      if (hypothesis.status === "omitted") {
+        console.log(
+          `         omitted ${hypothesis.kind}: ${hypothesis.text.replace(/\s+/g, " ")} (${hypothesis.reason})`,
+        );
+      }
+    }
   }
   const proved = verdicts.filter((v) => v.status === "discharged").length;
   console.log(`\n${proved}/${verdicts.length} discharged.`);

@@ -1,9 +1,10 @@
 # Richer verification obligations and Lean proofs
 
-Status: **partially implemented; stage 1 process handling started**. This extends the future-work discussion in
+Status: **partially implemented; stage 1 provenance, dependencies, and process handling started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The solver process hardening below
-is implemented; the richer obligation and Lean architecture remains proposed.
+and dependency reporting are implemented; the typed logical IR and Lean
+architecture remain proposed.
 External-tool references were consulted on 2026-09-24; implementation must pin
 and test specific versions rather than rely on the moving documentation links.
 
@@ -40,8 +41,9 @@ The current pipeline is visible in:
 
 The encoder supports integer arithmetic, using `QF_LIA` or `QF_NIA`. It models
 safe-integer bounds, truncating division, nullness, and expression definedness.
-Unsupported goals and aggregate rules are skipped. Unsupported body hypotheses
-are omitted, and range bounds currently contribute no hypotheses. Positive calls
+Unsupported goals, aggregate rules, and parity-recursive components are skipped.
+Unsupported body hypotheses are omitted with source text, offsets where available,
+and reasons, and range bounds currently contribute no hypotheses. Positive calls
 supply their published contracts, rather than their complete relation
 definitions; negated relation calls supply no contract hypothesis.
 
@@ -65,8 +67,23 @@ in a separate invocation only after `sat`; failure to retrieve one does not
 erase the original satisfiability result. The internal API accepts structured
 arguments, configurable limits, and an abort signal, and kills/reaps the solver
 on timeout, cancellation, or output overflow. Process-tree containment, memory
-limits, CLI limit configuration, and dependency-aware reporting remain open.
+limits and CLI limit configuration remain open.
 This is solver-trusted verification, not certificate checking.
+
+Generated obligations now record included and omitted hypothesis provenance and
+all defining refinement obligations for successfully assumed contracts. Omission
+notes appear in both `--obligations` and `--verify`. Local `unsat` results remain
+`conditional` if their dependency closure has a missing or unresolved member.
+Complete positive recursive groups discharge jointly by the existing induction
+argument; a partial cycle cannot discharge itself. Parity-recursive components
+are skipped because they need a different semantic argument. Successful answers
+carry separate `solver-trusted` assurance metadata.
+
+These dependency identities are batch-local and preserve elaborated module
+predicate identities. They are not persistent proof identities or cache keys.
+A solver-independent typed logical IR, complete source/module manifests, content
+digests, and proof caching remain unimplemented. The current provenance still
+stores included formulas as SMT text; it does not enable Lean export yet.
 
 ## Which harder claims should be expressible?
 
