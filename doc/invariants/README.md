@@ -219,7 +219,10 @@ those with a matching shape. Structural inference is also bounded: an annotation
 can fail because inference cannot prove it, not only because an actual bad value
 has been found.
 
-**Contrast with CodeQL.** CodeQL's QL has *prescriptive* type declarations:
+<details>
+<summary>Contrast with CodeQL</summary>
+
+CodeQL's QL has *prescriptive* type declarations:
 a variable's declared type restricts the values it ranges over. A QL class
 represents a set of values selected by its characteristic predicate, so choosing
 a narrower class can change a query's results. See the CodeQL references on
@@ -251,6 +254,8 @@ a subset, write a body condition such as `N % 2 = 0`, or use the extraction
 operations in the next section. To report violations, use an integrity
 constraint. These are different intentions: filtering for an invariant does not
 verify that the original data satisfied it.
+
+</details>
 
 Sibling rules can widen an unannotated column to heterogeneous `value`.
 `p(1). p("one").` is legal. To insist on integers, annotate each rule's
