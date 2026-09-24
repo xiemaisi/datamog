@@ -219,6 +219,39 @@ those with a matching shape. Structural inference is also bounded: an annotation
 can fail because inference cannot prove it, not only because an actual bad value
 has been found.
 
+**Contrast with CodeQL.** CodeQL's QL has *prescriptive* type declarations:
+a variable's declared type restricts the values it ranges over. A QL class
+represents a set of values selected by its characteristic predicate, so choosing
+a narrower class can change a query's results. See the CodeQL references on
+[variables](https://codeql.github.com/docs/ql-language-reference/variables/#declaring-a-variable)
+and [classes](https://codeql.github.com/docs/ql-language-reference/types/#classes).
+
+For example, in QL:
+
+```ql
+class EvenDigit extends int {
+  EvenDigit() { this in [0 .. 9] and this % 2 = 0 }
+}
+
+from EvenDigit n
+where n in [0 .. 5]
+select n
+```
+
+This selects `0`, `2`, and `4`. Changing `EvenDigit n` to `int n` also admits
+`1`, `3`, and `5`. The narrower declaration contributes a membership condition;
+it does not assert that all six candidate integers are even. QL still performs
+static type checking, so this does not mean arbitrary incompatible types can
+be mixed.
+
+Datamog's head annotations instead require inference to establish the declared
+contract for the rule's contributions. A narrower annotation that cannot be
+proved rejects the program; it does not discard the nonmatching rows. To select
+a subset, write a body condition such as `N % 2 = 0`, or use the extraction
+operations in the next section. To report violations, use an integrity
+constraint. These are different intentions: filtering for an invariant does not
+verify that the original data satisfied it.
+
 Sibling rules can widen an unannotated column to heterogeneous `value`.
 `p(1). p("one").` is legal. To insist on integers, annotate each rule's
 contribution; annotating only one sibling does not impose its annotation on the
