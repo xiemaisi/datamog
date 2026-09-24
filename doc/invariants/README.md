@@ -450,6 +450,10 @@ arbitrary `!-` or `error predicate` assertions, all data-loading assumptions,
 termination, or equivalence between a program and an external specification.
 Ordinary evaluation is still needed for data-dependent constraints.
 
+For possible extensions beyond this fragment, see the
+[design proposal for richer obligations and Lean proofs](../design/verification-obligations.md).
+It explores future verification support; none of those extensions is implemented.
+
 ### A dataset can pass while the proof fails
 
 [09-data-property.dl](code/09-data-property.dl) uses the same nonnegative sample
