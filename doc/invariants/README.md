@@ -192,6 +192,11 @@ arithmetic and `R["room"]` in `upper`, which produces an uppercase room name. Th
 it passes this shape check. Use a constraint or refinement for that relation
 between fields.
 
+Input formats affect validation too. JSONL uses native JSON types; CSV can
+coerce canonical numeric text. A CSV `string?` cell containing an empty string
+remains a string and cannot represent null. See [data loading](../spec.md#7-data-loading)
+for those boundary rules.
+
 ### A head annotation checks what inference can establish
 
 The annotations on `summary` are checked statically against the values its rule
@@ -257,17 +262,14 @@ verify that the original data satisfied it.
 
 </details>
 
+### An annotation applies to one rule
+
 Sibling rules can widen an unannotated column to heterogeneous `value`.
 `p(1). p("one").` is legal. To insist on integers, annotate each rule's
 contribution; annotating only one sibling does not impose its annotation on the
 others. Within one rule, sharing a variable between incompatible nonnullable
 integer and string columns is instead a type error: that one value must satisfy
 both requirements.
-
-Input formats affect validation too. JSONL uses native JSON types; CSV can
-coerce canonical numeric text. A CSV `string?` cell containing an empty string
-remains a string and cannot represent null. See [data loading](../spec.md#7-data-loading)
-for those boundary rules.
 
 ## 4. Extraction can implement a scalar check
 
