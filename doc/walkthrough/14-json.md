@@ -167,7 +167,9 @@ Records are closed: extra fields are rejected. `age?: integer` allows the field
 to be missing; `age: integer?` requires it but permits null. A missing age makes
 `next_age` derive no row. A nullable age instead needs a bound-variable guard
 (`A = P["age"], A <> null`) before arithmetic. `[float?]` allows null elements;
-`[float]?` allows a null array. Nested `value` accepts any JSON value.
+`[float]?` allows a null array. `value` excludes null at every declared
+position, so `[value?]` allows null elements and `[value]` does not. An
+opaque `value` may still contain null children.
 
 Inference also discovers shapes without declarations:
 

@@ -8,6 +8,7 @@ import { inferSemanticExpression } from "./semantic-expressions.ts";
 import {
   ANY_VALUE,
   NEVER,
+  NON_NULL_VALUE,
   ProofTypeRegistry,
   type SemanticType,
   fromPrimitiveType,
@@ -152,7 +153,9 @@ export function inferSemanticColumns(
       inferSemanticExpression(term, {
         variable: (name) => {
           const type = vars.get(name);
-          return type?.kind === "union" && nonNull.has(name)
+          if (!nonNull.has(name)) return type;
+          if (type?.kind === "value") return NON_NULL_VALUE;
+          return type?.kind === "union"
             ? unionType(...type.members.filter((t) => t.kind !== "scalar" || t.name !== "null"))
             : type;
         },

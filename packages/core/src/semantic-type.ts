@@ -3,7 +3,8 @@
  * Inference and operand lowering use these types while backends retain primitive storage.
  *
  * Unknown inference state is `undefined`, not a SemanticType. `never` is empty;
- * `value` admits every value, including null. Expression absence is separate.
+ * ANY_VALUE admits every value including null; NON_NULL_VALUE models declared
+ * `value`, excluding null at that position. Expression absence is separate.
  * Proof references describe existing derived proofs, never permission to build one.
  */
 import type { PrimitiveType } from "./ast.ts";
@@ -29,7 +30,7 @@ export interface SemanticField {
 
 export type SemanticType =
   | { readonly kind: "never" }
-  | { readonly kind: "value" }
+  | { readonly kind: "value"; readonly nonNull?: true }
   | { readonly kind: "scalar"; readonly name: ScalarType }
   | { readonly kind: "array"; readonly element: SemanticType }
   | { readonly kind: "tuple"; readonly elements: readonly SemanticType[] }
@@ -44,6 +45,8 @@ export type SemanticType =
 
 export const NEVER: SemanticType = { kind: "never" };
 export const ANY_VALUE: SemanticType = { kind: "value" };
+/** Declaration `value`: any value except null at this position. Children remain opaque. */
+export const NON_NULL_VALUE: SemanticType = { kind: "value", nonNull: true };
 
 export function scalarType(name: ScalarType): SemanticType {
   return { kind: "scalar", name };
@@ -72,8 +75,10 @@ function typeKey(type: SemanticType, work: SemanticTypeWork): string {
   let result: string;
   switch (type.kind) {
     case "never":
-    case "value":
       result = type.kind;
+      break;
+    case "value":
+      result = type.nonNull ? "non-null-value" : "value";
       break;
     case "scalar":
       result = `["scalar",${quoted(type.name)}]`;
@@ -149,7 +154,12 @@ function normalize(type: SemanticType, work: SemanticTypeWork, depth = 0): Seman
           for (const item of member.members) members.push(item);
         } else if (member.kind !== "never") members.push(member);
       }
-      if (members.some((t) => t.kind === "value")) return ANY_VALUE;
+      if (members.some((t) => t.kind === "value" && !t.nonNull)) return ANY_VALUE;
+      if (members.some((t) => t.kind === "value" && t.nonNull)) {
+        return members.some((t) => t.kind === "scalar" && t.name === "null")
+          ? ANY_VALUE
+          : NON_NULL_VALUE;
+      }
       const hasFloat = members.some((t) => t.kind === "scalar" && t.name === "float");
       const unique = new Map<string, SemanticType>();
       for (const member of members) {
@@ -217,7 +227,12 @@ function semanticSubtype(
   const b = target;
   // Compare products componentwise below: whole-product equality keys add work
   // before repeating the same traversal, especially across Cartesian branches.
-  if (a.kind === "never" || b.kind === "value" || a === b) return true;
+  if (a.kind === "never" || a === b) return true;
+  if (b.kind === "value") {
+    if (!b.nonNull) return true;
+    if (a.kind === "union") return a.members.every((member) => recurse(member, b));
+    return a.kind === "value" ? a.nonNull === true : a.kind !== "scalar" || a.name !== "null";
+  }
   if (a.kind === "scalar" && b.kind === "scalar")
     return a.name === b.name || (a.name === "integer" && b.name === "float");
   if (a.kind === "proof" && b.kind === "proof") {
@@ -367,8 +382,8 @@ function intersect(
   const a = left;
   const b = right;
   if (a.kind === "never" || b.kind === "never") return NEVER;
-  if (a.kind === "value") return b;
-  if (b.kind === "value" || typeKey(a, work) === typeKey(b, work)) return a;
+  if (a.kind === "value" && !a.nonNull) return b;
+  if ((b.kind === "value" && !b.nonNull) || typeKey(a, work) === typeKey(b, work)) return a;
   if (a.kind === "union")
     return normalize(
       { kind: "union", members: a.members.map((member) => recurse(member, b)) },
@@ -379,6 +394,8 @@ function intersect(
       { kind: "union", members: b.members.map((member) => recurse(a, member)) },
       work,
     );
+  if (a.kind === "value") return b.kind === "scalar" && b.name === "null" ? NEVER : b;
+  if (b.kind === "value") return a.kind === "scalar" && a.name === "null" ? NEVER : a;
   if (a.kind === "scalar" && b.kind === "scalar") {
     return (a.name === "integer" && b.name === "float") ||
       (a.name === "float" && b.name === "integer")

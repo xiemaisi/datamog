@@ -4,7 +4,7 @@ import { analyze } from "../src/analyzer.ts";
 import { validateConstructorAnnotations } from "../src/constructor-annotations.ts";
 import { checkModuleBoundaries, elaborate } from "../src/elaborate.ts";
 import { inferSemanticColumns } from "../src/semantic-inference.ts";
-import { ANY_VALUE, scalarType } from "../src/semantic-type.ts";
+import { NON_NULL_VALUE, scalarType } from "../src/semantic-type.ts";
 import { inferTypes } from "../src/types.ts";
 const typed = (source: string) => inferTypes(analyze(parse(source)));
 
@@ -56,7 +56,7 @@ test("published payloads remain opaque through forwarding and unannotated constr
     "p() :: C(3: value). forwarded(P) :- P:p. wrapped() :: W(X) :- forwarded(P), P=C(X).";
   const p = typed(source);
   expect(p.proofTypes.payload({ predicate: "wrapped" }, "W")).toEqual([scalarType("integer")]);
-  expect(p.publishedProofTypes.payload({ predicate: "wrapped" }, "W")).toEqual([ANY_VALUE]);
+  expect(p.publishedProofTypes.payload({ predicate: "wrapped" }, "W")).toEqual([NON_NULL_VALUE]);
   expect(() => typed(`${source} answer(X*2) :- P:wrapped, P=W(X).`)).toThrow("numeric operands");
   expect(() => typed(`${source} answer(as_integer(X)*2) :- P:wrapped, P=W(X).`)).not.toThrow();
 });
@@ -64,7 +64,7 @@ test("published payloads remain opaque through forwarding and unannotated constr
 test("recursive producers validate against inferred self payloads", () => {
   const p = typed("p(0) :: Base(1: value). p(I+1) :: Step(N+1: value) :- P:p(I), P=Base(N), I<1.");
   expect(p.proofTypes.payload({ predicate: "p" }, "Step")).toEqual([scalarType("integer")]);
-  expect(p.publishedProofTypes.payload({ predicate: "p" }, "Step")).toEqual([ANY_VALUE]);
+  expect(p.publishedProofTypes.payload({ predicate: "p" }, "Step")).toEqual([NON_NULL_VALUE]);
 });
 
 test("work exhaustion does not leave narrow payload contributions as annotation evidence", () => {

@@ -79,3 +79,31 @@ test("nullable field contracts require guards before narrowing", () => {
 test("expression refinements retain their syntax alongside structural types", () => {
   expect(() => typed("p(X as N: integer, _: N > 0) :- X = 1.")).not.toThrow();
 });
+
+test("nested value contracts require explicit nullability, including aliases and payloads", () => {
+  for (const type of ["value", "Opaque"]) {
+    const prefix = "type Opaque = value. ";
+    for (const source of [
+      `p({"x": null}: {x: ${type}}).`,
+      `p([null]: [${type}]).`,
+      `p() :: C({"x": null}: {x: ${type}}).`,
+    ])
+      expect(() => typed(prefix + source)).toThrow();
+    for (const source of [
+      `p({"x": null}: {x: ${type}?}).`,
+      `p([null]: [${type}?]).`,
+      `p() :: C({"x": null}: {x: ${type}?}).`,
+      `p({"x": {"child": null}}: {x: ${type}}).`,
+      `p({}: {x?: ${type}}).`,
+    ])
+      expect(() => typed(prefix + source)).not.toThrow();
+  }
+  expect(() => typed('p({"x": 1}: {x: value?}). q(P: {x: value}) :- p(P).')).toThrow();
+  expect(() => typed('p({"x": 1}: {x: value}). q(P: {x: value?}) :- p(P).')).not.toThrow();
+});
+
+test("null guards narrow opaque values inside structural annotations", () => {
+  const prefix = "input predicate p(x: value?).";
+  expect(() => typed(`${prefix} q({"x": X}: {x: value}) :- p(X).`)).toThrow();
+  expect(() => typed(`${prefix} q({"x": X}: {x: value}) :- p(X), X <> null.`)).not.toThrow();
+});

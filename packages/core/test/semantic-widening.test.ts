@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   ANY_VALUE,
   NEVER,
+  NON_NULL_VALUE,
   type SemanticType,
   isSemanticSubtype,
   sameSemanticType,
@@ -24,6 +25,7 @@ test("bounded types cover their inputs and bounding is idempotent", () => {
   const samples = [
     NEVER,
     ANY_VALUE,
+    NON_NULL_VALUE,
     int,
     array(int),
     record("x", array(int)),
@@ -132,6 +134,7 @@ test("wide tuples preserve element types and summarize mixed alternatives soundl
   for (const elements of [
     [int, int, int, int],
     [int, str, int, str],
+    [NON_NULL_VALUE, int, scalarType("null"), str],
   ]) {
     const source: SemanticType = { kind: "tuple", elements };
     const summary = boundSemanticType(source, budget);

@@ -141,3 +141,48 @@ test("prepared record indexes preserve special field names and own-field presenc
     '$["toString"]: unexpected field',
   );
 });
+
+test("value nullability is uniform across columns, fields, elements and aliases", () => {
+  for (const spelling of ["value", "Opaque"]) {
+    const prefix = "type Opaque = value. ";
+    for (const [shape, good, bad] of [
+      [`{x: ${spelling}}`, { x: { child: null } }, { x: null }],
+      [`{x?: ${spelling}}`, {}, { x: null }],
+      [`[${spelling}]`, [{ child: null }], [null]],
+    ] as const) {
+      const column = typed(`${prefix} input predicate p(x: ${shape}).`).extDecls.get("p")!
+        .columns[0]!;
+      expect(() => validateStructuralColumn(good, column, "row 1")).not.toThrow();
+      expect(() => validateStructuralColumn(bad, column, "row 2")).toThrow("expected value");
+      const nullable = typed(
+        `${prefix} input predicate p(x: ${shape.replace(spelling, `${spelling}?`)}).`,
+      ).extDecls.get("p")!.columns[0]!;
+      expect(() => validateStructuralColumn(bad, nullable, "row 2")).not.toThrow();
+    }
+  }
+});
+
+test("module boundaries preserve nested value nullability", () => {
+  for (const spelling of ["value", "Opaque"]) {
+    for (const nullable of [false, true]) {
+      const resolve = () => ({
+        program: parseRaw(
+          `type Opaque = value. input predicate data(x: {x: ${spelling}${nullable ? "?" : ""}}). output predicate out(P) :- data(P).`,
+        ),
+        file: "m.dl",
+      });
+      const check = (source: string) => {
+        const result = elaborate(
+          parseRaw(`${source} input predicate q(x: value) := out from "m.dl"(data = p).`),
+          resolve,
+          "entry.dl",
+        );
+        postProcess(result.program);
+        checkModuleBoundaries(inferTypes(analyze(result.program)), result.boundaries);
+      };
+      expect(() => check('p({"x": 1}: {x: value}).')).not.toThrow();
+      if (nullable) expect(() => check('p({"x": 1}: {x: value?}).')).not.toThrow();
+      else expect(() => check('p({"x": 1}: {x: value?}).')).toThrow();
+    }
+  }
+});

@@ -365,7 +365,10 @@ Records are closed: undeclared fields are rejected. `age?: integer` permits a
 missing field, while `age: integer?` requires the field but permits JSON null.
 These modifiers can be combined. `[integer]?` permits a null array;
 `[integer?]` permits null elements. Quoted field names and empty records (`{}`)
-are supported. Nested `value` accepts any JSON value, including null.
+are supported. `value` excludes null at every declared position; `value?` admits it.
+Thus `{x: value}` rejects `{"x": null}`, and `[value]` rejects `[null]`;
+use `{x: value?}` and `[value?]` to allow those values. An opaque `value`
+can still contain null children: `{x: value}` accepts `{"x": {"child": null}}`.
 
 These declarations retain `value` storage and publish their shape to consumers,
 so proven scalar fields can be used in typed operations (§5.1). Loaders validate

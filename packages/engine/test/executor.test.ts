@@ -2368,3 +2368,48 @@ describe("definedness at every conjunct", () => {
     expect(sqlite[0]).toEqual([{ concat: "1,3" }]);
   });
 });
+
+test("loaders enforce nested value nullability across evaluation backends", async () => {
+  for (const create of [
+    createSqlite,
+    (await import("../../backend/native/src/index.ts")).create,
+    (await import("../../backend/seminaive/src/index.ts")).create,
+    (await import("../../backend/sqljs/src/index.ts")).create,
+  ]) {
+    for (const [shape, value, valid] of [
+      ["value", null, false],
+      ["value?", null, true],
+      ["{x: Opaque}", { x: null }, false],
+      ["{x?: Opaque}", { x: null }, false],
+      ["{x?: Opaque}", {}, true],
+      ["{x: Opaque?}", { x: null }, true],
+      ["[Opaque]", [null], false],
+      ["[Opaque?]", [null], true],
+      ["{x: Opaque}", { x: { child: null } }, true],
+      ["[Opaque]", [{ child: null }], true],
+    ] as const) {
+      const backend = await create();
+      const executor = new DatamogExecutor(backend, [
+        {
+          name: "typed",
+          async canLoad() {
+            return true;
+          },
+          async load(decl, target) {
+            await insertRows(target, decl, [{ j: value }]);
+            return { rowsLoaded: 1 };
+          },
+        },
+      ]);
+      try {
+        const result = executor.execute(
+          `type Opaque = value. input predicate data(j: ${shape}). ?- data(J).`,
+        );
+        if (valid) expect((await result)[0]!.rows).toEqual([{ J: value }]);
+        else await expect(result).rejects.toThrow(/null|expected value/i);
+      } finally {
+        await backend.close();
+      }
+    }
+  }
+});

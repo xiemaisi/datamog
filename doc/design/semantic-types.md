@@ -19,12 +19,13 @@ separate from the primitive column types consumed by backends. It includes
 scalars, records, arrays, tuples, unions, and nominal proof references.
 
 Unknown inference state remains outside the type domain (`undefined`). `never`
-is the empty type; `value` is the universal type including null. Null is a scalar
-alternative, so nullable types can be represented as unions. This internal
-universal `value` is a conservative approximation, not the surface declaration
-`value`: declarations exclude a bare null unless marked `?`, enforced by the
-separate nullness checks. Expression absence is separate from both null and the
-empty type.
+is the empty type. `ANY_VALUE` is the universal type including null;
+`NON_NULL_VALUE` excludes null at the current position without constraining
+children. Both have kind `value`, distinguished by the `nonNull` flag. Surface
+`value` declarations map to `NON_NULL_VALUE` at every nesting depth, while
+`value?` maps to `ANY_VALUE`. Null is a scalar alternative, so other nullable
+types use unions; the union of `NON_NULL_VALUE` and null normalizes to
+`ANY_VALUE`. Expression absence is separate from both null and the empty type.
 
 Record fields carry independent optionality and value types. The additional-field
 type describes undeclared fields; `never` closes a record. Optional `never` fields

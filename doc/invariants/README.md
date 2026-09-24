@@ -181,7 +181,11 @@ independent uses of `?`:
 Arrays can have contracts too: `[integer]` admits arrays of integers,
 `[integer?]` permits null elements, and `[integer]?` permits a null array.
 A top-level `value` contract accepts any non-null JSON shape; `value?` also
-accepts a bare null. Nested `value` admits null without needing a separate `?`.
+accepts a bare null. The same rule holds at nested positions: `[value]` excludes null
+elements, while `[value?]` permits them. `{x?: value}` allows `x` to be
+absent, but requires a non-null value when present; `{x?: value?}` also
+allows an explicit null. A `value` remains opaque, so its children can
+contain null: `{x: value}` accepts `{"x": {"child": null}}`.
 
 The declaration provides enough information to use `R["start"]` directly in
 arithmetic and `R["room"]` in `upper`, which produces an uppercase room name. The second sample request still has its finish before its start:

@@ -65,7 +65,7 @@ function bound(type: SemanticType, depth: number, width: number): SemanticType {
       let element = NEVER;
       for (const item of type.elements) {
         element = widenSemanticType(element, item, { maxDepth: depth - 1, maxWidth: width });
-        if (element.kind === "value") break;
+        if (element.kind === "value" && !element.nonNull) break;
       }
       return { kind: "array", element };
     }

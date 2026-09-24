@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   ANY_VALUE,
   NEVER,
+  NON_NULL_VALUE,
   type SemanticType,
   intersectTypes,
   isSemanticSubtype,
@@ -29,6 +30,7 @@ const otherProof: SemanticType = { kind: "proof", id: { predicate: "b::list" } }
 const types = [
   NEVER,
   ANY_VALUE,
+  NON_NULL_VALUE,
   int,
   float,
   str,
@@ -121,7 +123,7 @@ function contains(type: SemanticType, value: unknown): boolean {
     case "never":
       return false;
     case "value":
-      return true;
+      return !type.nonNull || value !== null;
     case "proof":
       return false; // JSON shape never establishes nominal proof membership.
     case "scalar":
@@ -326,4 +328,14 @@ test("equal structural types remain reflexive without splits or shared object id
     expect(isSemanticSubtype(type, copy, { maxUnionSplits: 0 })).toBe(true);
     expect(isSemanticSubtype(copy, type, { maxUnionSplits: 0 })).toBe(true);
   }
+});
+
+test("declared value excludes null without constraining opaque children", () => {
+  expect(isSemanticSubtype(nil, NON_NULL_VALUE)).toBe(false);
+  expect(isSemanticSubtype(ANY_VALUE, NON_NULL_VALUE)).toBe(false);
+  for (const type of [int, str, record(nil), array(nil), proof])
+    expect(isSemanticSubtype(type, NON_NULL_VALUE)).toBe(true);
+  expect(unionType(NON_NULL_VALUE, nil)).toEqual(ANY_VALUE);
+  expect(intersectTypes(NON_NULL_VALUE, nil)).toEqual(NEVER);
+  expect(sameSemanticType(ANY_VALUE, NON_NULL_VALUE)).toBe(false);
 });

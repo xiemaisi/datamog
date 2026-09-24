@@ -5,6 +5,7 @@ import type { ColumnDecl, ExtDecl, Rule } from "./ast.ts";
 import { semanticContractMismatch } from "./semantic-diagnostics.ts";
 import {
   NEVER,
+  NON_NULL_VALUE,
   type SemanticType,
   fromPrimitiveType,
   normalizeType,
@@ -20,7 +21,9 @@ function valueType(value: TypeValue): SemanticType {
     ? { kind: "proof", id: { predicate: value.nominal.predicate } }
     : value.shape
       ? shapeType(value.shape)
-      : fromPrimitiveType(value.type!);
+      : value.type === "value"
+        ? NON_NULL_VALUE
+        : fromPrimitiveType(value.type!);
   return value.nullable ? unionType(type, scalarType("null")) : type;
 }
 
@@ -49,7 +52,9 @@ export function declaredColumnType(
     ? { kind: "proof", id: { predicate: column.nominal.predicate } }
     : column.shape
       ? shapeType(column.shape)
-      : fromPrimitiveType(column.type ?? "string");
+      : column.type === "value"
+        ? NON_NULL_VALUE
+        : fromPrimitiveType(column.type ?? "string");
   return column.nullable ? unionType(type, scalarType("null")) : type;
 }
 
@@ -59,7 +64,8 @@ type StructuralMatcher = (value: unknown, path: string) => string | undefined;
 function compileMatcher(type: SemanticType): StructuralMatcher {
   switch (type.kind) {
     case "value":
-      return () => undefined;
+      return (value, path) =>
+        type.nonNull && value === null ? `${path}: expected value (non-null)` : undefined;
     case "never":
       return (_value, path) => `${path}: no value is permitted`;
     case "scalar":

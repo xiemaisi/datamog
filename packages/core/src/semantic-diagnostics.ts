@@ -8,8 +8,9 @@ export function formatSemanticType(type: SemanticType, depth = 0): string {
     [...items.slice(0, 8), ...(items.length > 8 ? ["…"] : [])].join(", ");
   switch (type.kind) {
     case "never":
-    case "value":
       return type.kind;
+    case "value":
+      return type.nonNull ? "value" : "value?";
     case "scalar":
       return type.name;
     case "proof":

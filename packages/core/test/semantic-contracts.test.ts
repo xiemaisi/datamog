@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { parse } from "datamog-parser";
 import { AnalyzerError, analyze } from "../src/analyzer.ts";
-import { ANY_VALUE, scalarType } from "../src/semantic-type.ts";
+import { NON_NULL_VALUE, scalarType } from "../src/semantic-type.ts";
 import { inferTypes } from "../src/types.ts";
 const infer = (source: string) => inferTypes(analyze(parse(source)));
 
@@ -9,7 +9,7 @@ test("published shapes honor annotations transitively without changing implement
   const typed = infer('p(X: value) :- X = {"x": 1}. q(X) :- p(X). r(X) :- q(X).');
   for (const pred of ["p", "q", "r"]) {
     expect(typed.semanticColumnTypes.get(pred)![0]!.kind).toBe("record");
-    expect(typed.publishedSemanticColumnTypes.get(pred)).toEqual([ANY_VALUE]);
+    expect(typed.publishedSemanticColumnTypes.get(pred)).toEqual([NON_NULL_VALUE]);
     expect(typed.columnTypes.get(pred)).toEqual(["value"]);
   }
 });
@@ -22,7 +22,7 @@ test("unannotated predicates publish their inferred structural precision", () =>
 test("constructor signatures respect widened producer contracts", () => {
   const typed = infer("n(X: value) :- X = 1. opt() :: Some :- n(X).");
   expect(typed.proofTypes.payload({ predicate: "opt" }, "Some")).toEqual([scalarType("integer")]);
-  expect(typed.publishedProofTypes.payload({ predicate: "opt" }, "Some")).toEqual([ANY_VALUE]);
+  expect(typed.publishedProofTypes.payload({ predicate: "opt" }, "Some")).toEqual([NON_NULL_VALUE]);
   expect(() =>
     infer('n(X: value) :- X = 1. opt() :: Some :- n(X). ?- Some("s") = P.'),
   ).not.toThrow();

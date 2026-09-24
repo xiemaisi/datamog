@@ -147,6 +147,7 @@ export {
 export { assertNever } from "./util.ts";
 export {
   ANY_VALUE,
+  NON_NULL_VALUE,
   NEVER,
   ProofTypeRegistry,
   SemanticTypeLimitError,
