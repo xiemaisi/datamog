@@ -13,26 +13,82 @@ export const DEFAULT_SOLVER = "z3 -in";
 export interface Verdict {
   obligation: Obligation;
   /** `discharged` is unsat: no tuple satisfies the body and breaks the claim. */
-  status: "discharged" | "counterexample" | "unknown" | "skipped" | "error";
+  status: "discharged" | "counterexample" | "unknown" | "skipped" | "error" | "timeout";
   /** The solver's own words, on anything other than a clean discharge. */
   detail?: string;
 }
 
-async function runSolver(command: string[], script: string): Promise<string> {
+export interface SolverOptions {
+  /** Per invocation, including a separate countermodel request. */
+  timeoutMs?: number;
+  /** Combined stdout/stderr byte limit per invocation. */
+  maxOutputBytes?: number;
+  signal?: AbortSignal;
+}
+
+interface SolverResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  failure?: "timeout" | "output limit exceeded" | "cancelled";
+}
+
+async function runSolver(
+  command: string[],
+  script: string,
+  options: SolverOptions,
+): Promise<SolverResult> {
   const child = Bun.spawn(command, {
     stdin: new TextEncoder().encode(script),
     stdout: "pipe",
     stderr: "pipe",
   });
-  // A solver reports a malformed script on stderr and its verdict on stdout,
-  // and both are wanted. Read them together so neither pipe can fill while the
-  // other is being drained.
-  const [out, err] = await Promise.allSettled([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  await child.exited;
-  return [out, err].map((r) => (r.status === "fulfilled" ? r.value : "")).join("");
+  let failure: SolverResult["failure"];
+  const stop = (reason: NonNullable<SolverResult["failure"]>) => {
+    failure ??= reason;
+    child.kill("SIGKILL");
+  };
+  const timer = setTimeout(() => stop("timeout"), options.timeoutMs ?? 30_000);
+  const abort = () => stop("cancelled");
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  let bytes = 0;
+  const read = async (stream: ReadableStream<Uint8Array>) => {
+    const decoder = new TextDecoder();
+    let text = "";
+    for await (const chunk of stream) {
+      bytes += chunk.byteLength;
+      if (bytes > (options.maxOutputBytes ?? 1_048_576)) {
+        stop("output limit exceeded");
+        break;
+      }
+      text += decoder.decode(chunk, { stream: true });
+    }
+    return text + decoder.decode();
+  };
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      read(child.stdout),
+      read(child.stderr),
+      child.exited,
+    ]);
+    return { stdout, stderr, exitCode, failure };
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    child.kill("SIGKILL");
+    await child.exited;
+  }
+}
+
+function solverError(result: SolverResult): string | undefined {
+  if (result.failure) return result.failure;
+  if (result.exitCode !== 0)
+    return `solver exited with code ${result.exitCode}: ${result.stderr.trim()}`;
+  if (/^\s*\(error\b/m.test(result.stdout) || result.stderr.trim()) {
+    return [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
+  }
+  return undefined;
 }
 
 /**
@@ -43,9 +99,15 @@ async function runSolver(command: string[], script: string): Promise<string> {
  */
 export async function verifyObligations(
   obligations: Obligation[],
-  solver = DEFAULT_SOLVER,
+  solver: string | readonly string[] = DEFAULT_SOLVER,
+  options: SolverOptions = {},
 ): Promise<Verdict[]> {
-  const command = solver.split(/\s+/);
+  const command = typeof solver === "string" ? solver.trim().split(/\s+/) : [...solver];
+  for (const value of [options.timeoutMs, options.maxOutputBytes]) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+      throw new Error("Solver limits must be positive safe integers");
+    }
+  }
   const verdicts: Verdict[] = [];
   for (const obligation of obligations) {
     if (obligation.logic === null) {
@@ -56,49 +118,55 @@ export async function verifyObligations(
       verdicts.push({ obligation, status: "skipped", detail: note });
       continue;
     }
-    // `get-value` names what falsified the claim. It is only meaningful after
-    // `sat`; after `unsat` the solver says so and the line is ignored.
-    const script = [
-      `(set-logic ${obligation.logic})`,
-      obligation.script.replace(
-        "(pop 1)",
-        `(get-value (${obligation.declared.join(" ")}))\n(pop 1)`,
-      ),
-    ].join("\n");
-    // A spawn failure is the same for every obligation, so it is the run that
-    // failed rather than the claim. Fail once.
-    const output = await runSolver(command, script).catch((e: Error) => {
-      throw new Error(
-        `could not run \`${command.join(" ")}\`: ${e.message}. Pass --solver with an SMT-LIB 2 solver that reads a script on stdin.`,
-      );
-    });
-    const lines = output.split("\n").filter((l) => l.trim() !== "");
-    const verdict = lines.find((l) => /^(sat|unsat|unknown)$/.test(l.trim()))?.trim();
-    // A solver that rejects one command carries on with the rest, so `check-sat`
-    // still answers, but over a script missing an assertion, and reading that as
-    // a verdict turns a malformed encoding into a confident counterexample.
-    // `unsat` survives it: dropping an assertion only ever makes a proof harder,
-    // so a proof that went through is still a proof. Anything else does not.
-    // `(error ...)` is SMT-LIB's own error response, spelled the same way by every
-    // solver, and after `unsat` it is the `get-value` line saying there is no
-    // model to name, which the verdict already accounts for.
-    if (verdict !== "unsat" && lines.some((l) => /^\(error\b/.test(l.trim()))) {
-      verdicts.push({ obligation, status: "error", detail: lines.join(" ").trim() });
+    if (options.signal?.aborted) {
+      verdicts.push({ obligation, status: "error", detail: "cancelled" });
       continue;
     }
-    if (verdict === "unsat") verdicts.push({ obligation, status: "discharged" });
-    else if (verdict === "sat")
+    const script = `(set-logic ${obligation.logic})\n${obligation.script}`;
+    const invoke = (text: string) =>
+      runSolver(command, text, options).catch((e: Error) => {
+        throw new Error(
+          `could not run \`${command.join(" ")}\`: ${e.message}. Pass --solver with an SMT-LIB 2 solver that reads a script on stdin.`,
+        );
+      });
+    const result = await invoke(script);
+    const error = solverError(result);
+    if (error) {
       verdicts.push({
         obligation,
-        status: "counterexample",
-        detail: lines
-          .slice(lines.indexOf("sat") + 1)
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim(),
+        status: result.failure === "timeout" ? "timeout" : "error",
+        detail: error,
       });
-    else if (verdict === "unknown") verdicts.push({ obligation, status: "unknown" });
-    else verdicts.push({ obligation, status: "error", detail: output.trim() });
+      continue;
+    }
+    const answer = result.stdout.trim();
+    if (answer === "unsat") verdicts.push({ obligation, status: "discharged" });
+    else if (answer === "sat") {
+      // Re-run only satisfiable goals with a model request. Never accept an
+      // error after unsat as an expected side effect of asking for a model.
+      let detail: string | undefined;
+      if (obligation.declared.length > 0) {
+        const model = await invoke(
+          `(set-option :produce-models true)\n${script.replace(
+            "(pop 1)",
+            `(get-value (${obligation.declared.join(" ")}))\n(pop 1)`,
+          )}`,
+        );
+        const modelError = solverError(model);
+        detail = modelError
+          ? `Countermodel unavailable: ${modelError}`
+          : /^sat\s*\(/.test(model.stdout.trim())
+            ? model.stdout.trim().slice(3).trim()
+            : "Countermodel unavailable: inconsistent solver response";
+      }
+      verdicts.push({ obligation, status: "counterexample", detail });
+    } else if (answer === "unknown") verdicts.push({ obligation, status: "unknown" });
+    else
+      verdicts.push({
+        obligation,
+        status: "error",
+        detail: `Unexpected solver response: ${answer}`,
+      });
   }
   return verdicts;
 }
@@ -115,6 +183,7 @@ export function reportVerdicts(verdicts: Verdict[]): boolean {
     unknown: "unknown ",
     skipped: "skipped ",
     error: "ERROR   ",
+    timeout: "timeout ",
   };
   for (const { obligation, status, detail } of verdicts) {
     const { predicate, rule, claim } = obligation;

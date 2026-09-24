@@ -184,3 +184,87 @@ withSolver(`with ${solver}`, () => {
     });
   });
 });
+
+// Protocol regressions run even without an installed SMT solver.
+describe("solver process boundaries", () => {
+  const obligations = generateObligations(
+    inferTypes(analyze(parse("p(1). q(X, _: X > 0) :- p(X), X > 0."))),
+  );
+  const fake = (code: string) => [process.execPath, "-e", code];
+
+  test.each([
+    ["nonzero exit", 'console.log("unsat"); process.exit(2)'],
+    ["error before unsat", "console.log('(error \"bad assertion\")\\nunsat')"],
+    ["error after unsat", "console.log('unsat\\n(error \"bad command\")')"],
+    ["stderr verdict", 'console.error("unsat")'],
+    ["multiple answers", 'console.log("sat\\nunsat")'],
+    ["missing answer", 'console.log("")'],
+  ])("rejects %s", async (_, code) => {
+    expect((await verifyObligations(obligations, fake(code)))[0]!.status).toBe("error");
+  });
+
+  test("does not ask for a model after unsat", async () => {
+    const command = fake(`
+      const script = await Bun.stdin.text();
+      console.log(script.includes("get-value") ? '(error "no model")' : "unsat");
+    `);
+    expect((await verifyObligations(obligations, command))[0]!.status).toBe("discharged");
+  });
+
+  test("requests a model only after sat", async () => {
+    const command = fake(`
+      const script = await Bun.stdin.text();
+      console.log(script.includes("get-value") ? "sat\\n((X 1))" : "sat");
+    `);
+    const [verdict] = await verifyObligations(obligations, command);
+    expect(verdict!.status).toBe("counterexample");
+    expect(verdict!.detail).toBe("((X 1))");
+  });
+
+  test("model failure preserves sat without claiming an assignment", async () => {
+    const command = fake(`
+      const script = await Bun.stdin.text();
+      console.log(script.includes("get-value") ? "unsat" : "sat");
+    `);
+    const [verdict] = await verifyObligations(obligations, command);
+    expect(verdict!.status).toBe("counterexample");
+    expect(verdict!.detail).toContain("Countermodel unavailable");
+  });
+
+  test("kills a solver that hangs", async () => {
+    const [verdict] = await verifyObligations(obligations, fake("setInterval(() => {}, 1000)"), {
+      timeoutMs: 50,
+    });
+    expect(verdict!.status).toBe("timeout");
+  });
+
+  test.each(["stdout", "stderr"])("bounds %s output", async (stream) => {
+    const [verdict] = await verifyObligations(
+      obligations,
+      fake(`process.${stream}.write("x".repeat(100000)); setInterval(() => {}, 1000)`),
+      { maxOutputBytes: 1000 },
+    );
+    expect(verdict!.status).toBe("error");
+    expect(verdict!.detail).toBe("output limit exceeded");
+  });
+
+  test("cancels a running solver", async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 50);
+    try {
+      const [verdict] = await verifyObligations(obligations, fake("setInterval(() => {}, 1000)"), {
+        signal: controller.signal,
+      });
+      expect(verdict!.detail).toBe("cancelled");
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  test("an already cancelled run does not launch a solver", async () => {
+    const [verdict] = await verifyObligations(obligations, ["missing-solver"], {
+      signal: AbortSignal.abort(),
+    });
+    expect(verdict!.detail).toBe("cancelled");
+  });
+});

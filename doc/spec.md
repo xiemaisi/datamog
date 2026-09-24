@@ -2665,7 +2665,13 @@ reports `proved`, `FAILED` with the assignment that falsifies the claim, or
 `skipped` for a claim outside the fragment above. The solver is named by
 `--solver` and defaults to `z3 -in`; anything that reads an SMT-LIB 2 script on
 standard input will do. The exit status is non-zero unless every
-obligation is discharged.
+obligation is discharged. Each solver invocation is limited to 30 seconds and
+1 MiB of combined stdout/stderr. A timeout is reported separately; a nonzero
+exit, stderr diagnostics, malformed response, or output overflow is an error,
+even if the solver also prints `unsat`. Only one clean stdout verdict is
+accepted. A second invocation requests an assignment after `sat`; if retrieval
+fails, the original result is retained with an explicit unavailable-model note.
+These are trusted solver answers, not independently checked certificates.
 
 A contract that cannot be discharged is not thereby false. It may be a property
 of the data rather than a theorem, or it may need a bound the program has not

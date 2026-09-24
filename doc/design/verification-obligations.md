@@ -1,8 +1,9 @@
 # Richer verification obligations and Lean proofs
 
-Status: **unimplemented proposal**. This extends the future-work discussion in
+Status: **partially implemented; stage 1 process handling started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
-not change current syntax, runtime checks, or the meaning of `--verify`.
+not change current syntax or runtime checks. The solver process hardening below
+is implemented; the richer obligation and Lean architecture remains proposed.
 External-tool references were consulted on 2026-09-24; implementation must pin
 and test specific versions rather than rely on the moving documentation links.
 
@@ -54,7 +55,18 @@ published refinement contract vacuous.
 
 The CLI reports a solver's `unsat` answer, not an independently checked proof
 certificate. It does not yet have the dependency manifest, proof cache,
-resource-bounded orchestration, or Lean integration proposed here.
+full resource-bounded orchestration, or Lean integration proposed here.
+
+The first stage now bounds each solver invocation to 30 seconds and 1 MiB of
+combined output, retains separate stdout/stderr, and checks the exit status.
+Only a single clean stdout verdict is accepted; diagnostics and protocol errors
+fail the invocation even if it also prints `unsat`. Countermodels are requested
+in a separate invocation only after `sat`; failure to retrieve one does not
+erase the original satisfiability result. The internal API accepts structured
+arguments, configurable limits, and an abort signal, and kills/reaps the solver
+on timeout, cancellation, or output overflow. Process-tree containment, memory
+limits, CLI limit configuration, and dependency-aware reporting remain open.
+This is solver-trusted verification, not certificate checking.
 
 ## Which harder claims should be expressible?
 
