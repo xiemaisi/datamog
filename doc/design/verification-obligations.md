@@ -1,10 +1,11 @@
 # Richer verification obligations and Lean proofs
 
-Status: **partially implemented; stage 1 provenance, dependencies, and process handling started**. This extends the future-work discussion in
+Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
+and solver process handling implemented**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
-not change current syntax or runtime checks. The solver process hardening below
-and dependency reporting are implemented; the typed logical IR and Lean
-architecture remain proposed.
+not change current syntax or runtime checks. The integer obligation IR, solver
+process hardening, and dependency reporting below are implemented; Lean export
+and the broader verification architecture remain proposed.
 External-tool references were consulted on 2026-09-24; implementation must pin
 and test specific versions rather than rely on the moving documentation links.
 
@@ -33,8 +34,12 @@ The current pipeline is visible in:
 
 - [`refinements.ts`](../../packages/parser/src/refinements.ts): retains head
   propositions and synthesizes runtime constraints during post-processing.
+- [`obligation-ir.ts`](../../packages/core/src/obligation-ir.ts): typed integer and
+  Boolean expression trees and universally quantified local statements.
 - [`obligations.ts`](../../packages/core/src/obligations.ts): generates one
-  SMT-LIB obligation per refinement, using type and nullness information.
+  logical obligation per refinement, using type and nullness information.
+- [`obligation-smt.ts`](../../packages/core/src/obligation-smt.ts): exports those
+  statements to SMT-LIB and selects the required arithmetic logic.
 - [`verify.ts`](../../packages/cli/src/verify.ts): invokes an external solver
   separately for each obligation and reports its answer.
 - [Specification §5.11](../spec.md#511-head-refinements): the current contract.
@@ -81,9 +86,25 @@ carry separate `solver-trusted` assurance metadata.
 
 These dependency identities are batch-local and preserve elaborated module
 predicate identities. They are not persistent proof identities or cache keys.
-A solver-independent typed logical IR, complete source/module manifests, content
-digests, and proof caching remain unimplemented. The current provenance still
-stores included formulas as SMT text; it does not enable Lean export yet.
+The minimal logical IR now stores typed integer/Boolean expressions for domain
+restrictions, hypotheses, and conclusions; included provenance uses the same
+expression trees. Each supported statement explicitly quantifies its variables
+and names the `datamog-integer-v1` profile. Unsupported goals have a reason and
+no logical statement. Obligation kind and available source spans are retained.
+
+`generateLogicalObligations` builds these statements without generating solver
+syntax. `exportSmtObligation` derives declarations, assertions, and the SMT logic
+from the IR; `generateObligations` remains the compatibility entry point for the
+CLI. Truncating division is an explicit IR operation, lowered only by the SMT
+exporter. Its totalized value at zero is zero, while the separate Datamog
+definedness condition excludes that case; this does not define division by zero
+in Datamog. Safe-integer bounds and nullness likewise remain explicit formulas.
+
+This IR still describes the existing local contract abstraction, not complete
+relation definitions. Full source/module manifests, content digests, proof
+caching, and Lean export remain unimplemented. JSON round trips are tested for
+statement preservation, but serialized statements are not proof certificates or
+an independently validated import format.
 
 ## Which harder claims should be expressible?
 

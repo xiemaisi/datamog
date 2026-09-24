@@ -65,6 +65,8 @@ export {
 export { type ContractDiagnostic, findInertContracts } from "./contracts.ts";
 export {
   type Obligation,
+  type LogicalObligation,
+  generateLogicalObligations,
   type HypothesisProvenance,
   generateObligations,
   obligationScript,
@@ -188,3 +190,12 @@ export {
   declaredColumnType,
   validateStructuralColumn,
 } from "./structural-declarations.ts";
+
+export type {
+  BooleanExpression,
+  IntegerExpression,
+  LogicalExpression,
+  LogicalVariable,
+  ObligationStatement,
+} from "./obligation-ir.ts";
+export { exportSmtObligation } from "./obligation-smt.ts";
