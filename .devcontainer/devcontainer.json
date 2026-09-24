@@ -23,7 +23,8 @@
         "openai.chatgpt",
         "biomejs.biome",
         "ms-python.python",
-        "ms-toolsai.jupyter"
+        "ms-toolsai.jupyter",
+        "leanprover.lean4"
       ]
     }
   },

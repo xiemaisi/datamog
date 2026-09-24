@@ -15,7 +15,9 @@ SQL
 bun install --frozen-lockfile
 /opt/datamog-venv/bin/pip install --no-cache-dir -e /work/python/datamog-magic
 
-# Fail setup if the solver or either test database is unavailable.
+# Fail setup if the verification tools or either test database are unavailable.
 z3 --version
+lean --version
+lake --version
 psql -X --set=ON_ERROR_STOP=1 "$DATABASE_URL" --command='SELECT 1'
 psql -X --set=ON_ERROR_STOP=1 "$DATAMOG_EXAMPLES_DATABASE_URL" --command='SELECT 1'

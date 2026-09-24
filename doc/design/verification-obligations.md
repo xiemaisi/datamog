@@ -236,8 +236,8 @@ reach(X, Z) :- reach(X, Y), edge(Y, Z).
 
 The following illustrative Lean sketch abstracts vertices into a type `α`.
 An actual export would instantiate it with the modeled Datamog column domain.
-This sketch has not been compiled as part of this design work; Lean is not
-installed in the workspace.
+This sketch was checked with Lean 4.34.0 when adding Lean to the devcontainer;
+`#print axioms reach_preserves` reports no axiom dependencies.
 
 ```lean
 inductive Reach {α : Type} (edge : α → α → Prop) : α → α → Prop where

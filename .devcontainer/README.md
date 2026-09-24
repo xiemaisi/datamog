@@ -1,12 +1,12 @@
 # Project-specific container setup
 
-These files extend a base Docker image and stack with what datamog needs at runtime.
+These files extend a base Docker image and stack with what Datamog needs at runtime.
 
 ## Files
 
-- **`Dockerfile`** — built from `node:lts-slim`; adds chromium (for playwright), Z3 (for refinement verification), the Postgres client, bun, Claude Code, and the tooling Claude reaches for (gh, ripgrep, fd, jq, less, …). The installed claude launcher is renamed to `claude.real` and replaced with a wrapper that always passes `--dangerously-skip-permissions`; auto-update is disabled so the wrapper survives across sessions (rebuild the container to refresh claude). First-run prompts for theme and workspace trust are pre-answered via a minimal `~/.claude.json` baked into the image; the bypass-permissions warning is suppressed by the host's own `~/.claude/settings.json`, which is bind-mounted in (see below).
+- **`Dockerfile`** — built from `node:lts-slim`; adds chromium (for playwright), Z3 (for refinement verification), Lean and Lake (via Elan), the Postgres client, bun, Claude Code, and the tooling Claude reaches for (gh, ripgrep, fd, jq, less, …). The installed claude launcher is renamed to `claude.real` and replaced with a wrapper that always passes `--dangerously-skip-permissions`; auto-update is disabled so the wrapper survives across sessions (rebuild the container to refresh claude). First-run prompts for theme and workspace trust are pre-answered via a minimal `~/.claude.json` baked into the image; the bypass-permissions warning is suppressed by the host's own `~/.claude/settings.json`, which is bind-mounted in (see below).
 - **`docker-compose.yml`** — declares the `claude` service (with `build:` from the Dockerfile) plus the postgres sidecar, the tmpfs for `/tmp`, the seccomp relaxation chromium needs, the `..:/work` workspace bind mount, the `${HOME}/.claude` and `${HOME}/.config/gh` mounts, the `GH_TOKEN` and `ANTHROPIC_API_KEY` passthroughs, and a `sleep infinity` command so the container stays alive for VS Code to exec into.
-- **`devcontainer.json`** — VS Code Dev Containers config. Points at `docker-compose.yml`, attaches to the `claude` service, sets `workspaceFolder: /work`. Project-level config under `.claude/` in the repo is picked up via the workspace mount. VS Code extensions (`anthropic.claude-code`, `biomejs.biome`, `ms-python.python`, `ms-toolsai.jupyter`) are auto-installed in the container on first attach.
+- **`devcontainer.json`** — VS Code Dev Containers config. Points at `docker-compose.yml`, attaches to the `claude` service, sets `workspaceFolder: /work`. Project-level config under `.claude/` in the repo is picked up via the workspace mount. VS Code extensions (`anthropic.claude-code`, `biomejs.biome`, `ms-python.python`, `ms-toolsai.jupyter`, `leanprover.lean4`) are auto-installed in the container on first attach.
 
 The host's `~/.claude` is bind-mounted into the container by `docker-compose.yml`, so login, global agents/skills/CLAUDE.md, memory, and conversation history persist across rebuilds. **`~/.claude` must already exist on the host with your ownership** before the container is created — running `claude` on the host once is enough. Otherwise Docker auto-creates the mount source, and on Linux with rootful Docker it ends up root-owned and the container's `node` user can't write to it.
 
@@ -35,7 +35,7 @@ Sharing `gh` across the boundary takes **two** pieces, because `gh` splits confi
 
 After changing this setup, use **Codespaces: Rebuild Container** (or **Dev
 Containers: Rebuild Container** locally). The post-create script installs the
-locked Bun dependencies, creates any missing test databases, and checks Z3 and
+locked Bun dependencies, creates any missing test databases, and checks Z3, Lean, Lake, and
 both database connections. It also works with an existing `pgdata` volume.
 
 Run `bun test` normally: Z3 verification and Postgres tests are enabled without
@@ -43,6 +43,33 @@ additional environment setup. `DATAMOG_REQUIRE_POSTGRES=1` makes a missing datab
 configuration or connection a test failure. The two suites use separate databases
 because they drop and recreate `public`; reserve these databases for tests.
 Examples unsupported by SQL backends still skip on those backends.
+
+## Lean environment
+
+The image installs [Elan](https://lean-lang.org/install/manual/), Lean's toolchain
+manager, with Lean **4.34.0** as its default (the Docker build argument
+`LEAN_TOOLCHAIN=leanprover/lean4:v4.34.0`). Lean and its build tool Lake are
+available on PATH in interactive shells and automation. The image build runs
+both tools to ensure the actual toolchain is downloaded; post-create checks them
+again. The Lean 4 VS Code extension is installed on attachment.
+
+Elan lives at `/home/node/.elan`, owned by the runtime `node` user. Projects may
+pin a different version using a `lean-toolchain` file; Elan downloads that
+version on demand. Toolchains survive container restarts but are recreated on
+rebuild. Changing the image default requires updating `LEAN_TOOLCHAIN` and
+rebuilding the container; it does not override a project's version pin.
+
+After rebuilding, check the installation with:
+
+```bash
+lean --version
+lake --version
+elan show
+```
+
+Lean supports work on the [verification proposal](../doc/design/verification-obligations.md).
+Datamog's existing `--verify` command still uses an SMT solver; Lean integration
+is not implemented.
 
 ## Notebook environment
 
