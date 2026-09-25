@@ -1,5 +1,10 @@
 import { analyze, generateLogicalObligations, inferTypes } from "../packages/core/src/index.ts";
 import { exportLeanObligation, exportLeanRelation } from "../packages/core/src/obligation-lean.ts";
+import {
+  assertCurrentVerificationManifest,
+  createVerificationManifest,
+  verificationDigest,
+} from "../packages/core/src/verification-manifest.ts";
 import { parse } from "../packages/parser/src/index.ts";
 
 const root = new URL("../", import.meta.url);
@@ -38,12 +43,93 @@ theorem falseGoal_refuted : ¬ Generated.falseGoal := Proofs.falseGoal_refuted
 #audit falseGoal_refuted
 end Datamog.Checked
 `;
+// Hash the full frontend source inventories, not only the exporter entry point:
+// an analysis/import change must invalidate a result even if generated text agrees.
+const paths = new Set([
+  "doc/invariants/code/08-verify.dl",
+  "verification/lean/fixtures/reach.dl",
+  "scripts/generate-lean.ts",
+  "scripts/test-lean.ts",
+  "bun.lock",
+  "verification/lean/lean-toolchain",
+  "verification/lean/lakefile.toml",
+  "verification/lean/lake-manifest.json",
+  "verification/lean/Datamog.lean",
+]);
+for (const directory of ["packages/core/src", "packages/parser/src", "verification/lean/Datamog"]) {
+  for await (const path of new Bun.Glob("**/*").scan({
+    cwd: new URL(`${directory}/`, root).pathname,
+    onlyFiles: true,
+  })) {
+    if (directory.endsWith("Datamog") && ["Generated.lean", "Checked.lean"].includes(path))
+      continue;
+    if (/\.(ts|langium|lean)$/.test(path)) paths.add(`${directory}/${path}`);
+  }
+}
+const artifacts: Record<string, string> = {};
+for (const path of [...paths].sort())
+  artifacts[path] = await verificationDigest(await Bun.file(new URL(path, root)).text());
+const manifest = await createVerificationManifest(
+  [
+    {
+      id: "successor",
+      theorem: "Datamog.Checked.successor",
+      kind: "goal",
+      statement: successor[0]!,
+      assumptions: [],
+      dependencies: [],
+    },
+    {
+      id: "Reach",
+      kind: "definition",
+      statement: exportLeanRelation(reach, "reach", "Reach"),
+      assumptions: [],
+      dependencies: [],
+    },
+    {
+      id: "reachPreserves",
+      theorem: "Datamog.Checked.reachPreserves",
+      kind: "goal",
+      statement: generated.slice(
+        generated.indexOf("def reachPreserves"),
+        generated.indexOf("end Datamog.Generated"),
+      ),
+      assumptions: ["Every input edge preserves P"],
+      dependencies: ["Reach"],
+    },
+    {
+      id: "falseGoal",
+      kind: "definition",
+      statement: falseGoal,
+      assumptions: [],
+      dependencies: [],
+    },
+    {
+      id: "falseGoal_refuted",
+      theorem: "Datamog.Checked.falseGoal_refuted",
+      kind: "goal",
+      statement: "¬ Datamog.Generated.falseGoal",
+      assumptions: [],
+      dependencies: ["falseGoal"],
+    },
+  ],
+  {
+    profile: "datamog-integer-v1",
+    toolchain: (await Bun.file(new URL("lean-toolchain", project)).text()).trim(),
+    method: "lean-kernel-checked",
+    artifacts,
+  },
+);
 for (const [path, contents] of [
   ["Datamog/Generated.lean", generated],
-  ["Datamog/Checked.lean", checker],
+  ["Datamog/Checked.lean", `-- Verification manifest SHA-256: ${manifest.digest}\n${checker}`],
+  ["manifest.json", `${JSON.stringify(manifest, null, 2)}\n`],
 ]) {
   const target = new URL(path!, project);
   if (process.argv.includes("--check")) {
+    if (path === "manifest.json") {
+      assertCurrentVerificationManifest(manifest, await Bun.file(target).json());
+    }
     if ((await Bun.file(target).text()) !== contents) throw new Error(`Stale Lean output: ${path}`);
   } else await Bun.write(target, contents!);
 }

@@ -11,7 +11,7 @@ bun run test:lean
 
 `generate:lean` reads `doc/invariants/code/08-verify.dl` and
 `verification/lean/fixtures/reach.dl`. It regenerates only
-`Datamog/Generated.lean` and `Datamog/Checked.lean`. Maintain proofs in
+`Datamog/Generated.lean`, `Datamog/Checked.lean`, and `manifest.json`. Maintain proofs in
 `Datamog/Proofs.lean`; regeneration never overwrites that file.
 `bun run generate:lean --check` rejects stale generated output without writing.
 
@@ -55,6 +55,31 @@ The parser, analysis, exporters, semantic definitions, audit implementation, and
 pinned toolchain remain trusted. Local exported goals may assume published
 contracts: proving one does not independently discharge those dependencies.
 The registered successor fixture has no such dependencies. No proof cache,
-content-addressed manifest, arbitrary external proof import, or CLI `--verify`
+arbitrary external proof import, or CLI `--verify`
 Lean integration exists yet. Proof elaboration executes repository code; the
 axiom policy does not sandbox that process.
+
+## Manifest and invalidation
+
+`manifest.json` is a verification plan, not a successful result or certificate.
+It records registered theorem names, their statements, assumptions, and dependency
+closures. SHA-256 digests cover canonical JSON (sorted object keys, ordered arrays)
+and the complete reachable definition set, including cycles.
+
+The context includes the semantic profile, selected checking method, pinned
+Lean toolchain, lockfile, complete core/parser source inventories, generation and
+checking scripts, Datamog fixtures, and maintained Lean sources/configuration.
+These files are hashed by contents. Changing semantics, imported Lean definitions,
+proofs, the axiom audit, or frontend analysis invalidates the plan even when the
+exported theorem text happens to remain identical. This deliberately invalidates
+all registered results on any context change; finer dependency granularity can
+come later. Newly imported project Lean modules belong under `Datamog/` so they
+are included in the inventory; third-party Lean libraries remain unsupported.
+
+The generated checker records the manifest digest. `generate:lean --check`
+recomputes the artifacts from current sources and compares their full contents;
+a copied digest cannot authenticate a changed statement. `test:lean` performs
+that check before its fresh source build and reports the manifest identity with
+the successful audits. Regeneration preserves proof scripts, which must then
+check against the newly generated types. No cached result is accepted, and a
+manifest or matching digest alone never discharges a theorem.

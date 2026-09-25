@@ -39,15 +39,22 @@ try {
     "lake-manifest.json",
     "Datamog.lean",
     "Datamog",
+    "manifest.json",
   ]) {
     await cp(join(project, file), join(temp, file), { recursive: true });
   }
+  const manifest = await Bun.file(join(temp, "manifest.json")).json();
+  const goals = manifest.entries.filter((entry: { kind: string }) => entry.kind === "goal");
+  if (goals.length === 0) throw new Error("No registered Lean goals");
   const output = await run(["lake", "build"], temp);
-  for (const name of ["successor", "reachPreserves", "falseGoal_refuted"]) {
-    if (!output.includes(`Audited Datamog.Checked.${name}`))
-      throw new Error(`Missing axiom audit: ${name}`);
+  for (const goal of goals) {
+    if (!goal.theorem || !output.includes(`Audited ${goal.theorem}:`)) {
+      throw new Error(`Missing axiom audit: ${goal.id}`);
+    }
   }
-  console.log("Fresh Lean build and registered theorem audits passed.");
+  console.log(
+    `Fresh Lean build and registered theorem audits passed for manifest ${manifest.digest}.`,
+  );
   const negatives: [string, string, string][] = [
     [
       "FalseGoal",

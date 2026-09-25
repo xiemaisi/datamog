@@ -1,7 +1,7 @@
 # Richer verification obligations and Lean proofs
 
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
-and solver process handling implemented; stage 2 Lean spike implemented**. This extends the future-work discussion in
+and solver process handling implemented; stage 2 Lean spike implemented; stage 3 manifest identities started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -84,8 +84,9 @@ argument; a partial cycle cannot discharge itself. Parity-recursive components
 are skipped because they need a different semantic argument. Successful answers
 carry separate `solver-trusted` assurance metadata.
 
-These dependency identities are batch-local and preserve elaborated module
-predicate identities. They are not persistent proof identities or cache keys.
+These obligation dependency identities are batch-local and preserve elaborated
+module predicate identities. The Lean spike now supplements them with the
+content identities described below; the batch-local IDs alone are not cache keys.
 The minimal logical IR now stores typed integer/Boolean expressions for domain
 restrictions, hypotheses, and conclusions; included provenance uses the same
 expression trees. Each supported statement explicitly quantifies its variables
@@ -101,8 +102,8 @@ definedness condition excludes that case; this does not define division by zero
 in Datamog. Safe-integer bounds and nullness likewise remain explicit formulas.
 
 This IR still describes the existing local contract abstraction, not complete
-relation definitions. Full source/module manifests, content digests, proof
-caching, and general proof import remain unimplemented. JSON round trips are tested for
+relation definitions. General source/module manifests, proof caching, and general
+proof import remain unimplemented; the Lean spike has a scoped content manifest. JSON round trips are tested for
 statement preservation, but serialized statements are not proof certificates or
 an independently validated import format.
 
@@ -133,6 +134,29 @@ workflow runs this suite; ordinary builds and tests require no Lean installation
 These results concern the exported model, not verified backend implementations.
 This spike does not add a Lean mode to `--verify` or certify arbitrary dependency
 closures. The registered arithmetic fixture has no contract dependencies.
+
+## Initial statement identities
+
+The Lean generator now emits a [verification plan manifest](../../verification/lean/manifest.json)
+with theorem names, exact statements, explicit assumptions, dependency closures,
+and SHA-256 content identities. The closure algorithm includes cyclic dependencies
+without recursive hashing and rejects missing or duplicate nodes. Digests cover
+the semantic profile, checking method, toolchain, lockfile, core/parser source
+inventories, exporter/checking scripts, fixtures, and maintained Lean sources,
+including the semantics and axiom policy. Context changes conservatively
+invalidate all registered entries, even when their local statement is unchanged.
+
+The generated checker records the manifest digest. `generate:lean --check`
+recomputes the current plan and generated modules and rejects stale or altered
+content before `test:lean` rebuilds proofs from source. A claimed digest is not
+accepted in place of comparing the actual manifest. Tests cover goal, assumption,
+definition, toolchain, semantics, and policy changes, plus cyclic closures and
+forged content carrying an unchanged digest. Maintained proofs remain separate.
+
+This is the start of stage 3 for the fixed Lean project, not a cache or an
+external certificate-import protocol. The manifest records intended verification,
+not proof success. General module manifests, persisted checked results, finer
+invalidation, and arbitrary Lean/CLI integration remain future work.
 
 ## Which harder claims should be expressible?
 

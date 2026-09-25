@@ -26,6 +26,7 @@
       "node_modules",
       "verification/lean/.lake",
       "verification/lean/lake-manifest.json",
+      "verification/lean/manifest.json",
       "dist",
       "*.lockb",
       ".claude",
