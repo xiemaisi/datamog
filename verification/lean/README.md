@@ -118,3 +118,24 @@ unreachable server always fails the run. Lean CI provisions Postgres and require
 these checks. Fresh JSON reports include `semanticChecks` with the case count,
 participating backends and Postgres status; these concrete comparisons do not
 establish universal backend correctness or change theorem assurance.
+
+## Requiring unconditional goals
+
+Use manifest goal IDs to require specific unconditional results from a fresh run:
+
+```bash
+bun run test:lean --report --require-goal successor --require-goal falseGoal_refuted
+```
+
+All registered proofs and regression checks still run. Each requested ID must
+name a registered goal and have no remaining assumptions in its dependency
+closure; a definition ID, typo, missing audit, or conditional result fails the
+run. `--require-goal reachPreserves` therefore fails with the input edge premise
+in its diagnostic. Requiring `falseGoal` fails because it is a definition;
+`falseGoal_refuted` names the theorem proving its negation. An option without an
+ID is a usage error. Reports record the deduplicated requested IDs.
+
+Without `--require-goal`, conditional theorems continue to be valid outcomes of
+the proof suite. This gate checks the fixed project's fresh results only; it is
+not general CLI verification, arbitrary cyclic contract discharge, or report
+import. Lean CI requires the successor and false-goal-refutation proofs.

@@ -165,6 +165,12 @@ from its dependency closure. Goals with remaining input premises are conditional
 An earlier report is removed at the start of a report-producing run, so failure
 cannot leave that previous success behind. Reports describe modeled-language
 checks; they are not certificates and are never imported to discharge goals.
+The fixed-project runner also accepts repeated `--require-goal ID` options.
+Every requested ID must be a registered goal with a fresh unconditional result;
+unknown IDs, definitions, missing audits, and remaining input premises fail the
+run. All registered audits and semantic regressions still run, and reports
+record requested IDs. Lean CI requires successor safety and the false goal's
+refutation. This does not add general dependency discharge or report import.
 General module manifests, cached proof reuse, finer invalidation, and arbitrary
 Lean/CLI integration remain future work.
 

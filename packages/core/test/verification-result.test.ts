@@ -82,3 +82,19 @@ test("empty or ambiguous theorem registries cannot report success", async () => 
     expect(() => createLeanVerificationResult({ ...plan, entries }, output)).toThrow();
   }
 });
+
+test("required goals accept only registered unconditional fresh proofs", async () => {
+  const plan = await manifest();
+  expect(createLeanVerificationResult(plan, output, ["safe", "safe"]).requiredGoals).toEqual([
+    "safe",
+  ]);
+  for (const ids of [[], ["typo"], ["edge"], ["safe", "typo"]])
+    expect(() => createLeanVerificationResult(plan, output, ids)).toThrow();
+  expect(() => createLeanVerificationResult(plan, output, ["safe", "reach"])).toThrow(
+    "edge preserves P",
+  );
+  // Selecting a goal does not permit missing audits elsewhere in the plan.
+  expect(() => createLeanVerificationResult(plan, audit("Checked.safe"), ["safe"])).toThrow(
+    "Missing axiom audit",
+  );
+});

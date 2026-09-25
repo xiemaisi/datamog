@@ -7,11 +7,22 @@ const marker = "DATAMOG_AUDIT ";
  * The caller must check build success and manifest freshness first. Build tools
  * can emit arbitrary text; these records do not authenticate external proofs.
  */
-export function createLeanVerificationResult(manifest: Manifest, output: string) {
+export function createLeanVerificationResult(
+  manifest: Manifest,
+  output: string,
+  requiredGoals?: readonly string[],
+) {
   const goals = manifest.entries.filter((entry) => entry.kind === "goal");
   const expected = new Set(goals.map((goal) => goal.theorem));
   if (!goals.length || expected.has(undefined) || expected.size !== goals.length)
     throw new Error("Expected nonempty, uniquely named Lean goals");
+  if (requiredGoals !== undefined) {
+    if (!requiredGoals.length) throw new Error("No required Lean goals specified");
+    for (const id of requiredGoals) {
+      if (!goals.some((goal) => goal.id === id))
+        throw new Error(`Unknown required Lean goal: ${id}`);
+    }
+  }
   const audits = new Map<string, string[]>();
   for (const line of output.split("\n")) {
     const start = line.indexOf(marker);
@@ -52,7 +63,16 @@ export function createLeanVerificationResult(manifest: Manifest, output: string)
       axioms,
     };
   });
+  // This gate applies only to this fresh build, never to an imported report.
+  for (const id of requiredGoals ?? []) {
+    const entry = entries.find((entry) => entry.id === id)!;
+    if (entry.status !== "proved")
+      throw new Error(
+        `Required Lean goal ${id} remains conditional: ${entry.assumptions.join("; ")}`,
+      );
+  }
   return {
+    requiredGoals: [...new Set(requiredGoals ?? [])].sort(),
     schema: "datamog-verification-result-v1",
     purpose: "fresh-check-report",
     scope: "modeled-language",

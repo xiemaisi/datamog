@@ -15,11 +15,17 @@ import { createLeanVerificationResult } from "../packages/core/src/verification-
 const root = new URL("../", import.meta.url).pathname;
 const project = join(root, "verification/lean");
 const args = process.argv.slice(2);
-if (args.some((arg) => arg !== "--report") || args.length > 1)
-  throw new Error("Usage: bun run test:lean [--report]");
+const requiredGoals: string[] = [];
+let writeReport = false;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--report" && !writeReport) writeReport = true;
+  else if (args[i] === "--require-goal" && args[i + 1] && !args[i + 1]!.startsWith("--"))
+    requiredGoals.push(args[++i]!);
+  else throw new Error("Usage: bun run test:lean [--report] [--require-goal ID ...]");
+}
 const reportPath = join(project, "verification-result.json");
 // An explicitly requested report must not leave an earlier success after failure.
-if (args.includes("--report")) await rm(reportPath, { force: true });
+if (writeReport) await rm(reportPath, { force: true });
 const postgresUrl = process.env.DATAMOG_EXAMPLES_DATABASE_URL ?? process.env.DATABASE_URL;
 if (process.env.DATAMOG_REQUIRE_POSTGRES && !postgresUrl)
   throw new Error("DATAMOG_REQUIRE_POSTGRES is set but no PostgreSQL test URL is configured");
@@ -59,7 +65,11 @@ try {
   }
   const manifest = await Bun.file(join(temp, "manifest.json")).json();
   const output = await run(["lake", "build"], temp);
-  const report = createLeanVerificationResult(manifest, output);
+  const report = createLeanVerificationResult(
+    manifest,
+    output,
+    requiredGoals.length ? requiredGoals : undefined,
+  );
   console.log(
     `Fresh Lean build and registered theorem audits passed for manifest ${manifest.digest}.`,
   );
@@ -204,7 +214,7 @@ try {
     manifest,
     await Bun.file(join(project, "manifest.json")).json(),
   );
-  if (args.includes("--report")) {
+  if (writeReport) {
     const pending = `${reportPath}.tmp`;
     try {
       await Bun.write(pending, `${JSON.stringify({ ...report, semanticChecks }, null, 2)}\n`);

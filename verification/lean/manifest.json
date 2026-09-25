@@ -48,7 +48,7 @@
       "packages/core/src/types.ts": "fd6c0d121056e9953d519348da2003d3831f74ae7d38a41b7fa8181d43762e07",
       "packages/core/src/util.ts": "b11325b8cd7e04d5958b4ec84d3661971f7821742d08683cc27a700206c5d1b1",
       "packages/core/src/verification-manifest.ts": "7dd19ceee4fdd55a9000856cee272c941f54bbf69de61ef774d392fe83d3b530",
-      "packages/core/src/verification-result.ts": "37ce2d4fd09d9fca04d3eb1ced7aa561da2eae667335cf0ceba50868da74a864",
+      "packages/core/src/verification-result.ts": "6aabb98df0132ed3eeffa3fab7891dc88b0b1bd20fe4af759ed8d48832a055dc",
       "packages/parser/src/datamog-module.ts": "f4102d6bb01262cfe68d5d8662e22340cf71349ca14d54c9d9a2a79a553553ff",
       "packages/parser/src/datamog.langium": "53f24252a51ef3a6146a147570c109d930a98901bdfee7454fdc531b802f71a1",
       "packages/parser/src/generated/ast.ts": "8b18041ad60b5a8752758b8f89a6f585a68b8597e7730cb777c531f785143fe8",
@@ -63,7 +63,7 @@
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
       "scripts/generate-lean.ts": "6a8f5c557ea4b1b57d0eb703e21e23edf27773a8e28197547886788742012db4",
-      "scripts/test-lean.ts": "2e90a46ac8ae4f9923e0a31eb5652d15ae94999a387478aad41cace606ab7c10",
+      "scripts/test-lean.ts": "c6aaac85f49f219aaf3cf1861e166a1423bd487ca899f9acedb782f4e9b4b127",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
       "verification/lean/Datamog/Proofs.lean": "39898c32a41c48122753fdf70300944678bcf2cfbfc66e564bf011ffe3536dd4",
@@ -74,7 +74,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "7b1112d3981dcfb3e9d0ff222418ff7ebaa7e10ce4878ddbc11d6ced1a225686",
+  "contextDigest": "44ebfe5cd9755b1f85a10bded25c90a2780f19a9eeefc148b98ea8c8af152fe0",
   "entries": [
     {
       "id": "Reach",
@@ -85,7 +85,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "183f7776d874f1cf653218191967b51c27deea4e983a4dcd9b17b26b08b2d9ee"
+      "digest": "244573e9d25a2f24a34e68050c4259dd1f15bc3cfaea2b9632590414955398d7"
     },
     {
       "id": "falseGoal",
@@ -186,7 +186,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "5a720490a6ff4038212c104b8599cb91befe452b3633e8e5154824d69a2a62ae"
+      "digest": "64ae982b008bcdd21396b9bf819f8ac62a56e96ba4c8a103195d0e87223641f0"
     },
     {
       "id": "falseGoal_refuted",
@@ -201,7 +201,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "38f9b04aa426d2d77d8ba0dd8ee741fc441205c30ffa961dd55e05c18bea9961"
+      "digest": "cf55cae759614b57a48838cde2e11cf9daa63d2ba03cc741bdafd292c332aef0"
     },
     {
       "id": "reachPreserves",
@@ -218,7 +218,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "2d7b0a93622b97ab543895b17ecf1acc022bd0a1399a8dfdbce68fdf7744ed3c"
+      "digest": "3c83f40efd10ece2508d7915a03debf7d04888d9008babc21cc56988dbfbff8a"
     },
     {
       "id": "successor",
@@ -652,8 +652,8 @@
       "closure": [
         "successor"
       ],
-      "digest": "a11d2f61d11903d17e9010fe9fd9bde867ee8f8d2f57c1f7880e3f0e64def67a"
+      "digest": "ad3df8b7d214089104f8fba93aa55577a0fff15d74b0952b372bc94c3ea60457"
     }
   ],
-  "digest": "79219677507c174f9b69061e1608b186509a09928285b704306d5f1fc9c1e9a1"
+  "digest": "b5adff17115d6b11eef27f115124c0b247bdb4a88023ec15196e3e14e36cbddd"
 }
