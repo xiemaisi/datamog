@@ -128,9 +128,12 @@ integer operations and truth. It does not cover floats or structural values.
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
-axioms. They also compare 164 concrete semantic cases against native and SQLite
-execution and check those results by Lean kernel reduction. A separate Lean CI
-workflow runs this suite; ordinary builds and tests require no Lean installation.
+axioms. They also compare 164 concrete semantic cases against native, SQLite, and
+configured Postgres execution and check those results by Lean kernel reduction.
+Postgres comparisons use a temporary isolated schema, are required in the Lean CI
+job and devcontainer, and explicitly report a skip when no test database is
+configured elsewhere. Fresh reports record concrete-case coverage separately
+from theorem assurance. A separate Lean CI workflow runs this suite; ordinary builds and tests require no Lean installation.
 These results concern the exported model, not verified backend implementations.
 This spike does not add a Lean mode to `--verify` or certify arbitrary dependency
 closures. The registered arithmetic fixture has no contract dependencies.

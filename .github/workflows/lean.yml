@@ -13,6 +13,23 @@ jobs:
   lean:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/datamog_lean
+      DATAMOG_REQUIRE_POSTGRES: "1"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: datamog_lean
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d datamog_lean"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2

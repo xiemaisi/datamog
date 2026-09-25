@@ -103,3 +103,18 @@ The scope is the modeled language. Reports describe trusted local build outcomes
 they are not authenticated certificates, do not enable proof reuse, and are never
 accepted as input to discharge a goal. Build tools and their log output remain
 trusted. Consumers must not infer current validity from an old report.
+
+## Postgres semantic comparisons
+
+`bun run test:lean` also compares the 164 semantic cases with Postgres when
+`DATAMOG_EXAMPLES_DATABASE_URL` or `DATABASE_URL` is set (the former takes
+precedence). Use a dedicated test database. The runner creates a unique schema
+on a single connection and drops that schema on completion or failure; it does
+not reset `public`. The existing devcontainer configuration enables this path.
+
+Without a URL, the runner explicitly reports the Postgres comparisons as skipped.
+With `DATAMOG_REQUIRE_POSTGRES` set, a missing URL is an error. A configured but
+unreachable server always fails the run. Lean CI provisions Postgres and requires
+these checks. Fresh JSON reports include `semanticChecks` with the case count,
+participating backends and Postgres status; these concrete comparisons do not
+establish universal backend correctness or change theorem assurance.

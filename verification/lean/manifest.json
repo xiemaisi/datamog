@@ -63,7 +63,7 @@
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
       "scripts/generate-lean.ts": "6a8f5c557ea4b1b57d0eb703e21e23edf27773a8e28197547886788742012db4",
-      "scripts/test-lean.ts": "29e57f8c035e3bf9fe32e71d205e6de33f2443bd5488267ad10d8a9311475f18",
+      "scripts/test-lean.ts": "2e90a46ac8ae4f9923e0a31eb5652d15ae94999a387478aad41cace606ab7c10",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
       "verification/lean/Datamog/Proofs.lean": "39898c32a41c48122753fdf70300944678bcf2cfbfc66e564bf011ffe3536dd4",
@@ -74,7 +74,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "90a4c3be301adb219f2bc200336f9041b7bcda9e2c399de55c60f542dc6d711f",
+  "contextDigest": "7b1112d3981dcfb3e9d0ff222418ff7ebaa7e10ce4878ddbc11d6ced1a225686",
   "entries": [
     {
       "id": "Reach",
@@ -85,7 +85,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "786c417ca7201882786494248372af1a7b48cc14a8def04cdfaee59aa725291f"
+      "digest": "183f7776d874f1cf653218191967b51c27deea4e983a4dcd9b17b26b08b2d9ee"
     },
     {
       "id": "falseGoal",
@@ -186,7 +186,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "ced7e3de256f9a4d1e535f666bdf3917fe85f54c47f8b857a01f0665b7673095"
+      "digest": "5a720490a6ff4038212c104b8599cb91befe452b3633e8e5154824d69a2a62ae"
     },
     {
       "id": "falseGoal_refuted",
@@ -201,7 +201,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "6faec1f5a315c277a0104295f988db13efec42b7f7ba95b84ee684cd3d0b1841"
+      "digest": "38f9b04aa426d2d77d8ba0dd8ee741fc441205c30ffa961dd55e05c18bea9961"
     },
     {
       "id": "reachPreserves",
@@ -218,7 +218,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "baddfad507f14da8d581eefc074a619ffa7840aca69419f87b7f593915a382dd"
+      "digest": "2d7b0a93622b97ab543895b17ecf1acc022bd0a1399a8dfdbce68fdf7744ed3c"
     },
     {
       "id": "successor",
@@ -652,8 +652,8 @@
       "closure": [
         "successor"
       ],
-      "digest": "a6223dca6a630b7afa3b2050a1d6868745e88db0a88eb10ac41668e117852f41"
+      "digest": "a11d2f61d11903d17e9010fe9fd9bde867ee8f8d2f57c1f7880e3f0e64def67a"
     }
   ],
-  "digest": "700cc8e7226579d5aeee74d63ca7de6c1fb3b42a2af02da9c59eb9dc12d1c95b"
+  "digest": "79219677507c174f9b69061e1608b186509a09928285b704306d5f1fc9c1e9a1"
 }

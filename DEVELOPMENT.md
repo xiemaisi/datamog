@@ -165,12 +165,14 @@ and Lake. From the repository root:
 
 ```bash
 bun run generate:lean        # regenerate statements/checkers, preserve maintained proofs
-bun run test:lean            # fresh build, axiom policy negatives, native/SQLite comparisons
+bun run test:lean            # fresh build, axiom policy negatives, native/SQL comparisons
 ```
 
 Run these checks when changing the Lean exporters, semantic library, or proofs.
 The dedicated Lean Verification CI job installs the pinned toolchain and runs
-the same suite. `bun test` covers source-generation regressions without Lean.
+the same suite with Postgres required. The devcontainer also enables Postgres
+semantic comparisons automatically; elsewhere they skip explicitly without a test
+database URL. `bun test` covers source-generation regressions without Lean.
 
 ## Playground
 

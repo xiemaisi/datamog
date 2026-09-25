@@ -1,10 +1,12 @@
 // Optional integration suite: fresh Lean build, trust-policy failures, and
-// concrete agreement with native/SQLite. Ordinary `bun test` does not run it.
+// concrete agreement with native/SQLite and optional Postgres. Ordinary `bun test` does not run it.
 import { cp, mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { create as createNative } from "../packages/backend/native/src/index.ts";
+import { create as createPostgres } from "../packages/backend/postgres/src/index.ts";
 import { create as createSqlite } from "../packages/backend/sqlite/src/index.ts";
+import type { Backend } from "../packages/engine/src/backend.ts";
 import { DatamogExecutor } from "../packages/engine/src/executor.ts";
 
 import { assertCurrentVerificationManifest } from "../packages/core/src/verification-manifest.ts";
@@ -18,6 +20,9 @@ if (args.some((arg) => arg !== "--report") || args.length > 1)
 const reportPath = join(project, "verification-result.json");
 // An explicitly requested report must not leave an earlier success after failure.
 if (args.includes("--report")) await rm(reportPath, { force: true });
+const postgresUrl = process.env.DATAMOG_EXAMPLES_DATABASE_URL ?? process.env.DATABASE_URL;
+if (process.env.DATAMOG_REQUIRE_POSTGRES && !postgresUrl)
+  throw new Error("DATAMOG_REQUIRE_POSTGRES is set but no PostgreSQL test URL is configured");
 async function run(command: string[], cwd: string, expectedFailure?: string) {
   const child = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
   const timer = setTimeout(() => child.kill("SIGKILL"), 120_000);
@@ -114,10 +119,45 @@ try {
         cases.push([`${a} ${op} ${b}`, `${name} ${leanValue(a)} ${leanValue(b)}`]);
       }
     }
-  const native = await createNative();
-  const sqlite = await createSqlite();
+  const backends: [string, Backend][] = [];
+  const backendNames: string[] = [];
   const checks: string[] = [];
   try {
+    backends.push(["native", await createNative()]);
+    backends.push(["SQLite", await createSqlite()]);
+    if (postgresUrl) {
+      // One connection keeps search_path stable; never reset the public schema.
+      const sql = new Bun.SQL(postgresUrl, { max: 1, connectionTimeout: 5 });
+      const schema = `lean_semantics_${crypto.randomUUID().replaceAll("-", "")}`;
+      try {
+        await sql.unsafe(`CREATE SCHEMA ${schema}`);
+        await sql.unsafe(`SET search_path TO ${schema}`);
+        const backend = await createPostgres(sql);
+        backends.push([
+          "Postgres",
+          {
+            ...backend,
+            async close() {
+              try {
+                await sql.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+              } finally {
+                await backend.close();
+              }
+            },
+          },
+        ]);
+      } catch (error) {
+        try {
+          await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+        } finally {
+          await sql.close();
+        }
+        throw error;
+      }
+    } else {
+      console.log("Postgres semantic comparisons skipped: no test database URL configured.");
+    }
+    backendNames.push(...backends.map(([name]) => name));
     for (const [i, [expr, lean]] of cases.entries()) {
       const [left, op, right] = expr.split(" ");
       // The seed establishes integer columns even for a null test row.
@@ -125,11 +165,12 @@ try {
         result${i}(A ${op} B) :- pair${i}(A, B), A = ${left}, B = ${right}.
         ?- result${i}(X).`;
       const results = [];
-      for (const backend of [native, sqlite]) {
-        results.push((await new DatamogExecutor(backend).execute(source))[0]!.rows);
+      for (const [name, backend] of backends) {
+        const rows = (await new DatamogExecutor(backend).execute(source))[0]!.rows;
+        if (results.length && JSON.stringify(results[0]) !== JSON.stringify(rows))
+          throw new Error(`native/${name} disagree: ${expr}`);
+        results.push(rows);
       }
-      if (JSON.stringify(results[0]) !== JSON.stringify(results[1]))
-        throw new Error(`Native/SQLite disagree: ${expr}`);
       const rows = results[0]!;
       const value = rows[0]?.X;
       const expected =
@@ -141,8 +182,7 @@ try {
       checks.push(`example : ${lean} = ${expected} := by decide`);
     }
   } finally {
-    await native.close();
-    await sqlite.close();
+    await Promise.all(backends.map(([, backend]) => backend.close()));
   }
   checks.push(
     "example : Datamog.negationAsFailure none := by simp [Datamog.negationAsFailure, Datamog.Holds]",
@@ -152,7 +192,13 @@ try {
     `import Datamog.Semantics\nopen Datamog\n${checks.join("\n")}\n`,
   );
   await run(["lake", "env", "lean", "CrossCheck.lean"], temp);
-  console.log(`${cases.length} Lean/native/SQLite semantic cases passed.`);
+  console.log(`${cases.length} Lean/${backendNames.join("/")} semantic cases passed.`);
+  const semanticChecks = {
+    scope: "concrete-cases",
+    cases: cases.length,
+    backends: backendNames,
+    postgres: postgresUrl ? "passed" : "skipped",
+  };
   await run([process.execPath, "scripts/generate-lean.ts", "--check"], root);
   assertCurrentVerificationManifest(
     manifest,
@@ -161,7 +207,7 @@ try {
   if (args.includes("--report")) {
     const pending = `${reportPath}.tmp`;
     try {
-      await Bun.write(pending, `${JSON.stringify(report, null, 2)}\n`);
+      await Bun.write(pending, `${JSON.stringify({ ...report, semanticChecks }, null, 2)}\n`);
       await rename(pending, reportPath);
     } finally {
       await rm(pending, { force: true });
