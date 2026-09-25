@@ -114,7 +114,8 @@ without third-party Lean dependencies. `bun run generate:lean` exports the
 successor obligation from `08-verify.dl`, a deliberately false local goal, and an
 inductive reachability relation generated from a Datamog fixture. Maintained
 proofs establish successor safety, reachability preservation under an explicit
-edge premise, and the negation of the false goal. Generated checker theorems
+edge premise, reachability transitivity without extra input laws, and the negation
+of the false goal. Generated checker theorems
 require the exact expected types and audit their transitive axiom dependencies.
 
 [`obligation-lean.ts`](../../packages/core/src/obligation-lean.ts) exports the
@@ -169,10 +170,25 @@ The fixed-project runner also accepts repeated `--require-goal ID` options.
 Every requested ID must be a registered goal with a fresh unconditional result;
 unknown IDs, definitions, missing audits, and remaining input premises fail the
 run. All registered audits and semantic regressions still run, and reports
-record requested IDs. Lean CI requires successor safety and the false goal's
-refutation. This does not add general dependency discharge or report import.
+record requested IDs. Lean CI requires successor safety, reachability
+transitivity, and the false goal's refutation. This does not add general dependency discharge or report import.
 General module manifests, cached proof reuse, finer invalidation, and arbitrary
 Lean/CLI integration remain future work.
+
+## First worked relation law
+
+The companion project's `reachTransitive` goal states that two composable
+reachability derivations imply a derivation between their endpoints, for every
+input edge relation over the modeled bounded-integer domain. Its maintained
+proof inducts on the second derivation and uses the introduction rules exported
+from the Datamog fixture. The exact generated theorem type is audited, registered
+with a dependency on `Reach`, and required unconditionally in Lean CI. Its axiom
+closure is empty. Unlike `reachPreserves`, it needs no additional input law.
+
+This is a worked relation-level assertion in Lean, not new Datamog syntax or a
+general claim exporter. It uses the already supported positive recursive
+fragment; uniqueness, nontrivial coverage, and the remaining stage 4 families
+are still open.
 
 ## Which harder claims should be expressible?
 

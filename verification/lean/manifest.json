@@ -62,11 +62,11 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "6a8f5c557ea4b1b57d0eb703e21e23edf27773a8e28197547886788742012db4",
+      "scripts/generate-lean.ts": "70d2948a0515d7cea4b59e64309892ead8b696535f26bf0969e92fad81f92689",
       "scripts/test-lean.ts": "c6aaac85f49f219aaf3cf1861e166a1423bd487ca899f9acedb782f4e9b4b127",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "39898c32a41c48122753fdf70300944678bcf2cfbfc66e564bf011ffe3536dd4",
+      "verification/lean/Datamog/Proofs.lean": "351e9f58f3b2aeb2b0f4c4bf83ccf35636b929600b9f419c6d205001086baba8",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
       "verification/lean/lake-manifest.json": "17266b6b89bd7b2ae4ee695726c0dad98d7fd00a628a07a9b491d5cde0b0fb90",
@@ -74,7 +74,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "44ebfe5cd9755b1f85a10bded25c90a2780f19a9eeefc148b98ea8c8af152fe0",
+  "contextDigest": "3781081968149a971844059f7de38d1e1a0aa1e373f72675c41e0bd6f61d1965",
   "entries": [
     {
       "id": "Reach",
@@ -85,7 +85,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "244573e9d25a2f24a34e68050c4259dd1f15bc3cfaea2b9632590414955398d7"
+      "digest": "2a511bdafbe6704d13a1bfaeab2fc37993baa9977dafbc4e64d4ea41498d07bf"
     },
     {
       "id": "falseGoal",
@@ -186,7 +186,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "64ae982b008bcdd21396b9bf819f8ac62a56e96ba4c8a103195d0e87223641f0"
+      "digest": "668091ff37a4f4180f8fc1436a51b6fe80ad139f83dbebeb41b56a31390d46ab"
     },
     {
       "id": "falseGoal_refuted",
@@ -201,7 +201,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "cf55cae759614b57a48838cde2e11cf9daa63d2ba03cc741bdafd292c332aef0"
+      "digest": "ea0e1094b47f842a31e49d313d1aa0c26077e62a321fc69db8780a88744fc75c"
     },
     {
       "id": "reachPreserves",
@@ -218,7 +218,22 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "3c83f40efd10ece2508d7915a03debf7d04888d9008babc21cc56988dbfbff8a"
+      "digest": "cabd6c2e9e19ed00b4861ceefde7b1d5694c8791524f2bf905fe2df3d1b7e915"
+    },
+    {
+      "id": "reachTransitive",
+      "theorem": "Datamog.Checked.reachTransitive",
+      "kind": "goal",
+      "statement": "def reachTransitive : Prop :=\n  ∀ (edge : SafeInt → SafeInt → Prop) (a b c : SafeInt),\n  Reach edge a b → Reach edge b c → Reach edge a c\n",
+      "assumptions": [],
+      "dependencies": [
+        "Reach"
+      ],
+      "closure": [
+        "Reach",
+        "reachTransitive"
+      ],
+      "digest": "acebe36ca32a035d84d5ab0ed5fd29551366d6462eb052d25b567451e6f1f33e"
     },
     {
       "id": "successor",
@@ -652,8 +667,8 @@
       "closure": [
         "successor"
       ],
-      "digest": "ad3df8b7d214089104f8fba93aa55577a0fff15d74b0952b372bc94c3ea60457"
+      "digest": "72f7fe185d31bd4a993f146a9a14e1ea049cc8839e37e5897c8d6bb9676a2b5e"
     }
   ],
-  "digest": "b5adff17115d6b11eef27f115124c0b247bdb4a88023ec15196e3e14e36cbddd"
+  "digest": "999e8bbd3efa3f7fcfb16255b7ac3deaa59a59e7a3270b041b61173592326460"
 }

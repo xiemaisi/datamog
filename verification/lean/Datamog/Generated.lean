@@ -22,4 +22,9 @@ def reachPreserves : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (P : SafeInt → Prop),
   (∀ a b, edge a b → P a → P b) →
   ∀ a b, Reach edge a b → P a → P b
+
+def reachTransitive : Prop :=
+  ∀ (edge : SafeInt → SafeInt → Prop) (a b c : SafeInt),
+  Reach edge a b → Reach edge b c → Reach edge a c
+
 end Datamog.Generated

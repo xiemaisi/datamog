@@ -139,3 +139,22 @@ Without `--require-goal`, conditional theorems continue to be valid outcomes of
 the proof suite. This gate checks the fixed project's fresh results only; it is
 not general CLI verification, arbitrary cyclic contract discharge, or report
 import. Lean CI requires the successor and false-goal-refutation proofs.
+
+## Reachability transitivity
+
+The registered `reachTransitive` theorem proves, for every input edge relation
+and bounded-integer vertices `a`, `b`, and `c`:
+
+```text
+Reach(edge, a, b) → Reach(edge, b, c) → Reach(edge, a, c)
+```
+
+Its maintained proof inducts on the second finite derivation and uses only the
+constructors generated from `fixtures/reach.dl`. It has no extra input law or
+axiom dependencies and is required by Lean CI. Check it explicitly with
+`bun run test:lean --require-goal reachTransitive`.
+
+This is a worked relation-level law in the companion Lean project. It adds no
+Datamog assertion syntax or new supported translation fragment, and it does not
+claim termination or correctness of a backend's execution. The preservation
+example still retains its explicit edge premise.
