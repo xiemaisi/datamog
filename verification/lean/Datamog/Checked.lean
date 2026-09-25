@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: c68c9d6756233abbc0ed0181df1001c4de6700b1070d26b8892f8975413d427c
+-- Verification manifest SHA-256: 700cc8e7226579d5aeee74d63ca7de6c1fb3b42a2af02da9c59eb9dc12d1c95b
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit

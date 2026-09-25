@@ -48,6 +48,7 @@
       "packages/core/src/types.ts": "fd6c0d121056e9953d519348da2003d3831f74ae7d38a41b7fa8181d43762e07",
       "packages/core/src/util.ts": "b11325b8cd7e04d5958b4ec84d3661971f7821742d08683cc27a700206c5d1b1",
       "packages/core/src/verification-manifest.ts": "7dd19ceee4fdd55a9000856cee272c941f54bbf69de61ef774d392fe83d3b530",
+      "packages/core/src/verification-result.ts": "37ce2d4fd09d9fca04d3eb1ced7aa561da2eae667335cf0ceba50868da74a864",
       "packages/parser/src/datamog-module.ts": "f4102d6bb01262cfe68d5d8662e22340cf71349ca14d54c9d9a2a79a553553ff",
       "packages/parser/src/datamog.langium": "53f24252a51ef3a6146a147570c109d930a98901bdfee7454fdc531b802f71a1",
       "packages/parser/src/generated/ast.ts": "8b18041ad60b5a8752758b8f89a6f585a68b8597e7730cb777c531f785143fe8",
@@ -62,9 +63,9 @@
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
       "scripts/generate-lean.ts": "6a8f5c557ea4b1b57d0eb703e21e23edf27773a8e28197547886788742012db4",
-      "scripts/test-lean.ts": "0685c1ede01923a37e284a192a907131aa86de344482bf9d8a73752c415373e5",
+      "scripts/test-lean.ts": "29e57f8c035e3bf9fe32e71d205e6de33f2443bd5488267ad10d8a9311475f18",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
-      "verification/lean/Datamog/Audit.lean": "b5c77b5e191315908f94c2998e40f613eb909b1d754346b77332694ab8edff6b",
+      "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
       "verification/lean/Datamog/Proofs.lean": "39898c32a41c48122753fdf70300944678bcf2cfbfc66e564bf011ffe3536dd4",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
@@ -73,7 +74,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "839e4986cad181986b7f1ce85605e1f04c7a4d1915b78698975e58daf8fdd85c",
+  "contextDigest": "90a4c3be301adb219f2bc200336f9041b7bcda9e2c399de55c60f542dc6d711f",
   "entries": [
     {
       "id": "Reach",
@@ -84,7 +85,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "e6bbee58f72c0461e68840239c0f9720a40a8602e22b86589229a81a52de0f7d"
+      "digest": "786c417ca7201882786494248372af1a7b48cc14a8def04cdfaee59aa725291f"
     },
     {
       "id": "falseGoal",
@@ -185,7 +186,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "82c47f13e31d80d1dc7c78c850ebce130a30e94927ee68569811f41337c54dd6"
+      "digest": "ced7e3de256f9a4d1e535f666bdf3917fe85f54c47f8b857a01f0665b7673095"
     },
     {
       "id": "falseGoal_refuted",
@@ -200,7 +201,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "acde9a848e5ac439562ad304c3ae3a986b3deb1341f1eeb8fd5cbded7fcf89a7"
+      "digest": "6faec1f5a315c277a0104295f988db13efec42b7f7ba95b84ee684cd3d0b1841"
     },
     {
       "id": "reachPreserves",
@@ -217,7 +218,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "26f4824476b6ea36b4d14193676b69f501944f154e081f1ca674efe62e3173db"
+      "digest": "baddfad507f14da8d581eefc074a619ffa7840aca69419f87b7f593915a382dd"
     },
     {
       "id": "successor",
@@ -651,8 +652,8 @@
       "closure": [
         "successor"
       ],
-      "digest": "b9d678e1c1f62f57fb285be9e12186aa1b64356db8a4a07ea4dbd4e01f6105ae"
+      "digest": "a6223dca6a630b7afa3b2050a1d6868745e88db0a88eb10ac41668e117852f41"
     }
   ],
-  "digest": "c68c9d6756233abbc0ed0181df1001c4de6700b1070d26b8892f8975413d427c"
+  "digest": "700cc8e7226579d5aeee74d63ca7de6c1fb3b42a2af02da9c59eb9dc12d1c95b"
 }

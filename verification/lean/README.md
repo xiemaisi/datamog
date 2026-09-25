@@ -83,3 +83,23 @@ that check before its fresh source build and reports the manifest identity with
 the successful audits. Regeneration preserves proof scripts, which must then
 check against the newly generated types. No cached result is accepted, and a
 manifest or matching digest alone never discharges a theorem.
+
+## Fresh verification reports
+
+Run `bun run test:lean --report` to write the ignored
+`verification/lean/verification-result.json` after the entire suite succeeds.
+The runner removes an earlier report before checking, builds from fresh source,
+requires exactly one structured axiom audit for each registered theorem, and
+rechecks the manifest before atomically publishing the report. A failed run with
+`--report` leaves no previous success report. Runs without the flag do not update
+or remove reports.
+
+The report binds each theorem to its goal and manifest digests, records the
+transitive axiom dependencies, and keeps assurance separate from status. Goals
+with explicit assumptions anywhere in their dependency closure are `conditional`;
+others are `proved`. In particular, reachability retains its input edge premise,
+and `falseGoal_refuted` reports a proof of the negation, not of the false goal.
+The scope is the modeled language. Reports describe trusted local build outcomes;
+they are not authenticated certificates, do not enable proof reuse, and are never
+accepted as input to discharge a goal. Build tools and their log output remain
+trusted. Consumers must not infer current validity from an old report.

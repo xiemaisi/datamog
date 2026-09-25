@@ -1,7 +1,7 @@
 # Richer verification obligations and Lean proofs
 
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
-and solver process handling implemented; stage 2 Lean spike implemented; stage 3 manifest identities started**. This extends the future-work discussion in
+and solver process handling implemented; stage 2 Lean spike implemented; stage 3 manifest identities and fresh result reports started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -155,8 +155,15 @@ forged content carrying an unchanged digest. Maintained proofs remain separate.
 
 This is the start of stage 3 for the fixed Lean project, not a cache or an
 external certificate-import protocol. The manifest records intended verification,
-not proof success. General module manifests, persisted checked results, finer
-invalidation, and arbitrary Lean/CLI integration remain future work.
+not proof success. `test:lean --report` now writes an optional machine-readable fresh-check report
+only after the entire suite passes and the manifest is rechecked. Each registered
+theorem records its goal digest, axiom dependencies, assurance, and assumptions
+from its dependency closure. Goals with remaining input premises are conditional.
+An earlier report is removed at the start of a report-producing run, so failure
+cannot leave that previous success behind. Reports describe modeled-language
+checks; they are not certificates and are never imported to discharge goals.
+General module manifests, cached proof reuse, finer invalidation, and arbitrary
+Lean/CLI integration remain future work.
 
 ## Which harder claims should be expressible?
 

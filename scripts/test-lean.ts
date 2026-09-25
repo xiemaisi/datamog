@@ -1,14 +1,23 @@
 // Optional integration suite: fresh Lean build, trust-policy failures, and
 // concrete agreement with native/SQLite. Ordinary `bun test` does not run it.
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { create as createNative } from "../packages/backend/native/src/index.ts";
 import { create as createSqlite } from "../packages/backend/sqlite/src/index.ts";
 import { DatamogExecutor } from "../packages/engine/src/executor.ts";
 
+import { assertCurrentVerificationManifest } from "../packages/core/src/verification-manifest.ts";
+import { createLeanVerificationResult } from "../packages/core/src/verification-result.ts";
+
 const root = new URL("../", import.meta.url).pathname;
 const project = join(root, "verification/lean");
+const args = process.argv.slice(2);
+if (args.some((arg) => arg !== "--report") || args.length > 1)
+  throw new Error("Usage: bun run test:lean [--report]");
+const reportPath = join(project, "verification-result.json");
+// An explicitly requested report must not leave an earlier success after failure.
+if (args.includes("--report")) await rm(reportPath, { force: true });
 async function run(command: string[], cwd: string, expectedFailure?: string) {
   const child = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
   const timer = setTimeout(() => child.kill("SIGKILL"), 120_000);
@@ -44,14 +53,8 @@ try {
     await cp(join(project, file), join(temp, file), { recursive: true });
   }
   const manifest = await Bun.file(join(temp, "manifest.json")).json();
-  const goals = manifest.entries.filter((entry: { kind: string }) => entry.kind === "goal");
-  if (goals.length === 0) throw new Error("No registered Lean goals");
   const output = await run(["lake", "build"], temp);
-  for (const goal of goals) {
-    if (!goal.theorem || !output.includes(`Audited ${goal.theorem}:`)) {
-      throw new Error(`Missing axiom audit: ${goal.id}`);
-    }
-  }
+  const report = createLeanVerificationResult(manifest, output);
   console.log(
     `Fresh Lean build and registered theorem audits passed for manifest ${manifest.digest}.`,
   );
@@ -150,6 +153,21 @@ try {
   );
   await run(["lake", "env", "lean", "CrossCheck.lean"], temp);
   console.log(`${cases.length} Lean/native/SQLite semantic cases passed.`);
+  await run([process.execPath, "scripts/generate-lean.ts", "--check"], root);
+  assertCurrentVerificationManifest(
+    manifest,
+    await Bun.file(join(project, "manifest.json")).json(),
+  );
+  if (args.includes("--report")) {
+    const pending = `${reportPath}.tmp`;
+    try {
+      await Bun.write(pending, `${JSON.stringify(report, null, 2)}\n`);
+      await rename(pending, reportPath);
+    } finally {
+      await rm(pending, { force: true });
+    }
+    console.log(`Verification report written to ${reportPath}`);
+  }
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

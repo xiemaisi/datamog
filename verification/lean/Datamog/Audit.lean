@@ -9,4 +9,6 @@ elab "#audit " id:ident : command => do
     for axiomName in axioms do
       unless allowed.contains axiomName do
         throwError "Unapproved axiom {axiomName} in {name}"
-    logInfo m!"Audited {name}: {axioms}"
+    let record := Json.mkObj [("theorem", toJson name.toString),
+      ("axioms", toJson (axioms.map Name.toString))]
+    logInfo m!"DATAMOG_AUDIT {record.compress}"
