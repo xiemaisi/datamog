@@ -199,3 +199,5 @@ export type {
   ObligationStatement,
 } from "./obligation-ir.ts";
 export { exportSmtObligation } from "./obligation-smt.ts";
+
+export { exportLeanObligation, exportLeanRelation } from "./obligation-lean.ts";

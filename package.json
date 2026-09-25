@@ -31,6 +31,8 @@
     "test:coverage": "bun test --recursive --coverage",
     "bench:semantic-types": "bun scripts/benchmark-semantic-types.ts",
     "typecheck": "tsc -b",
+    "generate:lean": "bun scripts/generate-lean.ts",
+    "test:lean": "bun scripts/test-lean.ts",
     "generate:parser": "node scripts/generate-parser.mjs",
     "check": "bunx biome check .",
     "check:fix": "bunx biome check --fix .",

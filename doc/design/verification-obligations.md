@@ -1,11 +1,11 @@
 # Richer verification obligations and Lean proofs
 
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
-and solver process handling implemented**. This extends the future-work discussion in
+and solver process handling implemented; stage 2 Lean spike implemented**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
-process hardening, and dependency reporting below are implemented; Lean export
-and the broader verification architecture remain proposed.
+process hardening, dependency reporting, and optional Lean spike below are
+implemented; the broader verification architecture remains proposed.
 External-tool references were consulted on 2026-09-24; implementation must pin
 and test specific versions rather than rely on the moving documentation links.
 
@@ -62,7 +62,7 @@ published refinement contract vacuous.
 
 The CLI reports a solver's `unsat` answer, not an independently checked proof
 certificate. It does not yet have the dependency manifest, proof cache,
-full resource-bounded orchestration, or Lean integration proposed here.
+full resource-bounded orchestration, or general Lean integration proposed here.
 
 The first stage now bounds each solver invocation to 30 seconds and 1 MiB of
 combined output, retains separate stdout/stderr, and checks the exit status.
@@ -102,9 +102,37 @@ in Datamog. Safe-integer bounds and nullness likewise remain explicit formulas.
 
 This IR still describes the existing local contract abstraction, not complete
 relation definitions. Full source/module manifests, content digests, proof
-caching, and Lean export remain unimplemented. JSON round trips are tested for
+caching, and general proof import remain unimplemented. JSON round trips are tested for
 statement preservation, but serialized statements are not proof certificates or
 an independently validated import format.
+
+## Implemented Lean spike
+
+The optional [Lean project](../../verification/lean/README.md) pins Lean 4.34.0
+without third-party Lean dependencies. `bun run generate:lean` exports the
+successor obligation from `08-verify.dl`, a deliberately false local goal, and an
+inductive reachability relation generated from a Datamog fixture. Maintained
+proofs establish successor safety, reachability preservation under an explicit
+edge premise, and the negation of the false goal. Generated checker theorems
+require the exact expected types and audit their transitive axiom dependencies.
+
+[`obligation-lean.ts`](../../packages/core/src/obligation-lean.ts) exports the
+integer/Boolean IR as Lean propositions and a deliberately smaller relational
+fragment: one positive, possibly self-recursive relation with variable-only atoms
+over non-null integers. Other derived calls, mutual recursion, constraints,
+negation, aggregates, and computed terms remain unsupported by relational export.
+The semantic library distinguishes null from undefined and defines bounded
+integer operations and truth. It does not cover floats or structural values.
+
+`bun run test:lean` checks reproducibility and rebuilds from project source in a
+fresh temporary directory, with the axiom allowlist enforced. Tests reject a
+false goal, `sorry`, an extra axiom, a weaker statement, and native computation
+axioms. They also compare 164 concrete semantic cases against native and SQLite
+execution and check those results by Lean kernel reduction. A separate Lean CI
+workflow runs this suite; ordinary builds and tests require no Lean installation.
+These results concern the exported model, not verified backend implementations.
+This spike does not add a Lean mode to `--verify` or certify arbitrary dependency
+closures. The registered arithmetic fixture has no contract dependencies.
 
 ## Which harder claims should be expressible?
 

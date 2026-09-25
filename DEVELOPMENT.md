@@ -157,6 +157,21 @@ median/min/max timings; it does not impose performance thresholds. See the
 [baseline and methodology](doc/design/semantic-types-benchmarks.md) for what is
 included in each measurement.
 
+## Optional Lean Verification
+
+The [Lean verification spike](verification/lean/README.md) pins Lean 4.34.0 and
+runs separately from ordinary TypeScript builds. The devcontainer includes Lean
+and Lake. From the repository root:
+
+```bash
+bun run generate:lean        # regenerate statements/checkers, preserve maintained proofs
+bun run test:lean            # fresh build, axiom policy negatives, native/SQLite comparisons
+```
+
+Run these checks when changing the Lean exporters, semantic library, or proofs.
+The dedicated Lean Verification CI job installs the pinned toolchain and runs
+the same suite. `bun test` covers source-generation regressions without Lean.
+
 ## Playground
 
 Start the playground dev server:
