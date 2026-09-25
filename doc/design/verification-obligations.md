@@ -120,9 +120,11 @@ theorems require the exact expected types and audit their transitive axiom depen
 
 [`obligation-lean.ts`](../../packages/core/src/obligation-lean.ts) exports the
 integer/Boolean IR as Lean propositions and a deliberately smaller relational
-fragment: one positive, possibly self-recursive relation with variable-only atoms
-over non-null integers. Other derived calls, mutual recursion, constraints,
-negation, aggregates, and computed terms remain unsupported by relational export.
+fragment: one positive, possibly self-recursive relation over non-null integers, with
+variable-only body atoms and heads containing variables or a variable plus an
+integer literal. Computed outputs require a bounded witness equal to the sum.
+Other derived calls, mutual recursion, constraints, negation, aggregates, and
+other computed terms remain unsupported by relational export.
 The semantic library distinguishes null from undefined and defines bounded
 integer operations and truth. It does not cover floats or structural values.
 
@@ -195,12 +197,21 @@ The companion `reachUnique_refuted` theorem proves that universal reachability
 uniqueness is false: edges from `0` to `1` and `2` yield distinct targets. The
 manifest registers the refutation, not the false claim, as a proved goal. Both
 new results have exact checker types, axiom audits, and unconditional CI
-requirements. Two concrete relation fixtures replay the identity boundary cases
-and branching counterexample on native, SQLite, and configured Postgres; reports
+requirements. Three concrete relation fixtures replay identity and successor boundary cases
+and the branching counterexample on native, SQLite, and configured Postgres; reports
 count those separately from expression comparisons.
 
-General uniqueness assertions, nontrivial coverage, and the remaining stage 4
-families are still open.
+The `successorCoverage` theorem establishes output existence for every input
+integer strictly below `maxSafe`. Its proof constructs the bounded output; head
+definedness is not a premise. This upper bound is part of the theorem's stated
+input domain, not a claim that arbitrary datasets obey it. The companion
+`successorTotal_refuted` theorem shows that removing the bound is false, using
+an input containing `maxSafe`. Both are audited and required by Lean CI. The
+runtime fixture checks that `maxSafe - 1` produces `maxSafe`, whereas `maxSafe`
+produces no successor row, on all configured backends.
+
+General uniqueness and coverage assertions, structural values, and the remaining
+stage 4 families are still open.
 
 ## Which harder claims should be expressible?
 

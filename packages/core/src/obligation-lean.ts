@@ -1,4 +1,5 @@
 /** Optional Lean source export. No Lean executable or filesystem dependency. */
+import { isFloatLiteral } from "./ast.ts";
 import type { LogicalExpression } from "./obligation-ir.ts";
 import type { LogicalObligation } from "./obligations.ts";
 import type { TypedProgram } from "./types.ts";
@@ -64,8 +65,9 @@ export function exportLeanObligation(goal: LogicalObligation, name: string): str
 
 /**
  * Spike fragment: one positive (possibly self-recursive) relation, over non-null
- * integers, with variable-only atoms. Other derived calls, mutual recursion,
- * computed terms, negation, constraints and aggregates are rejected explicitly.
+ * integers, with variable-only body atoms and variable or variable-plus-integer
+ * heads. Other computed terms, derived calls, mutual recursion, negation,
+ * constraints and aggregates are rejected explicitly.
  * Inputs are arbitrary relations over SafeInt; finite derivations form the LFP.
  */
 export function exportLeanRelation(typed: TypedProgram, predicate: string, name: string): string {
@@ -99,22 +101,46 @@ export function exportLeanRelation(typed: TypedProgram, predicate: string, name:
   const result = `${name}${[...inputs.values()].map((i) => ` input${i}`).join("")}`;
   const constructors = rules.map((rule, i) => {
     const variables = new Map<string, string>();
-    const terms = (args: typeof rule.head.args) =>
+    const computed: string[] = [];
+    const defined: string[] = [];
+    const variable = (name: string) => {
+      if (!variables.has(name)) variables.set(name, `v${variables.size}`);
+      return variables.get(name)!;
+    };
+    const terms = (args: typeof rule.head.args, head = false) =>
       args
         .map((arg) => {
-          if (arg.$type !== "Variable") throw new Error("Unsupported Lean relation term");
-          if (!variables.has(arg.name)) variables.set(arg.name, `v${variables.size}`);
-          return variables.get(arg.name)!;
+          if (arg.$type === "Variable") return variable(arg.name);
+          if (
+            head &&
+            arg.$type === "BinaryExpr" &&
+            arg.op === "+" &&
+            arg.left.$type === "Variable" &&
+            arg.right.$type === "NumberLiteral" &&
+            !isFloatLiteral(arg.right) &&
+            Number.isSafeInteger(arg.right.value)
+          ) {
+            const input = variable(arg.left.name);
+            const output = `w${computed.length}`;
+            computed.push(output);
+            // A bounded output witness enforces head definedness. Coverage must
+            // construct that witness; overflow has no constructor instance.
+            defined.push(`(${output}.val = ${input}.val + (${arg.right.value} : Int))`);
+            return output;
+          }
+          throw new Error("Unsupported Lean relation term");
         })
         .join(" ");
-    const head = `${result} ${terms(rule.head.args)}`.trim();
+    const head = `${result} ${terms(rule.head.args, true)}`.trim();
     const body = rule.body.map((atom) => {
       if (atom.$type !== "Literal") throw new Error("Unsupported Lean relation body");
       const callee = atom.predicate === predicate ? result : `input${inputs.get(atom.predicate)}`;
       return `(${callee} ${terms(atom.args)})`;
     });
-    const binders = [...variables.values()].map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
-    return `  | rule${i} ${binders} : ${[...body, head].join(" → ")}`;
+    const binders = [...variables.values(), ...computed]
+      .map((v) => `(${v} : Datamog.SafeInt)`)
+      .join(" ");
+    return `  | rule${i} ${binders} : ${[...body, ...defined, head].join(" → ")}`;
   });
   return `inductive ${name} ${params} : ${relationType(predicate)} where\n${constructors.join("\n")}\n`;
 }

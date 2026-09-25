@@ -26,8 +26,9 @@ rules over `SafeInt`. It proves preservation of an arbitrary property, condition
 on the input edges preserving that property. It does not establish the premise
 for a loaded graph, nor prove evaluation termination. The relational exporter
 currently accepts one positive, possibly self-recursive predicate with
-variable-only atoms over non-null integers; other derived calls, mutual recursion,
-negation, aggregates, computed terms, and constraints are rejected.
+variable-only body atoms over non-null integers, with variable or
+variable-plus-integer-literal heads; other derived calls, mutual recursion,
+negation, aggregates, other computed terms, and constraints are rejected.
 
 `Semantics.lean` separates `none` (undefined) from `some Value.null`, models safe
 integers, truth, logical negation, null-aware equality, ordering, addition,
@@ -177,3 +178,23 @@ and the branching graph on native, SQLite, and configured Postgres, checking
 exact rows. Reports count these two relation fixtures separately from the 164
 expression cases. These remain companion-project claims; no general uniqueness
 syntax or new relational translation fragment is introduced.
+
+## Bounded successor coverage
+
+The relational exporter now accepts a head variable plus an integer literal
+(single addition only). Its constructor quantifies a `SafeInt` output and
+requires its value to equal the sum. Overflow has no output witness. Body terms
+remain variable-only; nested arithmetic and other computed operations are rejected.
+
+`fixtures/successor.dl` exports `succ(X, X + 1) :- sample(X)`.
+`successorCoverage` proves an output exists for every admitted input `x` with
+`x.val < maxSafe`, by constructing that output and proving its bounds.
+`successorTotal_refuted` proves coverage without that restriction is false.
+The bound is explicit in the theorem's input domain; this does not establish
+that a loaded dataset excludes the maximum. CI requires both checked results.
+
+The third concrete relation fixture includes negative values, zero, and both
+upper-bound cases: `maxSafe - 1` yields `maxSafe`, while `maxSafe` yields no row.
+It runs against native, SQLite, and configured Postgres and is counted separately
+from the expression cases in fresh reports. This worked coverage claim remains
+in the Lean companion project; it adds no assertion syntax.

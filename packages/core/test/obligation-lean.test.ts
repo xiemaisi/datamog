@@ -53,9 +53,21 @@ describe("optional Lean export", () => {
     expect(output).toContain("(Reach input0 v0 v2) → (input0 v2 v1) → Reach input0 v0 v1");
   });
 
+  test("computed integer heads require a bounded output witness", () => {
+    const output = exportLeanRelation(
+      typed("input predicate p(x: integer). q(X, X + 1) :- p(X)."),
+      "q",
+      "Q",
+    );
+    expect(output).toContain("(w0 : Datamog.SafeInt)");
+    expect(output).toContain("(w0.val = v0.val + (1 : Int)) → Q input0 v0 w0");
+  });
+
   test.each([
     "input predicate p(x: integer?). q(X) :- p(X).",
-    "input predicate p(x: integer). q(X + 1) :- p(X).",
+    "input predicate p(x: integer). q(X * 2) :- p(X).",
+    "input predicate p(x: integer). q((X + 1) + 1) :- p(X).",
+    "input predicate p(x: integer). q(X) :- p(X + 1).",
     "input predicate p(x: integer). q(X) :- p(X), not p(X).",
     "input predicate p(x: integer). q(X) :- p(X), X > 0.",
     "input predicate p(x: integer). q(X) :- p(X). q(X) :- r(X). r(X) :- q(X).",

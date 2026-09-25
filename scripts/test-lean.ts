@@ -202,6 +202,12 @@ try {
         expected: [-9007199254740991, 0, 9007199254740991].map((n) => ({ X: n, Y: n })),
       },
       {
+        fixture: "successor.dl",
+        query: "?- succ(X, Y).",
+        input: [-9007199254740991, -1, 0, 9007199254740990, 9007199254740991].map((n) => ({ n })),
+        expected: [-9007199254740991, -1, 0, 9007199254740990].map((n) => ({ X: n, Y: n + 1 })),
+      },
+      {
         fixture: "reach.dl",
         query: "?- reach(X, Y).",
         input: [
@@ -236,7 +242,7 @@ try {
           throw new Error(`${name} relation regression: ${testCase.fixture}`);
       }
     }
-    console.log(`2 relation fixtures passed on ${backendNames.join("/")}.`);
+    console.log(`3 relation fixtures passed on ${backendNames.join("/")}.`);
   } finally {
     await Promise.all(backends.map(([, backend]) => backend.close()));
   }
@@ -252,7 +258,7 @@ try {
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
-    relationCases: 2,
+    relationCases: 3,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

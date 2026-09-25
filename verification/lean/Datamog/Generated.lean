@@ -38,4 +38,15 @@ def reachUnique : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (x y z : SafeInt),
   Reach edge x y → Reach edge x z → y = z
 
+inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0
+
+def successorCoverage : Prop :=
+  ∀ (sample : SafeInt → Prop) (x : SafeInt),
+  sample x → x.val < maxSafe → ∃ y, Successor sample x y
+
+def successorTotal : Prop :=
+  ∀ (sample : SafeInt → Prop) (x : SafeInt),
+  sample x → ∃ y, Successor sample x y
+
 end Datamog.Generated

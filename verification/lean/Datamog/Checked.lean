@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: 44495a2a37a215d28df0de7d1e644c384d428e13f717d213304a1faabcb712e9
+-- Verification manifest SHA-256: 8a1a268e432d40a054d48847f4615e20eca051e971c10da33fe06c15faad5d73
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -15,4 +15,8 @@ theorem identityUnique : Generated.identityUnique := Proofs.identityUnique
 #audit identityUnique
 theorem reachUnique_refuted : ¬ Generated.reachUnique := Proofs.reachUnique_refuted
 #audit reachUnique_refuted
+theorem successorCoverage : Generated.successorCoverage := Proofs.successorCoverage
+#audit successorCoverage
+theorem successorTotal_refuted : ¬ Generated.successorTotal := Proofs.successorTotal_refuted
+#audit successorTotal_refuted
 end Datamog.Checked

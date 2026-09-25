@@ -1,0 +1,2 @@
+input predicate sample(n: integer).
+succ(X, X + 1) :- sample(X).

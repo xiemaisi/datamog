@@ -28,7 +28,7 @@
       "packages/core/src/nullness-diagnostics.ts": "19196b925ce2d81d93b9d20479f949a1cf0abb2cb3e350b29a36ef32689407af",
       "packages/core/src/nullness.ts": "d14a1e6276cd1e31320b37daad4cef061bec5b49b11d74197fc02730a05283c3",
       "packages/core/src/obligation-ir.ts": "c6b571c553ec81e081144db96cda5333d387791b58b03342486dfb44b914d5c9",
-      "packages/core/src/obligation-lean.ts": "4dbbecdae889674073011676d0c7c0523bb1e0825df5b2d58835083bbaee1c6a",
+      "packages/core/src/obligation-lean.ts": "adb42b503a93942f81e37c036866bff6026c14b84cc3a9a347d2238368fe80f4",
       "packages/core/src/obligation-smt.ts": "909a1de29bed1f3386737e88ad42e6f27ea7d075e05f37ae486c414700a5c5b0",
       "packages/core/src/obligations.ts": "46d3849eafbbeb40025d14b4dd921ddf523cb1cefcba52f964349480f1fe031d",
       "packages/core/src/partiality.ts": "30bb88e9d22a5e13e96b665e61994a619ab9224bfa3372495a161a63d0c5fc3d",
@@ -62,20 +62,21 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "ac25b919801c2fb9eb7c7c6b269f4ab052a5b103a4ffdd67751a19118dcb24e1",
-      "scripts/test-lean.ts": "54f7cf82b753e57fa425aeb896ced813e0f28defa6b7d21d3150a5574d9d95cd",
+      "scripts/generate-lean.ts": "c0caf66315487198b936578cf75548150c252a38347d18260426a15c4d615390",
+      "scripts/test-lean.ts": "5c764a5ba7ad06b21a4a23a29631724c6a2eae48a776f2af4deebb0b0980aa83",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "65c6c04874f2599505eb412c2a495fc4998059e2bf0bcf1721780509e871fed6",
+      "verification/lean/Datamog/Proofs.lean": "f17f0e9c10dfae4af8f586ab0c8a13bfeba80dfad11a34233c5787518e2eb3bb",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
+      "verification/lean/fixtures/successor.dl": "f78e888af124a557f7063b18702a83c4cbc78b96fdca1b34b724aa529ec26c9a",
       "verification/lean/lake-manifest.json": "17266b6b89bd7b2ae4ee695726c0dad98d7fd00a628a07a9b491d5cde0b0fb90",
       "verification/lean/lakefile.toml": "488ecd9e78966bedc2249edcdede2b42247d00856cbe31711bc406f5c51f2b74",
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "5afd90b6c65ec1db4d26f7d31af83467577c01b8795c3a4420c7c1bb72c8fa3e",
+  "contextDigest": "f5e726cf156fe8077d4d6e80068de524d2d5f4c94e96657dafe192c3fd3e55c6",
   "entries": [
     {
       "id": "Identity",
@@ -86,7 +87,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "51c6d03d313e5caa26dcaf6445a335d91fdeda3c5a63d4fc96537c4012b74778"
+      "digest": "0c5a03766357e1215348639b8c5863860441295347531a8aef52f7e3020132db"
     },
     {
       "id": "Reach",
@@ -97,7 +98,18 @@
       "closure": [
         "Reach"
       ],
-      "digest": "36c76d7347244588451cc9d12e5819917913d96e33b953fa85ad76b5af2f70c3"
+      "digest": "0f807267e1962923502a1801f2085bdb980fd16821803ade1c8be9cf005c2c17"
+    },
+    {
+      "id": "Successor",
+      "kind": "definition",
+      "statement": "inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where\n  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0\n",
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "Successor"
+      ],
+      "digest": "1d2ceb1440b89651e547908ac3dcf365ca495c10517645e6907350cc0fb5e632"
     },
     {
       "id": "falseGoal",
@@ -198,7 +210,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "238faf99a347b0c4faf23238eb804fb79ab986e368d0c0dc8e60ceebf6490ad3"
+      "digest": "0eed69892a3984aec1f3970e7369352d12692eefeec0712c39106a2927ffd80b"
     },
     {
       "id": "falseGoal_refuted",
@@ -213,7 +225,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "eed3c12674ab0380357f43473a687e0357b9e1cc3df802db2233cb226e5024f5"
+      "digest": "40e60db07debbebaf1cf10d9fb3c666d41a983c9de391d3b49a570bed8840fac"
     },
     {
       "id": "identityUnique",
@@ -228,7 +240,7 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "53bcf2341c69a15bf8356a26cb39d95fc1c810d8af6be806628fb162aa738225"
+      "digest": "7114a28e9e9229600a5eb6a3ca93216f4645f867532a30cc9585df7f6708fa4d"
     },
     {
       "id": "reachPreserves",
@@ -245,7 +257,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "d74ebf46c8ab1115a501bc834035d9069237130923e0bff5cdd9d898b120cc77"
+      "digest": "cad0488b97bc3fa718e8e2ac6924fa5bd061c24bb185ee7cbad132faba278976"
     },
     {
       "id": "reachTransitive",
@@ -260,7 +272,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "dc857a3a55fb07cd74835b695606e4a74f2e17d3b46b8f144f88ca0cfa31b5e1"
+      "digest": "18f558d163cdbdcb3dc3fdde1bed0b4fe213a27049baa08cf6a7a6ecb9172ee7"
     },
     {
       "id": "reachUnique",
@@ -274,7 +286,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "5f219cc2958490a4cd3f47e548b721083b23887fd32f725b37da70287bcef201"
+      "digest": "f2abdbaa114e7c86c6a9660f07e7a131b4969302856f933b212d6d52e84eda57"
     },
     {
       "id": "reachUnique_refuted",
@@ -290,7 +302,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "9cf720f0ce5219c4172ef322eac6dee3e2d7d7618221712548280859f6699966"
+      "digest": "d216d37fedebd48b020a1972e06411fcdb43753ac34461d818a9bfb7dc709123"
     },
     {
       "id": "successor",
@@ -724,8 +736,53 @@
       "closure": [
         "successor"
       ],
-      "digest": "879a375da02fa9eec96c79ff6f92e93e1b7272376dfc249a61d8ea86ffd8ad01"
+      "digest": "4dc20dc4c41331f4801c75a53ddebdc119795b03cc764382530f6372d18106c0"
+    },
+    {
+      "id": "successorCoverage",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.successorCoverage",
+      "statement": "def successorCoverage : Prop :=\n  ∀ (sample : SafeInt → Prop) (x : SafeInt),\n  sample x → x.val < maxSafe → ∃ y, Successor sample x y\n",
+      "assumptions": [],
+      "dependencies": [
+        "Successor"
+      ],
+      "closure": [
+        "Successor",
+        "successorCoverage"
+      ],
+      "digest": "ade132bc6a56a2656db8a2f8f88f8c66645281c5e2c3b4f42b65112988de7359"
+    },
+    {
+      "id": "successorTotal",
+      "kind": "definition",
+      "statement": "def successorTotal : Prop :=\n  ∀ (sample : SafeInt → Prop) (x : SafeInt),\n  sample x → ∃ y, Successor sample x y\n",
+      "assumptions": [],
+      "dependencies": [
+        "Successor"
+      ],
+      "closure": [
+        "Successor",
+        "successorTotal"
+      ],
+      "digest": "92b5a00f7b611944e83b9e83f4a674acce61425109512dfe4f181774d8b93197"
+    },
+    {
+      "id": "successorTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.successorTotal_refuted",
+      "statement": "¬ Datamog.Generated.successorTotal",
+      "assumptions": [],
+      "dependencies": [
+        "successorTotal"
+      ],
+      "closure": [
+        "Successor",
+        "successorTotal",
+        "successorTotal_refuted"
+      ],
+      "digest": "4d9007525427eb4161a6da292074da33d19b36ac6fd9ba5961ab4f7e701feb55"
     }
   ],
-  "digest": "44495a2a37a215d28df0de7d1e644c384d428e13f717d213304a1faabcb712e9"
+  "digest": "8a1a268e432d40a054d48847f4615e20eca051e971c10da33fe06c15faad5d73"
 }
