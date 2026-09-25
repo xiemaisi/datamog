@@ -114,9 +114,9 @@ without third-party Lean dependencies. `bun run generate:lean` exports the
 successor obligation from `08-verify.dl`, a deliberately false local goal, and an
 inductive reachability relation generated from a Datamog fixture. Maintained
 proofs establish successor safety, reachability preservation under an explicit
-edge premise, reachability transitivity without extra input laws, and the negation
-of the false goal. Generated checker theorems
-require the exact expected types and audit their transitive axiom dependencies.
+edge premise, reachability transitivity, identity uniqueness, and refutations of
+the false local goal and universal reachability uniqueness. Generated checker
+theorems require the exact expected types and audit their transitive axiom dependencies.
 
 [`obligation-lean.ts`](../../packages/core/src/obligation-lean.ts) exports the
 integer/Boolean IR as Lean propositions and a deliberately smaller relational
@@ -171,11 +171,11 @@ Every requested ID must be a registered goal with a fresh unconditional result;
 unknown IDs, definitions, missing audits, and remaining input premises fail the
 run. All registered audits and semantic regressions still run, and reports
 record requested IDs. Lean CI requires successor safety, reachability
-transitivity, and the false goal's refutation. This does not add general dependency discharge or report import.
+transitivity, identity uniqueness, and the false claims' refutations. This does not add general dependency discharge or report import.
 General module manifests, cached proof reuse, finer invalidation, and arbitrary
 Lean/CLI integration remain future work.
 
-## First worked relation law
+## Worked relation laws
 
 The companion project's `reachTransitive` goal states that two composable
 reachability derivations imply a derivation between their endpoints, for every
@@ -187,8 +187,20 @@ closure is empty. Unlike `reachPreserves`, it needs no additional input law.
 
 This is a worked relation-level assertion in Lean, not new Datamog syntax or a
 general claim exporter. It uses the already supported positive recursive
-fragment; uniqueness, nontrivial coverage, and the remaining stage 4 families
-are still open.
+fragment. A second fixture exports `identity(X, X) :- item(X)` and proves the
+two-tuple law `Identity(item, x, y) ∧ Identity(item, x, z) → y = z` by examining
+both derivations. The `identityUnique` theorem needs no input assumptions.
+
+The companion `reachUnique_refuted` theorem proves that universal reachability
+uniqueness is false: edges from `0` to `1` and `2` yield distinct targets. The
+manifest registers the refutation, not the false claim, as a proved goal. Both
+new results have exact checker types, axiom audits, and unconditional CI
+requirements. Two concrete relation fixtures replay the identity boundary cases
+and branching counterexample on native, SQLite, and configured Postgres; reports
+count those separately from expression comparisons.
+
+General uniqueness assertions, nontrivial coverage, and the remaining stage 4
+families are still open.
 
 ## Which harder claims should be expressible?
 

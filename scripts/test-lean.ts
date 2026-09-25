@@ -8,6 +8,7 @@ import { create as createPostgres } from "../packages/backend/postgres/src/index
 import { create as createSqlite } from "../packages/backend/sqlite/src/index.ts";
 import type { Backend } from "../packages/engine/src/backend.ts";
 import { DatamogExecutor } from "../packages/engine/src/executor.ts";
+import { insertRows } from "../packages/engine/src/loader.ts";
 
 import { assertCurrentVerificationManifest } from "../packages/core/src/verification-manifest.ts";
 import { createLeanVerificationResult } from "../packages/core/src/verification-result.ts";
@@ -191,6 +192,51 @@ try {
             : leanValue(value as number | null);
       checks.push(`example : ${lean} = ${expected} := by decide`);
     }
+    // Replay the positive uniqueness fixture and the branching counterexample.
+    // These are concrete translation regressions, not universal proof evidence.
+    const relationCases = [
+      {
+        fixture: "identity.dl",
+        query: "?- identity(X, Y).",
+        input: [-9007199254740991, 0, 9007199254740991].map((n) => ({ n })),
+        expected: [-9007199254740991, 0, 9007199254740991].map((n) => ({ X: n, Y: n })),
+      },
+      {
+        fixture: "reach.dl",
+        query: "?- reach(X, Y).",
+        input: [
+          { source: 0, target: 1 },
+          { source: 0, target: 2 },
+        ],
+        expected: [
+          { X: 0, Y: 1 },
+          { X: 0, Y: 2 },
+        ],
+      },
+    ];
+    const canonicalRows = (rows: Record<string, unknown>[]) =>
+      JSON.stringify(rows.map((row) => JSON.stringify([row.X, row.Y])).sort());
+    for (const testCase of relationCases) {
+      const source = await Bun.file(join(project, "fixtures", testCase.fixture)).text();
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "relation-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              await insertRows(target, decl, testCase.input);
+              return { rowsLoaded: testCase.input.length };
+            },
+          },
+        ]);
+        const rows = (await executor.execute(`${source}\n${testCase.query}`))[0]!.rows;
+        if (canonicalRows(rows) !== canonicalRows(testCase.expected))
+          throw new Error(`${name} relation regression: ${testCase.fixture}`);
+      }
+    }
+    console.log(`2 relation fixtures passed on ${backendNames.join("/")}.`);
   } finally {
     await Promise.all(backends.map(([, backend]) => backend.close()));
   }
@@ -206,6 +252,7 @@ try {
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
+    relationCases: 2,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

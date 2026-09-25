@@ -158,3 +158,22 @@ This is a worked relation-level law in the companion Lean project. It adds no
 Datamog assertion syntax or new supported translation fragment, and it does not
 claim termination or correctness of a backend's execution. The preservation
 example still retains its explicit edge premise.
+
+## Two-tuple uniqueness
+
+`fixtures/identity.dl` defines `identity(X, X) :- item(X)`. Its exported inductive
+relation supports `identityUnique`: for every input relation and every `x`, two
+outputs `y` and `z` must be equal. The proof examines the two derivations, without
+assuming uniqueness of the input data.
+
+Reachability does not satisfy the same law. `reachUnique_refuted` proves the
+negation of `reachUnique`, using the graph with edges `0 → 1` and `0 → 2`. Only
+the refutation is registered as a proved goal; the false uniqueness statement
+remains a definition and cannot satisfy `--require-goal reachUnique`.
+
+Both results use exact generated checker types and axiom audits and are required
+in Lean CI. The suite also replays the identity fixture at safe-integer boundaries
+and the branching graph on native, SQLite, and configured Postgres, checking
+exact rows. Reports count these two relation fixtures separately from the 164
+expression cases. These remain companion-project claims; no general uniqueness
+syntax or new relational translation fragment is introduced.

@@ -28,4 +28,25 @@ theorem falseGoal_refuted : ¬ Generated.falseGoal := by
   have bad := h 0 (by decide)
   omega
 
+theorem identityUnique : Generated.identityUnique := by
+  intro item x y z hxy hxz
+  cases hxy
+  cases hxz
+  rfl
+
+-- A branching input graph provides two different targets for one source.
+theorem reachUnique_refuted : ¬ Generated.reachUnique := by
+  intro unique
+  let zero : SafeInt := ⟨0, by decide⟩
+  let one : SafeInt := ⟨1, by decide⟩
+  let two : SafeInt := ⟨2, by decide⟩
+  let edge := fun (a b : SafeInt) => a = zero ∧ (b = one ∨ b = two)
+  have h01 : Generated.Reach edge zero one :=
+    Generated.Reach.rule0 zero one ⟨rfl, Or.inl rfl⟩
+  have h02 : Generated.Reach edge zero two :=
+    Generated.Reach.rule0 zero two ⟨rfl, Or.inr rfl⟩
+  have bad := congrArg Subtype.val (unique edge zero one two h01 h02)
+  change (1 : Int) = 2 at bad
+  omega
+
 end Datamog.Proofs

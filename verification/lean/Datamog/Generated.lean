@@ -27,4 +27,15 @@ def reachTransitive : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (a b c : SafeInt),
   Reach edge a b → Reach edge b c → Reach edge a c
 
+inductive Identity (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) : (input0 v0) → Identity input0 v0 v0
+
+def identityUnique : Prop :=
+  ∀ (item : SafeInt → Prop) (x y z : SafeInt),
+  Identity item x y → Identity item x z → y = z
+
+def reachUnique : Prop :=
+  ∀ (edge : SafeInt → SafeInt → Prop) (x y z : SafeInt),
+  Reach edge x y → Reach edge x z → y = z
+
 end Datamog.Generated
