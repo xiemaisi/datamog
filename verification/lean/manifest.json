@@ -28,7 +28,7 @@
       "packages/core/src/nullness-diagnostics.ts": "19196b925ce2d81d93b9d20479f949a1cf0abb2cb3e350b29a36ef32689407af",
       "packages/core/src/nullness.ts": "d14a1e6276cd1e31320b37daad4cef061bec5b49b11d74197fc02730a05283c3",
       "packages/core/src/obligation-ir.ts": "c6b571c553ec81e081144db96cda5333d387791b58b03342486dfb44b914d5c9",
-      "packages/core/src/obligation-lean.ts": "d4337348d97ec06a81494b7b9fabb366c1dc993f5207c7ab59f252b9c08afcf0",
+      "packages/core/src/obligation-lean.ts": "ede0cbb772597ef5fde966a57f3e4830f62760e2fa8cdad7d76c3ef67d11c2dd",
       "packages/core/src/obligation-smt.ts": "909a1de29bed1f3386737e88ad42e6f27ea7d075e05f37ae486c414700a5c5b0",
       "packages/core/src/obligations.ts": "46d3849eafbbeb40025d14b4dd921ddf523cb1cefcba52f964349480f1fe031d",
       "packages/core/src/partiality.ts": "30bb88e9d22a5e13e96b665e61994a619ab9224bfa3372495a161a63d0c5fc3d",
@@ -62,11 +62,11 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "b64a08f448b40b1a6a54c11129f2c579857f453c618483c30f67d9f843fa3b39",
+      "scripts/generate-lean.ts": "cb105cc031b1a62ad796e40e07302373a300be89aa4b403dff0621a80d081c27",
       "scripts/test-lean.ts": "5c764a5ba7ad06b21a4a23a29631724c6a2eae48a776f2af4deebb0b0980aa83",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "f17f0e9c10dfae4af8f586ab0c8a13bfeba80dfad11a34233c5787518e2eb3bb",
+      "verification/lean/Datamog/Proofs.lean": "bbabae6d8c29a783bb1244e075063816dd0245bbb03d4d4dc2d43a6045811b93",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
@@ -76,7 +76,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "9b195851a387ecd9441561f7f3e5d2e83413d83e1b7e95e76a35ed5736c0112d",
+  "contextDigest": "b20a04afd041f416a26de3c741cb7920b91f0b5d3743bfcd72d2d532af19af39",
   "entries": [
     {
       "id": "Identity",
@@ -87,7 +87,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "4d636e9d1394a833e651dafd7cbaff7822d82922ae4991aff16e258688493446"
+      "digest": "80dbb7282d0f6d38d7042ba137305963a37aa7ac4025082451de4aafd420a499"
     },
     {
       "id": "Reach",
@@ -98,7 +98,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "10b15b95bc688edd76eca683b48cb611f5f40db12ebab3bff408d7923f566b21"
+      "digest": "a0d70463fe47f6c0899129631ab4206e056d3cba1f8ee40352669e510424cc15"
     },
     {
       "id": "Successor",
@@ -109,7 +109,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "c3547f7656d2932d1e3d8739058e28e1b277f24ede71055f379d7735322e4999"
+      "digest": "193d26e50b3c45dc3112c5baa5d5173dfbaaf1763854ae0ca2cc7626e5233175"
     },
     {
       "id": "falseGoal",
@@ -210,7 +210,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "114d255dbc1e1004ff951dbce641f49a40b8ebe840fa060e592751d7fbac6357"
+      "digest": "41bac9ce9030d6061455b82d2f8b3609348189faea27625731011850fffa7238"
     },
     {
       "id": "falseGoal_refuted",
@@ -225,7 +225,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "4717386236721188b045b62330f5dee84563fa7ae7a97b97fb543cafb7e06f3f"
+      "digest": "32233067a6ec46bb13b00c6395a673b86bc9f1aaa73d84ca9bb866ff2c909307"
     },
     {
       "id": "identityUnique",
@@ -253,7 +253,7 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "7d17edb6c2616cca73d754ee75235aaf9ae19b647f0146cd17fd34a3ce1f7c62"
+      "digest": "cdef5f93284976529bcec5f2f8f87a9c9c3840dff5db8854e1f0d918ec80c8ad"
     },
     {
       "id": "reachPreserves",
@@ -270,7 +270,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "f5ef1a89084ec613937fe9726940c514209c841b032f3617acf7ac7b509ab2f8"
+      "digest": "7ed863297fff57e0a9386eaf65013ca4fc4ec7664da8d5d2dd89d82ee0b31860"
     },
     {
       "id": "reachTransitive",
@@ -285,7 +285,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "c94f117bd9a8e044b060b4876f350082f77e6da697639915ce1c935902096bca"
+      "digest": "75bf1c56cae40c6854ac7dc7d06e4a1707c70adbcf59350addfc3738ae82fae1"
     },
     {
       "id": "reachUnique",
@@ -312,7 +312,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "a4ffa99149738cbfc34fc20f56ebdf4b106e4cad1d19056b04f09c34f3155a84"
+      "digest": "5425fa6a7efb47a9e86e7f3a72ab6ac550928600c869e48337f75e739ee66bde"
     },
     {
       "id": "reachUnique_refuted",
@@ -328,7 +328,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "5de27d1f7026c04d884fc2ab2d751763a3836a83e3833cfcfc619dcc31fab19e"
+      "digest": "1d452c5fa37967dabd187adf3349cb0fe5b18b3ad657ac29452ac668a5a1f5ce"
     },
     {
       "id": "successor",
@@ -762,13 +762,32 @@
       "closure": [
         "successor"
       ],
-      "digest": "7baacf73a59476ccf550d78861fe21d3ea229ad054a936d31cb1e3cb7185cf89"
+      "digest": "b1b1982ec0450dd88422ca87287b0e5b02b121dc30f7fc1a05e1c72019d75468"
     },
     {
       "id": "successorCoverage",
       "kind": "goal",
       "theorem": "Datamog.Checked.successorCoverage",
-      "statement": "def successorCoverage : Prop :=\n  ∀ (sample : SafeInt → Prop) (x : SafeInt),\n  sample x → x.val < maxSafe → ∃ y, Successor sample x y\n",
+      "statement": {
+        "claim": {
+          "id": "successorCoverage",
+          "predicate": "succ",
+          "relationName": "Successor",
+          "inputPredicate": "sample",
+          "outputToInput": [
+            0,
+            null
+          ],
+          "bounds": [
+            {
+              "column": 0,
+              "op": "<",
+              "value": 9007199254740991
+            }
+          ]
+        },
+        "lean": "def successorCoverage : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),\n  input0 v0 → v0.val < (9007199254740991 : Int) → ∃ (w1 : Datamog.SafeInt), Successor input0 v0 w1\n"
+      },
       "assumptions": [],
       "dependencies": [
         "Successor"
@@ -777,12 +796,25 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "e6c97fffffe077201e0d4f0fbd46902db0cf3ec65d0537a4b3a70dfceaca7f05"
+      "digest": "08085458cc432b8884cad80118b988aca08db9951e6e41dce7e3177fd02f2dce"
     },
     {
       "id": "successorTotal",
       "kind": "definition",
-      "statement": "def successorTotal : Prop :=\n  ∀ (sample : SafeInt → Prop) (x : SafeInt),\n  sample x → ∃ y, Successor sample x y\n",
+      "statement": {
+        "claim": {
+          "id": "successorTotal",
+          "predicate": "succ",
+          "relationName": "Successor",
+          "inputPredicate": "sample",
+          "outputToInput": [
+            0,
+            null
+          ],
+          "bounds": []
+        },
+        "lean": "def successorTotal : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),\n  input0 v0 → ∃ (w1 : Datamog.SafeInt), Successor input0 v0 w1\n"
+      },
       "assumptions": [],
       "dependencies": [
         "Successor"
@@ -791,7 +823,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "1289c72b85e19d2addab3691d8f13c01c2d86fb181635c3c7d0b39c951149492"
+      "digest": "e9359937ca26b9dfe5a31037461395386d7ff3144c04c2e74a28a586c918b1f0"
     },
     {
       "id": "successorTotal_refuted",
@@ -807,8 +839,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "2fdb36ea171e5b470c25b246dea3e67a22657426b415e585c577d3afd45b07d5"
+      "digest": "7488d61cbecdf9869353fdee9447790cfdc0de364d92e4548b5c814f3faffc47"
     }
   ],
-  "digest": "bdb022515b10c7020af6d3b99ce18ba5a47b37571a2d66a5ca90a31d40f1ded5"
+  "digest": "869294e93e5fe8e94f47049221c2d6975c4bf7d79b6bfd34dc7d34667a445db4"
 }

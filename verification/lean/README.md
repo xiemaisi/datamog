@@ -227,5 +227,32 @@ assembling several claims over one relation must include its definition node
 only once; the manifest rejects duplicate IDs.
 
 This remains an internal API for the supported integer relational fragment,
-with the companion project's namespace convention. General coverage descriptors,
-Datamog assertion syntax, and arbitrary CLI export remain future work.
+with the companion project's namespace convention. Datamog assertion syntax
+and arbitrary CLI export remain future work.
+
+
+## Internal coverage-claim API
+
+`exportLeanCoverage(typedProgram, claim, polarity)` uses the same result and
+proof/refutation registration convention as uniqueness:
+
+```typescript
+{ id: "successorCoverage", predicate: "succ", relationName: "Successor",
+  inputPredicate: "sample", outputToInput: [0, null],
+  bounds: [{ column: 0, op: "<", value: Number.MAX_SAFE_INTEGER }] }
+```
+
+The input must be an external dependency of the exported relation. All its
+columns are universally quantified. Each output position maps to a zero-based
+input column, or `null` for an independent existential bounded-integer witness.
+Repeated mappings are allowed; no witnesses means direct inclusion. Mapping
+length must match the output arity. Bounds compare input columns with safe
+integer literals using `<`, `<=`, `>`, or `>=`; empty bounds cover all admitted
+input tuples. Invalid indices, operators, and non-safe-integer bounds are rejected.
+
+Bounds restrict the theorem's input domain, without assuming head definedness
+or a property of the entire dataset. The generated theorem must still establish
+an output derivation. Both successor claims now use this API; the unrestricted
+claim is registered with `"refute"`. Descriptors, bounds, exact statements, and
+dependency definitions enter content identities. Maintained proofs remain
+separate, and no new Datamog syntax or automatic proof search is introduced.

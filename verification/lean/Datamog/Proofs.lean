@@ -53,7 +53,7 @@ theorem successorCoverage : Generated.successorCoverage := by
   intro sample x hx upper
   have bounds := x.property
   have hy : InRange (x.val + 1) := by
-    unfold InRange at *
+    unfold InRange maxSafe at *
     omega
   exact ⟨⟨x.val + 1, hy⟩, Generated.Successor.rule0 x ⟨x.val + 1, hy⟩ hx rfl⟩
 

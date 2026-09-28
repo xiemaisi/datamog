@@ -42,11 +42,11 @@ inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Da
   | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0
 
 def successorCoverage : Prop :=
-  ∀ (sample : SafeInt → Prop) (x : SafeInt),
-  sample x → x.val < maxSafe → ∃ y, Successor sample x y
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
+  input0 v0 → v0.val < (9007199254740991 : Int) → ∃ (w1 : Datamog.SafeInt), Successor input0 v0 w1
 
 def successorTotal : Prop :=
-  ∀ (sample : SafeInt → Prop) (x : SafeInt),
-  sample x → ∃ y, Successor sample x y
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
+  input0 v0 → ∃ (w1 : Datamog.SafeInt), Successor input0 v0 w1
 
 end Datamog.Generated

@@ -149,6 +149,11 @@ function buildLeanRelation(typed: TypedProgram, predicate: string, name: string)
   });
   return {
     source: `inductive ${name} ${params} : ${relationType(predicate)} where\n${constructors.join("\n")}\n`,
+    inputs: [...inputs].map(([predicate, index]) => ({
+      predicate,
+      name: `input${index}`,
+      arity: typed.columnTypes.get(predicate)!.length,
+    })),
     params,
     application: result,
     arity: typed.columnTypes.get(predicate)!.length,
@@ -200,6 +205,20 @@ export function exportLeanUniqueness(
   const binders = variables.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
   const conclusion = outputs.map((i) => `${left[i]} = ${right[i]}`).join(" ∧ ");
   const statement = `def ${claim.id} : Prop :=\n  ∀ ${[relation.params, binders].filter(Boolean).join(" ")},\n  ${relation.application} ${left.join(" ")} → ${relation.application} ${right.join(" ")} → ${conclusion}\n`;
+  return registerLeanClaim(
+    { ...claim, keyColumns: keys, outputColumns: outputs },
+    relation.source,
+    statement,
+    polarity,
+  );
+}
+
+function registerLeanClaim<T extends { id: string; relationName: string }>(
+  claim: T,
+  source: string,
+  statement: string,
+  polarity: "prove" | "refute",
+) {
   const proofName = polarity === "prove" ? claim.id : `${claim.id}_refuted`;
   if (proofName === claim.relationName) throw new Error("Conflicting Lean proof name");
   const expected = `${polarity === "refute" ? "¬ " : ""}Generated.${claim.id}`;
@@ -207,7 +226,7 @@ export function exportLeanUniqueness(
     {
       id: claim.relationName,
       kind: "definition",
-      statement: relation.source,
+      statement: source,
       assumptions: [],
       dependencies: [],
     },
@@ -215,7 +234,7 @@ export function exportLeanUniqueness(
       id: claim.id,
       kind: polarity === "prove" ? "goal" : "definition",
       ...(polarity === "prove" ? { theorem: `Datamog.Checked.${proofName}` } : {}),
-      statement: { claim: { ...claim, keyColumns: keys, outputColumns: outputs }, lean: statement },
+      statement: { claim, lean: statement },
       assumptions: [],
       dependencies: [claim.relationName],
     },
@@ -230,9 +249,74 @@ export function exportLeanUniqueness(
       dependencies: [claim.id],
     });
   return {
-    relation: relation.source,
+    relation: source,
     statement,
     checker: `theorem ${proofName} : ${expected} := Proofs.${proofName}\n#audit ${proofName}\n`,
     nodes,
   };
+}
+
+/** Internal coverage law. Each output position maps to an input column or to
+ * an independent existential witness (null). Bounds restrict input tuples;
+ * they never assume computed-head definedness or a law about the whole input.
+ */
+export interface CoverageClaim {
+  id: string;
+  predicate: string;
+  relationName: string;
+  inputPredicate: string;
+  outputToInput: readonly (number | null)[];
+  bounds: readonly {
+    column: number;
+    op: "<" | "<=" | ">" | ">=";
+    value: number;
+  }[];
+}
+
+export function exportLeanCoverage(
+  typed: TypedProgram,
+  claim: CoverageClaim,
+  polarity: "prove" | "refute" = "prove",
+) {
+  identifier(claim.id);
+  identifier(claim.relationName);
+  if (claim.id === claim.relationName || /^(input[0-9]+|[vw][0-9]+)$/.test(claim.relationName))
+    throw new Error("Conflicting Lean coverage declaration name");
+  if (polarity !== "prove" && polarity !== "refute") throw new Error("Invalid proof polarity");
+  const relation = buildLeanRelation(typed, claim.predicate, claim.relationName);
+  const input = relation.inputs.find((input) => input.predicate === claim.inputPredicate);
+  if (!input) throw new Error("Coverage requires an input dependency of the exported relation");
+  const validColumn = (column: number) =>
+    Number.isInteger(column) && column >= 0 && column < input.arity;
+  if (
+    claim.outputToInput.length !== relation.arity ||
+    Array.from(claim.outputToInput).some((column) => column !== null && !validColumn(column))
+  )
+    throw new Error("Invalid coverage output mapping");
+  for (const bound of claim.bounds) {
+    if (
+      !validColumn(bound.column) ||
+      !["<", "<=", ">", ">="].includes(bound.op) ||
+      !Number.isSafeInteger(bound.value)
+    )
+      throw new Error("Invalid coverage input bound");
+  }
+  const variables = Array.from({ length: input.arity }, (_, i) => `v${i}`);
+  const witnesses: string[] = [];
+  const outputs = Array.from(claim.outputToInput, (column, i) => {
+    if (column !== null) return variables[column]!;
+    const witness = `w${i}`;
+    witnesses.push(witness);
+    return witness;
+  });
+  const binders = (names: string[]) => names.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
+  const operators = { "<": "<", "<=": "≤", ">": ">", ">=": "≥" };
+  const premises = [
+    [input.name, ...variables].join(" "),
+    ...claim.bounds.map((b) => `${variables[b.column]}.val ${operators[b.op]} (${b.value} : Int)`),
+  ];
+  const conclusion = [relation.application, ...outputs].join(" ");
+  const exists = witnesses.length ? `∃ ${binders(witnesses)}, ` : "";
+  const statement = `def ${claim.id} : Prop :=\n  ∀ ${[relation.params, binders(variables)].filter(Boolean).join(" ")},\n  ${premises.join(" → ")} → ${exists}${conclusion}\n`;
+  return registerLeanClaim(claim, relation.source, statement, polarity);
 }
