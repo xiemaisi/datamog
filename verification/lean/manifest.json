@@ -2,7 +2,7 @@
   "purpose": "verification-plan",
   "schema": "datamog-verification-manifest-v1",
   "context": {
-    "profile": "datamog-integer-v1",
+    "profile": "datamog-integer-v1+flat-record-v1",
     "toolchain": "leanprover/lean4:v4.34.0",
     "method": "lean-kernel-checked",
     "artifacts": {
@@ -62,11 +62,12 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "9f58bbd34239d65f280064fe2fee4da555ea39cbd5f36d0e1d362feb16baafa1",
-      "scripts/test-lean.ts": "5e9c4ac81706119aaf21a4f49af043e345794ba2b60eee7c1cd4c52f968753a4",
+      "scripts/generate-lean.ts": "a5b9ebc75071f3379b98db8e3986ece04b485c39e442079df8764aaf61a287f9",
+      "scripts/test-lean.ts": "5e85f8a032c788354dd0087f0eabb35d776c4260344af9becba2c39dc7c1311d",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "3e3c1af5a301f2cdbaa5971b66a75ffc97c1a8bddffcd76e4f0c59189d6121f3",
+      "verification/lean/Datamog/Proofs.lean": "06b56cc35d7c0df91e73b193b67cbc12503b6b429fd433de787dc6c7362f75e5",
+      "verification/lean/Datamog/Records.lean": "d336fbff97eee669ccf4a7e1a1707564a5cf7c13cc2a79c8bdbe59ef7f877e71",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/diagonal.dl": "923978fa45dded0ddac1dfcf32c47f92e3e871f867ab82e4dd94024a6748b772",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
@@ -80,7 +81,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "8cc582bb1c53234fe5ac27864b10dd55e76d35dfa98886dfe177efb9c8bc78f4",
+  "contextDigest": "f65f3eea9a766c2a2d8b1301858b993754d4c3a3219f7412e3e31eedb5ef8a89",
   "entries": [
     {
       "id": "Diagonal",
@@ -101,7 +102,7 @@
       "closure": [
         "Diagonal"
       ],
-      "digest": "22c5b49f1f72c36993e16134a4ad6ddc2bb4de23815aacfafd342f6dda082051"
+      "digest": "279ffd25557a88ba4937c0058b405f49983ee8eac7690a92b568def23869d897"
     },
     {
       "id": "Guarded",
@@ -122,7 +123,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "b1c2a820509438a8871b11db0a66b4bd08c2a7923131c26ca6a64bbd4035697c"
+      "digest": "faed80ee125faddd190c3c35a4b19d9a85a502e4645043f945d9593c5c28db83"
     },
     {
       "id": "Identity",
@@ -143,7 +144,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "60ae11429057213e6c8a6ed91746d8f04cd109b821ed488031eb259e0af188ba"
+      "digest": "e1f1f2f8b4dc5b3ef7eaf9f7b8878d1844c22bdca8f7664fcf957c939914c7d4"
     },
     {
       "id": "Overlapping",
@@ -164,7 +165,7 @@
       "closure": [
         "Overlapping"
       ],
-      "digest": "00cda9cf4f7a64b056ba6c131aa7c43cb6a015eaf653449114f949d3f1022b0a"
+      "digest": "71952918c03df543368f425bfccda674b695aab29522d3e63acb51440506bb0a"
     },
     {
       "id": "Reach",
@@ -185,7 +186,18 @@
       "closure": [
         "Reach"
       ],
-      "digest": "3115f06f3c9379ab528474b906432641f7b1f80463a94892db6c31b84a4f6278"
+      "digest": "b3d9e28160533b56237dbda812e76978b9163c909268fbbe860d84ed7845e09d"
+    },
+    {
+      "id": "RecordLookup",
+      "kind": "definition",
+      "statement": "import Datamog.Semantics\n\nnamespace Datamog\n\n-- A deliberately flat record model: only the scalar Value fragment is admitted.\n-- Entries follow construction order, so the last occurrence of a key wins.\nabbrev FlatRecord := List (String × Value)\n\ndef lookupField : FlatRecord → String → Result\n  | [], _ => none\n  | (name, value) :: rest, key =>\n    match lookupField rest key with\n    | some found => some found\n    | none => if name = key then some value else none\n\nend Datamog\n",
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "RecordLookup"
+      ],
+      "digest": "e5f5673f4e71ea81bf7aa755e7a13414ce4dd7c6c943c709b5eaead8cbeb0a95"
     },
     {
       "id": "Saturating",
@@ -206,7 +218,7 @@
       "closure": [
         "Saturating"
       ],
-      "digest": "45ea95125350a79a1f87d36199c81fa6e8655651916f028f8ee3cf8d5790c4e9"
+      "digest": "ae0e5012e2f69718d3f1dcf48bc5a15fb4bf891ae9bd84dc5adb9587428d2176"
     },
     {
       "id": "Successor",
@@ -227,7 +239,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "881938bb9dc9fd67a1e75835ae6a0aaf3d837b365140c5ea586b50b3e57393bd"
+      "digest": "0d8b49281a8dab11fcfef1ae8561196837fcfcc4273c42a6e48d11e2844fa50b"
     },
     {
       "id": "diagonalTotal",
@@ -254,7 +266,7 @@
         "Diagonal",
         "diagonalTotal"
       ],
-      "digest": "2f04b5f252d61949a0c87ebf900a0b9b2fc107ecebf44aa69515d9e49fc991ff"
+      "digest": "949497c07dc363ffc5b803d59fdf230149331213cef49f6f66a492a499c7345a"
     },
     {
       "id": "diagonalTotal_refuted",
@@ -270,7 +282,7 @@
         "diagonalTotal",
         "diagonalTotal_refuted"
       ],
-      "digest": "7a575907c51116965e5ee2df7dcffdb3f048ed88b26004ddf8da09236f47f654"
+      "digest": "576ed5eede58d88319261f3d66f09affbe5b4f0c75fd4481e561fc865e0db52c"
     },
     {
       "id": "diagonalUnique",
@@ -298,7 +310,7 @@
         "Diagonal",
         "diagonalUnique"
       ],
-      "digest": "298452f0d5ebc5dcb12e2bb41698d23f9b7649c4778bdeafd8cb6ff0a05a985e"
+      "digest": "5576e31fb7026a4d7a9075082af89bcf67ac0c3769486b60d36139fba5788786"
     },
     {
       "id": "falseGoal",
@@ -399,7 +411,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "f27a5103023ed73c4134b9aaf6d69fbc0cf08447d569ded6ecaad5a6aa4aa333"
+      "digest": "d10f3034a5f3066113edee63730c00e2d43790ac7ec589a52db3b3c98d1979a6"
     },
     {
       "id": "falseGoal_refuted",
@@ -414,7 +426,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "70dbc4b3e5802a30f451947984fd0a2f440e82cc0b25a7777675b20da69c854d"
+      "digest": "92cdbb36a52e79720d81832b7972a421aab92c3137b1521141e6616f9639078c"
     },
     {
       "id": "guardedCoverage",
@@ -448,7 +460,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "69bd03424c19667e16a896f798762e95b80cce87afbadba8a992587bc6ebff66"
+      "digest": "c79f5842136a09de7083e4962626964690bd607034a67dcebd2e5c313b832190"
     },
     {
       "id": "guardedTotal",
@@ -475,7 +487,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "33d0f9c9decee1cc13a0f8228f53e5c0328d4d8ee04495b268af1c3557656313"
+      "digest": "9285d1a88673258ff1e1641b481b67899d5c93841d580d6a66ac7a700f6c6976"
     },
     {
       "id": "guardedTotal_refuted",
@@ -491,7 +503,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "2b25b165a4a4b9f3b7080c16244fcc4c2e944106ffd28ea14ec6ac5ba4ac64a3"
+      "digest": "75c911d6b560545954d769d05043443b6c70514c328881ad1481610cd55ff6de"
     },
     {
       "id": "identityUnique",
@@ -519,7 +531,7 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "58dee167d8c1175869ad284a8d45c70e224efe8972b43924cc12f2cbc3f3ed0e"
+      "digest": "ff3c52c69d10b80e6a4d83b56cd6f434bd3b0acb4b14a35f516bebc9913849e7"
     },
     {
       "id": "overlappingUnique",
@@ -546,7 +558,7 @@
         "Overlapping",
         "overlappingUnique"
       ],
-      "digest": "bf6ceef7452aec6e250a8cf57e72eb24456199c33a0e3e501e8f470f0f7fe5a9"
+      "digest": "9cd855c18d6dec43cfd7efd0cfcd665bd58d7de032dba2e2be6b25a7a00c32db"
     },
     {
       "id": "overlappingUnique_refuted",
@@ -562,7 +574,7 @@
         "overlappingUnique",
         "overlappingUnique_refuted"
       ],
-      "digest": "8528ccd70b8f5b124aab299d87c553ce363a3470b27bbd4bf99612eef70301d8"
+      "digest": "d8700ab67a3488c495c516413eac1eaf66c0528cfdf8edfbf9ddd877e96134b0"
     },
     {
       "id": "reachPreserves",
@@ -579,7 +591,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "47c09438a1d092238cae7cd5169541c22777935566f2dd8ec01551217ba58a29"
+      "digest": "a2cf87e35abb6868386ef009275220280294c86a3f0656dd26d0d30b7b9e20db"
     },
     {
       "id": "reachTransitive",
@@ -594,7 +606,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "3593e595bb077a61cf61b43b230939466bb5ccc1f7898b6a8bc6097b930802cb"
+      "digest": "10b5bed950f29d89087dd22d49998fff493382dd2a1c9992268b929a55d60544"
     },
     {
       "id": "reachUnique",
@@ -621,7 +633,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "a0d78a7ddc1754a4bcd77fbdec30eee3d0e01fe018d33cb12ad713c7a6481a56"
+      "digest": "925b6105e29297dc6d3c795a6dcfa578d0b9751911108d221ade6d89386f166b"
     },
     {
       "id": "reachUnique_refuted",
@@ -637,7 +649,63 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "6eba1b32a8acbc56dabec937d4a58d3213a73fefd2c1d770174490173025ae81"
+      "digest": "25d63e2140dd55e2eeeff018b6a4d039da19853ac2c36798f60884bc4848fcf1"
+    },
+    {
+      "id": "recordAbsent",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.recordAbsent",
+      "statement": {
+        "profile": "datamog-flat-record-v1",
+        "lean": "def recordAbsent : Prop :=\n  ∀ (fields : FlatRecord) (key : String),\n  (∀ entry ∈ fields, entry.1 ≠ key) → lookupField fields key = none\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "RecordLookup"
+      ],
+      "closure": [
+        "RecordLookup",
+        "recordAbsent"
+      ],
+      "digest": "a14780ff569876975a7016ed5f1c3cdaf8a516ba481d143feb88ddda6ed3c89d"
+    },
+    {
+      "id": "recordLastWrite",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.recordLastWrite",
+      "statement": {
+        "profile": "datamog-flat-record-v1",
+        "lean": "def recordLastWrite : Prop :=\n  ∀ (fields : FlatRecord) (key : String) (value : Value),\n  lookupField (fields ++ [(key, value)]) key = some value\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "RecordLookup"
+      ],
+      "closure": [
+        "RecordLookup",
+        "recordLastWrite"
+      ],
+      "digest": "c936461d892d4eff73721118d0014910530badaa5d424ef598adf9710d26277f"
+    },
+    {
+      "id": "recordNullDistinct",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.recordNullDistinct",
+      "statement": {
+        "profile": "datamog-flat-record-v1",
+        "lean": "def recordNullDistinct : Prop :=\n  ∀ (fields : FlatRecord) (key : String),\n  lookupField fields key = none →\n  lookupField (fields ++ [(key, Value.null)]) key ≠ lookupField fields key\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "RecordLookup",
+        "recordLastWrite"
+      ],
+      "closure": [
+        "RecordLookup",
+        "recordLastWrite",
+        "recordNullDistinct"
+      ],
+      "digest": "68e99d13938cb56447e0d1f331d6c1a20643637a441f272f6cf4bbcbfb1b6cee"
     },
     {
       "id": "saturatingCoverage",
@@ -665,7 +733,7 @@
         "Saturating",
         "saturatingCoverage"
       ],
-      "digest": "c4edff47e6219abaf1d3d7c4889d5e583a06c01fa0d2436dc7641cb7658bd311"
+      "digest": "40fd87798cac63a1e06015f097afb6c73784783367a20b7e05e4157d2ea7849e"
     },
     {
       "id": "saturatingUnique",
@@ -693,7 +761,7 @@
         "Saturating",
         "saturatingUnique"
       ],
-      "digest": "90dcaa81b43a9a0e8337bf8896eefc43147bb1f23080ca209fa2dd86e31c55c4"
+      "digest": "fb159c334a5d2c8b1ea1b8c2705d67072f08099de7c57122b8c5c5f040caccdb"
     },
     {
       "id": "successor",
@@ -1127,7 +1195,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "f0589ab9a2f90569cd42883bbdc4a8de37644ed13fea4874b89fdb69a1a3791c"
+      "digest": "74ff7134aa375effe0fe384c9db18361b341e6e766ba4c9bf41f0a580c99cd5a"
     },
     {
       "id": "successorCoverage",
@@ -1161,7 +1229,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "9b6cc97065d35109a4f404dd5880903f18da393a9e58e4abfbd67a695c590d3d"
+      "digest": "36f35ea005d902b2b6b0a3735f2b8d45ba5a2ec04dbf4b532c8458c91af67bdc"
     },
     {
       "id": "successorTotal",
@@ -1188,7 +1256,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "7dc0acdfdda0eff2dfabd2fc9ffdc3bca3c5f488089c5bc52d6afd31feb7c21c"
+      "digest": "76b6e3ce2449a1d6d948ac63bc1a1d66e49a8646c8514a26a601de862599f711"
     },
     {
       "id": "successorTotal_refuted",
@@ -1204,8 +1272,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "cd8f065856dd024bd5feb553cd3804aff0e6fa25c3dda727e38f09b54da5e2c4"
+      "digest": "ddec0f59091a3c18c8626c4784ae1944cdbf127aa6316f0d23f5c03274512b09"
     }
   ],
-  "digest": "e02126eed569c8bee3ccfcd4aaa514e45217fdfd12ef9232bd0345169a5dc356"
+  "digest": "d9578fcfeb7a1b6f315a6f3d2110bd5c93cb06bf182f34054220e7f9db402748"
 }

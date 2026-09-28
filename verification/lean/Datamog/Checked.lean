@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: e02126eed569c8bee3ccfcd4aaa514e45217fdfd12ef9232bd0345169a5dc356
+-- Verification manifest SHA-256: d9578fcfeb7a1b6f315a6f3d2110bd5c93cb06bf182f34054220e7f9db402748
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -44,4 +44,10 @@ theorem diagonalUnique : Generated.diagonalUnique := Proofs.diagonalUnique
 theorem diagonalTotal_refuted : ¬ Generated.diagonalTotal := Proofs.diagonalTotal_refuted
 #audit diagonalTotal_refuted
 
+theorem recordAbsent : Generated.recordAbsent := Proofs.recordAbsent
+#audit recordAbsent
+theorem recordLastWrite : Generated.recordLastWrite := Proofs.recordLastWrite
+#audit recordLastWrite
+theorem recordNullDistinct : Generated.recordNullDistinct := Proofs.recordNullDistinct
+#audit recordNullDistinct
 end Datamog.Checked

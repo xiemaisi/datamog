@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims started**. This extends the future-work discussion in
+and coverage claims plus flat-record lookup laws started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -128,12 +128,15 @@ integer literal. Computed outputs require a bounded witness equal to the sum.
 Other derived calls, mutual recursion, constraints, negation, aggregates, and
 other computed terms remain unsupported by relational export.
 The semantic library distinguishes null from undefined and defines bounded
-integer operations and truth. It does not cover floats or structural values.
+integer operations and truth. A separate `Records.lean` library now models
+lookup in flat records containing these scalar values; nested structures, strings
+as values, floats, and general structural export remain unsupported.
 
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
-axioms. They also compare 164 concrete semantic cases against native, SQLite, and
+axioms. They also compare 164 arithmetic/null cases and 124 flat-record lookup
+cases against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -278,6 +281,28 @@ through the claim APIs, audited, and required in Lean CI. The runtime fixture
 checks equal pairs at both integer boundaries and unequal pairs in both orders.
 This extends only the non-null integer fragment; it does not model null-aware
 equality or equality-driven variable binding.
+
+## Initial flat-record lookup laws
+
+The companion project's `Records.lean` models a finite list of string-keyed
+entries whose values are null, bounded integers, or Booleans. Lookup returns
+`none` for an absent key and `some Value.null` for an explicit null.
+Entries retain construction order, with the last duplicate key winning.
+
+Three exact registered goals establish absent-key lookup, last-write lookup,
+and the distinction between an absent key and adding a null-valued key.
+Their maintained proofs are audited and required by Lean CI. These are generic
+library laws, not exported proofs of arbitrary Datamog structural contracts.
+The manifest identifies the added `datamog-flat-record-v1` scope alongside
+`datamog-integer-v1`; record-law statements carry their own profile.
+
+The integration suite compares 124 cases on native, SQLite, and Postgres and
+checks the expected results by Lean kernel reduction. Cases include missing and
+null fields, integer boundaries, Booleans, duplicate keys in both orders, dotted
+keys, and empty keys. Fresh reports count these separately as `recordCases`.
+Nested records, arrays, structural type membership, and wrong-shape receivers
+remain outside this flat model; the existing exporters still reject structural
+claims.
 
 ## Which harder claims should be expressible?
 

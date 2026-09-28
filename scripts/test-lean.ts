@@ -131,6 +131,32 @@ try {
         cases.push([`${a} ${op} ${b}`, `${name} ${leanValue(a)} ${leanValue(b)}`]);
       }
     }
+  // Flat record cases retain duplicate entries so construction order is tested.
+  type Scalar = number | boolean | null;
+  const recordInputs: [string, Scalar][][] = [[], [["a.b", null]], [["", true]]];
+  for (const value of [null, false, true, 0, -1, -9007199254740991, 9007199254740991]) {
+    recordInputs.push(
+      [["x", value]],
+      [["other", value]],
+      [
+        ["x", value],
+        ["x", null],
+      ],
+      [
+        ["x", null],
+        ["x", value],
+      ],
+    );
+  }
+  const recordCases = recordInputs.flatMap((fields) =>
+    ["x", "missing", "a.b", ""].map((key) => ({ fields, key })),
+  );
+  const leanScalar = (value: Scalar) =>
+    value === null
+      ? "Value.null"
+      : typeof value === "boolean"
+        ? `(Value.boolean ${value})`
+        : `(Value.integer ⟨${value}, by decide⟩)`;
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -192,6 +218,24 @@ try {
             ? `(some (.boolean ${value}))`
             : leanValue(value as number | null);
       checks.push(`example : ${lean} = ${expected} := by decide`);
+    }
+    for (const [i, { fields, key }] of recordCases.entries()) {
+      const literal = `{${fields.map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(", ")}}`;
+      const source = `recordCase${i}(${literal}).
+        recordResult${i}(R[${JSON.stringify(key)}]) :- recordCase${i}(R).
+        ?- recordResult${i}(X).`;
+      const found = fields.findLast(([name]) => name === key);
+      const expected = found ? [{ X: found[1] }] : [];
+      for (const [name, backend] of backends) {
+        const rows = (await new DatamogExecutor(backend).execute(source))[0]!.rows;
+        if (JSON.stringify(rows) !== JSON.stringify(expected))
+          throw new Error(`${name} record lookup regression: ${literal}[${JSON.stringify(key)}]`);
+      }
+      const leanFields = `[${fields.map(([k, v]) => `(${JSON.stringify(k)}, ${leanScalar(v)})`).join(", ")}]`;
+      const result = found ? `some ${leanScalar(found[1])}` : "none";
+      checks.push(
+        `example : lookupField ${leanFields} ${JSON.stringify(key)} = ${result} := by decide`,
+      );
     }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
@@ -296,14 +340,18 @@ try {
   );
   await Bun.write(
     join(temp, "CrossCheck.lean"),
-    `import Datamog.Semantics\nopen Datamog\n${checks.join("\n")}\n`,
+    `import Datamog.Semantics\nimport Datamog.Records\nopen Datamog\n${checks.join("\n")}\n`,
   );
   await run(["lake", "env", "lean", "CrossCheck.lean"], temp);
   console.log(`${cases.length} Lean/${backendNames.join("/")} semantic cases passed.`);
+  console.log(
+    `${recordCases.length} Lean/${backendNames.join("/")} flat-record lookup cases passed.`,
+  );
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
     relationCases: 7,
+    recordCases: recordCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

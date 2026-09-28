@@ -135,4 +135,27 @@ theorem diagonalTotal_refuted : ¬ Generated.diagonalTotal := by
     change y.val = 1 at target
     omega
 
+theorem recordAbsent : Generated.recordAbsent := by
+  intro fields key
+  induction fields with
+  | nil => simp [lookupField]
+  | cons entry rest ih =>
+    intro absent
+    have head := absent entry (by simp)
+    have tail := ih (by
+      intro e member
+      exact absent e (by simp [member]))
+    simp [lookupField, tail, head]
+
+theorem recordLastWrite : Generated.recordLastWrite := by
+  intro fields key value
+  induction fields with
+  | nil => simp [lookupField]
+  | cons entry rest ih => simp [lookupField, ih]
+
+theorem recordNullDistinct : Generated.recordNullDistinct := by
+  intro fields key absent
+  rw [recordLastWrite fields key Value.null, absent]
+  exact null_is_defined
+
 end Datamog.Proofs

@@ -35,8 +35,9 @@ integers, truth, logical negation, null-aware equality, ordering, addition,
 truncating division, and remainder. Nullable arithmetic is rejected by Datamog's
 current frontend; the raw semantic operations still state its null propagation.
 The IR's quotient uses zero as a totalized placeholder for a zero divisor;
-Datamog division separately requires a nonzero divisor. This model has no float
-or structural-value semantics. Structural goals remain unsupported by local export.
+Datamog division separately requires a nonzero divisor. This scalar model has no float semantics.
+The separate flat-record library below adds lookup over scalar-valued entries;
+structural goals remain unsupported by local and relational export.
 
 `test:lean` checks regeneration and the toolchain version, copies project sources
 to a fresh temporary project, and rebuilds without existing project `.olean`
@@ -322,3 +323,27 @@ Both results are required in Lean CI. The seventh relation fixture compares
 equal pairs at both safe-integer boundaries and mismatched pairs in both orders
 on native, SQLite, and Postgres. These results concern non-null integers;
 nullable equality and equality-driven bindings are still outside this exporter.
+
+
+## Flat-record lookup library
+
+`Datamog/Records.lean` introduces `FlatRecord`, a finite list of string-keyed
+entries with scalar `Value` contents (null, bounded integers, and Booleans).
+`lookupField` keeps absence (`none`) separate from explicit null
+(`some Value.null`). The last occurrence of a duplicate key wins.
+
+The generated goals `recordAbsent`, `recordLastWrite`, and
+`recordNullDistinct` register generic library laws with exact checker types and
+axiom audits. CI requires all three. Their maintained proofs live in
+`Proofs.lean`. The last law depends on the registered last-write result;
+all record goals depend on the record library definition. The manifest context
+now names `datamog-integer-v1+flat-record-v1`, and record-law statements identify
+the `datamog-flat-record-v1` profile explicitly.
+
+The runner checks 124 concrete lookup cases against native, SQLite, Postgres,
+and Lean kernel reduction, including missing keys, explicit null, duplicate
+keys in both orders, scalar boundaries, dotted keys, and empty keys.
+Reports record their count under `semanticChecks.recordCases`, separately from
+arithmetic cases and relation fixtures. Nested values, arrays, strings as
+values, structural membership, and wrong-shape lookup are not modeled.
+This library does not enable arbitrary structural claims in the exporters.
