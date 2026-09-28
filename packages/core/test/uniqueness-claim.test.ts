@@ -61,7 +61,7 @@ test("invalid columns and conflicting names fail before emitting claims", () => 
 test("unsupported relation semantics cannot yield uniqueness claims", () => {
   for (const source of [
     "input predicate p(a: integer?). q(X, X) :- p(X).",
-    "input predicate p(a: integer). q(X, X) :- p(X), X > 0.",
+    "input predicate p(a: integer). q(X, X) :- p(X), X + 1 > 0.",
     "input predicate p(a: integer). q(X, X * 2) :- p(X).",
   ])
     expect(() => exportLeanUniqueness(compile(source), claim)).toThrow();

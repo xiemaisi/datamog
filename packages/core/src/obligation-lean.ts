@@ -66,8 +66,8 @@ export function exportLeanObligation(goal: LogicalObligation, name: string): str
 
 /**
  * Spike fragment: one positive (possibly self-recursive) relation, over non-null
- * integers, with variable-only body atoms and variable or variable-plus-integer
- * heads. Other computed terms, derived calls, mutual recursion, negation,
+ * integers, with variable-only body atoms, simple integer order guards, and
+ * variable or variable-plus-integer heads. Other computed terms, derived calls, mutual recursion, negation,
  * constraints and aggregates are rejected explicitly.
  * Inputs are arbitrary relations over SafeInt; finite derivations form the LFP.
  */
@@ -93,6 +93,7 @@ function buildLeanRelation(typed: TypedProgram, predicate: string, name: string)
   for (const rule of rules) {
     if (rule.head.refinements?.length) throw new Error("Unsupported Lean relation refinement");
     for (const atom of rule.body) {
+      if (atom.$type === "Filter" && !atom.negated) continue;
       if (atom.$type !== "Literal" || atom.negated)
         throw new Error("Unsupported Lean relation body");
       if (atom.predicate !== predicate) {
@@ -137,7 +138,41 @@ function buildLeanRelation(typed: TypedProgram, predicate: string, name: string)
         })
         .join(" ");
     const head = `${result} ${terms(rule.head.args, true)}`.trim();
+    // Guard variables must be supplied by positive relation atoms. This keeps
+    // comparisons total over SafeInt, with no null or undefined cases omitted.
+    const bound = new Set(
+      rule.body.flatMap((atom) =>
+        atom.$type === "Literal" && !atom.negated
+          ? atom.args.flatMap((arg) => (arg.$type === "Variable" ? [arg.name] : []))
+          : [],
+      ),
+    );
+    const guardTerm = (term: (typeof rule.head.args)[number]): string => {
+      if (term.$type === "Variable" && bound.has(term.name)) return `${variable(term.name)}.val`;
+      if (
+        term.$type === "NumberLiteral" &&
+        !isFloatLiteral(term) &&
+        Number.isSafeInteger(term.value)
+      )
+        return `(${term.value} : Int)`;
+      if (
+        term.$type === "UnaryExpr" &&
+        term.op === "-" &&
+        term.operand.$type === "NumberLiteral" &&
+        !isFloatLiteral(term.operand) &&
+        Number.isSafeInteger(term.operand.value)
+      )
+        return `(${-term.operand.value} : Int)`;
+      throw new Error("Unsupported Lean relation guard term");
+    };
     const body = rule.body.map((atom) => {
+      if (atom.$type === "Filter" && !atom.negated) {
+        const expr = atom.expr;
+        const operators: Record<string, string> = { "<": "<", "<=": "≤", ">": ">", ">=": "≥" };
+        if (expr.$type !== "BinaryExpr" || !Object.hasOwn(operators, expr.op))
+          throw new Error("Unsupported Lean relation guard");
+        return `(${guardTerm(expr.left)} ${operators[expr.op]} ${guardTerm(expr.right)})`;
+      }
       if (atom.$type !== "Literal") throw new Error("Unsupported Lean relation body");
       const callee = atom.predicate === predicate ? result : `input${inputs.get(atom.predicate)}`;
       return `(${callee} ${terms(atom.args)})`;

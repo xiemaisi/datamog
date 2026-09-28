@@ -123,7 +123,7 @@ theorems require the exact expected types and audit their transitive axiom depen
 [`obligation-lean.ts`](../../packages/core/src/obligation-lean.ts) exports the
 integer/Boolean IR as Lean propositions and a deliberately smaller relational
 fragment: one positive, possibly self-recursive relation over non-null integers, with
-variable-only body atoms and heads containing variables or a variable plus an
+variable-only body atoms, simple integer order guards, and heads containing variables or a variable plus an
 integer literal. Computed outputs require a bounded witness equal to the sum.
 Other derived calls, mutual recursion, constraints, negation, aggregates, and
 other computed terms remain unsupported by relational export.
@@ -199,7 +199,7 @@ The companion `reachUnique_refuted` theorem proves that universal reachability
 uniqueness is false: edges from `0` to `1` and `2` yield distinct targets. The
 manifest registers the refutation, not the false claim, as a proved goal. Both
 new results have exact checker types, axiom audits, and unconditional CI
-requirements. Three concrete relation fixtures replay identity and successor boundary cases
+requirements. Four concrete relation fixtures replay identity and successor boundary cases
 and the branching counterexample on native, SQLite, and configured Postgres; reports
 count those separately from expression comparisons.
 
@@ -244,7 +244,18 @@ Lean text alone is insufficient. Duplicate claim/refutation IDs, conflicting
 definitions, duplicate checker theorem names, and missing dependencies fail the
 batch. The fixed project uses the assembled sources, checkers, and manifest
 nodes together. This remains an internal build API, not an external proof-import
-validator. Structural values and the remaining stage 4 families are still open.
+validator.
+
+Relational export now accepts positive order guards (`<`, `<=`, `>`, `>=`)
+between variables bound by relation atoms and safe integer literals. Guards
+become constructor premises, preserving body order, rather than assumptions
+added to coverage claims. Nullable operands, arithmetic expressions, equality,
+compound Boolean expressions, and negated filters remain unsupported.
+The guarded successor fixture proves coverage below `maxSafe - 1` and refutes
+unrestricted coverage using `maxSafe - 1` itself: its successor would be defined,
+but the filter excludes the row. Both results are required in Lean CI, and the
+fixture replays the boundary on native, SQLite, and Postgres. Structural values
+and the remaining stage 4 families are still open.
 
 ## Which harder claims should be expressible?
 

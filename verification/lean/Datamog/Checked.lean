@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: d3bc08ffe2cdfb4caebf275525196d22dcb92866cd6c25c8f3b8791406c86acf
+-- Verification manifest SHA-256: f9551b9d5828cc5dc76c2bbdaf13173ab3325639fc988dd58f07e9125483dce6
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -22,5 +22,11 @@ theorem successorCoverage : Generated.successorCoverage := Proofs.successorCover
 
 theorem successorTotal_refuted : ¬ Generated.successorTotal := Proofs.successorTotal_refuted
 #audit successorTotal_refuted
+
+theorem guardedCoverage : Generated.guardedCoverage := Proofs.guardedCoverage
+#audit guardedCoverage
+
+theorem guardedTotal_refuted : ¬ Generated.guardedTotal := Proofs.guardedTotal_refuted
+#audit guardedTotal_refuted
 
 end Datamog.Checked

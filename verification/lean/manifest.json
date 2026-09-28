@@ -28,7 +28,7 @@
       "packages/core/src/nullness-diagnostics.ts": "19196b925ce2d81d93b9d20479f949a1cf0abb2cb3e350b29a36ef32689407af",
       "packages/core/src/nullness.ts": "d14a1e6276cd1e31320b37daad4cef061bec5b49b11d74197fc02730a05283c3",
       "packages/core/src/obligation-ir.ts": "c6b571c553ec81e081144db96cda5333d387791b58b03342486dfb44b914d5c9",
-      "packages/core/src/obligation-lean.ts": "d753c313a541d45926bc800b9764af6dcd3dea4c60c35e4bcb42ff2afef17c25",
+      "packages/core/src/obligation-lean.ts": "db351071a0610e6bd6a68e5e925e3b7836ec1e43067b37eea5c842cdc169034a",
       "packages/core/src/obligation-smt.ts": "909a1de29bed1f3386737e88ad42e6f27ea7d075e05f37ae486c414700a5c5b0",
       "packages/core/src/obligations.ts": "46d3849eafbbeb40025d14b4dd921ddf523cb1cefcba52f964349480f1fe031d",
       "packages/core/src/partiality.ts": "30bb88e9d22a5e13e96b665e61994a619ab9224bfa3372495a161a63d0c5fc3d",
@@ -62,12 +62,13 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "8a04e7b90637e1a3e8cf85b32c590bb4f2f52f2125c3252edf7148127dc7d4aa",
-      "scripts/test-lean.ts": "5c764a5ba7ad06b21a4a23a29631724c6a2eae48a776f2af4deebb0b0980aa83",
+      "scripts/generate-lean.ts": "57e34503526f779a473444bad17b29ed3691f09303d810b27780a56e558924ed",
+      "scripts/test-lean.ts": "98dd85969de215bc45cfcde8d55bc33f8f58163a9374f655e78295d87982151f",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "bbabae6d8c29a783bb1244e075063816dd0245bbb03d4d4dc2d43a6045811b93",
+      "verification/lean/Datamog/Proofs.lean": "fb0f5c948c56edde00bbc9e77dc7543333b0d46005f74aa61cc2d941e6aaf2cd",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
+      "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
       "verification/lean/fixtures/successor.dl": "f78e888af124a557f7063b18702a83c4cbc78b96fdca1b34b724aa529ec26c9a",
@@ -76,8 +77,29 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "26b0f2302359c3f8bb719af6ae277b64fffd6b021bf84ce518bcfb5893f345e0",
+  "contextDigest": "3c33e2f3f05c8dad7edc4f3f95ef247c926ed182486ff9d8300caf189b3d5d70",
   "entries": [
+    {
+      "id": "Guarded",
+      "kind": "definition",
+      "statement": {
+        "predicate": "guarded",
+        "inputs": [
+          {
+            "predicate": "sample",
+            "name": "input0",
+            "arity": 1
+          }
+        ],
+        "lean": "inductive Guarded (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where\n  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740990 : Int)) → (w0.val = v0.val + (1 : Int)) → Guarded input0 v0 w0\n"
+      },
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "Guarded"
+      ],
+      "digest": "d2fe43787b75484d4923d339508073040fb2450ba7c72db5f5c29734eeb9c9af"
+    },
     {
       "id": "Identity",
       "kind": "definition",
@@ -97,7 +119,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "58b260f1cd7f16e989b31c1e0e28d7943f675f8d5b6eeabf237dfb3ddb06d293"
+      "digest": "0a3146fe8981107c8fe9700a5ba56b6f63bf503e8d091a1682134abdecbe5426"
     },
     {
       "id": "Reach",
@@ -118,7 +140,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "39773a971b91fd115ae394edc297fe63d888c21efa0ea08e65c8b5dfaa98769d"
+      "digest": "10644447c723fb782bf09f498d440aa6e7bd600e1709c38a378c77f94ad44347"
     },
     {
       "id": "Successor",
@@ -139,7 +161,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "a18239712b005282ca4a87e1f04af11b5a2b0f6ac5997bb0e0b519435d2c5619"
+      "digest": "4cc7cdf9fdd9e548197e254eb1876d11c8878688d26e53482e539cde005d5104"
     },
     {
       "id": "falseGoal",
@@ -240,7 +262,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "be4e78e1506d1a3105a65233cb68564855feb93dbdb6d0dfcbe972c153abbfe2"
+      "digest": "2cc07e442fb6f710b8091d9f7861aaa190e1d029ff83ea5f5c6a17c30982e3bd"
     },
     {
       "id": "falseGoal_refuted",
@@ -255,7 +277,84 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "34e5b9d262f784fbd8430aa5d42fd9e4e571518d44660db96af4591f3fcff980"
+      "digest": "cf1933f8e6dc40ba71c25ea3e5c71a29ef01cc206aec98dc98a2b6e765f79c62"
+    },
+    {
+      "id": "guardedCoverage",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.guardedCoverage",
+      "statement": {
+        "claim": {
+          "id": "guardedCoverage",
+          "predicate": "guarded",
+          "relationName": "Guarded",
+          "inputPredicate": "sample",
+          "outputToInput": [
+            0,
+            null
+          ],
+          "bounds": [
+            {
+              "column": 0,
+              "op": "<",
+              "value": 9007199254740990
+            }
+          ]
+        },
+        "lean": "def guardedCoverage : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),\n  input0 v0 → v0.val < (9007199254740990 : Int) → ∃ (w1 : Datamog.SafeInt), Guarded input0 v0 w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Guarded"
+      ],
+      "closure": [
+        "Guarded",
+        "guardedCoverage"
+      ],
+      "digest": "e187a7ffdabcd49d8986bb7e5902db10ec1591f448781dd9b52c9d38ce86eefa"
+    },
+    {
+      "id": "guardedTotal",
+      "kind": "definition",
+      "statement": {
+        "claim": {
+          "id": "guardedTotal",
+          "predicate": "guarded",
+          "relationName": "Guarded",
+          "inputPredicate": "sample",
+          "outputToInput": [
+            0,
+            null
+          ],
+          "bounds": []
+        },
+        "lean": "def guardedTotal : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),\n  input0 v0 → ∃ (w1 : Datamog.SafeInt), Guarded input0 v0 w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Guarded"
+      ],
+      "closure": [
+        "Guarded",
+        "guardedTotal"
+      ],
+      "digest": "fb7172c2ca90a0bba3d31bc8183b1aea0451cd1352036df1466b489433adbb6c"
+    },
+    {
+      "id": "guardedTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.guardedTotal_refuted",
+      "statement": "¬ Datamog.Generated.guardedTotal",
+      "assumptions": [],
+      "dependencies": [
+        "guardedTotal"
+      ],
+      "closure": [
+        "Guarded",
+        "guardedTotal",
+        "guardedTotal_refuted"
+      ],
+      "digest": "b011d1986199c226245760aa1996ed979d0c7a5fef5cca77978af377b1948ebc"
     },
     {
       "id": "identityUnique",
@@ -283,7 +382,7 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "b3dfcd6c1a76ff19447d31c32d93ac06d5453b901e7b00f289a4dc1a635e3ed9"
+      "digest": "dae4c087831193613c44f0022a2f52c6a2158d77051c197af15fb90fa364f31f"
     },
     {
       "id": "reachPreserves",
@@ -300,7 +399,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "ed7f09908a7963a4fbf7ac7839589f967c5260025ff10cf60bbedf5e2c11612e"
+      "digest": "3e40d6bbfa3af90ad85a7089d58eb7630b6d8053fc9ff3956a3b909ec6608fc9"
     },
     {
       "id": "reachTransitive",
@@ -315,7 +414,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "3913188b57b3c3839c2e72844c800b22d252393ed9ffd6c3c5252d7e928309f1"
+      "digest": "32262c3874a28d20f0b42e7cfc029d6a09f27dae3d759b77b9bd772eb1701402"
     },
     {
       "id": "reachUnique",
@@ -342,7 +441,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "6e591036ba85a85a1afd1c6ac799aa1f1ae9ef4f699fcb82494451bf0c92ea78"
+      "digest": "37a206f6a6f7623b09c8830bd74ecb625ac53a09098c91cc9b11f9f3e9419a10"
     },
     {
       "id": "reachUnique_refuted",
@@ -358,7 +457,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "ad0236160ecfc5e0540b4659aeb70f29c83354a45180898857ca8e36f34041a2"
+      "digest": "b0eb357841fe7c0fd68f4330d8ccb59ee50af67c2abe3cdfc6b693b67f1321d0"
     },
     {
       "id": "successor",
@@ -792,7 +891,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "689db3e504438238b0c5b005d783d7052950b1122e4849850c940ad51512f5f7"
+      "digest": "1102d07fef64ba6d47746761b7517be5de8e0ffb010086f4412f2f681a84c6f7"
     },
     {
       "id": "successorCoverage",
@@ -826,7 +925,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "e75a009c30901316709cb44120799987a1377da6f59fc9e875242a46f4506c5e"
+      "digest": "1da854d53a7205649313db0c304d17a09096eaa80367fcbd17b657f57b511594"
     },
     {
       "id": "successorTotal",
@@ -853,7 +952,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "be3f9caa8b626208a65460adec376ad85f51f77289783e6d471aae6e4d69d50f"
+      "digest": "bad0780ead3228b15a35a456e9d65a1497453ebb3a7b22973175b9a28c5528b6"
     },
     {
       "id": "successorTotal_refuted",
@@ -869,8 +968,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "c8dd43cddde122d23ffdd0be311cd5359c94fb146ec60c5b282cef3467c483cd"
+      "digest": "f8491920854371ccdba4d4643bb6064c449f11a7c3d2846f95bf248cc70399cb"
     }
   ],
-  "digest": "d3bc08ffe2cdfb4caebf275525196d22dcb92866cd6c25c8f3b8791406c86acf"
+  "digest": "f9551b9d5828cc5dc76c2bbdaf13173ab3325639fc988dd58f07e9125483dce6"
 }

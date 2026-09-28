@@ -111,7 +111,7 @@ test("invalid mappings, bounds, inputs, and names cannot emit coverage claims", 
 test("coverage rejects unsupported relation semantics", () => {
   for (const source of [
     "input predicate p(a: integer?). q(X, X, X) :- p(X).",
-    "input predicate p(a: integer). q(X, X, X) :- p(X), X > 0.",
+    "input predicate p(a: integer). q(X, X, X) :- p(X), X + 1 > 0.",
     "input predicate p(a: integer). q(X, X, X * 2) :- p(X).",
   ])
     expect(() => exportLeanCoverage(compile(source), claim)).toThrow();

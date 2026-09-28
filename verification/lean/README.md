@@ -26,7 +26,7 @@ rules over `SafeInt`. It proves preservation of an arbitrary property, condition
 on the input edges preserving that property. It does not establish the premise
 for a loaded graph, nor prove evaluation termination. The relational exporter
 currently accepts one positive, possibly self-recursive predicate with
-variable-only body atoms over non-null integers, with variable or
+variable-only body atoms and simple integer order guards over non-null integers, with variable or
 variable-plus-integer-literal heads; other derived calls, mutual recursion,
 negation, aggregates, other computed terms, and constraints are rejected.
 
@@ -270,3 +270,20 @@ the input bundles, with all relations emitted before claim statements. Reorderin
 bundles leaves manifest content identities unchanged. Empty batches are rejected.
 This is an internal assembler for trusted exporter results, not a validator for
 external source or proof artifacts.
+
+
+## Integer body guards
+
+Positive `<`, `<=`, `>`, and `>=` comparisons may use atom-bound variables
+or safe integer literals (including negative literals). Each comparison becomes
+a premise of that rule's constructor, in body order. This fragment is total over
+non-null bounded integers; nullable operands, arithmetic within guards, equality,
+compound Boolean expressions, and negated filters are rejected.
+
+`fixtures/guarded-successor.dl` filters inputs with `X < 9007199254740990`.
+`guardedCoverage` constructs an output below that explicit domain bound.
+`guardedTotal_refuted` uses the excluded value `9007199254740990`, whose
+successor would fit in the integer domain. Thus filtering alone can defeat
+coverage; guards are never silently assumed by the coverage exporter. Lean CI
+requires both results. The fourth relation regression compares the fixture,
+including both sides of the filter boundary, on native, SQLite, and Postgres.

@@ -24,6 +24,9 @@ inductive Identity (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Dat
 inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
   | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0
 
+inductive Guarded (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740990 : Int)) → (w0.val = v0.val + (1 : Int)) → Guarded input0 v0 w0
+
 def reachPreserves : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (P : SafeInt → Prop),
   (∀ a b, edge a b → P a → P b) →
@@ -48,5 +51,13 @@ def successorCoverage : Prop :=
 def successorTotal : Prop :=
   ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
   input0 v0 → ∃ (w1 : Datamog.SafeInt), Successor input0 v0 w1
+
+def guardedCoverage : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
+  input0 v0 → v0.val < (9007199254740990 : Int) → ∃ (w1 : Datamog.SafeInt), Guarded input0 v0 w1
+
+def guardedTotal : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
+  input0 v0 → ∃ (w1 : Datamog.SafeInt), Guarded input0 v0 w1
 
 end Datamog.Generated

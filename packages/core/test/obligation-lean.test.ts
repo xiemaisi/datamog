@@ -64,12 +64,42 @@ describe("optional Lean export", () => {
   });
 
   test.each([
+    ["X < 0", "(v0.val < (0 : Int))"],
+    ["X <= 7", "(v0.val ≤ (7 : Int))"],
+    ["0 > X", "((0 : Int) > v0.val)"],
+    ["7 >= X", "((7 : Int) ≥ v0.val)"],
+    ["X >= -7", "(v0.val ≥ (-7 : Int))"],
+    ["X < Y", "(v0.val < v1.val)"],
+  ])("integer guard %s is a constructor premise", (guard, expected) => {
+    const output = exportLeanRelation(
+      typed(`input predicate p(x: integer, y: integer). q(X, Y) :- ${guard}, p(X, Y).`),
+      "q",
+      "Q",
+    );
+    expect(output).toContain(`${expected} → (input0 v0 v1) → Q input0 v0 v1`);
+  });
+
+  test.each([
+    "not X < 0",
+    "X < 0.5",
+    "X < 9007199254740992",
+    "X < 1.0",
+    "X / 0 < 1",
+    "X < 0 || X > 1",
+    "X <> 0",
+  ])("unsupported guard %s fails explicitly", (guard) => {
+    expect(() =>
+      exportLeanRelation(typed(`input predicate p(x: integer). q(X) :- p(X), ${guard}.`), "q", "Q"),
+    ).toThrow();
+  });
+
+  test.each([
     "input predicate p(x: integer?). q(X) :- p(X).",
     "input predicate p(x: integer). q(X * 2) :- p(X).",
     "input predicate p(x: integer). q((X + 1) + 1) :- p(X).",
     "input predicate p(x: integer). q(X) :- p(X + 1).",
     "input predicate p(x: integer). q(X) :- p(X), not p(X).",
-    "input predicate p(x: integer). q(X) :- p(X), X > 0.",
+    "input predicate p(x: integer). q(X) :- p(X), X + 1 > 0.",
     "input predicate p(x: integer). q(X) :- p(X). q(X) :- r(X). r(X) :- q(X).",
   ])("rejects unsupported relational semantics: %s", (source) => {
     expect(() => exportLeanRelation(typed(source), "q", "Q")).toThrow();

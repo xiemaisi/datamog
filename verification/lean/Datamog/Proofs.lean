@@ -68,4 +68,22 @@ theorem successorTotal_refuted : ¬ Generated.successorTotal := by
     change y.val = maxSafe + 1 at value
     omega
 
+theorem guardedCoverage : Generated.guardedCoverage := by
+  intro sample x hx upper
+  have bounds := x.property
+  have hy : InRange (x.val + 1) := by
+    unfold InRange maxSafe at *
+    omega
+  exact ⟨⟨x.val + 1, hy⟩, Generated.Guarded.rule0 x ⟨x.val + 1, hy⟩ hx upper rfl⟩
+
+-- This input has a defined successor, but the rule's guard excludes it.
+theorem guardedTotal_refuted : ¬ Generated.guardedTotal := by
+  intro total
+  let excluded : SafeInt := ⟨9007199254740990, by decide⟩
+  obtain ⟨y, derivation⟩ := total (fun _ => True) excluded True.intro
+  cases derivation with
+  | rule0 _ guard _ =>
+    change (9007199254740990 : Int) < 9007199254740990 at guard
+    omega
+
 end Datamog.Proofs
