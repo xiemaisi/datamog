@@ -86,4 +86,33 @@ theorem guardedTotal_refuted : ¬ Generated.guardedTotal := by
     change (9007199254740990 : Int) < 9007199254740990 at guard
     omega
 
+-- Sibling rules jointly cover the full bounded domain.
+theorem saturatingCoverage : Generated.saturatingCoverage := by
+  intro sample x hx
+  by_cases upper : x.val < 9007199254740991
+  · have bounds := x.property
+    have hy : InRange (x.val + 1) := by
+      unfold InRange maxSafe at *
+      omega
+    exact ⟨⟨x.val + 1, hy⟩, Generated.Saturating.rule0 x ⟨x.val + 1, hy⟩ hx upper rfl⟩
+  · exact ⟨x, Generated.Saturating.rule1 x hx (by omega)⟩
+
+theorem saturatingUnique : Generated.saturatingUnique := by
+  intro sample x y z hxy hxz
+  cases hxy <;> cases hxz <;> apply Subtype.ext <;> simp_all <;> omega
+
+-- Moving the second guard down by one permits two distinct outputs.
+theorem overlappingUnique_refuted : ¬ Generated.overlappingUnique := by
+  intro unique
+  let nearTop : SafeInt := ⟨9007199254740990, by decide⟩
+  let top : SafeInt := ⟨9007199254740991, by decide⟩
+  let sample := fun (_ : SafeInt) => True
+  have increment : Generated.Overlapping sample nearTop top :=
+    Generated.Overlapping.rule0 nearTop top True.intro (by decide) (by decide)
+  have unchanged : Generated.Overlapping sample nearTop nearTop :=
+    Generated.Overlapping.rule1 nearTop True.intro (by decide)
+  have bad := congrArg Subtype.val (unique sample nearTop top nearTop increment unchanged)
+  change (9007199254740991 : Int) = 9007199254740990 at bad
+  omega
+
 end Datamog.Proofs

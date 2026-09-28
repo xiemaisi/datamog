@@ -287,3 +287,21 @@ successor would fit in the integer domain. Thus filtering alone can defeat
 coverage; guards are never silently assumed by the coverage exporter. Lean CI
 requires both results. The fourth relation regression compares the fixture,
 including both sides of the filter boundary, on native, SQLite, and Postgres.
+
+
+## Coverage and uniqueness across sibling rules
+
+`saturating-successor.dl` increments below `maxSafe` and returns its input
+unchanged at `maxSafe`. The generated `saturatingCoverage` theorem quantifies
+over all admitted input integers, with no additional domain bounds. Its proof
+selects the applicable constructor and establishes the computed output's bounds.
+`saturatingUnique` examines both derivations and rules out contradictory guards.
+
+`overlapping-successor.dl` moves the fallback guard down to `maxSafe - 1`.
+That input now produces both itself and `maxSafe`. The registered goal
+`overlappingUnique_refuted` proves the negation of uniqueness using those two
+derivations. All three new results are required in Lean CI. The fifth and sixth
+relation fixtures replay the total function and overlapping counterexample on
+native, SQLite, and Postgres, including the safe-integer boundary. SQL fixture
+loaders replace input rows within the isolated test schema to prevent earlier
+fixtures with the same input name from contributing data.

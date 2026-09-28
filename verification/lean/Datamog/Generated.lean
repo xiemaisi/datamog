@@ -27,6 +27,14 @@ inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Da
 inductive Guarded (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
   | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740990 : Int)) → (w0.val = v0.val + (1 : Int)) → Guarded input0 v0 w0
 
+inductive Saturating (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740991 : Int)) → (w0.val = v0.val + (1 : Int)) → Saturating input0 v0 w0
+  | rule1 (v0 : Datamog.SafeInt) : (input0 v0) → (v0.val ≥ (9007199254740991 : Int)) → Saturating input0 v0 v0
+
+inductive Overlapping (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740991 : Int)) → (w0.val = v0.val + (1 : Int)) → Overlapping input0 v0 w0
+  | rule1 (v0 : Datamog.SafeInt) : (input0 v0) → (v0.val ≥ (9007199254740990 : Int)) → Overlapping input0 v0 v0
+
 def reachPreserves : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (P : SafeInt → Prop),
   (∀ a b, edge a b → P a → P b) →
@@ -59,5 +67,17 @@ def guardedCoverage : Prop :=
 def guardedTotal : Prop :=
   ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
   input0 v0 → ∃ (w1 : Datamog.SafeInt), Guarded input0 v0 w1
+
+def saturatingCoverage : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),
+  input0 v0 → ∃ (w1 : Datamog.SafeInt), Saturating input0 v0 w1
+
+def saturatingUnique : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
+  Saturating input0 v0 v1 → Saturating input0 v0 w1 → v1 = w1
+
+def overlappingUnique : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
+  Overlapping input0 v0 v1 → Overlapping input0 v0 w1 → v1 = w1
 
 end Datamog.Generated

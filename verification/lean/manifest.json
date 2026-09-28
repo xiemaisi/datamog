@@ -62,22 +62,24 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "57e34503526f779a473444bad17b29ed3691f09303d810b27780a56e558924ed",
-      "scripts/test-lean.ts": "98dd85969de215bc45cfcde8d55bc33f8f58163a9374f655e78295d87982151f",
+      "scripts/generate-lean.ts": "55481bc4f64cf523884096420ee91f1c2cfedd8774222caaa7be1bb4c240e058",
+      "scripts/test-lean.ts": "2eba2b4cf055167fe17dabaf660874c02b0790f918952e54296e1efefcb992a0",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "fb0f5c948c56edde00bbc9e77dc7543333b0d46005f74aa61cc2d941e6aaf2cd",
+      "verification/lean/Datamog/Proofs.lean": "0b24ddeb66477262238cc2e1a16f911b9c234c6c9c453b43006d437e9d99d616",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
+      "verification/lean/fixtures/overlapping-successor.dl": "67911bcf126cdd11acee729084b6f60c11a013f81459e9949a027bfbcf80369a",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
+      "verification/lean/fixtures/saturating-successor.dl": "d1b112f46d06f31d1382692f8af074885bfc6a326551e1f7e1fd6b04721f67ba",
       "verification/lean/fixtures/successor.dl": "f78e888af124a557f7063b18702a83c4cbc78b96fdca1b34b724aa529ec26c9a",
       "verification/lean/lake-manifest.json": "17266b6b89bd7b2ae4ee695726c0dad98d7fd00a628a07a9b491d5cde0b0fb90",
       "verification/lean/lakefile.toml": "488ecd9e78966bedc2249edcdede2b42247d00856cbe31711bc406f5c51f2b74",
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "3c33e2f3f05c8dad7edc4f3f95ef247c926ed182486ff9d8300caf189b3d5d70",
+  "contextDigest": "70dc746d25bfae07ef165ffc2267bce760e2ea3e0f23ce4fe621c70022e23cbc",
   "entries": [
     {
       "id": "Guarded",
@@ -98,7 +100,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "d2fe43787b75484d4923d339508073040fb2450ba7c72db5f5c29734eeb9c9af"
+      "digest": "278f9889802b486c2547ed196590f4658fb63b403dcdb892979321d8eef22e39"
     },
     {
       "id": "Identity",
@@ -119,7 +121,28 @@
       "closure": [
         "Identity"
       ],
-      "digest": "0a3146fe8981107c8fe9700a5ba56b6f63bf503e8d091a1682134abdecbe5426"
+      "digest": "25dd73c857ecd5d98008740952aa8eb078b9898064684a3aaaedeb6d240054b1"
+    },
+    {
+      "id": "Overlapping",
+      "kind": "definition",
+      "statement": {
+        "predicate": "overlapping",
+        "inputs": [
+          {
+            "predicate": "sample",
+            "name": "input0",
+            "arity": 1
+          }
+        ],
+        "lean": "inductive Overlapping (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where\n  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740991 : Int)) → (w0.val = v0.val + (1 : Int)) → Overlapping input0 v0 w0\n  | rule1 (v0 : Datamog.SafeInt) : (input0 v0) → (v0.val ≥ (9007199254740990 : Int)) → Overlapping input0 v0 v0\n"
+      },
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "Overlapping"
+      ],
+      "digest": "762c992b3b1941967fa83aa33126a7e551da61464d01d53f4351dbe069ac906d"
     },
     {
       "id": "Reach",
@@ -140,7 +163,28 @@
       "closure": [
         "Reach"
       ],
-      "digest": "10644447c723fb782bf09f498d440aa6e7bd600e1709c38a378c77f94ad44347"
+      "digest": "0b5f9426a64e59199091e9c9a798dc47767e270365bdc3657b30166db3d4c935"
+    },
+    {
+      "id": "Saturating",
+      "kind": "definition",
+      "statement": {
+        "predicate": "saturating",
+        "inputs": [
+          {
+            "predicate": "sample",
+            "name": "input0",
+            "arity": 1
+          }
+        ],
+        "lean": "inductive Saturating (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where\n  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740991 : Int)) → (w0.val = v0.val + (1 : Int)) → Saturating input0 v0 w0\n  | rule1 (v0 : Datamog.SafeInt) : (input0 v0) → (v0.val ≥ (9007199254740991 : Int)) → Saturating input0 v0 v0\n"
+      },
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "Saturating"
+      ],
+      "digest": "a6699995acc8f5cc18e7ae06750650d726291ea9e28a3fb5fa78fba0f46b8299"
     },
     {
       "id": "Successor",
@@ -161,7 +205,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "4cc7cdf9fdd9e548197e254eb1876d11c8878688d26e53482e539cde005d5104"
+      "digest": "cf9d5c54a63bb3dd0202fefc291f0030af4e77866d70c69c30e12f397ad7da15"
     },
     {
       "id": "falseGoal",
@@ -262,7 +306,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "2cc07e442fb6f710b8091d9f7861aaa190e1d029ff83ea5f5c6a17c30982e3bd"
+      "digest": "265fc5ded3d1b00fe6af8ba4abaa1a0687d0a08c3419bd9b532a2f215826bfa7"
     },
     {
       "id": "falseGoal_refuted",
@@ -277,7 +321,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "cf1933f8e6dc40ba71c25ea3e5c71a29ef01cc206aec98dc98a2b6e765f79c62"
+      "digest": "8355e66b9c20eba42b7ed5ba01d30273ebcca65e2dbb5e36380adab9035f692c"
     },
     {
       "id": "guardedCoverage",
@@ -311,7 +355,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "e187a7ffdabcd49d8986bb7e5902db10ec1591f448781dd9b52c9d38ce86eefa"
+      "digest": "9bf35acf6206bb412881883d2d630043a34f398b103488c6de97dabd8c0e32fe"
     },
     {
       "id": "guardedTotal",
@@ -338,7 +382,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "fb7172c2ca90a0bba3d31bc8183b1aea0451cd1352036df1466b489433adbb6c"
+      "digest": "f89f63a470f5b328e07f3fe2b4f373e05ac7cab7f38116e3ca03f1121337a7e4"
     },
     {
       "id": "guardedTotal_refuted",
@@ -354,7 +398,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "b011d1986199c226245760aa1996ed979d0c7a5fef5cca77978af377b1948ebc"
+      "digest": "a9e49aae5f8726eb6dd11d8ba95bb0e7424ac20e712c49ec4551a0263327c911"
     },
     {
       "id": "identityUnique",
@@ -382,7 +426,50 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "dae4c087831193613c44f0022a2f52c6a2158d77051c197af15fb90fa364f31f"
+      "digest": "b2320eb3df175f2e248099b5fa140a86808dfa27489b4002984286d37baf9b2b"
+    },
+    {
+      "id": "overlappingUnique",
+      "kind": "definition",
+      "statement": {
+        "claim": {
+          "id": "overlappingUnique",
+          "predicate": "overlapping",
+          "relationName": "Overlapping",
+          "keyColumns": [
+            0
+          ],
+          "outputColumns": [
+            1
+          ]
+        },
+        "lean": "def overlappingUnique : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),\n  Overlapping input0 v0 v1 → Overlapping input0 v0 w1 → v1 = w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Overlapping"
+      ],
+      "closure": [
+        "Overlapping",
+        "overlappingUnique"
+      ],
+      "digest": "2e3a86a4028bcbd59ffc7a768750eec1a833f9ebc2c618f4e344f426cf3dc892"
+    },
+    {
+      "id": "overlappingUnique_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.overlappingUnique_refuted",
+      "statement": "¬ Datamog.Generated.overlappingUnique",
+      "assumptions": [],
+      "dependencies": [
+        "overlappingUnique"
+      ],
+      "closure": [
+        "Overlapping",
+        "overlappingUnique",
+        "overlappingUnique_refuted"
+      ],
+      "digest": "ff63d1c32feedb28956e4d329c23362dc1af370fc5c87eca51f4aaf27b275570"
     },
     {
       "id": "reachPreserves",
@@ -399,7 +486,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "3e40d6bbfa3af90ad85a7089d58eb7630b6d8053fc9ff3956a3b909ec6608fc9"
+      "digest": "3e9804fd3161da9631b03c09a5de5a98b41975b8490318df34653cec62ed9a24"
     },
     {
       "id": "reachTransitive",
@@ -414,7 +501,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "32262c3874a28d20f0b42e7cfc029d6a09f27dae3d759b77b9bd772eb1701402"
+      "digest": "30ed95ff5c0fb11b26b6b35edf5c7f0277259fc6cf1440d0268a9d6d960a0218"
     },
     {
       "id": "reachUnique",
@@ -441,7 +528,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "37a206f6a6f7623b09c8830bd74ecb625ac53a09098c91cc9b11f9f3e9419a10"
+      "digest": "f9f60e4f20fda13b0fab77d13f9b5d33d8992f25d4335ddc0df64add75dd0318"
     },
     {
       "id": "reachUnique_refuted",
@@ -457,7 +544,63 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "b0eb357841fe7c0fd68f4330d8ccb59ee50af67c2abe3cdfc6b693b67f1321d0"
+      "digest": "4284637252a3d3e30db61cb1dc91fd081324c3ce104e56cebcefbc5cdd1e5174"
+    },
+    {
+      "id": "saturatingCoverage",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.saturatingCoverage",
+      "statement": {
+        "claim": {
+          "id": "saturatingCoverage",
+          "predicate": "saturating",
+          "relationName": "Saturating",
+          "inputPredicate": "sample",
+          "outputToInput": [
+            0,
+            null
+          ],
+          "bounds": []
+        },
+        "lean": "def saturatingCoverage : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),\n  input0 v0 → ∃ (w1 : Datamog.SafeInt), Saturating input0 v0 w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Saturating"
+      ],
+      "closure": [
+        "Saturating",
+        "saturatingCoverage"
+      ],
+      "digest": "08344387255ac00db28a2a762131eaa55cc6b3eaba1052f560599be45583f39c"
+    },
+    {
+      "id": "saturatingUnique",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.saturatingUnique",
+      "statement": {
+        "claim": {
+          "id": "saturatingUnique",
+          "predicate": "saturating",
+          "relationName": "Saturating",
+          "keyColumns": [
+            0
+          ],
+          "outputColumns": [
+            1
+          ]
+        },
+        "lean": "def saturatingUnique : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),\n  Saturating input0 v0 v1 → Saturating input0 v0 w1 → v1 = w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Saturating"
+      ],
+      "closure": [
+        "Saturating",
+        "saturatingUnique"
+      ],
+      "digest": "a5fb0640464074ef2f3aef3972405b79795f2da1e2c64a4a073d035d4f0085de"
     },
     {
       "id": "successor",
@@ -891,7 +1034,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "1102d07fef64ba6d47746761b7517be5de8e0ffb010086f4412f2f681a84c6f7"
+      "digest": "a50018b1365563c86838f052f6f6a9666e0004c471e7179962b44da8e035ad53"
     },
     {
       "id": "successorCoverage",
@@ -925,7 +1068,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "1da854d53a7205649313db0c304d17a09096eaa80367fcbd17b657f57b511594"
+      "digest": "461af924d71f133aa3ce26c98a28eba0660a65062df5de1d0fdd5ea814853261"
     },
     {
       "id": "successorTotal",
@@ -952,7 +1095,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "bad0780ead3228b15a35a456e9d65a1497453ebb3a7b22973175b9a28c5528b6"
+      "digest": "6a1ca286afc29f183d0e5fb8bc8933579afb0b0d49d9ad1597236c410ee73a16"
     },
     {
       "id": "successorTotal_refuted",
@@ -968,8 +1111,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "f8491920854371ccdba4d4643bb6064c449f11a7c3d2846f95bf248cc70399cb"
+      "digest": "5dc7c29d5cd44ba8001cb555a041897de48bc531770d51c1fa25a79317d2f0e1"
     }
   ],
-  "digest": "f9551b9d5828cc5dc76c2bbdaf13173ab3325639fc988dd58f07e9125483dce6"
+  "digest": "8649f56936ce9d43756c59fc078cd628a804936bb19c3047776b44c4fa07b261"
 }

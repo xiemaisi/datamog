@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: f9551b9d5828cc5dc76c2bbdaf13173ab3325639fc988dd58f07e9125483dce6
+-- Verification manifest SHA-256: 8649f56936ce9d43756c59fc078cd628a804936bb19c3047776b44c4fa07b261
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -28,5 +28,14 @@ theorem guardedCoverage : Generated.guardedCoverage := Proofs.guardedCoverage
 
 theorem guardedTotal_refuted : ¬ Generated.guardedTotal := Proofs.guardedTotal_refuted
 #audit guardedTotal_refuted
+
+theorem saturatingCoverage : Generated.saturatingCoverage := Proofs.saturatingCoverage
+#audit saturatingCoverage
+
+theorem saturatingUnique : Generated.saturatingUnique := Proofs.saturatingUnique
+#audit saturatingUnique
+
+theorem overlappingUnique_refuted : ¬ Generated.overlappingUnique := Proofs.overlappingUnique_refuted
+#audit overlappingUnique_refuted
 
 end Datamog.Checked

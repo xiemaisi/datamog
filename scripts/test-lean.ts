@@ -7,6 +7,7 @@ import { create as createNative } from "../packages/backend/native/src/index.ts"
 import { create as createPostgres } from "../packages/backend/postgres/src/index.ts";
 import { create as createSqlite } from "../packages/backend/sqlite/src/index.ts";
 import type { Backend } from "../packages/engine/src/backend.ts";
+import { ident } from "../packages/engine/src/dialect.ts";
 import { DatamogExecutor } from "../packages/engine/src/executor.ts";
 import { insertRows } from "../packages/engine/src/loader.ts";
 
@@ -216,6 +217,27 @@ try {
         expected: [-9007199254740991, -1, 0, 9007199254740989].map((n) => ({ X: n, Y: n + 1 })),
       },
       {
+        fixture: "saturating-successor.dl",
+        query: "?- saturating(X, Y).",
+        input: [-9007199254740991, -1, 0, 9007199254740989, 9007199254740990, 9007199254740991].map(
+          (n) => ({ n }),
+        ),
+        expected: [
+          -9007199254740991, -1, 0, 9007199254740989, 9007199254740990, 9007199254740991,
+        ].map((n) => ({ X: n, Y: n === 9007199254740991 ? n : n + 1 })),
+      },
+      {
+        fixture: "overlapping-successor.dl",
+        query: "?- overlapping(X, Y).",
+        input: [9007199254740989, 9007199254740990, 9007199254740991].map((n) => ({ n })),
+        expected: [
+          { X: 9007199254740989, Y: 9007199254740990 },
+          { X: 9007199254740990, Y: 9007199254740991 },
+          { X: 9007199254740990, Y: 9007199254740990 },
+          { X: 9007199254740991, Y: 9007199254740991 },
+        ],
+      },
+      {
         fixture: "reach.dl",
         query: "?- reach(X, Y).",
         input: [
@@ -240,6 +262,9 @@ try {
               return true;
             },
             async load(decl, target) {
+              // SQL input tables outlive an executor. Replace this fixture's
+              // data within the isolated test schema, rather than accumulating it.
+              if (target.sqlDialect) await target.execute(`DELETE FROM ${ident(decl.predicate)}`);
               await insertRows(target, decl, testCase.input);
               return { rowsLoaded: testCase.input.length };
             },
@@ -250,7 +275,7 @@ try {
           throw new Error(`${name} relation regression: ${testCase.fixture}`);
       }
     }
-    console.log(`4 relation fixtures passed on ${backendNames.join("/")}.`);
+    console.log(`6 relation fixtures passed on ${backendNames.join("/")}.`);
   } finally {
     await Promise.all(backends.map(([, backend]) => backend.close()));
   }
@@ -266,7 +291,7 @@ try {
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
-    relationCases: 4,
+    relationCases: 6,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

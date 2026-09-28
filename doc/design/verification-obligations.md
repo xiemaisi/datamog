@@ -199,7 +199,7 @@ The companion `reachUnique_refuted` theorem proves that universal reachability
 uniqueness is false: edges from `0` to `1` and `2` yield distinct targets. The
 manifest registers the refutation, not the false claim, as a proved goal. Both
 new results have exact checker types, axiom audits, and unconditional CI
-requirements. Four concrete relation fixtures replay identity and successor boundary cases
+requirements. Six concrete relation fixtures replay identity and successor boundary cases
 and the branching counterexample on native, SQLite, and configured Postgres; reports
 count those separately from expression comparisons.
 
@@ -256,6 +256,17 @@ unrestricted coverage using `maxSafe - 1` itself: its successor would be defined
 but the filter excludes the row. Both results are required in Lean CI, and the
 fixture replays the boundary on native, SQLite, and Postgres. Structural values
 and the remaining stage 4 families are still open.
+
+The saturating successor fixture uses two sibling rules: increment below
+`maxSafe`, otherwise return the input unchanged. `saturatingCoverage` proves
+coverage for the entire admitted integer domain with no extra input bounds;
+`saturatingUnique` proves that the rules yield only one output per input.
+Moving the fallback guard down to `maxSafe - 1` introduces two distinct outputs
+at that value. `overlappingUnique_refuted` proves the resulting uniqueness
+claim false. All three results have exact generated types, axiom audits, and CI
+requirements. The two added runtime fixtures replay the boundary behavior on
+native, SQLite, and Postgres. Each fixture replaces its SQL input rows so shared
+input predicate names cannot contaminate later comparisons.
 
 ## Which harder claims should be expressible?
 
