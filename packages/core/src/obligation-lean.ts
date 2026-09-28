@@ -3,7 +3,7 @@ import { isFloatLiteral } from "./ast.ts";
 import type { LogicalExpression } from "./obligation-ir.ts";
 import type { LogicalObligation } from "./obligations.ts";
 import type { TypedProgram } from "./types.ts";
-import type { VerificationNode } from "./verification-manifest.ts";
+import { type VerificationNode, canonicalVerificationJson } from "./verification-manifest.ts";
 
 function identifier(name: string): string {
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name))
@@ -207,15 +207,15 @@ export function exportLeanUniqueness(
   const statement = `def ${claim.id} : Prop :=\n  ∀ ${[relation.params, binders].filter(Boolean).join(" ")},\n  ${relation.application} ${left.join(" ")} → ${relation.application} ${right.join(" ")} → ${conclusion}\n`;
   return registerLeanClaim(
     { ...claim, keyColumns: keys, outputColumns: outputs },
-    relation.source,
+    relation,
     statement,
     polarity,
   );
 }
 
-function registerLeanClaim<T extends { id: string; relationName: string }>(
+function registerLeanClaim<T extends { id: string; relationName: string; predicate: string }>(
   claim: T,
-  source: string,
+  relation: ReturnType<typeof buildLeanRelation>,
   statement: string,
   polarity: "prove" | "refute",
 ) {
@@ -226,7 +226,7 @@ function registerLeanClaim<T extends { id: string; relationName: string }>(
     {
       id: claim.relationName,
       kind: "definition",
-      statement: source,
+      statement: { predicate: claim.predicate, inputs: relation.inputs, lean: relation.source },
       assumptions: [],
       dependencies: [],
     },
@@ -249,7 +249,7 @@ function registerLeanClaim<T extends { id: string; relationName: string }>(
       dependencies: [claim.id],
     });
   return {
-    relation: source,
+    relation: relation.source,
     statement,
     checker: `theorem ${proofName} : ${expected} := Proofs.${proofName}\n#audit ${proofName}\n`,
     nodes,
@@ -318,5 +318,56 @@ export function exportLeanCoverage(
   const conclusion = [relation.application, ...outputs].join(" ");
   const exists = witnesses.length ? `∃ ${binders(witnesses)}, ` : "";
   const statement = `def ${claim.id} : Prop :=\n  ∀ ${[relation.params, binders(variables)].filter(Boolean).join(" ")},\n  ${premises.join(" → ")} → ${exists}${conclusion}\n`;
-  return registerLeanClaim(claim, relation.source, statement, polarity);
+  return registerLeanClaim(claim, relation, statement, polarity);
+}
+
+/** Assemble trusted exporter results, not imported proof artifacts. Shared relation
+ * definitions must match in source, predicate identity, and input parameter wiring.
+ * Claim IDs (including refutations) remain unique even when their text agrees.
+ */
+export function assembleLeanClaims(bundles: readonly ReturnType<typeof exportLeanUniqueness>[]) {
+  if (!bundles.length) throw new Error("No Lean claims to assemble");
+  const nodes = new Map<string, VerificationNode>();
+  const relations = new Map<string, string>();
+  const statements: string[] = [];
+  const checkers: string[] = [];
+  const theorems = new Set<string>();
+  for (const bundle of bundles) {
+    const definition = bundle.nodes[0];
+    if (!definition || definition.kind !== "definition")
+      throw new Error("Missing Lean relation definition");
+    for (const node of bundle.nodes) {
+      const previous = nodes.get(node.id);
+      if (previous) {
+        if (
+          node === definition &&
+          relations.has(node.id) &&
+          relations.get(node.id) === bundle.relation &&
+          canonicalVerificationJson(previous) === canonicalVerificationJson(node)
+        )
+          continue;
+        throw new Error(`Conflicting or duplicate Lean registration: ${node.id}`);
+      }
+      if (node.theorem) {
+        if (theorems.has(node.theorem))
+          throw new Error(`Duplicate Lean checker theorem: ${node.theorem}`);
+        theorems.add(node.theorem);
+      }
+      nodes.set(node.id, node);
+    }
+    relations.set(definition.id, bundle.relation);
+    statements.push(bundle.statement);
+    checkers.push(bundle.checker);
+  }
+  for (const node of nodes.values()) {
+    for (const dependency of node.dependencies) {
+      if (!nodes.has(dependency)) throw new Error(`Missing Lean claim dependency: ${dependency}`);
+    }
+  }
+  return {
+    relations: [...relations.values()].join("\n"),
+    statements: statements.join("\n"),
+    checker: checkers.join("\n"),
+    nodes: [...nodes.values()],
+  };
 }

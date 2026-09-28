@@ -235,8 +235,16 @@ dataset satisfies those bounds. Empty bounds express coverage for every admitted
 input tuple, and an output with no witnesses expresses direct inclusion.
 Invalid mappings, unsafe bounds, and unsupported relations fail before export.
 Proof/refutation registration shares the uniqueness API's exact checker and
-manifest boundary. Structural values and the remaining stage 4 families are
-still open.
+manifest boundary.
+
+`assembleLeanClaims` now combines these exports without manually dropping
+duplicate relation nodes. It shares only matching relation definitions, including
+their elaborated predicate identities and input parameter mappings; identical
+Lean text alone is insufficient. Duplicate claim/refutation IDs, conflicting
+definitions, duplicate checker theorem names, and missing dependencies fail the
+batch. The fixed project uses the assembled sources, checkers, and manifest
+nodes together. This remains an internal build API, not an external proof-import
+validator. Structural values and the remaining stage 4 families are still open.
 
 ## Which harder claims should be expressible?
 

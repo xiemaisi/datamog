@@ -18,6 +18,12 @@ inductive Reach (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamo
   | rule0 (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) : (input0 v0 v1) → Reach input0 v0 v1
   | rule1 (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (v2 : Datamog.SafeInt) : (Reach input0 v0 v2) → (input0 v2 v1) → Reach input0 v0 v1
 
+inductive Identity (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) : (input0 v0) → Identity input0 v0 v0
+
+inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0
+
 def reachPreserves : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (P : SafeInt → Prop),
   (∀ a b, edge a b → P a → P b) →
@@ -27,19 +33,13 @@ def reachTransitive : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (a b c : SafeInt),
   Reach edge a b → Reach edge b c → Reach edge a c
 
-inductive Identity (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
-  | rule0 (v0 : Datamog.SafeInt) : (input0 v0) → Identity input0 v0 v0
-
-def identityUnique : Prop :=
-  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
-  Identity input0 v0 v1 → Identity input0 v0 w1 → v1 = w1
-
 def reachUnique : Prop :=
   ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
   Reach input0 v0 v1 → Reach input0 v0 w1 → v1 = w1
 
-inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
-  | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0
+def identityUnique : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
+  Identity input0 v0 v1 → Identity input0 v0 w1 → v1 = w1
 
 def successorCoverage : Prop :=
   ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt),

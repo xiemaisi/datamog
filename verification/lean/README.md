@@ -222,9 +222,14 @@ and manifest nodes. The checker expects a maintained proof under `Datamog.Proofs
 it does not create that proof. Default `"prove"` registers the claim as a goal;
 `"refute"` registers its negation under an `_refuted` ID and retains the claim as
 a definition. The identity and reachability uniqueness examples now use this
-API. Descriptors and exact statements both enter content identities. Callers
-assembling several claims over one relation must include its definition node
-only once; the manifest rejects duplicate IDs.
+API. Descriptors and exact statements both enter content identities. Use `assembleLeanClaims` to combine exporter results: it emits shared relation
+definitions once, followed by the claim statements, and collects their checkers
+and manifest nodes. It rejects duplicate claim/refutation IDs, conflicting
+relation definitions, duplicate checker theorem names, and missing dependencies.
+A shared definition must agree in Lean source, elaborated predicate identity,
+input parameter mapping, assumptions, and dependencies. Identical Lean text
+alone is insufficient: parameter renaming can hide different Datamog inputs.
+The underlying manifest builder continues to reject all duplicate IDs.
 
 This remains an internal API for the supported integer relational fragment,
 with the companion project's namespace convention. Datamog assertion syntax
@@ -256,3 +261,12 @@ an output derivation. Both successor claims now use this API; the unrestricted
 claim is registered with `"refute"`. Descriptors, bounds, exact statements, and
 dependency definitions enter content identities. Maintained proofs remain
 separate, and no new Datamog syntax or automatic proof search is introduced.
+
+
+The fixed project assembles its uniqueness and coverage exports with this helper.
+For example, `assembleLeanClaims([uniqueExport, coverageExport])` returns
+`relations`, `statements`, `checker`, and `nodes`. Declaration order follows
+the input bundles, with all relations emitted before claim statements. Reordering
+bundles leaves manifest content identities unchanged. Empty batches are rejected.
+This is an internal assembler for trusted exporter results, not a validator for
+external source or proof artifacts.
