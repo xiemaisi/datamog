@@ -92,6 +92,21 @@ def diagonalTotal : Prop :=
   ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt),
   input0 v0 v1 → ∃ (w1 : Datamog.SafeInt), Diagonal input0 v0 w1
 
+def requiredFieldPresent : Prop :=
+  ∀ (fields : FlatRecord) (key : String) (nullable : Bool),
+  integerFieldMatches fields key false nullable = true →
+  ∃ value, lookupField fields key = some value
+
+def nonnullableFieldInteger : Prop :=
+  ∀ (fields : FlatRecord) (key : String),
+  integerFieldMatches fields key false false = true →
+  ∃ n : SafeInt, lookupField fields key = some (Value.integer n)
+
+def optionalFieldTotal_refuted : Prop :=
+  ¬ (∀ (fields : FlatRecord) (key : String),
+  integerFieldMatches fields key true true = true →
+  ∃ value, lookupField fields key = some value)
+
 def recordAbsent : Prop :=
   ∀ (fields : FlatRecord) (key : String),
   (∀ entry ∈ fields, entry.1 ≠ key) → lookupField fields key = none

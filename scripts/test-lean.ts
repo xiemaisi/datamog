@@ -157,6 +157,17 @@ try {
       : typeof value === "boolean"
         ? `(Value.boolean ${value})`
         : `(Value.integer ⟨${value}, by decide⟩)`;
+  const fieldInputs: [string, Scalar][][] = [
+    [],
+    ...[null, false, true, 0, -1, -9007199254740991, 9007199254740991].map(
+      (value): [string, Scalar][] => [["x", value]],
+    ),
+  ];
+  const fieldCases = [false, true].flatMap((optional) =>
+    [false, true].flatMap((nullable) =>
+      fieldInputs.map((fields) => ({ fields, optional, nullable })),
+    ),
+  );
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -235,6 +246,49 @@ try {
       const result = found ? `some ${leanScalar(found[1])}` : "none";
       checks.push(
         `example : lookupField ${leanFields} ${JSON.stringify(key)} = ${result} := by decide`,
+      );
+    }
+    for (const [i, { fields, optional, nullable }] of fieldCases.entries()) {
+      const field = fields[0];
+      const accepts = field
+        ? field[1] === null
+          ? nullable
+          : typeof field[1] === "number"
+        : optional;
+      const record = Object.fromEntries(fields);
+      const source = `input predicate fieldCase${i}(r: {x${optional ? "?" : ""}: integer${nullable ? "?" : ""}}).
+        fieldResult${i}(R["x"]) :- fieldCase${i}(R).
+        ?- fieldResult${i}(X).`;
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "field-membership-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              await insertRows(target, decl, [{ r: record }]);
+              return { rowsLoaded: 1 };
+            },
+          },
+        ]);
+        let rejected = false;
+        let rows: Record<string, unknown>[] = [];
+        try {
+          rows = (await executor.execute(source))[0]!.rows;
+        } catch (error) {
+          // Only structural input rejection counts as an expected mismatch.
+          if (!(error instanceof Error) || !error.message.includes("column 'r'")) throw error;
+          rejected = true;
+        }
+        if (rejected === accepts)
+          throw new Error(`${name} integer-field acceptance regression: case ${i}`);
+        if (accepts && JSON.stringify(rows) !== JSON.stringify(field ? [{ X: field[1] }] : []))
+          throw new Error(`${name} integer-field projection regression: case ${i}`);
+      }
+      const leanFields = `[${fields.map(([k, v]) => `(${JSON.stringify(k)}, ${leanScalar(v)})`).join(", ")}]`;
+      checks.push(
+        `example : integerFieldMatches ${leanFields} "x" ${optional} ${nullable} = ${accepts} := by decide`,
       );
     }
     // Replay the positive uniqueness fixture and the branching counterexample.
@@ -347,11 +401,15 @@ try {
   console.log(
     `${recordCases.length} Lean/${backendNames.join("/")} flat-record lookup cases passed.`,
   );
+  console.log(
+    `${fieldCases.length} Lean/${backendNames.join("/")} integer-field acceptance cases passed.`,
+  );
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
     relationCases: 7,
     recordCases: recordCases.length,
+    fieldCases: fieldCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

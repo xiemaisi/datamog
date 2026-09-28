@@ -158,4 +158,25 @@ theorem recordNullDistinct : Generated.recordNullDistinct := by
   rw [recordLastWrite fields key Value.null, absent]
   exact null_is_defined
 
+theorem requiredFieldPresent : Generated.requiredFieldPresent := by
+  intro fields key nullable accepted
+  cases result : lookupField fields key with
+  | none => simp [integerFieldMatches, result] at accepted
+  | some value => exact ⟨value, rfl⟩
+
+theorem nonnullableFieldInteger : Generated.nonnullableFieldInteger := by
+  intro fields key accepted
+  cases result : lookupField fields key with
+  | none => simp [integerFieldMatches, result] at accepted
+  | some value =>
+    cases value with
+    | null => simp [integerFieldMatches, result] at accepted
+    | boolean b => simp [integerFieldMatches, result] at accepted
+    | integer n => exact ⟨n, rfl⟩
+
+theorem optionalFieldTotal_refuted : Generated.optionalFieldTotal_refuted := by
+  intro total
+  obtain ⟨value, impossible⟩ := total [] "x" (by rfl)
+  simp [lookupField] at impossible
+
 end Datamog.Proofs

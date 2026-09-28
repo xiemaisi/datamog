@@ -13,4 +13,13 @@ def lookupField : FlatRecord → String → Result
     | some found => some found
     | none => if name = key then some value else none
 
+-- This checks one integer field, not closed-record membership or nested shapes.
+def integerFieldMatches (fields : FlatRecord) (key : String)
+    (optional nullable : Bool) : Bool :=
+  match lookupField fields key with
+  | none => optional
+  | some .null => nullable
+  | some (.integer _) => true
+  | some (.boolean _) => false
+
 end Datamog

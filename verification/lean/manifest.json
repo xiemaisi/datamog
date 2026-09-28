@@ -62,12 +62,12 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "a5b9ebc75071f3379b98db8e3986ece04b485c39e442079df8764aaf61a287f9",
-      "scripts/test-lean.ts": "5e85f8a032c788354dd0087f0eabb35d776c4260344af9becba2c39dc7c1311d",
+      "scripts/generate-lean.ts": "11a6238de7b450a1285f42740f049dc27580dd703a2dadb42234e9ce7892217e",
+      "scripts/test-lean.ts": "88d986dc758bd827364b549eeaeaaae606c86e89956c5e98e5a3d8bf414795e4",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "06b56cc35d7c0df91e73b193b67cbc12503b6b429fd433de787dc6c7362f75e5",
-      "verification/lean/Datamog/Records.lean": "d336fbff97eee669ccf4a7e1a1707564a5cf7c13cc2a79c8bdbe59ef7f877e71",
+      "verification/lean/Datamog/Proofs.lean": "a7814870c0e756c5a70ac3047f7a2ce4f8c31a2eec022cf46f39fdc57ccd5b3f",
+      "verification/lean/Datamog/Records.lean": "192c7b2fa6b3588b2e51d01ea1e5286ccda9c8c19244088b99be4c51aec8d276",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/diagonal.dl": "923978fa45dded0ddac1dfcf32c47f92e3e871f867ab82e4dd94024a6748b772",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
@@ -81,7 +81,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "f65f3eea9a766c2a2d8b1301858b993754d4c3a3219f7412e3e31eedb5ef8a89",
+  "contextDigest": "91de46868998b28c5948761da73ad5feda3fcfc864bc526fa1617fabbbfb28e0",
   "entries": [
     {
       "id": "Diagonal",
@@ -102,7 +102,7 @@
       "closure": [
         "Diagonal"
       ],
-      "digest": "279ffd25557a88ba4937c0058b405f49983ee8eac7690a92b568def23869d897"
+      "digest": "523c97a28802bc82d3538ca68dbe2d8af90ca541452b9e2e14a8d70d5fab6ac4"
     },
     {
       "id": "Guarded",
@@ -123,7 +123,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "faed80ee125faddd190c3c35a4b19d9a85a502e4645043f945d9593c5c28db83"
+      "digest": "31760cdfa3ff57877e8095555e4ee712b2ff0e0800cb608ae92ca178de4efa10"
     },
     {
       "id": "Identity",
@@ -144,7 +144,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "e1f1f2f8b4dc5b3ef7eaf9f7b8878d1844c22bdca8f7664fcf957c939914c7d4"
+      "digest": "0c337bce7e69785c2ea901023e9f607a51d21763b1d92c49f6a40a0f1c83eac2"
     },
     {
       "id": "Overlapping",
@@ -165,7 +165,7 @@
       "closure": [
         "Overlapping"
       ],
-      "digest": "71952918c03df543368f425bfccda674b695aab29522d3e63acb51440506bb0a"
+      "digest": "13b3e478a3bf40b6ff17347ddfc2e7064923fcbd66beccc733e915c2a3adea24"
     },
     {
       "id": "Reach",
@@ -186,18 +186,18 @@
       "closure": [
         "Reach"
       ],
-      "digest": "b3d9e28160533b56237dbda812e76978b9163c909268fbbe860d84ed7845e09d"
+      "digest": "e264ffc2426506247fab18035d85416a4545c16663f38a85676fd54aac2a58ae"
     },
     {
       "id": "RecordLookup",
       "kind": "definition",
-      "statement": "import Datamog.Semantics\n\nnamespace Datamog\n\n-- A deliberately flat record model: only the scalar Value fragment is admitted.\n-- Entries follow construction order, so the last occurrence of a key wins.\nabbrev FlatRecord := List (String × Value)\n\ndef lookupField : FlatRecord → String → Result\n  | [], _ => none\n  | (name, value) :: rest, key =>\n    match lookupField rest key with\n    | some found => some found\n    | none => if name = key then some value else none\n\nend Datamog\n",
+      "statement": "import Datamog.Semantics\n\nnamespace Datamog\n\n-- A deliberately flat record model: only the scalar Value fragment is admitted.\n-- Entries follow construction order, so the last occurrence of a key wins.\nabbrev FlatRecord := List (String × Value)\n\ndef lookupField : FlatRecord → String → Result\n  | [], _ => none\n  | (name, value) :: rest, key =>\n    match lookupField rest key with\n    | some found => some found\n    | none => if name = key then some value else none\n\n-- This checks one integer field, not closed-record membership or nested shapes.\ndef integerFieldMatches (fields : FlatRecord) (key : String)\n    (optional nullable : Bool) : Bool :=\n  match lookupField fields key with\n  | none => optional\n  | some .null => nullable\n  | some (.integer _) => true\n  | some (.boolean _) => false\n\nend Datamog\n",
       "assumptions": [],
       "dependencies": [],
       "closure": [
         "RecordLookup"
       ],
-      "digest": "e5f5673f4e71ea81bf7aa755e7a13414ce4dd7c6c943c709b5eaead8cbeb0a95"
+      "digest": "ac35b1ad0ce7931d293e9955d626ff9bc0731c48045cdc7d9edb79da49c3a07a"
     },
     {
       "id": "Saturating",
@@ -218,7 +218,7 @@
       "closure": [
         "Saturating"
       ],
-      "digest": "ae0e5012e2f69718d3f1dcf48bc5a15fb4bf891ae9bd84dc5adb9587428d2176"
+      "digest": "e16c6d69a75d7f2c0189769c2249791214a6439593abe48ced5cf211af14b981"
     },
     {
       "id": "Successor",
@@ -239,7 +239,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "0d8b49281a8dab11fcfef1ae8561196837fcfcc4273c42a6e48d11e2844fa50b"
+      "digest": "bdb08b281161241a9858d78946e6de643eaef365d0d032430036d292e18b215b"
     },
     {
       "id": "diagonalTotal",
@@ -266,7 +266,7 @@
         "Diagonal",
         "diagonalTotal"
       ],
-      "digest": "949497c07dc363ffc5b803d59fdf230149331213cef49f6f66a492a499c7345a"
+      "digest": "a73a25798b10daa55b5c76c45b47cd2ee3f10ddfc246da5e2aba625247a2452c"
     },
     {
       "id": "diagonalTotal_refuted",
@@ -282,7 +282,7 @@
         "diagonalTotal",
         "diagonalTotal_refuted"
       ],
-      "digest": "576ed5eede58d88319261f3d66f09affbe5b4f0c75fd4481e561fc865e0db52c"
+      "digest": "23aa6af0900d69100e7144e41e018982a30be56b8beffdf74904047807fc3587"
     },
     {
       "id": "diagonalUnique",
@@ -310,7 +310,7 @@
         "Diagonal",
         "diagonalUnique"
       ],
-      "digest": "5576e31fb7026a4d7a9075082af89bcf67ac0c3769486b60d36139fba5788786"
+      "digest": "33e0134fd839d9614dff5c41d4d1793bc52eef150127959c61391ce9e9bbfd69"
     },
     {
       "id": "falseGoal",
@@ -411,7 +411,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "d10f3034a5f3066113edee63730c00e2d43790ac7ec589a52db3b3c98d1979a6"
+      "digest": "c7ceb9c19bcdb5f71e6573dc69fcf2eb2b823f7d308b9bff13a099b8462e755d"
     },
     {
       "id": "falseGoal_refuted",
@@ -426,7 +426,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "92cdbb36a52e79720d81832b7972a421aab92c3137b1521141e6616f9639078c"
+      "digest": "333246771641c18c513b1c04f7cafbad99d6328ba63979b12dbbf8135ba4eb72"
     },
     {
       "id": "guardedCoverage",
@@ -460,7 +460,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "c79f5842136a09de7083e4962626964690bd607034a67dcebd2e5c313b832190"
+      "digest": "85a7a4783f657a9a7734d0dca4075d86250c51f53544ce0d4d4b961a66ac2c76"
     },
     {
       "id": "guardedTotal",
@@ -487,7 +487,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "9285d1a88673258ff1e1641b481b67899d5c93841d580d6a66ac7a700f6c6976"
+      "digest": "c4b81ff82103c77e224ea0933396e2e71a5c12845dc8053b6a06b26dfb19b080"
     },
     {
       "id": "guardedTotal_refuted",
@@ -503,7 +503,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "75c911d6b560545954d769d05043443b6c70514c328881ad1481610cd55ff6de"
+      "digest": "cddb74541743757ef36179022893d49ea7750a44c8b89551b0c3f0cad5e5d6f3"
     },
     {
       "id": "identityUnique",
@@ -531,7 +531,43 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "ff3c52c69d10b80e6a4d83b56cd6f434bd3b0acb4b14a35f516bebc9913849e7"
+      "digest": "b148ab9275a25404206b21bb791aeada81a8566e669ae9152bc0062eb5d5315a"
+    },
+    {
+      "id": "nonnullableFieldInteger",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.nonnullableFieldInteger",
+      "statement": {
+        "profile": "datamog-flat-record-v1",
+        "lean": "def nonnullableFieldInteger : Prop :=\n  ∀ (fields : FlatRecord) (key : String),\n  integerFieldMatches fields key false false = true →\n  ∃ n : SafeInt, lookupField fields key = some (Value.integer n)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "RecordLookup"
+      ],
+      "closure": [
+        "RecordLookup",
+        "nonnullableFieldInteger"
+      ],
+      "digest": "a1b2728e7f89e59246ad818ffcae7309dbe6418262d33f48ee8d9c750e33a4aa"
+    },
+    {
+      "id": "optionalFieldTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.optionalFieldTotal_refuted",
+      "statement": {
+        "profile": "datamog-flat-record-v1",
+        "lean": "def optionalFieldTotal_refuted : Prop :=\n  ¬ (∀ (fields : FlatRecord) (key : String),\n  integerFieldMatches fields key true true = true →\n  ∃ value, lookupField fields key = some value)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "RecordLookup"
+      ],
+      "closure": [
+        "RecordLookup",
+        "optionalFieldTotal_refuted"
+      ],
+      "digest": "2c29f720c8ba65386217e731c09e702b8ebce67dee60d778aaadec4d26777ed5"
     },
     {
       "id": "overlappingUnique",
@@ -558,7 +594,7 @@
         "Overlapping",
         "overlappingUnique"
       ],
-      "digest": "9cd855c18d6dec43cfd7efd0cfcd665bd58d7de032dba2e2be6b25a7a00c32db"
+      "digest": "ac5de2c209b83be37b53df7cc626c7628231c81c186d04eec08375826ec3975e"
     },
     {
       "id": "overlappingUnique_refuted",
@@ -574,7 +610,7 @@
         "overlappingUnique",
         "overlappingUnique_refuted"
       ],
-      "digest": "d8700ab67a3488c495c516413eac1eaf66c0528cfdf8edfbf9ddd877e96134b0"
+      "digest": "08dbd5d2cd8157244565c281b600b135266565ff087d722be59061d4f76bbf6e"
     },
     {
       "id": "reachPreserves",
@@ -591,7 +627,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "a2cf87e35abb6868386ef009275220280294c86a3f0656dd26d0d30b7b9e20db"
+      "digest": "031dca605231e5b8d4498f1e95a66f07283709e8866aa5ea3d35f7a18fabcede"
     },
     {
       "id": "reachTransitive",
@@ -606,7 +642,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "10b5bed950f29d89087dd22d49998fff493382dd2a1c9992268b929a55d60544"
+      "digest": "6d49e67f0cc173b8815f7a1e76659009887caf06bc450347195d6f24da88c246"
     },
     {
       "id": "reachUnique",
@@ -633,7 +669,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "925b6105e29297dc6d3c795a6dcfa578d0b9751911108d221ade6d89386f166b"
+      "digest": "255df6820f95c856d520baebfe87ebf73be44c3c96e10748c9d9d79ea62ce7ab"
     },
     {
       "id": "reachUnique_refuted",
@@ -649,7 +685,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "25d63e2140dd55e2eeeff018b6a4d039da19853ac2c36798f60884bc4848fcf1"
+      "digest": "826faf27714b86096fb80d1e53c47211d38cb70600e34481056bb0f8b29906bf"
     },
     {
       "id": "recordAbsent",
@@ -667,7 +703,7 @@
         "RecordLookup",
         "recordAbsent"
       ],
-      "digest": "a14780ff569876975a7016ed5f1c3cdaf8a516ba481d143feb88ddda6ed3c89d"
+      "digest": "32be5c671062d2ced58083273cca05511995b33764a01abe952f34232d065fa8"
     },
     {
       "id": "recordLastWrite",
@@ -685,7 +721,7 @@
         "RecordLookup",
         "recordLastWrite"
       ],
-      "digest": "c936461d892d4eff73721118d0014910530badaa5d424ef598adf9710d26277f"
+      "digest": "b7b2e70b073e717576c48803ef5ce44db6a2b4e4bfe84466cde9ba3acded6bb4"
     },
     {
       "id": "recordNullDistinct",
@@ -705,7 +741,25 @@
         "recordLastWrite",
         "recordNullDistinct"
       ],
-      "digest": "68e99d13938cb56447e0d1f331d6c1a20643637a441f272f6cf4bbcbfb1b6cee"
+      "digest": "cf1184135e48ccde8c59e13d6e279b31a3bf129eb1aa82622e3bcfe2a68e3190"
+    },
+    {
+      "id": "requiredFieldPresent",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.requiredFieldPresent",
+      "statement": {
+        "profile": "datamog-flat-record-v1",
+        "lean": "def requiredFieldPresent : Prop :=\n  ∀ (fields : FlatRecord) (key : String) (nullable : Bool),\n  integerFieldMatches fields key false nullable = true →\n  ∃ value, lookupField fields key = some value\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "RecordLookup"
+      ],
+      "closure": [
+        "RecordLookup",
+        "requiredFieldPresent"
+      ],
+      "digest": "2f618b9b28a90a8a38190e580fe61ea21b815340b9c5499e9731b9a63d087557"
     },
     {
       "id": "saturatingCoverage",
@@ -733,7 +787,7 @@
         "Saturating",
         "saturatingCoverage"
       ],
-      "digest": "40fd87798cac63a1e06015f097afb6c73784783367a20b7e05e4157d2ea7849e"
+      "digest": "53e74b6402e81692fd88e3f8f3adbe206f641e976886b29be730de510454a232"
     },
     {
       "id": "saturatingUnique",
@@ -761,7 +815,7 @@
         "Saturating",
         "saturatingUnique"
       ],
-      "digest": "fb159c334a5d2c8b1ea1b8c2705d67072f08099de7c57122b8c5c5f040caccdb"
+      "digest": "59d386cfc1bf1f354449279406af28758b3f35bc79a8b7616149cade98911704"
     },
     {
       "id": "successor",
@@ -1195,7 +1249,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "74ff7134aa375effe0fe384c9db18361b341e6e766ba4c9bf41f0a580c99cd5a"
+      "digest": "1efb51b9afda021390afce64c2b191a71a500c704bd0e40ae5757198be7d7cdc"
     },
     {
       "id": "successorCoverage",
@@ -1229,7 +1283,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "36f35ea005d902b2b6b0a3735f2b8d45ba5a2ec04dbf4b532c8458c91af67bdc"
+      "digest": "ac2214304bce9a6455cd1ad18fca5e0f786208c39b7ef68af7efc7bbf3e7ea40"
     },
     {
       "id": "successorTotal",
@@ -1256,7 +1310,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "76b6e3ce2449a1d6d948ac63bc1a1d66e49a8646c8514a26a601de862599f711"
+      "digest": "a5dd67c8455361662c5c654f0cba6eb184c4f9dc6fa103b2dc4b622da0da5f23"
     },
     {
       "id": "successorTotal_refuted",
@@ -1272,8 +1326,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "ddec0f59091a3c18c8626c4784ae1944cdbf127aa6316f0d23f5c03274512b09"
+      "digest": "652c60c0be440c6778dbedb57eb96dff1a31a792721689de23b249f8cf3fd6d3"
     }
   ],
-  "digest": "d9578fcfeb7a1b6f315a6f3d2110bd5c93cb06bf182f34054220e7f9db402748"
+  "digest": "fb0568798fd6fee7af82372d22cfd7174489115dfabb8a5feb44fe09a357b9cd"
 }

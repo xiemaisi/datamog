@@ -345,5 +345,28 @@ and Lean kernel reduction, including missing keys, explicit null, duplicate
 keys in both orders, scalar boundaries, dotted keys, and empty keys.
 Reports record their count under `semanticChecks.recordCases`, separately from
 arithmetic cases and relation fixtures. Nested values, arrays, strings as
-values, structural membership, and wrong-shape lookup are not modeled.
+values, general structural membership, and wrong-shape lookup are not modeled.
 This library does not enable arbitrary structural claims in the exporters.
+
+
+## Required, optional, and nullable integer fields
+
+`integerFieldMatches fields key optional nullable` checks just one field in the
+flat-record model. Optionality permits absence; nullability permits a present
+null. Bounded integers match in every flag combination; Booleans never match.
+This predicate does not check undeclared keys or whole-record membership.
+
+The exact registered goals `requiredFieldPresent` and
+`nonnullableFieldInteger` establish lookup existence for accepted required
+fields, and an integer witness for accepted required non-nullable fields.
+`optionalFieldTotal_refuted` refutes the universal existence claim for optional
+nullable fields with an empty record. All three have maintained proofs, axiom
+audits, and unconditional CI requirements.
+
+The integration runner compares 32 cases covering all four flag combinations,
+absence, null, Booleans, and integer boundaries. Each backend loads a single-field
+structural declaration; invalid inputs must be rejected by structural validation,
+and valid inputs must produce the expected projected value (or no row for an
+absent optional field). Lean reduction checks the same acceptance results.
+Fresh reports count them separately as `semanticChecks.fieldCases`.
+This is a worked field-level model, not a general structural schema exporter.

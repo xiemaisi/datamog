@@ -135,8 +135,8 @@ as values, floats, and general structural export remain unsupported.
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
-axioms. They also compare 164 arithmetic/null cases and 124 flat-record lookup
-cases against native, SQLite, and
+axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
+cases, and 32 integer-field acceptance cases against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -300,9 +300,25 @@ The integration suite compares 124 cases on native, SQLite, and Postgres and
 checks the expected results by Lean kernel reduction. Cases include missing and
 null fields, integer boundaries, Booleans, duplicate keys in both orders, dotted
 keys, and empty keys. Fresh reports count these separately as `recordCases`.
-Nested records, arrays, structural type membership, and wrong-shape receivers
+Nested records, arrays, general structural type membership, and wrong-shape receivers
 remain outside this flat model; the existing exporters still reject structural
 claims.
+
+The flat-record library also defines `integerFieldMatches`, which checks one
+field with independent optional and nullable flags. Absence is accepted only
+when optional; explicit null only when nullable; bounded integers are accepted
+and Booleans rejected. This does not enforce closed-record membership.
+
+Three further registered results prove that an accepted required field is
+present and an accepted required non-nullable field contains an integer, and
+refute total lookup for optional nullable fields using the empty record.
+All are audited and required by Lean CI. The 32 concrete cases compare all four
+flag combinations against actual structural input loading on native, SQLite,
+and Postgres; accepted inputs also have their projected lookup results checked.
+Lean reduction checks the same acceptance matrix, and reports record its count
+as `fieldCases`. These tests use single-field closed declarations, while the
+formal predicate concerns just that field. General schema translation remains
+unimplemented.
 
 ## Which harder claims should be expressible?
 

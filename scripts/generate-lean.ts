@@ -149,6 +149,31 @@ const claims = assembleLeanClaims([
 ]);
 const recordGoals = [
   {
+    id: "requiredFieldPresent",
+    statement: `def requiredFieldPresent : Prop :=
+  ∀ (fields : FlatRecord) (key : String) (nullable : Bool),
+  integerFieldMatches fields key false nullable = true →
+  ∃ value, lookupField fields key = some value
+`,
+  },
+  {
+    id: "nonnullableFieldInteger",
+    statement: `def nonnullableFieldInteger : Prop :=
+  ∀ (fields : FlatRecord) (key : String),
+  integerFieldMatches fields key false false = true →
+  ∃ n : SafeInt, lookupField fields key = some (Value.integer n)
+`,
+  },
+  {
+    id: "optionalFieldTotal_refuted",
+    statement: `def optionalFieldTotal_refuted : Prop :=
+  ¬ (∀ (fields : FlatRecord) (key : String),
+  integerFieldMatches fields key true true = true →
+  ∃ value, lookupField fields key = some value)
+`,
+  },
+
+  {
     id: "recordAbsent",
     statement: `def recordAbsent : Prop :=
   ∀ (fields : FlatRecord) (key : String),
