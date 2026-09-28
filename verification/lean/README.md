@@ -198,3 +198,34 @@ upper-bound cases: `maxSafe - 1` yields `maxSafe`, while `maxSafe` yields no row
 It runs against native, SQLite, and configured Postgres and is counted separately
 from the expression cases in fresh reports. This worked coverage claim remains
 in the Lean companion project; it adds no assertion syntax.
+
+## Internal uniqueness-claim API
+
+`exportLeanUniqueness(typedProgram, claim, polarity)` in
+`packages/core/src/obligation-lean.ts` accepts a named descriptor:
+
+```typescript
+{ id: "identityUnique", predicate: "identity", relationName: "Identity",
+  keyColumns: [0], outputColumns: [1] }
+```
+
+Column indices are zero-based positions in the elaborated relation. Key columns
+are shared between two universally quantified tuples; every other column varies
+independently. The conclusion equates the selected output columns. Empty keys
+mean global uniqueness. Outputs must be nonempty and disjoint from keys;
+duplicates, nonintegral or out-of-range indices, unknown predicates, and
+unsupported relational semantics are rejected. Column selections are normalized
+into ascending order.
+
+The result contains the relation source, exact claim statement, checker source,
+and manifest nodes. The checker expects a maintained proof under `Datamog.Proofs`;
+it does not create that proof. Default `"prove"` registers the claim as a goal;
+`"refute"` registers its negation under an `_refuted` ID and retains the claim as
+a definition. The identity and reachability uniqueness examples now use this
+API. Descriptors and exact statements both enter content identities. Callers
+assembling several claims over one relation must include its definition node
+only once; the manifest rejects duplicate IDs.
+
+This remains an internal API for the supported integer relational fragment,
+with the companion project's namespace convention. General coverage descriptors,
+Datamog assertion syntax, and arbitrary CLI export remain future work.

@@ -3,6 +3,7 @@ import { isFloatLiteral } from "./ast.ts";
 import type { LogicalExpression } from "./obligation-ir.ts";
 import type { LogicalObligation } from "./obligations.ts";
 import type { TypedProgram } from "./types.ts";
+import type { VerificationNode } from "./verification-manifest.ts";
 
 function identifier(name: string): string {
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name))
@@ -71,6 +72,10 @@ export function exportLeanObligation(goal: LogicalObligation, name: string): str
  * Inputs are arbitrary relations over SafeInt; finite derivations form the LFP.
  */
 export function exportLeanRelation(typed: TypedProgram, predicate: string, name: string): string {
+  return buildLeanRelation(typed, predicate, name).source;
+}
+
+function buildLeanRelation(typed: TypedProgram, predicate: string, name: string) {
   identifier(name);
   const rules = typed.rules.get(predicate);
   if (!rules?.length) throw new Error("Lean relation has no defining rules");
@@ -142,5 +147,92 @@ export function exportLeanRelation(typed: TypedProgram, predicate: string, name:
       .join(" ");
     return `  | rule${i} ${binders} : ${[...body, ...defined, head].join(" → ")}`;
   });
-  return `inductive ${name} ${params} : ${relationType(predicate)} where\n${constructors.join("\n")}\n`;
+  return {
+    source: `inductive ${name} ${params} : ${relationType(predicate)} where\n${constructors.join("\n")}\n`,
+    params,
+    application: result,
+    arity: typed.columnTypes.get(predicate)!.length,
+  };
+}
+
+/** Internal relation law descriptor. Columns are zero-based positional indices.
+ * Unselected non-key columns vary independently in the two tuples.
+ * Empty keys mean global uniqueness; outputs must be nonempty and disjoint.
+ */
+export interface UniquenessClaim {
+  id: string;
+  predicate: string;
+  relationName: string;
+  keyColumns: readonly number[];
+  outputColumns: readonly number[];
+}
+
+/** Generate statements and fixed-project checker/manifest registrations together.
+ * Produces no proof. A refutation registers the negation as its own goal.
+ * Names live in Datamog.Generated / Proofs / Checked, as in the optional project.
+ */
+export function exportLeanUniqueness(
+  typed: TypedProgram,
+  claim: UniquenessClaim,
+  polarity: "prove" | "refute" = "prove",
+) {
+  identifier(claim.id);
+  identifier(claim.relationName);
+  if (claim.id === claim.relationName || /^(input[0-9]+|[vw][0-9]+)$/.test(claim.relationName))
+    throw new Error("Conflicting Lean uniqueness declaration name");
+  if (polarity !== "prove" && polarity !== "refute") throw new Error("Invalid proof polarity");
+  const relation = buildLeanRelation(typed, claim.predicate, claim.relationName);
+  const validate = (columns: readonly number[]) => {
+    if (
+      new Set(columns).size !== columns.length ||
+      columns.some((column) => !Number.isInteger(column) || column < 0 || column >= relation.arity)
+    )
+      throw new Error("Invalid uniqueness column selection");
+    return [...columns].sort((a, b) => a - b);
+  };
+  const keys = validate(claim.keyColumns);
+  const outputs = validate(claim.outputColumns);
+  if (!outputs.length || outputs.some((column) => keys.includes(column)))
+    throw new Error("Uniqueness outputs must be nonempty and disjoint from keys");
+  const left = Array.from({ length: relation.arity }, (_, i) => `v${i}`);
+  const right = left.map((v, i) => (keys.includes(i) ? v : `w${i}`));
+  const variables = [...new Set([...left, ...right])];
+  const binders = variables.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
+  const conclusion = outputs.map((i) => `${left[i]} = ${right[i]}`).join(" ∧ ");
+  const statement = `def ${claim.id} : Prop :=\n  ∀ ${[relation.params, binders].filter(Boolean).join(" ")},\n  ${relation.application} ${left.join(" ")} → ${relation.application} ${right.join(" ")} → ${conclusion}\n`;
+  const proofName = polarity === "prove" ? claim.id : `${claim.id}_refuted`;
+  if (proofName === claim.relationName) throw new Error("Conflicting Lean proof name");
+  const expected = `${polarity === "refute" ? "¬ " : ""}Generated.${claim.id}`;
+  const nodes: VerificationNode[] = [
+    {
+      id: claim.relationName,
+      kind: "definition",
+      statement: relation.source,
+      assumptions: [],
+      dependencies: [],
+    },
+    {
+      id: claim.id,
+      kind: polarity === "prove" ? "goal" : "definition",
+      ...(polarity === "prove" ? { theorem: `Datamog.Checked.${proofName}` } : {}),
+      statement: { claim: { ...claim, keyColumns: keys, outputColumns: outputs }, lean: statement },
+      assumptions: [],
+      dependencies: [claim.relationName],
+    },
+  ];
+  if (polarity === "refute")
+    nodes.push({
+      id: proofName,
+      kind: "goal",
+      theorem: `Datamog.Checked.${proofName}`,
+      statement: `¬ Datamog.Generated.${claim.id}`,
+      assumptions: [],
+      dependencies: [claim.id],
+    });
+  return {
+    relation: relation.source,
+    statement,
+    checker: `theorem ${proofName} : ${expected} := Proofs.${proofName}\n#audit ${proofName}\n`,
+    nodes,
+  };
 }

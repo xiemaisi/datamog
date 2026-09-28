@@ -1,5 +1,9 @@
 import { analyze, generateLogicalObligations, inferTypes } from "../packages/core/src/index.ts";
-import { exportLeanObligation, exportLeanRelation } from "../packages/core/src/obligation-lean.ts";
+import {
+  exportLeanObligation,
+  exportLeanRelation,
+  exportLeanUniqueness,
+} from "../packages/core/src/obligation-lean.ts";
 import {
   assertCurrentVerificationManifest,
   createVerificationManifest,
@@ -32,14 +36,24 @@ const reachTransitive = `def reachTransitive : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (a b c : SafeInt),
   Reach edge a b → Reach edge b c → Reach edge a c
 `;
-const identityUnique = `def identityUnique : Prop :=
-  ∀ (item : SafeInt → Prop) (x y z : SafeInt),
-  Identity item x y → Identity item x z → y = z
-`;
-const reachUnique = `def reachUnique : Prop :=
-  ∀ (edge : SafeInt → SafeInt → Prop) (x y z : SafeInt),
-  Reach edge x y → Reach edge x z → y = z
-`;
+const identityUnique = exportLeanUniqueness(identity, {
+  id: "identityUnique",
+  predicate: "identity",
+  relationName: "Identity",
+  keyColumns: [0],
+  outputColumns: [1],
+});
+const reachUnique = exportLeanUniqueness(
+  reach,
+  {
+    id: "reachUnique",
+    predicate: "reach",
+    relationName: "Reach",
+    keyColumns: [0],
+    outputColumns: [1],
+  },
+  "refute",
+);
 const successorCoverage = `def successorCoverage : Prop :=
   ∀ (sample : SafeInt → Prop) (x : SafeInt),
   sample x → x.val < maxSafe → ∃ y, Successor sample x y
@@ -53,12 +67,12 @@ import Datamog.Semantics
 namespace Datamog.Generated
 ${exportLeanObligation(successor[0]!, "successor")}
 ${exportLeanObligation(falseGoal, "falseGoal")}
-${exportLeanRelation(reach, "reach", "Reach")}
+${reachUnique.relation}
 ${reachPreserves}
 ${reachTransitive}
-${exportLeanRelation(identity, "identity", "Identity")}
-${identityUnique}
-${reachUnique}
+${identityUnique.relation}
+${identityUnique.statement}
+${reachUnique.statement}
 ${exportLeanRelation(successorRelation, "succ", "Successor")}
 ${successorCoverage}
 ${successorTotal}
@@ -76,10 +90,8 @@ theorem reachTransitive : Generated.reachTransitive := Proofs.reachTransitive
 #audit reachTransitive
 theorem falseGoal_refuted : ¬ Generated.falseGoal := Proofs.falseGoal_refuted
 #audit falseGoal_refuted
-theorem identityUnique : Generated.identityUnique := Proofs.identityUnique
-#audit identityUnique
-theorem reachUnique_refuted : ¬ Generated.reachUnique := Proofs.reachUnique_refuted
-#audit reachUnique_refuted
+${identityUnique.checker}
+${reachUnique.checker}
 theorem successorCoverage : Generated.successorCoverage := Proofs.successorCoverage
 #audit successorCoverage
 theorem successorTotal_refuted : ¬ Generated.successorTotal := Proofs.successorTotal_refuted
@@ -124,13 +136,7 @@ const manifest = await createVerificationManifest(
       assumptions: [],
       dependencies: [],
     },
-    {
-      id: "Reach",
-      kind: "definition",
-      statement: exportLeanRelation(reach, "reach", "Reach"),
-      assumptions: [],
-      dependencies: [],
-    },
+    ...reachUnique.nodes,
     {
       id: "reachPreserves",
       theorem: "Datamog.Checked.reachPreserves",
@@ -147,36 +153,7 @@ const manifest = await createVerificationManifest(
       assumptions: [],
       dependencies: ["Reach"],
     },
-    {
-      id: "Identity",
-      kind: "definition",
-      statement: exportLeanRelation(identity, "identity", "Identity"),
-      assumptions: [],
-      dependencies: [],
-    },
-    {
-      id: "identityUnique",
-      kind: "goal",
-      theorem: "Datamog.Checked.identityUnique",
-      statement: identityUnique,
-      assumptions: [],
-      dependencies: ["Identity"],
-    },
-    {
-      id: "reachUnique",
-      kind: "definition",
-      statement: reachUnique,
-      assumptions: [],
-      dependencies: ["Reach"],
-    },
-    {
-      id: "reachUnique_refuted",
-      kind: "goal",
-      theorem: "Datamog.Checked.reachUnique_refuted",
-      statement: "¬ Datamog.Generated.reachUnique",
-      assumptions: [],
-      dependencies: ["reachUnique"],
-    },
+    ...identityUnique.nodes,
     {
       id: "Successor",
       kind: "definition",

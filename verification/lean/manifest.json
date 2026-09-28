@@ -28,7 +28,7 @@
       "packages/core/src/nullness-diagnostics.ts": "19196b925ce2d81d93b9d20479f949a1cf0abb2cb3e350b29a36ef32689407af",
       "packages/core/src/nullness.ts": "d14a1e6276cd1e31320b37daad4cef061bec5b49b11d74197fc02730a05283c3",
       "packages/core/src/obligation-ir.ts": "c6b571c553ec81e081144db96cda5333d387791b58b03342486dfb44b914d5c9",
-      "packages/core/src/obligation-lean.ts": "adb42b503a93942f81e37c036866bff6026c14b84cc3a9a347d2238368fe80f4",
+      "packages/core/src/obligation-lean.ts": "d4337348d97ec06a81494b7b9fabb366c1dc993f5207c7ab59f252b9c08afcf0",
       "packages/core/src/obligation-smt.ts": "909a1de29bed1f3386737e88ad42e6f27ea7d075e05f37ae486c414700a5c5b0",
       "packages/core/src/obligations.ts": "46d3849eafbbeb40025d14b4dd921ddf523cb1cefcba52f964349480f1fe031d",
       "packages/core/src/partiality.ts": "30bb88e9d22a5e13e96b665e61994a619ab9224bfa3372495a161a63d0c5fc3d",
@@ -62,7 +62,7 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "c0caf66315487198b936578cf75548150c252a38347d18260426a15c4d615390",
+      "scripts/generate-lean.ts": "b64a08f448b40b1a6a54c11129f2c579857f453c618483c30f67d9f843fa3b39",
       "scripts/test-lean.ts": "5c764a5ba7ad06b21a4a23a29631724c6a2eae48a776f2af4deebb0b0980aa83",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
@@ -76,7 +76,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "f5e726cf156fe8077d4d6e80068de524d2d5f4c94e96657dafe192c3fd3e55c6",
+  "contextDigest": "9b195851a387ecd9441561f7f3e5d2e83413d83e1b7e95e76a35ed5736c0112d",
   "entries": [
     {
       "id": "Identity",
@@ -87,7 +87,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "0c5a03766357e1215348639b8c5863860441295347531a8aef52f7e3020132db"
+      "digest": "4d636e9d1394a833e651dafd7cbaff7822d82922ae4991aff16e258688493446"
     },
     {
       "id": "Reach",
@@ -98,7 +98,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "0f807267e1962923502a1801f2085bdb980fd16821803ade1c8be9cf005c2c17"
+      "digest": "10b15b95bc688edd76eca683b48cb611f5f40db12ebab3bff408d7923f566b21"
     },
     {
       "id": "Successor",
@@ -109,7 +109,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "1d2ceb1440b89651e547908ac3dcf365ca495c10517645e6907350cc0fb5e632"
+      "digest": "c3547f7656d2932d1e3d8739058e28e1b277f24ede71055f379d7735322e4999"
     },
     {
       "id": "falseGoal",
@@ -210,7 +210,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "0eed69892a3984aec1f3970e7369352d12692eefeec0712c39106a2927ffd80b"
+      "digest": "114d255dbc1e1004ff951dbce641f49a40b8ebe840fa060e592751d7fbac6357"
     },
     {
       "id": "falseGoal_refuted",
@@ -225,13 +225,26 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "40e60db07debbebaf1cf10d9fb3c666d41a983c9de391d3b49a570bed8840fac"
+      "digest": "4717386236721188b045b62330f5dee84563fa7ae7a97b97fb543cafb7e06f3f"
     },
     {
       "id": "identityUnique",
       "kind": "goal",
       "theorem": "Datamog.Checked.identityUnique",
-      "statement": "def identityUnique : Prop :=\n  ∀ (item : SafeInt → Prop) (x y z : SafeInt),\n  Identity item x y → Identity item x z → y = z\n",
+      "statement": {
+        "claim": {
+          "id": "identityUnique",
+          "predicate": "identity",
+          "relationName": "Identity",
+          "keyColumns": [
+            0
+          ],
+          "outputColumns": [
+            1
+          ]
+        },
+        "lean": "def identityUnique : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),\n  Identity input0 v0 v1 → Identity input0 v0 w1 → v1 = w1\n"
+      },
       "assumptions": [],
       "dependencies": [
         "Identity"
@@ -240,7 +253,7 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "7114a28e9e9229600a5eb6a3ca93216f4645f867532a30cc9585df7f6708fa4d"
+      "digest": "7d17edb6c2616cca73d754ee75235aaf9ae19b647f0146cd17fd34a3ce1f7c62"
     },
     {
       "id": "reachPreserves",
@@ -257,7 +270,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "cad0488b97bc3fa718e8e2ac6924fa5bd061c24bb185ee7cbad132faba278976"
+      "digest": "f5ef1a89084ec613937fe9726940c514209c841b032f3617acf7ac7b509ab2f8"
     },
     {
       "id": "reachTransitive",
@@ -272,12 +285,25 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "18f558d163cdbdcb3dc3fdde1bed0b4fe213a27049baa08cf6a7a6ecb9172ee7"
+      "digest": "c94f117bd9a8e044b060b4876f350082f77e6da697639915ce1c935902096bca"
     },
     {
       "id": "reachUnique",
       "kind": "definition",
-      "statement": "def reachUnique : Prop :=\n  ∀ (edge : SafeInt → SafeInt → Prop) (x y z : SafeInt),\n  Reach edge x y → Reach edge x z → y = z\n",
+      "statement": {
+        "claim": {
+          "id": "reachUnique",
+          "predicate": "reach",
+          "relationName": "Reach",
+          "keyColumns": [
+            0
+          ],
+          "outputColumns": [
+            1
+          ]
+        },
+        "lean": "def reachUnique : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),\n  Reach input0 v0 v1 → Reach input0 v0 w1 → v1 = w1\n"
+      },
       "assumptions": [],
       "dependencies": [
         "Reach"
@@ -286,7 +312,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "f2abdbaa114e7c86c6a9660f07e7a131b4969302856f933b212d6d52e84eda57"
+      "digest": "a4ffa99149738cbfc34fc20f56ebdf4b106e4cad1d19056b04f09c34f3155a84"
     },
     {
       "id": "reachUnique_refuted",
@@ -302,7 +328,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "d216d37fedebd48b020a1972e06411fcdb43753ac34461d818a9bfb7dc709123"
+      "digest": "5de27d1f7026c04d884fc2ab2d751763a3836a83e3833cfcfc619dcc31fab19e"
     },
     {
       "id": "successor",
@@ -736,7 +762,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "4dc20dc4c41331f4801c75a53ddebdc119795b03cc764382530f6372d18106c0"
+      "digest": "7baacf73a59476ccf550d78861fe21d3ea229ad054a936d31cb1e3cb7185cf89"
     },
     {
       "id": "successorCoverage",
@@ -751,7 +777,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "ade132bc6a56a2656db8a2f8f88f8c66645281c5e2c3b4f42b65112988de7359"
+      "digest": "e6c97fffffe077201e0d4f0fbd46902db0cf3ec65d0537a4b3a70dfceaca7f05"
     },
     {
       "id": "successorTotal",
@@ -765,7 +791,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "92b5a00f7b611944e83b9e83f4a674acce61425109512dfe4f181774d8b93197"
+      "digest": "1289c72b85e19d2addab3691d8f13c01c2d86fb181635c3c7d0b39c951149492"
     },
     {
       "id": "successorTotal_refuted",
@@ -781,8 +807,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "4d9007525427eb4161a6da292074da33d19b36ac6fd9ba5961ab4f7e701feb55"
+      "digest": "2fdb36ea171e5b470c25b246dea3e67a22657426b415e585c577d3afd45b07d5"
     }
   ],
-  "digest": "8a1a268e432d40a054d48847f4615e20eca051e971c10da33fe06c15faad5d73"
+  "digest": "bdb022515b10c7020af6d3b99ce18ba5a47b37571a2d66a5ca90a31d40f1ded5"
 }

@@ -31,12 +31,12 @@ inductive Identity (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Dat
   | rule0 (v0 : Datamog.SafeInt) : (input0 v0) → Identity input0 v0 v0
 
 def identityUnique : Prop :=
-  ∀ (item : SafeInt → Prop) (x y z : SafeInt),
-  Identity item x y → Identity item x z → y = z
+  ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
+  Identity input0 v0 v1 → Identity input0 v0 w1 → v1 = w1
 
 def reachUnique : Prop :=
-  ∀ (edge : SafeInt → SafeInt → Prop) (x y z : SafeInt),
-  Reach edge x y → Reach edge x z → y = z
+  ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
+  Reach input0 v0 v1 → Reach input0 v0 w1 → v1 = w1
 
 inductive Successor (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
   | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (w0.val = v0.val + (1 : Int)) → Successor input0 v0 w0

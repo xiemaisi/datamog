@@ -1,7 +1,9 @@
 # Richer verification obligations and Lean proofs
 
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
-and solver process handling implemented; stage 2 Lean spike implemented; stage 3 manifest identities and fresh result reports started**. This extends the future-work discussion in
+and solver process handling implemented; stage 2 Lean spike implemented; stage 3
+manifest identities and fresh result reports started; stage 4 internal uniqueness
+claims and worked coverage proofs started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -210,8 +212,19 @@ an input containing `maxSafe`. Both are audited and required by Lean CI. The
 runtime fixture checks that `maxSafe - 1` produces `maxSafe`, whereas `maxSafe`
 produces no successor row, on all configured backends.
 
-General uniqueness and coverage assertions, structural values, and the remaining
-stage 4 families are still open.
+An internal `exportLeanUniqueness` API now generalizes the two uniqueness
+examples. A named descriptor selects the elaborated predicate, Lean relation
+name, and zero-based key/output columns. Two tuples share only the selected key
+columns; every non-key column varies independently. Selected output equalities
+form the conclusion. Empty keys express global uniqueness; empty outputs,
+overlapping or invalid columns, and unsupported relations are rejected.
+
+The API emits the relation, exact claim, checker declaration, and manifest nodes
+from one descriptor, with explicit proof/refutation polarity. Both existing
+uniqueness examples use it and retain their maintained proofs. Descriptor and
+statement changes invalidate content identities. This is internal integer-fragment
+support, not Datamog assertion syntax or automatic proof search. Coverage
+descriptors, structural values, and the remaining stage 4 families are still open.
 
 ## Which harder claims should be expressible?
 
