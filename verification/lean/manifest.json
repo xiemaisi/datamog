@@ -28,7 +28,7 @@
       "packages/core/src/nullness-diagnostics.ts": "19196b925ce2d81d93b9d20479f949a1cf0abb2cb3e350b29a36ef32689407af",
       "packages/core/src/nullness.ts": "d14a1e6276cd1e31320b37daad4cef061bec5b49b11d74197fc02730a05283c3",
       "packages/core/src/obligation-ir.ts": "c6b571c553ec81e081144db96cda5333d387791b58b03342486dfb44b914d5c9",
-      "packages/core/src/obligation-lean.ts": "db351071a0610e6bd6a68e5e925e3b7836ec1e43067b37eea5c842cdc169034a",
+      "packages/core/src/obligation-lean.ts": "9defa5e28c7239bdc2f308dbbe3ee23933209b87082373a6d07bd5ef6208ad51",
       "packages/core/src/obligation-smt.ts": "909a1de29bed1f3386737e88ad42e6f27ea7d075e05f37ae486c414700a5c5b0",
       "packages/core/src/obligations.ts": "46d3849eafbbeb40025d14b4dd921ddf523cb1cefcba52f964349480f1fe031d",
       "packages/core/src/partiality.ts": "30bb88e9d22a5e13e96b665e61994a619ab9224bfa3372495a161a63d0c5fc3d",
@@ -62,12 +62,13 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "55481bc4f64cf523884096420ee91f1c2cfedd8774222caaa7be1bb4c240e058",
-      "scripts/test-lean.ts": "2eba2b4cf055167fe17dabaf660874c02b0790f918952e54296e1efefcb992a0",
+      "scripts/generate-lean.ts": "9f58bbd34239d65f280064fe2fee4da555ea39cbd5f36d0e1d362feb16baafa1",
+      "scripts/test-lean.ts": "5e9c4ac81706119aaf21a4f49af043e345794ba2b60eee7c1cd4c52f968753a4",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "0b24ddeb66477262238cc2e1a16f911b9c234c6c9c453b43006d437e9d99d616",
+      "verification/lean/Datamog/Proofs.lean": "3e3c1af5a301f2cdbaa5971b66a75ffc97c1a8bddffcd76e4f0c59189d6121f3",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
+      "verification/lean/fixtures/diagonal.dl": "923978fa45dded0ddac1dfcf32c47f92e3e871f867ab82e4dd94024a6748b772",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
       "verification/lean/fixtures/overlapping-successor.dl": "67911bcf126cdd11acee729084b6f60c11a013f81459e9949a027bfbcf80369a",
@@ -79,8 +80,29 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "70dc746d25bfae07ef165ffc2267bce760e2ea3e0f23ce4fe621c70022e23cbc",
+  "contextDigest": "8cc582bb1c53234fe5ac27864b10dd55e76d35dfa98886dfe177efb9c8bc78f4",
   "entries": [
+    {
+      "id": "Diagonal",
+      "kind": "definition",
+      "statement": {
+        "predicate": "diagonal",
+        "inputs": [
+          {
+            "predicate": "pair",
+            "name": "input0",
+            "arity": 2
+          }
+        ],
+        "lean": "inductive Diagonal (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where\n  | rule0 (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) : (input0 v0 v1) → (v0.val = v1.val) → Diagonal input0 v0 v1\n"
+      },
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "Diagonal"
+      ],
+      "digest": "22c5b49f1f72c36993e16134a4ad6ddc2bb4de23815aacfafd342f6dda082051"
+    },
     {
       "id": "Guarded",
       "kind": "definition",
@@ -100,7 +122,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "278f9889802b486c2547ed196590f4658fb63b403dcdb892979321d8eef22e39"
+      "digest": "b1c2a820509438a8871b11db0a66b4bd08c2a7923131c26ca6a64bbd4035697c"
     },
     {
       "id": "Identity",
@@ -121,7 +143,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "25dd73c857ecd5d98008740952aa8eb078b9898064684a3aaaedeb6d240054b1"
+      "digest": "60ae11429057213e6c8a6ed91746d8f04cd109b821ed488031eb259e0af188ba"
     },
     {
       "id": "Overlapping",
@@ -142,7 +164,7 @@
       "closure": [
         "Overlapping"
       ],
-      "digest": "762c992b3b1941967fa83aa33126a7e551da61464d01d53f4351dbe069ac906d"
+      "digest": "00cda9cf4f7a64b056ba6c131aa7c43cb6a015eaf653449114f949d3f1022b0a"
     },
     {
       "id": "Reach",
@@ -163,7 +185,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "0b5f9426a64e59199091e9c9a798dc47767e270365bdc3657b30166db3d4c935"
+      "digest": "3115f06f3c9379ab528474b906432641f7b1f80463a94892db6c31b84a4f6278"
     },
     {
       "id": "Saturating",
@@ -184,7 +206,7 @@
       "closure": [
         "Saturating"
       ],
-      "digest": "a6699995acc8f5cc18e7ae06750650d726291ea9e28a3fb5fa78fba0f46b8299"
+      "digest": "45ea95125350a79a1f87d36199c81fa6e8655651916f028f8ee3cf8d5790c4e9"
     },
     {
       "id": "Successor",
@@ -205,7 +227,78 @@
       "closure": [
         "Successor"
       ],
-      "digest": "cf9d5c54a63bb3dd0202fefc291f0030af4e77866d70c69c30e12f397ad7da15"
+      "digest": "881938bb9dc9fd67a1e75835ae6a0aaf3d837b365140c5ea586b50b3e57393bd"
+    },
+    {
+      "id": "diagonalTotal",
+      "kind": "definition",
+      "statement": {
+        "claim": {
+          "id": "diagonalTotal",
+          "predicate": "diagonal",
+          "relationName": "Diagonal",
+          "inputPredicate": "pair",
+          "outputToInput": [
+            0,
+            null
+          ],
+          "bounds": []
+        },
+        "lean": "def diagonalTotal : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt),\n  input0 v0 v1 → ∃ (w1 : Datamog.SafeInt), Diagonal input0 v0 w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Diagonal"
+      ],
+      "closure": [
+        "Diagonal",
+        "diagonalTotal"
+      ],
+      "digest": "2f04b5f252d61949a0c87ebf900a0b9b2fc107ecebf44aa69515d9e49fc991ff"
+    },
+    {
+      "id": "diagonalTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.diagonalTotal_refuted",
+      "statement": "¬ Datamog.Generated.diagonalTotal",
+      "assumptions": [],
+      "dependencies": [
+        "diagonalTotal"
+      ],
+      "closure": [
+        "Diagonal",
+        "diagonalTotal",
+        "diagonalTotal_refuted"
+      ],
+      "digest": "7a575907c51116965e5ee2df7dcffdb3f048ed88b26004ddf8da09236f47f654"
+    },
+    {
+      "id": "diagonalUnique",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.diagonalUnique",
+      "statement": {
+        "claim": {
+          "id": "diagonalUnique",
+          "predicate": "diagonal",
+          "relationName": "Diagonal",
+          "keyColumns": [
+            0
+          ],
+          "outputColumns": [
+            1
+          ]
+        },
+        "lean": "def diagonalUnique : Prop :=\n  ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),\n  Diagonal input0 v0 v1 → Diagonal input0 v0 w1 → v1 = w1\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "Diagonal"
+      ],
+      "closure": [
+        "Diagonal",
+        "diagonalUnique"
+      ],
+      "digest": "298452f0d5ebc5dcb12e2bb41698d23f9b7649c4778bdeafd8cb6ff0a05a985e"
     },
     {
       "id": "falseGoal",
@@ -306,7 +399,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "265fc5ded3d1b00fe6af8ba4abaa1a0687d0a08c3419bd9b532a2f215826bfa7"
+      "digest": "f27a5103023ed73c4134b9aaf6d69fbc0cf08447d569ded6ecaad5a6aa4aa333"
     },
     {
       "id": "falseGoal_refuted",
@@ -321,7 +414,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "8355e66b9c20eba42b7ed5ba01d30273ebcca65e2dbb5e36380adab9035f692c"
+      "digest": "70dbc4b3e5802a30f451947984fd0a2f440e82cc0b25a7777675b20da69c854d"
     },
     {
       "id": "guardedCoverage",
@@ -355,7 +448,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "9bf35acf6206bb412881883d2d630043a34f398b103488c6de97dabd8c0e32fe"
+      "digest": "69bd03424c19667e16a896f798762e95b80cce87afbadba8a992587bc6ebff66"
     },
     {
       "id": "guardedTotal",
@@ -382,7 +475,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "f89f63a470f5b328e07f3fe2b4f373e05ac7cab7f38116e3ca03f1121337a7e4"
+      "digest": "33d0f9c9decee1cc13a0f8228f53e5c0328d4d8ee04495b268af1c3557656313"
     },
     {
       "id": "guardedTotal_refuted",
@@ -398,7 +491,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "a9e49aae5f8726eb6dd11d8ba95bb0e7424ac20e712c49ec4551a0263327c911"
+      "digest": "2b25b165a4a4b9f3b7080c16244fcc4c2e944106ffd28ea14ec6ac5ba4ac64a3"
     },
     {
       "id": "identityUnique",
@@ -426,7 +519,7 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "b2320eb3df175f2e248099b5fa140a86808dfa27489b4002984286d37baf9b2b"
+      "digest": "58dee167d8c1175869ad284a8d45c70e224efe8972b43924cc12f2cbc3f3ed0e"
     },
     {
       "id": "overlappingUnique",
@@ -453,7 +546,7 @@
         "Overlapping",
         "overlappingUnique"
       ],
-      "digest": "2e3a86a4028bcbd59ffc7a768750eec1a833f9ebc2c618f4e344f426cf3dc892"
+      "digest": "bf6ceef7452aec6e250a8cf57e72eb24456199c33a0e3e501e8f470f0f7fe5a9"
     },
     {
       "id": "overlappingUnique_refuted",
@@ -469,7 +562,7 @@
         "overlappingUnique",
         "overlappingUnique_refuted"
       ],
-      "digest": "ff63d1c32feedb28956e4d329c23362dc1af370fc5c87eca51f4aaf27b275570"
+      "digest": "8528ccd70b8f5b124aab299d87c553ce363a3470b27bbd4bf99612eef70301d8"
     },
     {
       "id": "reachPreserves",
@@ -486,7 +579,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "3e9804fd3161da9631b03c09a5de5a98b41975b8490318df34653cec62ed9a24"
+      "digest": "47c09438a1d092238cae7cd5169541c22777935566f2dd8ec01551217ba58a29"
     },
     {
       "id": "reachTransitive",
@@ -501,7 +594,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "30ed95ff5c0fb11b26b6b35edf5c7f0277259fc6cf1440d0268a9d6d960a0218"
+      "digest": "3593e595bb077a61cf61b43b230939466bb5ccc1f7898b6a8bc6097b930802cb"
     },
     {
       "id": "reachUnique",
@@ -528,7 +621,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "f9f60e4f20fda13b0fab77d13f9b5d33d8992f25d4335ddc0df64add75dd0318"
+      "digest": "a0d78a7ddc1754a4bcd77fbdec30eee3d0e01fe018d33cb12ad713c7a6481a56"
     },
     {
       "id": "reachUnique_refuted",
@@ -544,7 +637,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "4284637252a3d3e30db61cb1dc91fd081324c3ce104e56cebcefbc5cdd1e5174"
+      "digest": "6eba1b32a8acbc56dabec937d4a58d3213a73fefd2c1d770174490173025ae81"
     },
     {
       "id": "saturatingCoverage",
@@ -572,7 +665,7 @@
         "Saturating",
         "saturatingCoverage"
       ],
-      "digest": "08344387255ac00db28a2a762131eaa55cc6b3eaba1052f560599be45583f39c"
+      "digest": "c4edff47e6219abaf1d3d7c4889d5e583a06c01fa0d2436dc7641cb7658bd311"
     },
     {
       "id": "saturatingUnique",
@@ -600,7 +693,7 @@
         "Saturating",
         "saturatingUnique"
       ],
-      "digest": "a5fb0640464074ef2f3aef3972405b79795f2da1e2c64a4a073d035d4f0085de"
+      "digest": "90dcaa81b43a9a0e8337bf8896eefc43147bb1f23080ca209fa2dd86e31c55c4"
     },
     {
       "id": "successor",
@@ -1034,7 +1127,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "a50018b1365563c86838f052f6f6a9666e0004c471e7179962b44da8e035ad53"
+      "digest": "f0589ab9a2f90569cd42883bbdc4a8de37644ed13fea4874b89fdb69a1a3791c"
     },
     {
       "id": "successorCoverage",
@@ -1068,7 +1161,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "461af924d71f133aa3ce26c98a28eba0660a65062df5de1d0fdd5ea814853261"
+      "digest": "9b6cc97065d35109a4f404dd5880903f18da393a9e58e4abfbd67a695c590d3d"
     },
     {
       "id": "successorTotal",
@@ -1095,7 +1188,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "6a1ca286afc29f183d0e5fb8bc8933579afb0b0d49d9ad1597236c410ee73a16"
+      "digest": "7dc0acdfdda0eff2dfabd2fc9ffdc3bca3c5f488089c5bc52d6afd31feb7c21c"
     },
     {
       "id": "successorTotal_refuted",
@@ -1111,8 +1204,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "5dc7c29d5cd44ba8001cb555a041897de48bc531770d51c1fa25a79317d2f0e1"
+      "digest": "cd8f065856dd024bd5feb553cd3804aff0e6fa25c3dda727e38f09b54da5e2c4"
     }
   ],
-  "digest": "8649f56936ce9d43756c59fc078cd628a804936bb19c3047776b44c4fa07b261"
+  "digest": "e02126eed569c8bee3ccfcd4aaa514e45217fdfd12ef9232bd0345169a5dc356"
 }

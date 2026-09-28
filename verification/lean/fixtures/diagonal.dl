@@ -1,0 +1,2 @@
+input predicate pair(left: integer, right: integer).
+diagonal(X, Y) :- pair(X, Y), X = Y.

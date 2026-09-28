@@ -238,6 +238,18 @@ try {
         ],
       },
       {
+        fixture: "diagonal.dl",
+        query: "?- diagonal(X, Y).",
+        input: [
+          { left: -9007199254740991, right: -9007199254740991 },
+          { left: 0, right: 0 },
+          { left: 0, right: 1 },
+          { left: 1, right: 0 },
+          { left: 9007199254740991, right: 9007199254740991 },
+        ],
+        expected: [-9007199254740991, 0, 9007199254740991].map((n) => ({ X: n, Y: n })),
+      },
+      {
         fixture: "reach.dl",
         query: "?- reach(X, Y).",
         input: [
@@ -275,7 +287,7 @@ try {
           throw new Error(`${name} relation regression: ${testCase.fixture}`);
       }
     }
-    console.log(`6 relation fixtures passed on ${backendNames.join("/")}.`);
+    console.log(`7 relation fixtures passed on ${backendNames.join("/")}.`);
   } finally {
     await Promise.all(backends.map(([, backend]) => backend.close()));
   }
@@ -291,7 +303,7 @@ try {
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
-    relationCases: 6,
+    relationCases: 7,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

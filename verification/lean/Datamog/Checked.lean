@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: 8649f56936ce9d43756c59fc078cd628a804936bb19c3047776b44c4fa07b261
+-- Verification manifest SHA-256: e02126eed569c8bee3ccfcd4aaa514e45217fdfd12ef9232bd0345169a5dc356
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -37,5 +37,11 @@ theorem saturatingUnique : Generated.saturatingUnique := Proofs.saturatingUnique
 
 theorem overlappingUnique_refuted : ¬ Generated.overlappingUnique := Proofs.overlappingUnique_refuted
 #audit overlappingUnique_refuted
+
+theorem diagonalUnique : Generated.diagonalUnique := Proofs.diagonalUnique
+#audit diagonalUnique
+
+theorem diagonalTotal_refuted : ¬ Generated.diagonalTotal := Proofs.diagonalTotal_refuted
+#audit diagonalTotal_refuted
 
 end Datamog.Checked

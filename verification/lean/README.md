@@ -26,7 +26,7 @@ rules over `SafeInt`. It proves preservation of an arbitrary property, condition
 on the input edges preserving that property. It does not establish the premise
 for a loaded graph, nor prove evaluation termination. The relational exporter
 currently accepts one positive, possibly self-recursive predicate with
-variable-only body atoms and simple integer order guards over non-null integers, with variable or
+variable-only body atoms and simple integer comparison guards over non-null integers, with variable or
 variable-plus-integer-literal heads; other derived calls, mutual recursion,
 negation, aggregates, other computed terms, and constraints are rejected.
 
@@ -274,11 +274,14 @@ external source or proof artifacts.
 
 ## Integer body guards
 
-Positive `<`, `<=`, `>`, and `>=` comparisons may use atom-bound variables
+Positive `<`, `<=`, `>`, `>=`, and `=` comparisons may use atom-bound variables
 or safe integer literals (including negative literals). Each comparison becomes
 a premise of that rule's constructor, in body order. This fragment is total over
-non-null bounded integers; nullable operands, arithmetic within guards, equality,
-compound Boolean expressions, and negated filters are rejected.
+non-null bounded integers; nullable operands, arithmetic within guards,
+disequality, compound Boolean expressions, and negated filters are rejected.
+Equality must use variables bound by positive relation atoms; introducing a new
+variable through an equality remains unsupported. Plain body equality and
+parenthesized equality filters obey the same restriction.
 
 `fixtures/guarded-successor.dl` filters inputs with `X < 9007199254740990`.
 `guardedCoverage` constructs an output below that explicit domain bound.
@@ -305,3 +308,17 @@ relation fixtures replay the total function and overlapping counterexample on
 native, SQLite, and Postgres, including the safe-integer boundary. SQL fixture
 loaders replace input rows within the isolated test schema to prevent earlier
 fixtures with the same input name from contributing data.
+
+
+## Equality filtering
+
+`fixtures/diagonal.dl` retains pairs satisfying `X = Y`. Its generated
+`diagonalUnique` claim is proved by examining two derivations and their equality
+premises. The `diagonalTotal_refuted` theorem uses an input relation containing
+only `(0, 1)`: no output with first column `0` exists, even though the output's
+second column is existential. Filtering cannot be silently assumed by coverage.
+
+Both results are required in Lean CI. The seventh relation fixture compares
+equal pairs at both safe-integer boundaries and mismatched pairs in both orders
+on native, SQLite, and Postgres. These results concern non-null integers;
+nullable equality and equality-driven bindings are still outside this exporter.

@@ -69,6 +69,9 @@ describe("optional Lean export", () => {
     ["0 > X", "((0 : Int) > v0.val)"],
     ["7 >= X", "((7 : Int) ≥ v0.val)"],
     ["X >= -7", "(v0.val ≥ (-7 : Int))"],
+    ["X = Y", "(v0.val = v1.val)"],
+    ["(X = Y)", "(v0.val = v1.val)"],
+    ["X = -7", "(v0.val = (-7 : Int))"],
     ["X < Y", "(v0.val < v1.val)"],
   ])("integer guard %s is a constructor premise", (guard, expected) => {
     const output = exportLeanRelation(
@@ -80,6 +83,10 @@ describe("optional Lean export", () => {
   });
 
   test.each([
+    "not X = 0",
+    "X = 1.0",
+    "X = Y",
+    "X = X + 1",
     "not X < 0",
     "X < 0.5",
     "X < 9007199254740992",
@@ -95,6 +102,8 @@ describe("optional Lean export", () => {
 
   test.each([
     "input predicate p(x: integer?). q(X) :- p(X).",
+    "input predicate p(x: integer?). q(X) :- p(X), X = 0.",
+    "input predicate p(x: integer). q(Y) :- p(X), Y = X.",
     "input predicate p(x: integer). q(X * 2) :- p(X).",
     "input predicate p(x: integer). q((X + 1) + 1) :- p(X).",
     "input predicate p(x: integer). q(X) :- p(X + 1).",

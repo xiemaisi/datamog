@@ -35,6 +35,9 @@ inductive Overlapping (input0 : Datamog.SafeInt → Prop) : Datamog.SafeInt → 
   | rule0 (v0 : Datamog.SafeInt) (w0 : Datamog.SafeInt) : (input0 v0) → (v0.val < (9007199254740991 : Int)) → (w0.val = v0.val + (1 : Int)) → Overlapping input0 v0 w0
   | rule1 (v0 : Datamog.SafeInt) : (input0 v0) → (v0.val ≥ (9007199254740990 : Int)) → Overlapping input0 v0 v0
 
+inductive Diagonal (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
+  | rule0 (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) : (input0 v0 v1) → (v0.val = v1.val) → Diagonal input0 v0 v1
+
 def reachPreserves : Prop :=
   ∀ (edge : SafeInt → SafeInt → Prop) (P : SafeInt → Prop),
   (∀ a b, edge a b → P a → P b) →
@@ -79,5 +82,13 @@ def saturatingUnique : Prop :=
 def overlappingUnique : Prop :=
   ∀ (input0 : Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
   Overlapping input0 v0 v1 → Overlapping input0 v0 w1 → v1 = w1
+
+def diagonalUnique : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (w1 : Datamog.SafeInt),
+  Diagonal input0 v0 v1 → Diagonal input0 v0 w1 → v1 = w1
+
+def diagonalTotal : Prop :=
+  ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt),
+  input0 v0 v1 → ∃ (w1 : Datamog.SafeInt), Diagonal input0 v0 w1
 
 end Datamog.Generated

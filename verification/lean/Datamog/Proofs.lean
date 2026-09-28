@@ -115,4 +115,24 @@ theorem overlappingUnique_refuted : ¬ Generated.overlappingUnique := by
   change (9007199254740991 : Int) = 9007199254740990 at bad
   omega
 
+theorem diagonalUnique : Generated.diagonalUnique := by
+  intro pair x y z hxy hxz
+  cases hxy
+  cases hxz
+  apply Subtype.ext
+  omega
+
+theorem diagonalTotal_refuted : ¬ Generated.diagonalTotal := by
+  intro total
+  let zero : SafeInt := ⟨0, by decide⟩
+  let one : SafeInt := ⟨1, by decide⟩
+  let pair := fun (a b : SafeInt) => a = zero ∧ b = one
+  obtain ⟨y, derivation⟩ := total pair zero one ⟨rfl, rfl⟩
+  cases derivation with
+  | rule0 input equal =>
+    have target := congrArg Subtype.val input.2
+    change (0 : Int) = y.val at equal
+    change y.val = 1 at target
+    omega
+
 end Datamog.Proofs

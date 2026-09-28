@@ -66,7 +66,7 @@ export function exportLeanObligation(goal: LogicalObligation, name: string): str
 
 /**
  * Spike fragment: one positive (possibly self-recursive) relation, over non-null
- * integers, with variable-only body atoms, simple integer order guards, and
+ * integers, with variable-only body atoms, simple integer comparison guards, and
  * variable or variable-plus-integer heads. Other computed terms, derived calls, mutual recursion, negation,
  * constraints and aggregates are rejected explicitly.
  * Inputs are arbitrary relations over SafeInt; finite derivations form the LFP.
@@ -93,7 +93,7 @@ function buildLeanRelation(typed: TypedProgram, predicate: string, name: string)
   for (const rule of rules) {
     if (rule.head.refinements?.length) throw new Error("Unsupported Lean relation refinement");
     for (const atom of rule.body) {
-      if (atom.$type === "Filter" && !atom.negated) continue;
+      if (atom.$type === "Equality" || (atom.$type === "Filter" && !atom.negated)) continue;
       if (atom.$type !== "Literal" || atom.negated)
         throw new Error("Unsupported Lean relation body");
       if (atom.predicate !== predicate) {
@@ -166,9 +166,16 @@ function buildLeanRelation(typed: TypedProgram, predicate: string, name: string)
       throw new Error("Unsupported Lean relation guard term");
     };
     const body = rule.body.map((atom) => {
+      if (atom.$type === "Equality") return `(${guardTerm(atom.left)} = ${guardTerm(atom.expr)})`;
       if (atom.$type === "Filter" && !atom.negated) {
         const expr = atom.expr;
-        const operators: Record<string, string> = { "<": "<", "<=": "≤", ">": ">", ">=": "≥" };
+        const operators: Record<string, string> = {
+          "<": "<",
+          "<=": "≤",
+          ">": ">",
+          ">=": "≥",
+          "=": "=",
+        };
         if (expr.$type !== "BinaryExpr" || !Object.hasOwn(operators, expr.op))
           throw new Error("Unsupported Lean relation guard");
         return `(${guardTerm(expr.left)} ${operators[expr.op]} ${guardTerm(expr.right)})`;
