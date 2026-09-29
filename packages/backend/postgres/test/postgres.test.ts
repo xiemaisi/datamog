@@ -415,6 +415,19 @@ describe.skipIf(!HAS_DATABASE_URL)("postgres backend (DATABASE_URL)", () => {
     expect(results[1]!.rows).toEqual([{ L: [["￿"], ["😀"]] }]);
   });
 
+  test("Regression: integer subscripts reject scalar parents but retain null elements", async () => {
+    const results = await new DatamogExecutor(backend).execute(`
+      data([null, 3, true, "text", {}, [], [null], [[7]]]).
+      idx(0). idx(1). idx(2). idx(3). idx(4). idx(5). idx(6). idx(7).
+      picked(I, V[I][0]) :- data(V), idx(I).
+      ?- picked(I, X).
+    `);
+    expect(results[0]!.rows.sort((a, b) => Number(a.I) - Number(b.I))).toEqual([
+      { I: 6, X: null },
+      { I: 7, X: [7] },
+    ]);
+  });
+
   test("Regression: wide array indices are undefined without int32 cast overflow", async () => {
     const executor = new DatamogExecutor(backend);
     const results = await executor.execute(`

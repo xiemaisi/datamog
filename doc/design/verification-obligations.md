@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus record and integer-array schema export started**. This extends the future-work discussion in
+and coverage claims plus record and nested integer-array schema export started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -132,15 +132,17 @@ integer operations and truth. A separate `Records.lean` library now models
 lookup in flat records containing these scalar values. `NestedRecords.lean`
 adds a separate recursive record value domain and closed integer-leaf schemas.
 `Arrays.lean` models scalar arrays with integer-element schemas and partial indexing.
-Strings as values, floats, arrays of records or arrays, and general structural
-export remain unsupported.
+`NestedArrays.lean` adds recursively nested integer arrays with per-level
+nullability and bounded path lookup. Strings as values, floats, arrays of records,
+and general structural export remain unsupported.
 
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
 cases, 32 integer-field acceptance cases, 265 flat-schema acceptance cases,
-61 nested-schema cases, and 114 integer-array cases against native, SQLite, and
+61 nested-schema cases, 114 integer-array cases, and 376 nested-array cases
+against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -419,6 +421,40 @@ Datamog indices above the 32-bit range. The dialect now guards the index before
 casting, so such indices yield no value. Dedicated regressions cover dynamic
 and constant wide indices, including SQL planning. This restores the existing
 indexing contract; the Lean theorems still concern the modeled language.
+
+## Nested integer-array schemas
+
+`exportLeanNestedArraySchema` exports non-null input arrays with arbitrary array
+nesting and integer leaves, including expanded aliases. The separate
+`datamog-nested-array-v1` profile records one element-nullability flag per dimension.
+For example, `[[integer?]?]` permits both null inner arrays and null integer leaves.
+Ragged and empty arrays are admitted; scalar values at the wrong depth are rejected.
+
+Generated goals quantify over index paths whose length equals the schema depth.
+Their `Bounds` premise requires an actual array and an in-range nonnegative index
+at every step, using the length of that particular inner array. The generic
+`nestedArrayTypedLookup` theorem proves that such paths return an integer, or an
+explicit null if the leaf schema permits it. Null intermediate arrays cannot
+satisfy the remaining bounds. `nestedArrayTotal_refuted` uses a null inner array
+to refute unconditional lookup at `[0, 0]`. The generic theorem, refutation, and
+three fixture theorems have exact checker types, axiom audits, manifest identities,
+and unconditional CI requirements.
+
+The runner compares 376 cases on native, SQLite, and Postgres, including ragged
+arrays, empty and null children, wrong nesting depth, Boolean leaves, and integer
+boundaries. Dynamic indices exercise negative, out-of-range, and wide values at
+each dimension. Lean checks the same membership and lookup results; fresh reports
+record `nestedArraySchemaCases` separately.
+
+These comparisons exposed Postgres treating a JSON scalar as a singleton array
+at index zero. Numeric subscripts now require an actual array, preserving the
+existing Datamog wrong-shape lookup contract. The SQL guard binds the receiver
+once to avoid duplicating nested expressions. A dedicated regression distinguishes
+null parents from null array elements.
+
+Nullable root arrays, arrays containing records, arrays inside records, and
+non-integer leaf schemas remain unsupported by this exporter. These proofs concern
+the modeled language, not backend correctness or general structural refinements.
 
 ## Which harder claims should be expressible?
 

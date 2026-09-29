@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: a44d320474521d9864c98add6216ae5b72573541908395cc3c21d27f5121523a
+-- Verification manifest SHA-256: aa7ad323515a86e4fdd6a2e2210ded61c98ee6761bf457ff87d91a9a397ba087
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -52,6 +52,16 @@ theorem NestedSchema_path0 : Generated.NestedSchema_path0 := Proofs.NestedSchema
 #audit NestedSchema_path0
 theorem NestedSchema_path1 : Generated.NestedSchema_path1 := Proofs.NestedSchema_path1
 #audit NestedSchema_path1
+theorem NestedArray_lookup : Generated.NestedArray_lookup := Proofs.NestedArray_lookup
+#audit NestedArray_lookup
+theorem NullableNestedArray_lookup : Generated.NullableNestedArray_lookup := Proofs.NullableNestedArray_lookup
+#audit NullableNestedArray_lookup
+theorem DeepArray_lookup : Generated.DeepArray_lookup := Proofs.DeepArray_lookup
+#audit DeepArray_lookup
+theorem nestedArrayTypedLookup : Generated.nestedArrayTypedLookup := Proofs.nestedArrayTypedLookup
+#audit nestedArrayTypedLookup
+theorem nestedArrayTotal_refuted : Generated.nestedArrayTotal_refuted := Proofs.nestedArrayTotal_refuted
+#audit nestedArrayTotal_refuted
 theorem IntegerArray_lookup : Generated.IntegerArray_lookup := Proofs.IntegerArray_lookup
 #audit IntegerArray_lookup
 theorem NullableIntegerArray_lookup : Generated.NullableIntegerArray_lookup := Proofs.NullableIntegerArray_lookup

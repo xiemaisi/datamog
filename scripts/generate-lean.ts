@@ -1,5 +1,6 @@
 import { exportLeanArraySchema } from "../packages/core/src/array-schema-lean.ts";
 import { analyze, generateLogicalObligations, inferTypes } from "../packages/core/src/index.ts";
+import { exportLeanNestedArraySchema } from "../packages/core/src/nested-array-schema-lean.ts";
 import { exportLeanNestedRecordSchema } from "../packages/core/src/nested-record-schema-lean.ts";
 import {
   assembleLeanClaims,
@@ -192,6 +193,36 @@ const arraySchemas = await Promise.all(
     }),
   ),
 );
+const nestedArraySchemas = await Promise.all(
+  [
+    ["NestedArray", "nested-array.dl"],
+    ["NullableNestedArray", "nullable-nested-array.dl"],
+    ["DeepArray", "deep-array.dl"],
+  ].map(async ([id, fixture]) =>
+    exportLeanNestedArraySchema(
+      compile(await Bun.file(new URL(`fixtures/${fixture}`, project)).text()),
+      { id: id!, predicate: "items", column: 0 },
+    ),
+  ),
+);
+const nestedArrayGoals = [
+  {
+    id: "nestedArrayTypedLookup",
+    statement: `def nestedArrayTypedLookup : Prop :=
+  ∀ flags nullable value path, NestedArrays.accepts flags nullable value = true →
+  NestedArrays.Bounds value path → path.length = flags.length →
+  ∃ result, NestedArrays.lookupPath value path = some result ∧
+    NestedArrays.accepts [] (NestedArrays.leafNullable flags nullable) result = true
+`,
+  },
+  {
+    id: "nestedArrayTotal_refuted",
+    statement: `def nestedArrayTotal_refuted : Prop :=
+  ¬ (∀ value, NestedArrays.accepts NullableNestedArray false value = true →
+  ∃ result, NestedArrays.lookupPath value [0, 0] = some result)
+`,
+  },
+];
 const arrayGoals = [
   {
     id: "arrayElementValid",
@@ -297,9 +328,12 @@ import Datamog.Semantics
 import Datamog.Records
 import Datamog.NestedRecords
 import Datamog.Arrays
+import Datamog.NestedArrays
 namespace Datamog.Generated
 ${exportLeanObligation(successor[0]!, "successor")}
 ${exportLeanObligation(falseGoal, "falseGoal")}
+${nestedArraySchemas.map((schema) => schema.source + schema.statement).join("\n")}
+${nestedArrayGoals.map((goal) => goal.statement).join("\n")}
 ${arraySchemas.map((schema) => schema.source + schema.statement).join("\n")}
 ${arrayGoals.map((goal) => goal.statement).join("\n")}
 ${nestedSchema.source}
@@ -330,6 +364,8 @@ theorem falseGoal_refuted : ¬ Generated.falseGoal := Proofs.falseGoal_refuted
 ${claims.checker}
 ${recordSchema.checker}
 ${nestedSchema.checker}
+${nestedArraySchemas.map((schema) => schema.checker).join("\n")}
+${nestedArrayGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
 ${arraySchemas.map((schema) => schema.checker).join("\n")}
 ${arrayGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
 ${nestedGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
@@ -349,6 +385,9 @@ const paths = new Set([
   "verification/lean/fixtures/diagonal.dl",
   "verification/lean/fixtures/record-schema.dl",
   "verification/lean/fixtures/nested-record-schema.dl",
+  "verification/lean/fixtures/nested-array.dl",
+  "verification/lean/fixtures/nullable-nested-array.dl",
+  "verification/lean/fixtures/deep-array.dl",
   "verification/lean/fixtures/integer-array.dl",
   "verification/lean/fixtures/nullable-integer-array.dl",
   "verification/lean/fixtures/empty-record-schema.dl",
@@ -386,6 +425,22 @@ const manifest = await createVerificationManifest(
     ...claims.nodes,
     ...recordSchema.nodes,
     ...nestedSchema.nodes,
+    ...nestedArraySchemas.flatMap((schema) => schema.nodes),
+    {
+      id: "NestedArraySemantics",
+      kind: "definition",
+      statement: await Bun.file(new URL("Datamog/NestedArrays.lean", project)).text(),
+      assumptions: [],
+      dependencies: [],
+    },
+    ...nestedArrayGoals.map(({ id, statement }) => ({
+      id,
+      kind: "goal" as const,
+      theorem: `Datamog.Checked.${id}`,
+      statement: { profile: "datamog-nested-array-v1", lean: statement },
+      assumptions: [],
+      dependencies: ["NestedArraySemantics", "NullableNestedArray"],
+    })),
     ...arraySchemas.flatMap((schema) => schema.nodes),
     {
       id: "ArraySemantics",
@@ -468,7 +523,7 @@ const manifest = await createVerificationManifest(
     },
   ],
   {
-    profile: "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1",
+    profile: "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1+nested-array-v1",
     toolchain: (await Bun.file(new URL("lean-toolchain", project)).text()).trim(),
     method: "lean-kernel-checked",
     artifacts,

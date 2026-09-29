@@ -453,3 +453,32 @@ with six dynamic indices per admitted array. Lean checks every case's acceptance
 and lookup results. Reports count `semanticChecks.arraySchemaCases`. The tests
 also exposed and now cover a Postgres int32 subscript cast overflow: wide valid
 Datamog indices now yield no value rather than an SQL error.
+
+### Nested integer-array schemas
+
+`exportLeanNestedArraySchema` in `packages/core/src/nested-array-schema-lean.ts`
+exports arbitrary array nesting with integer leaves. Root arrays must be non-null;
+each element position independently permits or rejects null. For example,
+`[[integer?]?]` admits null inner arrays and null leaves. Schemas are lists of
+nullability flags in `Datamog/NestedArrays.lean`, under `datamog-nested-array-v1`.
+Records and non-integer leaf schemas remain unsupported.
+
+`NestedArray_lookup`, `NullableNestedArray_lookup`, and `DeepArray_lookup` cover
+two- and three-level fixtures. Each requires a path of the schema's depth and
+`Bounds` evidence: every traversed value must be an array, and each index must
+be below that array's own length. The conclusion returns a value satisfying the
+integer leaf schema, preserving explicit null when permitted. Empty arrays and
+null parents do not create unconditional child-lookup guarantees.
+
+`nestedArrayTypedLookup` proves the generic result by induction on schema depth.
+`nestedArrayTotal_refuted` refutes unconditional `[0, 0]` lookup using a null inner
+array. All five results have exact checkers, audited axiom dependencies, content
+identities, and CI requirements. Bounds are explicit theorem premises, not input
+dataset assumptions or presumed head definedness.
+
+The runner checks 376 acceptance cases and dynamic path lookups on native, SQLite,
+and Postgres, then checks those results in Lean. Reports count
+`semanticChecks.nestedArraySchemaCases`. Cases include ragged arrays, missing
+indices, empty and null children, wrong depths, and integer boundaries. This also
+regresses a Postgres scalar-at-index-zero discrepancy; numeric JSON subscripts now
+require an actual array and preserve null only when it is an array element.

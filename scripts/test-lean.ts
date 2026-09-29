@@ -294,6 +294,58 @@ try {
       Bun.file(join(project, "fixtures", fixture)).text(),
     ),
   );
+  type ArrayValue = Scalar | ArrayValue[];
+  const leanArray = (value: ArrayValue): string =>
+    Array.isArray(value)
+      ? `(.array [${value.map(leanArray).join(", ")}])`
+      : `(.scalar ${leanScalar(value)})`;
+  const arrayAccepts = (flags: boolean[], nullable: boolean, value: ArrayValue): boolean => {
+    if (value === null) return nullable;
+    if (!flags.length) return typeof value === "number";
+    return (
+      Array.isArray(value) && value.every((child) => arrayAccepts(flags.slice(1), flags[0]!, child))
+    );
+  };
+  const arrayLookup = (value: ArrayValue, path: number[]): ArrayValue | undefined => {
+    let result: ArrayValue | undefined = value;
+    for (const index of path)
+      result = Array.isArray(result) && index >= 0 ? result[index] : undefined;
+    return result;
+  };
+  const innerArrays: ArrayValue[] = [
+    null,
+    [],
+    [null],
+    [0],
+    [-9007199254740991, 9007199254740991],
+    [false],
+    0,
+    false,
+    [[0]],
+  ];
+  const nestedArrayInputs: ArrayValue[] = [null, 0, false, []];
+  for (const first of innerArrays) {
+    nestedArrayInputs.push([first]);
+    for (const second of innerArrays) nestedArrayInputs.push([first, second]);
+  }
+  const nestedArraySpecs = [
+    { id: "NestedArray", fixture: "nested-array.dl", flags: [false, false] },
+    { id: "NullableNestedArray", fixture: "nullable-nested-array.dl", flags: [true, true] },
+    { id: "DeepArray", fixture: "deep-array.dl", flags: [true, true, false] },
+  ];
+  const nestedArrayCases = (
+    await Promise.all(
+      nestedArraySpecs.map(async (spec) => ({
+        ...spec,
+        source: await Bun.file(join(project, "fixtures", spec.fixture)).text(),
+      })),
+    )
+  ).flatMap((spec) =>
+    (spec.flags.length === 2
+      ? nestedArrayInputs
+      : [...nestedArrayInputs, ...nestedArrayInputs.map((value) => [value])]
+    ).map((value) => ({ ...spec, value })),
+  );
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -575,6 +627,85 @@ try {
         );
       }
     }
+    for (const [caseIndex, spec] of nestedArrayCases.entries()) {
+      const { value, flags } = spec;
+      const accepts = arrayAccepts(flags, false, value);
+      // Exercise each dimension separately, including negative and wide dynamic indices.
+      const paths = [[...flags.map(() => 0)], [...flags.map(() => 1)]];
+      for (let level = 0; level < flags.length; level++)
+        for (const index of arrayIndices) {
+          const path = flags.map(() => 0);
+          path[level] = index;
+          paths.push(path);
+        }
+      const uniquePaths = [...new Map(paths.map((path) => [JSON.stringify(path), path])).values()];
+      const columns = flags.map((_, i) => `i${i}`);
+      const variables = flags.map((_, i) => `I${i}`);
+      const inputName = `nestedArrayItems${caseIndex}`;
+      const indexName = `nestedArrayIndices${caseIndex}`;
+      const outputName = `nestedArrayOutput${caseIndex}`;
+      const source = `${spec.source.replaceAll("items", inputName)}input predicate ${indexName}(${columns.map((c) => `${c}: integer`).join(", ")}).
+${outputName}(${variables.join(", ")}, V${variables.map((v) => `[${v}]`).join("")}) :- ${inputName}(V), ${indexName}(${variables.join(", ")}).
+?- ${outputName}(${variables.join(", ")}, X).`;
+      const expected = uniquePaths.flatMap((path) => {
+        const result = arrayLookup(value, path);
+        return result === undefined
+          ? []
+          : [{ ...Object.fromEntries(variables.map((v, i) => [v, path[i]])), X: result }];
+      });
+      const sorted = (rows: Record<string, unknown>[]) =>
+        rows.map((row) => JSON.stringify(row)).sort();
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "nested-array-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              const rows =
+                decl.predicate === inputName
+                  ? [{ values: value }]
+                  : uniquePaths.map((path) =>
+                      Object.fromEntries(columns.map((c, i) => [c, path[i]])),
+                    );
+              await insertRows(target, decl, rows);
+              return { rowsLoaded: rows.length };
+            },
+          },
+        ]);
+        let rejected = false;
+        let rows: Record<string, unknown>[] = [];
+        try {
+          rows = (await executor.execute(source))[0]!.rows;
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes("column 'values'")) throw error;
+          rejected = true;
+        }
+        if (rejected === accepts) throw new Error(`${name} nested array acceptance: ${caseIndex}`);
+        if (accepts && JSON.stringify(sorted(rows)) !== JSON.stringify(sorted(expected)))
+          throw new Error(`${name} nested array lookup: ${caseIndex}: ${JSON.stringify(rows)}`);
+      }
+      const leanValue = leanArray(value);
+      checks.push(
+        `example : NestedArrays.accepts Generated.${spec.id} false ${leanValue} = ${accepts} := by decide`,
+      );
+      for (const path of uniquePaths) {
+        const found = arrayLookup(value, path);
+        const result = found === undefined ? "none" : `some ${leanArray(found)}`;
+        // Int-valued lookup checks invalid indices too; theorem paths use Nat.
+        const expression = path.reduce(
+          (expr, index) =>
+            `(${expr}).bind (fun value => NestedArrays.lookupIndex value (${index}))`,
+          `(some ${leanValue})`,
+        );
+        checks.push(`example : ${expression} = ${result} := by rfl`);
+        if (path.every((index) => index >= 0))
+          checks.push(
+            `example : NestedArrays.lookupPath ${leanValue} [${path.join(", ")}] = ${result} := by rfl`,
+          );
+      }
+    }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
     const relationCases = [
@@ -693,6 +824,9 @@ try {
   );
   console.log(`${nestedCases.length} Lean/${backendNames.join("/")} nested schema cases passed.`);
   console.log(`${arrayCases.length} Lean/${backendNames.join("/")} array schema cases passed.`);
+  console.log(
+    `${nestedArrayCases.length} Lean/${backendNames.join("/")} nested array schema cases passed.`,
+  );
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
@@ -702,6 +836,7 @@ try {
     schemaCases: schemaCases.length,
     nestedSchemaCases: nestedCases.length,
     arraySchemaCases: arrayCases.length,
+    nestedArraySchemaCases: nestedArrayCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

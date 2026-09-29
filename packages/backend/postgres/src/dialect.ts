@@ -83,7 +83,13 @@ export class PostgresSqlDialect implements SqlDialect {
     const index = indexIsString
       ? indexSql
       : `CASE WHEN (${indexSql}) BETWEEN 0 AND 2147483647 THEN (${indexSql}) ELSE NULL END`;
-    return jsonNullPreserved(`(${receiverSql} -> CAST(${index} AS ${cast}))`);
+    if (indexIsString) return jsonNullPreserved(`(${receiverSql} -> CAST(${index} AS ${cast}))`);
+    // JSONB treats a scalar as a singleton array at index zero. Datamog
+    // requires an actual array. Bind the receiver once so nested accesses
+    // do not duplicate the entire preceding expression at every level.
+    return `(SELECT CASE WHEN jsonb_typeof(dm_subscript.value) = 'array'
+      THEN dm_subscript.value -> CAST(${index} AS ${cast}) ELSE NULL END
+      FROM (SELECT ${receiverSql} AS value) AS dm_subscript)`;
   }
 
   jsonSlice(receiverSql: string, startSql: string | null, endSql: string | null): string {

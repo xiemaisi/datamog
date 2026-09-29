@@ -3,6 +3,7 @@ import Datamog.Semantics
 import Datamog.Records
 import Datamog.NestedRecords
 import Datamog.Arrays
+import Datamog.NestedArrays
 namespace Datamog.Generated
 def successor : Prop :=
   ∀ (v0 : Int) (v1 : Prop) (v2 : Int),
@@ -16,6 +17,40 @@ def falseGoal : Prop :=
   ∀ (v0 : Int),
   (((-(9007199254740991 : Int)) <= v0) ∧ (v0 <= (9007199254740991 : Int))) →
   (v0 > (0 : Int))
+
+def NestedArray : List Bool := [false, false]
+def NestedArray_lookup : Prop :=
+  ∀ (value : Datamog.NestedArrays.Value) (path : List Nat),
+  Datamog.NestedArrays.accepts NestedArray false value = true →
+  Datamog.NestedArrays.Bounds value path → path.length = 2 →
+  ∃ result, Datamog.NestedArrays.lookupPath value path = some result ∧
+    Datamog.NestedArrays.accepts [] false result = true
+
+def NullableNestedArray : List Bool := [true, true]
+def NullableNestedArray_lookup : Prop :=
+  ∀ (value : Datamog.NestedArrays.Value) (path : List Nat),
+  Datamog.NestedArrays.accepts NullableNestedArray false value = true →
+  Datamog.NestedArrays.Bounds value path → path.length = 2 →
+  ∃ result, Datamog.NestedArrays.lookupPath value path = some result ∧
+    Datamog.NestedArrays.accepts [] true result = true
+
+def DeepArray : List Bool := [true, true, false]
+def DeepArray_lookup : Prop :=
+  ∀ (value : Datamog.NestedArrays.Value) (path : List Nat),
+  Datamog.NestedArrays.accepts DeepArray false value = true →
+  Datamog.NestedArrays.Bounds value path → path.length = 3 →
+  ∃ result, Datamog.NestedArrays.lookupPath value path = some result ∧
+    Datamog.NestedArrays.accepts [] false result = true
+
+def nestedArrayTypedLookup : Prop :=
+  ∀ flags nullable value path, NestedArrays.accepts flags nullable value = true →
+  NestedArrays.Bounds value path → path.length = flags.length →
+  ∃ result, NestedArrays.lookupPath value path = some result ∧
+    NestedArrays.accepts [] (NestedArrays.leafNullable flags nullable) result = true
+
+def nestedArrayTotal_refuted : Prop :=
+  ¬ (∀ value, NestedArrays.accepts NullableNestedArray false value = true →
+  ∃ result, NestedArrays.lookupPath value [0, 0] = some result)
 
 def IntegerArray : Bool := false
 def IntegerArray_lookup : Prop :=

@@ -1652,7 +1652,7 @@ path(X, Y) :- path(X, Z), path(Z, Y).
     expect(sql).not.toContain("'null'::jsonb");
     expect(sql).not.toContain("NULLIF(jsonb_typeof(");
     expect(sql).toContain(
-      "jsonb_typeof((CASE WHEN (0) < 0 THEN NULL ELSE (jsonb_build_array(NULL)",
+      "jsonb_typeof((CASE WHEN (0) < 0 THEN NULL ELSE (SELECT CASE WHEN jsonb_typeof(dm_subscript.value) = 'array'",
     );
     // The subscript can still be undefined, out of range or wrong-shape, so the
     // head carries a definedness guard.

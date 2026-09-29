@@ -2,7 +2,7 @@
   "purpose": "verification-plan",
   "schema": "datamog-verification-manifest-v1",
   "context": {
-    "profile": "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1",
+    "profile": "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1+nested-array-v1",
     "toolchain": "leanprover/lean4:v4.34.0",
     "method": "lean-kernel-checked",
     "artifacts": {
@@ -24,6 +24,7 @@
       "packages/core/src/keywords.ts": "29c032498cfaa7cdaf6eecbb8d7b7ddb5351ae8aaa3f3511d580a6ce28ed2e6f",
       "packages/core/src/module-diagnostics.ts": "533dfec57c7e184a84f299792e6d0a1b29de40f4b39bb3f0e462f6c50cecc74b",
       "packages/core/src/negation-cycle.ts": "b72c07b68cdb4d316e78967a6cc6e469cfcfe166471fb03f567832650326ad60",
+      "packages/core/src/nested-array-schema-lean.ts": "4b69741af1045d471dab3f062ebb538390bef3a113e586b02ff1d86f344991d5",
       "packages/core/src/nested-record-schema-lean.ts": "bfd787f26ba51d73f19559b2ff4bdbb201784f06d7759836586e706b421f0818",
       "packages/core/src/nominal-declarations.ts": "0171e114c236de88b0d8e7c4172f17f263410236fc7babdb48835a9d7ab41a44",
       "packages/core/src/nullable-operands.ts": "9872a68e350742e90d100ab2cebf8ac094943f270ddc0afa5f24cfcab33cd0d7",
@@ -65,22 +66,26 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "b65da085861663cea1cd832e5032b5b21c0acd6a010660dd73a4d30d31c59f05",
-      "scripts/test-lean.ts": "e7ce7505445c1a2acacbcd4a4babc26311a5411e06a46834f37b0774e139dc6a",
+      "scripts/generate-lean.ts": "c6ce02909d8ba1b54170b8db975b7ba66987a0e017f7f4b4b73d28c18d35d8c2",
+      "scripts/test-lean.ts": "e1c9e68b521b55b0c651bbc0019098a265256d3e369379e76c12459d57c6d7a5",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Arrays.lean": "9c810a40e45ad05518678107e0a31a1c4262ee124f9e9515768dd4a7d56fec22",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
+      "verification/lean/Datamog/NestedArrays.lean": "453ade4cd22db54134442bfacddbbf8ef4875dfdef9c7912e2607a7ff2af62b3",
       "verification/lean/Datamog/NestedRecords.lean": "d6977de990c608dce3a30d9100ca640ef9efc01fb5ed24a438ff9806d93b33f7",
-      "verification/lean/Datamog/Proofs.lean": "42568bc0bee9c45f756173d67f3307889f88fcf124d0f61190c06e98f0856268",
+      "verification/lean/Datamog/Proofs.lean": "c7ee92b0cd9b18d7c987d1e5020943ac951a10d080d9a3078c57649f5f11f04a",
       "verification/lean/Datamog/Records.lean": "6b45612757719f0ec4808654c5785c38029b4fb9593d31678bc528c7cf583500",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
+      "verification/lean/fixtures/deep-array.dl": "383d7625660d582520b9206c389485556dd0ac98d18119810917c6cce08148a7",
       "verification/lean/fixtures/diagonal.dl": "923978fa45dded0ddac1dfcf32c47f92e3e871f867ab82e4dd94024a6748b772",
       "verification/lean/fixtures/empty-record-schema.dl": "7be9918e3e4fad5080ddb88efcd1b302c39cdb30a0debaefee2d37e64186d685",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
       "verification/lean/fixtures/integer-array.dl": "439f33d7d8c885ef68242040292fd0e6d92feeb0b46eccfa4a9f3bed20b4009e",
+      "verification/lean/fixtures/nested-array.dl": "a1fec65cd409cccb6fd8a5595dffcc15a628ea70f05dfd87e13caa6af0880b24",
       "verification/lean/fixtures/nested-record-schema.dl": "0f5874637a16b68637a0a53b3bbe52b9cc3e7d1d4a9ffea38f5d3141df89369f",
       "verification/lean/fixtures/nullable-integer-array.dl": "7de4552b4bb05cc2b05cbc53297b1610ac1db207209b8da57cc62dacdd16243a",
+      "verification/lean/fixtures/nullable-nested-array.dl": "2fd8fca1f47cac0d414463bf99ffdbaf09d081136c7390502eb16842f8d8ea9b",
       "verification/lean/fixtures/overlapping-successor.dl": "67911bcf126cdd11acee729084b6f60c11a013f81459e9949a027bfbcf80369a",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
       "verification/lean/fixtures/record-schema.dl": "ba0c59e081821de1e542b716bd1d94f332fd2fe57d743e4773e716d83a50aafe",
@@ -91,7 +96,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "5b437f92b8e8603856faa9b76bf24c49a94d2c161e795465ac087511bde8b7ef",
+  "contextDigest": "c0bb607705cdbe5dc51711b17ee0ac340df4abb1e95709cf4368f25d4dd18ba2",
   "entries": [
     {
       "id": "ArraySemantics",
@@ -102,7 +107,51 @@
       "closure": [
         "ArraySemantics"
       ],
-      "digest": "ab4ad5a07ecdf4f26a6cd33009dddadd3b9b6d3110f6881febfd68b527b93222"
+      "digest": "f190bf14021adbff362cc34a172f11f8e7e1e594652f4877dc5f4d9045e78f2c"
+    },
+    {
+      "id": "DeepArray",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "id": "DeepArray",
+        "predicate": "items",
+        "column": 0,
+        "flags": [
+          true,
+          true,
+          false
+        ],
+        "lean": "def DeepArray : List Bool := [true, true, false]\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedArraySemantics"
+      ],
+      "closure": [
+        "DeepArray",
+        "NestedArraySemantics"
+      ],
+      "digest": "2aafb124984d35638c9b035fe1972185c105b3548e1246543993371126bf7d5b"
+    },
+    {
+      "id": "DeepArray_lookup",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.DeepArray_lookup",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "lean": "def DeepArray_lookup : Prop :=\n  ∀ (value : Datamog.NestedArrays.Value) (path : List Nat),\n  Datamog.NestedArrays.accepts DeepArray false value = true →\n  Datamog.NestedArrays.Bounds value path → path.length = 3 →\n  ∃ result, Datamog.NestedArrays.lookupPath value path = some result ∧\n    Datamog.NestedArrays.accepts [] false result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "DeepArray"
+      ],
+      "closure": [
+        "DeepArray",
+        "DeepArray_lookup",
+        "NestedArraySemantics"
+      ],
+      "digest": "a959154eeac39ba0f382b72c9c5880031966f8fa6626782defbd4d88450b5db3"
     },
     {
       "id": "Diagonal",
@@ -123,7 +172,7 @@
       "closure": [
         "Diagonal"
       ],
-      "digest": "889590e6cf6bd2f8b50082387fe757b2aea5b8b970e6496454d7ac9daa3e00b7"
+      "digest": "7df4f69e6db1640d09978a26220e48994654591944d74c9f1cef679e060c5166"
     },
     {
       "id": "DocumentSchema",
@@ -165,7 +214,7 @@
         "DocumentSchema",
         "RecordLookup"
       ],
-      "digest": "4e705d17fe1bb8e9238d0060a7fb6210b6eb029cfb06410dfd6d072a441eee2d"
+      "digest": "a51ff001fa3cd3124100944bd1d5a887f22a0d40b90832a504fd0d977291196f"
     },
     {
       "id": "DocumentSchema_field0",
@@ -184,7 +233,7 @@
         "DocumentSchema_field0",
         "RecordLookup"
       ],
-      "digest": "c1c195e2a0093549b965eb3658415b817adcc1d7c2b0f1097b057f0b57a9f0d5"
+      "digest": "75294099b9ad85700a6f0070575f9e1fd0b1313998644695292d17c114cb5b95"
     },
     {
       "id": "DocumentSchema_field1",
@@ -203,7 +252,7 @@
         "DocumentSchema_field1",
         "RecordLookup"
       ],
-      "digest": "1395692b08350d39f01f2c5a59bfd0f9b93265cad7374c17ba87c5a962f319d9"
+      "digest": "f101ac955facbac147d19a7bee4ee7c265357f65a663a0c755c61abc4ca34447"
     },
     {
       "id": "EmptySchema",
@@ -224,7 +273,7 @@
         "EmptySchema",
         "RecordLookup"
       ],
-      "digest": "2efd02d14916cb625bf3abbe652bfc980bce7629fcfa23c04a813b28dffdb17b"
+      "digest": "6c3bf6ae3361d6e53f18714ae9d8fdb04e3635cd6113dc000ad878381cb6d3f3"
     },
     {
       "id": "Guarded",
@@ -245,7 +294,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "9ded04f65c131895e1561450dae1c34431e3f1f6e71914e4b9b823084d361621"
+      "digest": "579d4184d0bb2cfc0209ef3388adbca0b3d3a4205f640502c49fa3f89ef9e476"
     },
     {
       "id": "Identity",
@@ -266,7 +315,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "91135ec0d88129e3acbb63ad7e0991d5703e8494679daecbc1a03819e9401c6b"
+      "digest": "9b3084229f3ec961b847ce50a425208004f01ecee2390411c14e965b120bc32d"
     },
     {
       "id": "IntegerArray",
@@ -287,7 +336,7 @@
         "ArraySemantics",
         "IntegerArray"
       ],
-      "digest": "bd65f2b54a6eb36dd37ac62fdb80b970614c82b8e21bc0d0065c070bf72d99ba"
+      "digest": "c11182b5f541e0a3e6c4f34bc096e03499dece8acad1fe76da24101f52d996fc"
     },
     {
       "id": "IntegerArray_lookup",
@@ -306,7 +355,61 @@
         "IntegerArray",
         "IntegerArray_lookup"
       ],
-      "digest": "12f2a321ccd00b5478cc5b289f4a85a7cf5eb9e25fa16d1213c99d652f4717e6"
+      "digest": "e783a542fe36e8c35b5cb07aae9561b9205b848991865f68c65db1db92c9d114"
+    },
+    {
+      "id": "NestedArray",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "id": "NestedArray",
+        "predicate": "items",
+        "column": 0,
+        "flags": [
+          false,
+          false
+        ],
+        "lean": "def NestedArray : List Bool := [false, false]\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedArraySemantics"
+      ],
+      "closure": [
+        "NestedArray",
+        "NestedArraySemantics"
+      ],
+      "digest": "af83679f1a3d159c16b51f29fd29802101c72c7a43cf9867f3ca1ca401c7f2cd"
+    },
+    {
+      "id": "NestedArraySemantics",
+      "kind": "definition",
+      "statement": "import Datamog.Semantics\nnamespace Datamog.NestedArrays\ninductive Value where\n  | scalar (value : Datamog.Value)\n  | array (values : List Value)\n-- One element-nullability flag per array dimension; [] describes an integer.\ndef accepts : List Bool → Bool → Value → Bool\n  | _, nullable, .scalar .null => nullable\n  | [], _, .scalar (.integer _) => true\n  | nullable :: rest, _, .array values => values.all (accepts rest nullable)\n  | _, _, _ => false\ndef lookupIndex : Value → Int → Option Value\n  | .array values, index => if 0 ≤ index then values[index.toNat]? else none\n  | _, _ => none\ndef lookupPath : Value → List Nat → Option Value\n  | value, [] => some value\n  | value, index :: rest => (lookupIndex value (Int.ofNat index)).bind (lookupPath · rest)\n-- Every bound concerns the actual array reached by the preceding indices.\ninductive Bounds : Value → List Nat → Prop where\n  | done : Bounds value []\n  | step (bound : index < values.length) (tail : Bounds values[index] rest) :\n      Bounds (.array values) (index :: rest)\ndef leafNullable : List Bool → Bool → Bool\n  | [], nullable => nullable\n  | next :: rest, _ => leafNullable rest next\n theorem typedLookup (flags : List Bool) (nullable : Bool) (value : Value)\n    (path : List Nat) (accepted : accepts flags nullable value = true)\n    (bounds : Bounds value path) (depth : path.length = flags.length) :\n    ∃ result, lookupPath value path = some result ∧\n      accepts [] (leafNullable flags nullable) result = true := by\n  induction flags generalizing nullable value path with\n  | nil =>\n    cases path with\n    | nil => exact ⟨value, rfl, accepted⟩\n    | cons _ _ => simp at depth\n  | cons next rest ih =>\n    cases bounds with\n    | done => simp at depth\n    | @step index values tail bound remaining =>\n      simp only [accepts, List.all_eq_true] at accepted\n      have child := accepted _ (List.getElem_mem bound)\n      obtain ⟨result, found, valid⟩ := ih next values[index] tail child remaining (by simpa using depth)\n      exact ⟨result, by simpa [lookupPath, lookupIndex, bound] using found, valid⟩\nend Datamog.NestedArrays\n",
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "NestedArraySemantics"
+      ],
+      "digest": "bb75d3f69ce8360b8c4043db5a23b71216703a3b6fc526513f8ff5e1a4090ce4"
+    },
+    {
+      "id": "NestedArray_lookup",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.NestedArray_lookup",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "lean": "def NestedArray_lookup : Prop :=\n  ∀ (value : Datamog.NestedArrays.Value) (path : List Nat),\n  Datamog.NestedArrays.accepts NestedArray false value = true →\n  Datamog.NestedArrays.Bounds value path → path.length = 2 →\n  ∃ result, Datamog.NestedArrays.lookupPath value path = some result ∧\n    Datamog.NestedArrays.accepts [] false result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedArray"
+      ],
+      "closure": [
+        "NestedArray",
+        "NestedArraySemantics",
+        "NestedArray_lookup"
+      ],
+      "digest": "e5dc13b6b33371761dc1849264b9d3529eb84aca800c200c1297e2b7658a243c"
     },
     {
       "id": "NestedRecords",
@@ -317,7 +420,7 @@
       "closure": [
         "NestedRecords"
       ],
-      "digest": "42bce3e9b491b7b2d0c6b40c12e247b5a40f06d5ab820a8565f4c9c0d335f29b"
+      "digest": "9d4d6e174ea648831918d3979f71290f7fbc5cbcaf1cd27384385df0072a0755"
     },
     {
       "id": "NestedSchema",
@@ -404,7 +507,7 @@
         "NestedRecords",
         "NestedSchema"
       ],
-      "digest": "c22cdad1d7756f2d39d50e8c83477a0816fa5085ef7c0f9cb9bfa6e21cbf12b9"
+      "digest": "d013b6bc5a5e111d27f0879711aa8b99e6dc1a04148d194ee8f8fa6ac517a04a"
     },
     {
       "id": "NestedSchema_path0",
@@ -431,7 +534,7 @@
         "NestedSchema",
         "NestedSchema_path0"
       ],
-      "digest": "edd7897154e6c69c9855706960b889fb9981f971af00a135e5e0b9219f30e0b9"
+      "digest": "57828640e99e2a4d7396263a938a174769ee42d39fb469d617078ebf11c5f001"
     },
     {
       "id": "NestedSchema_path1",
@@ -458,7 +561,7 @@
         "NestedSchema",
         "NestedSchema_path1"
       ],
-      "digest": "b83d99e6ba6adf753b1bdc8a024b8b11027719dca1a1b8c6c1d46ce45f38d336"
+      "digest": "ce56f820f209807d0122844724debdd54b6fa2584dea39e08fe5033cc4976ced"
     },
     {
       "id": "NullableIntegerArray",
@@ -479,7 +582,7 @@
         "ArraySemantics",
         "NullableIntegerArray"
       ],
-      "digest": "43de944acea74d5dc1d4b59ac0c37fa850a03fd464e5f722fd5faf43fdb709fb"
+      "digest": "43e6d50c712ca99c8d8dfe16016c9e16153a5ac0b92c9cd4e416e33f674bddd9"
     },
     {
       "id": "NullableIntegerArray_lookup",
@@ -498,7 +601,50 @@
         "NullableIntegerArray",
         "NullableIntegerArray_lookup"
       ],
-      "digest": "96c04bb29d875fa12b2e75d6946d0b111ececeddfd697992a6287fbe1fdc645e"
+      "digest": "58a72f09172518e387d0c1f6ccf5dd9a053796efefcdf3b3efaecbaacb83ebe1"
+    },
+    {
+      "id": "NullableNestedArray",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "id": "NullableNestedArray",
+        "predicate": "items",
+        "column": 0,
+        "flags": [
+          true,
+          true
+        ],
+        "lean": "def NullableNestedArray : List Bool := [true, true]\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedArraySemantics"
+      ],
+      "closure": [
+        "NestedArraySemantics",
+        "NullableNestedArray"
+      ],
+      "digest": "ff68230b2f54b86203ad901eeaaab0702d19133956bb1db7128ffc84649c99fb"
+    },
+    {
+      "id": "NullableNestedArray_lookup",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.NullableNestedArray_lookup",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "lean": "def NullableNestedArray_lookup : Prop :=\n  ∀ (value : Datamog.NestedArrays.Value) (path : List Nat),\n  Datamog.NestedArrays.accepts NullableNestedArray false value = true →\n  Datamog.NestedArrays.Bounds value path → path.length = 2 →\n  ∃ result, Datamog.NestedArrays.lookupPath value path = some result ∧\n    Datamog.NestedArrays.accepts [] true result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NullableNestedArray"
+      ],
+      "closure": [
+        "NestedArraySemantics",
+        "NullableNestedArray",
+        "NullableNestedArray_lookup"
+      ],
+      "digest": "302ffe72269b6a5e9958dedd7f65fa1a0aca479348f9ddaedc0ac36d7357d7cc"
     },
     {
       "id": "Overlapping",
@@ -519,7 +665,7 @@
       "closure": [
         "Overlapping"
       ],
-      "digest": "d55cd421c91a9eeecfcdea91a95cd41acc5c593571458a2fa26ad5e0a4e3e4d3"
+      "digest": "09bcda2d4701db3f311037732c96095511dd6ec48dedd1143796b88d83f222d8"
     },
     {
       "id": "Reach",
@@ -540,7 +686,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "feffcbb65ed59cfdb9e761b905fd8503ac9c6a3bdf60da5cf8ef02b1673325ae"
+      "digest": "8e486b72bbe265cf99472e2bc41981cf277eb288a9e0985ea61a527a0987d496"
     },
     {
       "id": "RecordLookup",
@@ -551,7 +697,7 @@
       "closure": [
         "RecordLookup"
       ],
-      "digest": "f91a69071ec60651612067465ee7c4a44ad835a066577a49fb9e88ebc47da9e2"
+      "digest": "49524cc39eedf8b255b55ceee6bca3a987415b5b03d56cec49e98dbc0983e018"
     },
     {
       "id": "Saturating",
@@ -572,7 +718,7 @@
       "closure": [
         "Saturating"
       ],
-      "digest": "91fa86852873dc004ba7b9acebb2b6249988fef5dc92c09690a6a342d3944074"
+      "digest": "cf13224760c245480300fc0a55ab5e60d25877015a8b929fbda20774ced09ee0"
     },
     {
       "id": "Successor",
@@ -593,7 +739,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "d462cf43eb4ed52545eab2d80f1b557e62ff7bc3c11a0c414ebb2b0e4c7448d7"
+      "digest": "7cf884aced0ab53d8545a71728fac3b8897c76a3da8ac1d8534aa18d8804a1f6"
     },
     {
       "id": "arrayElementValid",
@@ -611,7 +757,7 @@
         "ArraySemantics",
         "arrayElementValid"
       ],
-      "digest": "ad7ce3d238a95d23390a4d177654ef2d904fd15ad319ed7c2b20bd42f9ee4441"
+      "digest": "382e6c1b3357b7b76085df4ced1f1b764a7b8d3ec0bf22259ebc1875f1f2490d"
     },
     {
       "id": "arrayNegativeAbsent",
@@ -629,7 +775,7 @@
         "ArraySemantics",
         "arrayNegativeAbsent"
       ],
-      "digest": "6c85ac4dd28f3525f85d56666ffe4ff65685f3c16eca6c9056136d07d14f43b8"
+      "digest": "db7fc3c471cca805bef7d0a85bc1e65f2162ccde49b8f701f2ac99d5b2846350"
     },
     {
       "id": "arrayPastEndAbsent",
@@ -647,7 +793,7 @@
         "ArraySemantics",
         "arrayPastEndAbsent"
       ],
-      "digest": "f5eef137b313e44e909ba57faad05ca8850673553070d038499e2c1fb441bbb2"
+      "digest": "e208b630cc5f11d785d60b038bf4eaaf0ae3bb8b4f1f9057587ab5a04304548a"
     },
     {
       "id": "arrayTotal_refuted",
@@ -665,7 +811,7 @@
         "ArraySemantics",
         "arrayTotal_refuted"
       ],
-      "digest": "7ca32c7f5127dac69d1d84a3b9017666e21e9f3ea508f1dccb33b3e85aacb964"
+      "digest": "8e73917d1161e1418ea3d4fc6a268b111b60918a3a326334b80f571404867520"
     },
     {
       "id": "diagonalTotal",
@@ -692,7 +838,7 @@
         "Diagonal",
         "diagonalTotal"
       ],
-      "digest": "24c6ff6e61a16e6858455375b5c49ea536869b633bb18581b299af0d8dea2423"
+      "digest": "ff3bfcd8ad8ad701f123d82946ea0683683de1d68eb0d8db4d6f654f041c18a4"
     },
     {
       "id": "diagonalTotal_refuted",
@@ -708,7 +854,7 @@
         "diagonalTotal",
         "diagonalTotal_refuted"
       ],
-      "digest": "97c9294d69bbbba71dc9954306f289fd32bc4090a480a52db6d9c2fb1475f245"
+      "digest": "34185ca8dab99648c9761ad663829d21899791ae44cd0cd7a47c5bc1eaaa4e84"
     },
     {
       "id": "diagonalUnique",
@@ -736,7 +882,7 @@
         "Diagonal",
         "diagonalUnique"
       ],
-      "digest": "15423f58f46f7373992acf1811c6edee4ea14690e9317101a11d4e568387ba5e"
+      "digest": "323a26d4e29eba0a8ac40775d7a57ebe83063f05094fd4a735a11f66832f8c4b"
     },
     {
       "id": "emptySchemaExact",
@@ -754,7 +900,7 @@
         "RecordLookup",
         "emptySchemaExact"
       ],
-      "digest": "a5dad4599df8e40adc6701e9e0ed6769085d068164428fa2fce663af9c447de0"
+      "digest": "8efa3ed28d6fdc0c19fd616ed3e27a6b26046de2ea321ea9a1f0e29ca2724d34"
     },
     {
       "id": "falseGoal",
@@ -855,7 +1001,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "ded97f0fbd8e885b46c7977f4af12bd842e0f34cf5c225deff10525fa923068d"
+      "digest": "320c03f850703a9bdc71c494f41093e4c2de9afa561be4815b0668e443fa6760"
     },
     {
       "id": "falseGoal_refuted",
@@ -870,7 +1016,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "fd4a39720be5be75c736e51751f068f7933b4e588530091df37ab5040791c05e"
+      "digest": "b0ee6bcc53a92278584dbdb126eae96c283135c2c3582d24e8c4938a6c1f420d"
     },
     {
       "id": "guardedCoverage",
@@ -904,7 +1050,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "b2532658b54ce57be1af19e15b75a4c2b3215bd8e0afea76c0795da1b825ff84"
+      "digest": "03b64b53bd64aca935eaae2ac9cb685b0151b75f57c24438e1f2c7d9bfbf2871"
     },
     {
       "id": "guardedTotal",
@@ -931,7 +1077,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "850e1cf5c63e1714b002926bb448e8326462aba1e846f7bff5572530a2603283"
+      "digest": "b60834423e6f2ec20e6a61fe6304914e9c708f0d9fb71fa5c238e3bc67ac7244"
     },
     {
       "id": "guardedTotal_refuted",
@@ -947,7 +1093,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "7d6bb11661b06feffdd69f37db2a1403bc52617e0358fbe5ecae480dcb1cc19c"
+      "digest": "1ae2a7b9bcd0e34fd9bfa1a150d3e26d0e7011a01e315059047e43d350a33f46"
     },
     {
       "id": "identityUnique",
@@ -975,7 +1121,47 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "f4cb60e78b0fddfc07b4d5dd69299ddc18326d002edcf529ad22253f39fc3ffb"
+      "digest": "3fd6ec73866799c827fec5f0b793103d94668ec1f9f824efbe5a0c940b547dc1"
+    },
+    {
+      "id": "nestedArrayTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.nestedArrayTotal_refuted",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "lean": "def nestedArrayTotal_refuted : Prop :=\n  ¬ (∀ value, NestedArrays.accepts NullableNestedArray false value = true →\n  ∃ result, NestedArrays.lookupPath value [0, 0] = some result)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedArraySemantics",
+        "NullableNestedArray"
+      ],
+      "closure": [
+        "NestedArraySemantics",
+        "NullableNestedArray",
+        "nestedArrayTotal_refuted"
+      ],
+      "digest": "e09fba2b6f923e62f87d97ee35350519aa6291fe120dbbc6a793f2ba14862666"
+    },
+    {
+      "id": "nestedArrayTypedLookup",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.nestedArrayTypedLookup",
+      "statement": {
+        "profile": "datamog-nested-array-v1",
+        "lean": "def nestedArrayTypedLookup : Prop :=\n  ∀ flags nullable value path, NestedArrays.accepts flags nullable value = true →\n  NestedArrays.Bounds value path → path.length = flags.length →\n  ∃ result, NestedArrays.lookupPath value path = some result ∧\n    NestedArrays.accepts [] (NestedArrays.leafNullable flags nullable) result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedArraySemantics",
+        "NullableNestedArray"
+      ],
+      "closure": [
+        "NestedArraySemantics",
+        "NullableNestedArray",
+        "nestedArrayTypedLookup"
+      ],
+      "digest": "fab1137ac7f110eb82a2ce87f4df276020a301fd466cbe4b50b7bb0ced5f9dc0"
     },
     {
       "id": "nestedRequiredPath",
@@ -993,7 +1179,7 @@
         "NestedRecords",
         "nestedRequiredPath"
       ],
-      "digest": "3dc2ce66afd638381fe4521ea51a48b4468ecea835b4c75d16d4cacf73fab9d2"
+      "digest": "21578b2c47db0f38e30432fcd72c3876eb00bcaddfa7cfc29e350e34c532ba09"
     },
     {
       "id": "nonnullableFieldInteger",
@@ -1011,7 +1197,7 @@
         "RecordLookup",
         "nonnullableFieldInteger"
       ],
-      "digest": "09dcaafd07ff02c3d8b595af1c26d6dfd033da1718970d81b61d7969e8e6e5a6"
+      "digest": "fd2adeea3cc804c63c9086d42ef2b184ca3712345ea78754556f4fa9b40a0955"
     },
     {
       "id": "nullableParentTotal_refuted",
@@ -1030,7 +1216,7 @@
         "NestedSchema",
         "nullableParentTotal_refuted"
       ],
-      "digest": "92519b9e74a83556e648f9919dfd9bfc6427b007474481e92fd70cfaebb27712"
+      "digest": "cbab85ccdbf755d1806f11da036a914d1eba9e2853341bbc55feab951ae33676"
     },
     {
       "id": "optionalFieldTotal_refuted",
@@ -1048,7 +1234,7 @@
         "RecordLookup",
         "optionalFieldTotal_refuted"
       ],
-      "digest": "ca1d80321d1df2f94a98548d81a8c85601547457e7f88ff8bbd8b1a866c73889"
+      "digest": "7f6f89b424a21e586972b5663f827b3d8ad239c1db15ee2374311d80dc86cee3"
     },
     {
       "id": "optionalParentTotal_refuted",
@@ -1067,7 +1253,7 @@
         "NestedSchema",
         "optionalParentTotal_refuted"
       ],
-      "digest": "80ed8ed4c1f6fcc204214dea26eaef5d2a9af1c67a44575d76e4e8a0588d4cbf"
+      "digest": "d06b6e8b874d0350007655009ee2d1b1ee9fa7ea474e2601cdde48287b2ee903"
     },
     {
       "id": "overlappingUnique",
@@ -1094,7 +1280,7 @@
         "Overlapping",
         "overlappingUnique"
       ],
-      "digest": "82f0c79b80b25b11190ddf455632d6a892f8c462438ff08956741dc1f42d39d1"
+      "digest": "a5e4f1a61cc8b326edde66dd3d5a704c9dfaf77b54db737cbf29e542abe1915a"
     },
     {
       "id": "overlappingUnique_refuted",
@@ -1110,7 +1296,7 @@
         "overlappingUnique",
         "overlappingUnique_refuted"
       ],
-      "digest": "a8a8c75ae4478d58768c9639cefa689a4e5f220bbc6290b6d6c117abbbaed15c"
+      "digest": "db37c6d77517d61b5a7451498be17d793585974c07e7d26481db40d8cf26c121"
     },
     {
       "id": "reachPreserves",
@@ -1127,7 +1313,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "0ef8ac7b9fb19329edc60971dd9f9feb980b2c92e0ffbac41873050316d2a771"
+      "digest": "caf15acb47e2ed73b99164a5f16051840896cc4e04978c42605fc29d5dec32c8"
     },
     {
       "id": "reachTransitive",
@@ -1142,7 +1328,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "d90e8419a9de23aeacd21b1a2c4127028e8d58816589b2ae5e28a9072e56b11b"
+      "digest": "2f144b58a9fd2f40ce2d81f5df309eb499043f2f51065e826cedb898e589ba7f"
     },
     {
       "id": "reachUnique",
@@ -1169,7 +1355,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "157b2caf5865fedc24f684c258c75813605745e0c73221e32e0ca8f8ab00e739"
+      "digest": "917331b697d44c470b56798978379b647394219b1ab2de16aaba99752e1c68c4"
     },
     {
       "id": "reachUnique_refuted",
@@ -1185,7 +1371,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "fbb7570027a391ffedc875e8bece1413fc8850215b401a73536bc207fa863436"
+      "digest": "336f82e10bc379e76fdb5dd610e059f5238047803a4e09a55d2d1ac6ebf8c3b2"
     },
     {
       "id": "recordAbsent",
@@ -1203,7 +1389,7 @@
         "RecordLookup",
         "recordAbsent"
       ],
-      "digest": "a25e53489752c74192dab9f3ebb09670e16fd171d3e16aade5b66c31a6f9fc75"
+      "digest": "eafb59bc2262edf5dfc1b1bc377d314971bfd63d08acea4ba31f6e20bf5905f7"
     },
     {
       "id": "recordLastWrite",
@@ -1221,7 +1407,7 @@
         "RecordLookup",
         "recordLastWrite"
       ],
-      "digest": "23930ac9fad040fe484c5c877405c7356f52e7f46b5fa3e3d039f2bb41441f08"
+      "digest": "63dff1b1a506782d01a90908100931be93798b895803b47fc5b3c56df9d2b485"
     },
     {
       "id": "recordNullDistinct",
@@ -1241,7 +1427,7 @@
         "recordLastWrite",
         "recordNullDistinct"
       ],
-      "digest": "14f706976c09c6a987c72cf57d2fe96a27a694797c06e3f25e2ba34f5e6cac5c"
+      "digest": "5037c93046894e84c722ab071e3720688f0428a5541ea99abf190cb8936fb4d2"
     },
     {
       "id": "requiredFieldPresent",
@@ -1259,7 +1445,7 @@
         "RecordLookup",
         "requiredFieldPresent"
       ],
-      "digest": "ce3583d0928c3de0be00c21b214bc8297983d6700e6c540396c007b18aa26d56"
+      "digest": "e1f5ca6a578d88187b67cb7eb5b5ccf48c17397cbe254ac29e39084f50fb9c2d"
     },
     {
       "id": "saturatingCoverage",
@@ -1287,7 +1473,7 @@
         "Saturating",
         "saturatingCoverage"
       ],
-      "digest": "fb2b4a85aff4cd146247cc959511c5f3015138fb9949256c31aa2be538c5675d"
+      "digest": "f0fb8a24b058fe92c2a767dacd9ae75894add7b1de8190b88f261973c43e91f2"
     },
     {
       "id": "saturatingUnique",
@@ -1315,7 +1501,7 @@
         "Saturating",
         "saturatingUnique"
       ],
-      "digest": "e7ff67ff8b5ae8befd51f4ab4abcc2f0d91776304d41014aeda42f292fcc6121"
+      "digest": "1da6ee020ddb07a82e95cc4498de50adbde66f3f0b64983f2d63862d0806408b"
     },
     {
       "id": "schemaClosed",
@@ -1333,7 +1519,7 @@
         "RecordLookup",
         "schemaClosed"
       ],
-      "digest": "893372fed0379953793593f5cce6132b8159debd98f057c5faabde8516c104a1"
+      "digest": "2608c0520d45b8010886b11c0fd540b317b28a745379bc8d787aaf320889c37c"
     },
     {
       "id": "schemaFieldMatches",
@@ -1351,7 +1537,7 @@
         "RecordLookup",
         "schemaFieldMatches"
       ],
-      "digest": "f8813fdb5d7f3e2676d6591ec787c526cd6673d25a5484a4c28a0de72a1fa1f0"
+      "digest": "50d9a43c00abb4326c8f82383637d038c09a9cf4ac6b07a8108cdc3105802fc4"
     },
     {
       "id": "successor",
@@ -1785,7 +1971,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "ed9475b92dce1f029edb4876a9458b5d24a6cad56b0890707c3a8415303d67a7"
+      "digest": "ae7ab43af12ace7a8bd5ba1f96a8072b6ec04bcb39dd4b4400a9fe2a0bf07f58"
     },
     {
       "id": "successorCoverage",
@@ -1819,7 +2005,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "cdb6d0e7523b3ef2288cdab4873b06adc83db0c85a478fdf7b62a8c49f4299f0"
+      "digest": "764e8b6838ec7d7cff3b1740f16298fceb358e071ae92653a14c5d6ef51a25cd"
     },
     {
       "id": "successorTotal",
@@ -1846,7 +2032,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "e86516fbedbec9d5057b55b972d3d8a18cdc53558fcd563d13a4454fb0a91d0f"
+      "digest": "3d16cad8b5e5ee57aecb57c88fb0edb4b6f2636431f18d9358e299151d377bf2"
     },
     {
       "id": "successorTotal_refuted",
@@ -1862,8 +2048,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "dd7ca291f982208bee2503562ef8076608f91ce778a2f059f816c2803b7bbbe3"
+      "digest": "94aa1751702ce9d22780547b916a0a87010fe674403b4c7b0dc5c346eedc6152"
     }
   ],
-  "digest": "a44d320474521d9864c98add6216ae5b72573541908395cc3c21d27f5121523a"
+  "digest": "aa7ad323515a86e4fdd6a2e2210ded61c98ee6761bf457ff87d91a9a397ba087"
 }

@@ -972,7 +972,9 @@ Index conventions:
 - Indices beyond the receiver length produce `""` / `[]` for string /
   array-`value` slices and `""` for string subscripts (the receiver's
   empty value). A `value` subscript that falls out of range has **no
-  value**, exactly as a missing key does (§5.4).
+  value**, exactly as a missing key does (§5.4). An integer subscript also
+  has no value when its `value` receiver is a scalar (including JSON null),
+  rather than an array. A null element inside an array remains a defined value.
 
 > **Cross-backend variance.** Strings containing an embedded NUL
 > character (`U+0000`, reachable via `parse_json("\"\\u0000\"")`) are

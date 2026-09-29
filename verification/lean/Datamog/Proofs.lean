@@ -269,4 +269,23 @@ theorem arrayTotal_refuted : Generated.arrayTotal_refuted := by
   obtain ⟨value, impossible⟩ := total [] (by simp [Arrays.accepts])
   simp [Arrays.lookupIndex] at impossible
 
+theorem nestedArrayTypedLookup : Generated.nestedArrayTypedLookup := NestedArrays.typedLookup
+
+theorem NestedArray_lookup : Generated.NestedArray_lookup := by
+  intro value path accepted bounds depth
+  exact NestedArrays.typedLookup Generated.NestedArray false value path accepted bounds depth
+
+theorem NullableNestedArray_lookup : Generated.NullableNestedArray_lookup := by
+  intro value path accepted bounds depth
+  exact NestedArrays.typedLookup Generated.NullableNestedArray false value path accepted bounds depth
+
+theorem DeepArray_lookup : Generated.DeepArray_lookup := by
+  intro value path accepted bounds depth
+  exact NestedArrays.typedLookup Generated.DeepArray false value path accepted bounds depth
+
+theorem nestedArrayTotal_refuted : Generated.nestedArrayTotal_refuted := by
+  intro total
+  obtain ⟨result, impossible⟩ := total (.array [.scalar .null]) (by decide)
+  simp [NestedArrays.lookupPath, NestedArrays.lookupIndex] at impossible
+
 end Datamog.Proofs
