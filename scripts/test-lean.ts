@@ -169,7 +169,8 @@ try {
     ),
   );
   const schemaSource = await Bun.file(join(project, "fixtures/record-schema.dl")).text();
-  const schemaCases: { record: Record<string, Scalar>; accepts: boolean }[] = [];
+  const emptySchemaSource = await Bun.file(join(project, "fixtures/empty-record-schema.dl")).text();
+  const schemaCases: { record: Record<string, Scalar>; accepts: boolean; empty?: boolean }[] = [];
   const choices = [undefined, null, 0, false] as const;
   for (const required of choices)
     for (const nullable of choices)
@@ -196,6 +197,9 @@ try {
     });
   for (const extra of [null, false, 0])
     schemaCases.push({ record: { required: 0, nullable: null, extra }, accepts: false });
+  schemaCases.push({ record: {}, accepts: true, empty: true });
+  for (const extra of [null, false, 0])
+    schemaCases.push({ record: { extra }, accepts: false, empty: true });
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -319,8 +323,8 @@ try {
         `example : integerFieldMatches ${leanFields} "x" ${optional} ${nullable} = ${accepts} := by decide`,
       );
     }
-    for (const [i, { record, accepts }] of schemaCases.entries()) {
-      const source = schemaSource
+    for (const [i, { record, accepts, empty }] of schemaCases.entries()) {
+      const source = (empty ? emptySchemaSource : schemaSource)
         .replaceAll("document", `schemaInput${i}`)
         .replaceAll("project", `schemaOutput${i}`);
       for (const [name, backend] of backends) {
@@ -348,7 +352,8 @@ try {
           throw new Error(`${name} schema acceptance regression: case ${i}`);
         if (
           accepts &&
-          JSON.stringify(rows) !== JSON.stringify([{ X: record.required, Y: record.nullable }])
+          JSON.stringify(rows) !==
+            JSON.stringify(empty ? [{ R: record }] : [{ X: record.required, Y: record.nullable }])
         )
           throw new Error(`${name} schema projection regression: case ${i}`);
       }
@@ -356,7 +361,7 @@ try {
         .map(([key, value]) => `(${JSON.stringify(key)}, ${leanScalar(value)})`)
         .join(", ")}]`;
       checks.push(
-        `example : integerRecordMatches Generated.DocumentSchema ${fields} = ${accepts} := by decide`,
+        `example : integerRecordMatches Generated.${empty ? "EmptySchema" : "DocumentSchema"} ${fields} = ${accepts} := by decide`,
       );
     }
     // Replay the positive uniqueness fixture and the branching counterexample.

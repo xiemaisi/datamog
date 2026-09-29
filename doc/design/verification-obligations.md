@@ -136,7 +136,7 @@ as values, floats, and general structural export remain unsupported.
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
-cases, 32 integer-field acceptance cases, and 261 closed-schema acceptance cases against native, SQLite, and
+cases, 32 integer-field acceptance cases, and 265 closed-schema acceptance cases against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -335,7 +335,7 @@ Lean source. Changed names, flags, fields, or predicate identities invalidate
 content identities. String keys are encoded as Unicode scalar data; unpaired
 UTF-16 surrogates are rejected.
 
-The runner compares 261 schema cases against structural input loading on native,
+The runner compares 265 schema cases against structural input loading on native,
 SQLite, and Postgres, and checks the exported schema by Lean kernel reduction.
 These cover all combinations of missing, null, integer, and Boolean values across
 four fields, both integer boundaries, and extra keys. Accepted records also have
@@ -344,6 +344,15 @@ This remains a flat integer-field fragment over `FlatRecord`; nullable record
 receivers, nested schemas, arrays, other field types, and nominal membership
 remain unsupported. It does not export arbitrary structural refinements or prove
 backend correctness.
+
+Three registered generic schema laws now prove field-check preservation,
+closedness (every accepted record key is declared), and exact empty-schema
+membership. The fixture's required-field proofs reuse the field-check theorem.
+All three laws have exact checker types, axiom audits, and unconditional CI
+requirements. The schema regression count includes four empty-schema cases:
+the empty record is accepted, while an extra integer, Boolean, or null-valued
+key is rejected. The empty fixture exports a schema definition without any
+required-field goals; it cannot itself satisfy a requested theorem ID.
 
 ## Which harder claims should be expressible?
 

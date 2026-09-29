@@ -389,10 +389,19 @@ lookup guarantee. Empty schemas are supported and generate no required-field goa
 `fixtures/record-schema.dl` exercises all four flag combinations. Its two
 required-field proofs (`DocumentSchema_field0` and `DocumentSchema_field1`) are
 maintained, audited, and required by Lean CI. The manifest preserves the predicate
-identity, column index, and schema descriptors. The runner compares 261 cases
+identity, column index, and schema descriptors. The runner compares 265 cases
 against input validation and accepted projections on native, SQLite, and Postgres,
 then checks acceptance using the generated schema by Lean reduction. Reports
 record these separately under `semanticChecks.schemaCases`.
 
 These are theorems about the flat modeled domain, not arbitrary structural
 contracts or a proof of the input validator or execution backends.
+
+The generic `schemaFieldMatches`, `schemaClosed`, and `emptySchemaExact` laws
+are also registered, audited, and required by CI. They prove that accepted
+records satisfy each declared field check, contain only declared keys, and
+match an empty schema exactly when they are empty. The fixture lookup proofs
+reuse `schemaFieldMatches`. Four of the 265 schema cases exercise the exported
+empty schema against empty records and extra integer, Boolean, and null fields.
+An empty schema generates no required-field goals; its definition is not an
+acceptable `--require-goal` target.

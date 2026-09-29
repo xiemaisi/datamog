@@ -179,17 +179,33 @@ theorem optionalFieldTotal_refuted : Generated.optionalFieldTotal_refuted := by
   obtain ⟨value, impossible⟩ := total [] "x" (by rfl)
   simp [lookupField] at impossible
 
+theorem schemaFieldMatches : Generated.schemaFieldMatches := by
+  intro schema fields field member accepted
+  simp only [integerRecordMatches, Bool.and_eq_true, List.all_eq_true] at accepted
+  exact accepted.1 field member
+
+theorem schemaClosed : Generated.schemaClosed := by
+  intro schema fields accepted entry member
+  simp only [integerRecordMatches, Bool.and_eq_true, List.all_eq_true] at accepted
+  have declared := accepted.2 entry member
+  simpa only [List.any_eq_true, beq_iff_eq] using declared
+
+theorem emptySchemaExact : Generated.emptySchemaExact := by
+  intro fields
+  cases fields with
+  | nil => decide
+  | cons entry rest => simp [integerRecordMatches]
+
 theorem DocumentSchema_field0 : Generated.DocumentSchema_field0 := by
   intro fields accepted
-  have field : integerFieldMatches fields "required" false false = true := by
-    simp [integerRecordMatches, Generated.DocumentSchema] at accepted
-    exact accepted.1.1
-  exact nonnullableFieldInteger fields _ field
+  exact nonnullableFieldInteger fields "required"
+    (schemaFieldMatches Generated.DocumentSchema fields ⟨"required", false, false⟩
+      (by simp [Generated.DocumentSchema]) accepted)
 
 theorem DocumentSchema_field1 : Generated.DocumentSchema_field1 := by
   intro fields accepted
-  apply requiredFieldPresent fields _ true
-  simp [integerRecordMatches, Generated.DocumentSchema] at accepted
-  exact accepted.1.2.1
+  exact requiredFieldPresent fields "nullable" true
+    (schemaFieldMatches Generated.DocumentSchema fields ⟨"nullable", false, true⟩
+      (by simp [Generated.DocumentSchema]) accepted)
 
 end Datamog.Proofs

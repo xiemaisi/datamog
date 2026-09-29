@@ -152,7 +152,33 @@ const recordSchema = exportLeanRecordSchema(
   compile(await Bun.file(new URL("fixtures/record-schema.dl", project)).text()),
   { id: "DocumentSchema", predicate: "document", column: 0 },
 );
+const emptyRecordSchema = exportLeanRecordSchema(
+  compile(await Bun.file(new URL("fixtures/empty-record-schema.dl", project)).text()),
+  { id: "EmptySchema", predicate: "document", column: 0 },
+);
 const recordGoals = [
+  {
+    id: "schemaFieldMatches",
+    statement: `def schemaFieldMatches : Prop :=
+  ∀ (schema : List IntegerField) (fields : FlatRecord) (field : IntegerField),
+  field ∈ schema → integerRecordMatches schema fields = true →
+  integerFieldMatches fields field.name field.optional field.nullable = true
+`,
+  },
+  {
+    id: "schemaClosed",
+    statement: `def schemaClosed : Prop :=
+  ∀ (schema : List IntegerField) (fields : FlatRecord),
+  integerRecordMatches schema fields = true →
+  ∀ entry ∈ fields, ∃ field ∈ schema, field.name = entry.1
+`,
+  },
+  {
+    id: "emptySchemaExact",
+    statement: `def emptySchemaExact : Prop :=
+  ∀ fields : FlatRecord, integerRecordMatches [] fields = true ↔ fields = []
+`,
+  },
   {
     id: "requiredFieldPresent",
     statement: `def requiredFieldPresent : Prop :=
@@ -208,6 +234,7 @@ namespace Datamog.Generated
 ${exportLeanObligation(successor[0]!, "successor")}
 ${exportLeanObligation(falseGoal, "falseGoal")}
 ${recordSchema.source}
+${emptyRecordSchema.source}
 ${recordSchema.goals.map((goal) => goal.statement).join("\n")}
 ${claims.relations}
 ${reachPreserves}
@@ -245,6 +272,7 @@ const paths = new Set([
   "verification/lean/fixtures/overlapping-successor.dl",
   "verification/lean/fixtures/diagonal.dl",
   "verification/lean/fixtures/record-schema.dl",
+  "verification/lean/fixtures/empty-record-schema.dl",
   "scripts/generate-lean.ts",
   "scripts/test-lean.ts",
   "bun.lock",
@@ -278,6 +306,7 @@ const manifest = await createVerificationManifest(
     },
     ...claims.nodes,
     ...recordSchema.nodes,
+    ...emptyRecordSchema.nodes,
     {
       id: "RecordLookup",
       kind: "definition",

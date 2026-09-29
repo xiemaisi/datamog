@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: 0b843297ee8756e597b1c2f9ae1dda31a02caa01bd380705bfa38ede8e86dca9
+-- Verification manifest SHA-256: 14539c84ac616721a5f61c4b30d8e5a44eaacc45fb2b2a392d8e8edfd729ed90
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -48,6 +48,12 @@ theorem DocumentSchema_field0 : Generated.DocumentSchema_field0 := Proofs.Docume
 #audit DocumentSchema_field0
 theorem DocumentSchema_field1 : Generated.DocumentSchema_field1 := Proofs.DocumentSchema_field1
 #audit DocumentSchema_field1
+theorem schemaFieldMatches : Generated.schemaFieldMatches := Proofs.schemaFieldMatches
+#audit schemaFieldMatches
+theorem schemaClosed : Generated.schemaClosed := Proofs.schemaClosed
+#audit schemaClosed
+theorem emptySchemaExact : Generated.emptySchemaExact := Proofs.emptySchemaExact
+#audit emptySchemaExact
 theorem requiredFieldPresent : Generated.requiredFieldPresent := Proofs.requiredFieldPresent
 #audit requiredFieldPresent
 theorem nonnullableFieldInteger : Generated.nonnullableFieldInteger := Proofs.nonnullableFieldInteger

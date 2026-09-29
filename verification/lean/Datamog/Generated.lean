@@ -18,6 +18,9 @@ def falseGoal : Prop :=
 def DocumentSchema : List Datamog.IntegerField :=
   [⟨(String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]), false, false⟩, ⟨(String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true⟩, ⟨(String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false⟩, ⟨(String.ofList [Char.ofNat 109, Char.ofNat 97, Char.ofNat 121, Char.ofNat 98, Char.ofNat 101]), true, true⟩]
 
+def EmptySchema : List Datamog.IntegerField :=
+  []
+
 def DocumentSchema_field0 : Prop :=
   ∀ fields : Datamog.FlatRecord, Datamog.integerRecordMatches DocumentSchema fields = true →
   ∃ n : Datamog.SafeInt, Datamog.lookupField fields (String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]) = some (Datamog.Value.integer n)
@@ -102,6 +105,19 @@ def diagonalUnique : Prop :=
 def diagonalTotal : Prop :=
   ∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt),
   input0 v0 v1 → ∃ (w1 : Datamog.SafeInt), Diagonal input0 v0 w1
+
+def schemaFieldMatches : Prop :=
+  ∀ (schema : List IntegerField) (fields : FlatRecord) (field : IntegerField),
+  field ∈ schema → integerRecordMatches schema fields = true →
+  integerFieldMatches fields field.name field.optional field.nullable = true
+
+def schemaClosed : Prop :=
+  ∀ (schema : List IntegerField) (fields : FlatRecord),
+  integerRecordMatches schema fields = true →
+  ∀ entry ∈ fields, ∃ field ∈ schema, field.name = entry.1
+
+def emptySchemaExact : Prop :=
+  ∀ fields : FlatRecord, integerRecordMatches [] fields = true ↔ fields = []
 
 def requiredFieldPresent : Prop :=
   ∀ (fields : FlatRecord) (key : String) (nullable : Bool),
