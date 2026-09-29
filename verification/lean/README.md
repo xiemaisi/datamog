@@ -405,3 +405,28 @@ reuse `schemaFieldMatches`. Four of the 265 schema cases exercise the exported
 empty schema against empty records and extra integer, Boolean, and null fields.
 An empty schema generates no required-field goals; its definition is not an
 acceptable `--require-goal` target.
+
+### Nested integer-record schemas
+
+`exportLeanNestedRecordSchema` in `packages/core/src/nested-record-schema-lean.ts`
+exports non-null input record columns with nested closed records and integer
+leaves. `Datamog/NestedRecords.lean` supplies a separate recursive value domain,
+membership checks, and literal-segment path lookup. Every field retains its
+optional and nullable flags. Arrays, other leaf types, and nominal membership
+remain unsupported; the root record must be non-null.
+
+Generated leaf lookup goals require every parent to be required and non-nullable.
+Required integer leaves get an integer witness; required nullable leaves get a
+presence guarantee. Optional/nullable parents generate no descendant total-lookup
+claim. The generic `nestedRequiredPath` theorem proves this rule by induction;
+`NestedSchema_path0` and `NestedSchema_path1` instantiate it for the fixture.
+`optionalParentTotal_refuted` and `nullableParentTotal_refuted` establish why
+removing those parent requirements is unsound. All five are registered, audited,
+and required by Lean CI, with the `datamog-nested-record-v1` profile.
+
+The runner compares 61 cases on native, SQLite, and Postgres, checking input
+acceptance and projections for admitted records. Missing/null values, wrong
+scalar shapes, extra keys at multiple depths, and integer boundaries are covered.
+Lean checks the exported membership predicate and five path lookups per case.
+Reports record `semanticChecks.nestedSchemaCases` separately. These results
+concern the modeled fragment, not general schema translation or backend proofs.

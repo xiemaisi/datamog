@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: 14539c84ac616721a5f61c4b30d8e5a44eaacc45fb2b2a392d8e8edfd729ed90
+-- Verification manifest SHA-256: 65fd7facfe3bd8df8dc8417364d07ad99c646b3e8c0e8227435dc3ed104c3c92
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -48,6 +48,16 @@ theorem DocumentSchema_field0 : Generated.DocumentSchema_field0 := Proofs.Docume
 #audit DocumentSchema_field0
 theorem DocumentSchema_field1 : Generated.DocumentSchema_field1 := Proofs.DocumentSchema_field1
 #audit DocumentSchema_field1
+theorem NestedSchema_path0 : Generated.NestedSchema_path0 := Proofs.NestedSchema_path0
+#audit NestedSchema_path0
+theorem NestedSchema_path1 : Generated.NestedSchema_path1 := Proofs.NestedSchema_path1
+#audit NestedSchema_path1
+theorem nestedRequiredPath : Generated.nestedRequiredPath := Proofs.nestedRequiredPath
+#audit nestedRequiredPath
+theorem optionalParentTotal_refuted : Generated.optionalParentTotal_refuted := Proofs.optionalParentTotal_refuted
+#audit optionalParentTotal_refuted
+theorem nullableParentTotal_refuted : Generated.nullableParentTotal_refuted := Proofs.nullableParentTotal_refuted
+#audit nullableParentTotal_refuted
 theorem schemaFieldMatches : Generated.schemaFieldMatches := Proofs.schemaFieldMatches
 #audit schemaFieldMatches
 theorem schemaClosed : Generated.schemaClosed := Proofs.schemaClosed

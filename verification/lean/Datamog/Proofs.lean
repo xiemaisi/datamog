@@ -208,4 +208,40 @@ theorem DocumentSchema_field1 : Generated.DocumentSchema_field1 := by
     (schemaFieldMatches Generated.DocumentSchema fields ⟨"nullable", false, true⟩
       (by simp [Generated.DocumentSchema]) accepted)
 
+theorem nestedRequiredPath : Generated.nestedRequiredPath := by
+  intro schema path nullable required value accepted
+  exact Nested.requiredPathLookup required value accepted
+
+theorem NestedSchema_path0 : Generated.NestedSchema_path0 := by
+  intro value accepted
+  apply Nested.requiredIntegerLookup (schema := Generated.NestedSchema) _ value accepted
+  apply Nested.RequiredPath.step (by simp [Generated.NestedSchema]; rfl)
+  apply Nested.RequiredPath.step (by simp; rfl)
+  exact Nested.RequiredPath.leaf (by simp)
+
+theorem NestedSchema_path1 : Generated.NestedSchema_path1 := by
+  intro value accepted
+  have required : Nested.RequiredPath Generated.NestedSchema ["required", "inner", "nullable"] true := by
+    apply Nested.RequiredPath.step (by simp [Generated.NestedSchema]; rfl)
+    apply Nested.RequiredPath.step (by simp; rfl)
+    exact Nested.RequiredPath.leaf (by simp)
+  obtain ⟨result, found, _⟩ := Nested.requiredPathLookup required value accepted
+  exact ⟨result, found⟩
+
+private def nestedCounterexample : Nested.Value := .record [
+  ("required", .record [("inner", .record [("n", .scalar (.integer ⟨0, by decide⟩)),
+    ("nullable", .scalar .null)])]), ("nullable", .scalar .null)]
+
+theorem optionalParentTotal_refuted : Generated.optionalParentTotal_refuted := by
+  intro total
+  obtain ⟨result, impossible⟩ := total nestedCounterexample (by
+    simp [Generated.NestedSchema, nestedCounterexample, Nested.accepts, Nested.lookup])
+  simp [nestedCounterexample, Nested.lookupPath, Nested.lookup] at impossible
+
+theorem nullableParentTotal_refuted : Generated.nullableParentTotal_refuted := by
+  intro total
+  obtain ⟨result, impossible⟩ := total nestedCounterexample (by
+    simp [Generated.NestedSchema, nestedCounterexample, Nested.accepts, Nested.lookup])
+  simp [nestedCounterexample, Nested.lookupPath, Nested.lookup] at impossible
+
 end Datamog.Proofs

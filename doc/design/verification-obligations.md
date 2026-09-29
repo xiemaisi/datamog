@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus flat-record schema export started**. This extends the future-work discussion in
+and coverage claims plus flat and nested record schema export started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -129,14 +129,16 @@ Other derived calls, mutual recursion, constraints, negation, aggregates, and
 other computed terms remain unsupported by relational export.
 The semantic library distinguishes null from undefined and defines bounded
 integer operations and truth. A separate `Records.lean` library now models
-lookup in flat records containing these scalar values; nested structures, strings
-as values, floats, and general structural export remain unsupported.
+lookup in flat records containing these scalar values. `NestedRecords.lean`
+adds a separate recursive record value domain and closed integer-leaf schemas.
+Arrays, strings as values, floats, and general structural export remain unsupported.
 
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
-cases, 32 integer-field acceptance cases, and 265 closed-schema acceptance cases against native, SQLite, and
+cases, 32 integer-field acceptance cases, 265 flat-schema acceptance cases,
+and 61 nested-schema cases against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -342,7 +344,7 @@ four fields, both integer boundaries, and extra keys. Accepted records also have
 their required-field projections checked. Reports count these as `schemaCases`.
 This remains a flat integer-field fragment over `FlatRecord`; nullable record
 receivers, nested schemas, arrays, other field types, and nominal membership
-remain unsupported. It does not export arbitrary structural refinements or prove
+remain unsupported by this flat exporter. It does not export arbitrary structural refinements or prove
 backend correctness.
 
 Three registered generic schema laws now prove field-check preservation,
@@ -353,6 +355,40 @@ requirements. The schema regression count includes four empty-schema cases:
 the empty record is accepted, while an extra integer, Boolean, or null-valued
 key is rejected. The empty fixture exports a schema definition without any
 required-field goals; it cannot itself satisfy a requested theorem ID.
+
+## Nested integer-record schemas
+
+The internal `exportLeanNestedRecordSchema` API translates non-null input record
+columns with recursively nested closed records and integer leaves. Optionality
+and nullability are preserved at each field; both records and leaves can carry
+those flags. The separate `datamog-nested-record-v1` profile uses recursive record
+values containing the existing bounded integers, Booleans, and null. Lookup
+returns no value for a missing key or a non-record parent, while a null leaf is
+a defined value. Keys remain literal path segments, so a dotted key is not split.
+
+The exporter generates integer-leaf path goals only when every ancestor is
+required and non-nullable and the leaf is required. Non-nullable leaves get an
+integer witness; nullable leaves get a presence guarantee. Optional or nullable
+parents suppress descendant total-lookup goals, but their schemas still constrain
+any present non-null record. Membership rejects extra keys at every level.
+Empty nested records are supported and generate no leaf guarantees.
+
+A generic theorem proves the required-parent rule by induction on a path through
+the schema. The three-level fixture instantiates it for integer and nullable
+leaves. Two further theorems refute total child lookup through an optional parent
+and a nullable parent, using an accepted record with an absent optional field and
+an explicitly null parent. All five results have exact generated checker types,
+transitive axiom audits, manifest identities, and unconditional CI requirements.
+
+The runner compares 61 nested cases against input loading and accepted projections
+on native, SQLite, and Postgres. Cases cover missing and null parents/leaves,
+wrong scalar shapes, extra keys at three depths, and both safe-integer boundaries.
+Lean checks membership and five path lookups per case by kernel-checked reduction
+and rewriting. Reports count these separately as `nestedSchemaCases`.
+
+This exporter does not support nullable root records, arrays, non-integer leaf
+schemas, nominal types, or arbitrary structural refinements. It does not extend
+the local SMT or relational exporters, and it does not prove backend correctness.
 
 ## Which harder claims should be expressible?
 

@@ -200,6 +200,85 @@ try {
   schemaCases.push({ record: {}, accepts: true, empty: true });
   for (const extra of [null, false, 0])
     schemaCases.push({ record: { extra }, accepts: false, empty: true });
+  type NestedValue = Scalar | { [key: string]: NestedValue };
+  const nestedSource = await Bun.file(join(project, "fixtures/nested-record-schema.dl")).text();
+  const nestedCases: { value: NestedValue; accepts: boolean }[] = [];
+  const baseline = (): Record<string, NestedValue> => ({
+    required: { inner: { n: 0, nullable: null } },
+    nullable: null,
+  });
+  const variations: (NestedValue | undefined)[] = [
+    undefined,
+    null,
+    false,
+    0,
+    {},
+    { n: null },
+    { n: false },
+    { n: 0 },
+    { n: -9007199254740991 },
+    { n: 9007199254740991 },
+    { n: 0, extra: null },
+  ];
+  for (const key of ["optional", "nullable", "maybe"])
+    for (const value of variations) {
+      const record = baseline();
+      if (value === undefined) delete record[key];
+      else record[key] = value;
+      const accepts =
+        value === undefined
+          ? key !== "nullable"
+          : value === null
+            ? key !== "optional"
+            : typeof value === "object" &&
+              Object.keys(value).length === 1 &&
+              typeof value.n === "number";
+      nestedCases.push({ value: record, accepts });
+    }
+  for (const value of [null, false, 0]) nestedCases.push({ value, accepts: false });
+  for (const value of [undefined, null, false, 0, {}]) {
+    const record = baseline();
+    if (value === undefined) Reflect.deleteProperty(record, "required");
+    else record.required = value;
+    nestedCases.push({ value: record, accepts: false });
+    nestedCases.push({
+      value: { ...baseline(), required: value === undefined ? {} : { inner: value } },
+      accepts: false,
+    });
+  }
+  for (const key of ["n", "nullable"])
+    for (const value of [undefined, null, false, 0, -9007199254740991, 9007199254740991]) {
+      const inner: Record<string, NestedValue> = { n: 0, nullable: null };
+      if (value === undefined) delete inner[key];
+      else inner[key] = value;
+      nestedCases.push({
+        value: { ...baseline(), required: { inner } },
+        accepts: typeof value === "number" || (key === "nullable" && value === null),
+      });
+    }
+  nestedCases.push(
+    { value: { ...baseline(), extra: null }, accepts: false },
+    {
+      value: { ...baseline(), required: { inner: { n: 0, nullable: null }, extra: 0 } },
+      accepts: false,
+    },
+    {
+      value: { ...baseline(), required: { inner: { n: 0, nullable: null, extra: false } } },
+      accepts: false,
+    },
+  );
+  const leanNested = (value: NestedValue): string =>
+    value !== null && typeof value === "object"
+      ? `(.record [${Object.entries(value)
+          .map(([key, child]) => `(${JSON.stringify(key)}, ${leanNested(child)})`)
+          .join(", ")}])`
+      : `(.scalar ${leanScalar(value)})`;
+  const nestedLookup = (value: NestedValue, path: string[]): NestedValue | undefined => {
+    let current: NestedValue | undefined = value;
+    for (const key of path)
+      current = current !== null && typeof current === "object" ? current[key] : undefined;
+    return current;
+  };
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -364,6 +443,68 @@ try {
         `example : integerRecordMatches Generated.${empty ? "EmptySchema" : "DocumentSchema"} ${fields} = ${accepts} := by decide`,
       );
     }
+    for (const [i, { value, accepts }] of nestedCases.entries()) {
+      const source = [
+        nestedSource
+          .replaceAll("document", `nestedInput${i}`)
+          .replaceAll("project", `nestedOutput${i}`),
+        ...["optional", "nullable", "maybe"].map(
+          (key, j) =>
+            `output predicate nestedPath${i}_${j}(X) :- nestedInput${i}(R), X = R["${key}"]["n"].`,
+        ),
+      ].join("\n");
+      const paths = [
+        ["required", "inner", "n"],
+        ["required", "inner", "nullable"],
+        ["optional", "n"],
+        ["nullable", "n"],
+        ["maybe", "n"],
+      ];
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "nested-schema-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              await insertRows(target, decl, [{ r: value }]);
+              return { rowsLoaded: 1 };
+            },
+          },
+        ]);
+        let rejected = false;
+        let results: { rows: Record<string, unknown>[] }[] = [];
+        try {
+          results = await executor.execute(source);
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes("column 'r'")) throw error;
+          rejected = true;
+        }
+        if (rejected === accepts)
+          throw new Error(`${name} nested schema acceptance regression: ${i}`);
+        if (accepts) {
+          const expected = [
+            [{ X: nestedLookup(value, paths[0]!), Y: nestedLookup(value, paths[1]!) }],
+            ...paths.slice(2).map((path) => {
+              const result = nestedLookup(value, path);
+              return result === undefined ? [] : [{ X: result }];
+            }),
+          ];
+          if (JSON.stringify(results.map((result) => result.rows)) !== JSON.stringify(expected))
+            throw new Error(`${name} nested schema lookup regression: ${i}`);
+        }
+      }
+      checks.push(
+        `example : Nested.accepts Generated.NestedSchema ${leanNested(value)} = ${accepts} := by simp [Nested.accepts, Generated.NestedSchema, Nested.lookup]`,
+      );
+      for (const path of paths) {
+        const result = nestedLookup(value, path);
+        checks.push(
+          `example : Nested.lookupPath ${leanNested(value)} [${path.map((key) => JSON.stringify(key)).join(", ")}] = ${result === undefined ? "none" : `some ${leanNested(result)}`} := by rfl`,
+        );
+      }
+    }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
     const relationCases = [
@@ -480,6 +621,7 @@ try {
   console.log(
     `${schemaCases.length} Lean/${backendNames.join("/")} schema acceptance cases passed.`,
   );
+  console.log(`${nestedCases.length} Lean/${backendNames.join("/")} nested schema cases passed.`);
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
@@ -487,6 +629,7 @@ try {
     recordCases: recordCases.length,
     fieldCases: fieldCases.length,
     schemaCases: schemaCases.length,
+    nestedSchemaCases: nestedCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

@@ -2,7 +2,7 @@
   "purpose": "verification-plan",
   "schema": "datamog-verification-manifest-v1",
   "context": {
-    "profile": "datamog-integer-v1+flat-record-v1",
+    "profile": "datamog-integer-v1+flat-record-v1+nested-record-v1",
     "toolchain": "leanprover/lean4:v4.34.0",
     "method": "lean-kernel-checked",
     "artifacts": {
@@ -23,6 +23,7 @@
       "packages/core/src/keywords.ts": "29c032498cfaa7cdaf6eecbb8d7b7ddb5351ae8aaa3f3511d580a6ce28ed2e6f",
       "packages/core/src/module-diagnostics.ts": "533dfec57c7e184a84f299792e6d0a1b29de40f4b39bb3f0e462f6c50cecc74b",
       "packages/core/src/negation-cycle.ts": "b72c07b68cdb4d316e78967a6cc6e469cfcfe166471fb03f567832650326ad60",
+      "packages/core/src/nested-record-schema-lean.ts": "bfd787f26ba51d73f19559b2ff4bdbb201784f06d7759836586e706b421f0818",
       "packages/core/src/nominal-declarations.ts": "0171e114c236de88b0d8e7c4172f17f263410236fc7babdb48835a9d7ab41a44",
       "packages/core/src/nullable-operands.ts": "9872a68e350742e90d100ab2cebf8ac094943f270ddc0afa5f24cfcab33cd0d7",
       "packages/core/src/nullness-diagnostics.ts": "19196b925ce2d81d93b9d20479f949a1cf0abb2cb3e350b29a36ef32689407af",
@@ -63,17 +64,19 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "e64d72e29f0fb818ed661f892828fc91d65ddac12b464fd3cd669f8140bc1e64",
-      "scripts/test-lean.ts": "0f1040a2f908643b8c5601efd636b2bbff50df3b825bdff83f42173ca8191dfc",
+      "scripts/generate-lean.ts": "c1b81c4c29871b46f085fb409295498b901ece4bc4a8d856c173b16821c12272",
+      "scripts/test-lean.ts": "3b18f8f4c2d4043390b4a12d01fbc325851521faf2cf6f84960c86ae9b3955be",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
-      "verification/lean/Datamog/Proofs.lean": "3eaa6113834792577c3d18350c0f787ccf52625545d0e3e52789e5ec52df9bdd",
+      "verification/lean/Datamog/NestedRecords.lean": "d6977de990c608dce3a30d9100ca640ef9efc01fb5ed24a438ff9806d93b33f7",
+      "verification/lean/Datamog/Proofs.lean": "6d4485d23473bb324a8aff21f7a44e3afa960f3ce0ca2e7f79be82699420938d",
       "verification/lean/Datamog/Records.lean": "6b45612757719f0ec4808654c5785c38029b4fb9593d31678bc528c7cf583500",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
       "verification/lean/fixtures/diagonal.dl": "923978fa45dded0ddac1dfcf32c47f92e3e871f867ab82e4dd94024a6748b772",
       "verification/lean/fixtures/empty-record-schema.dl": "7be9918e3e4fad5080ddb88efcd1b302c39cdb30a0debaefee2d37e64186d685",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
+      "verification/lean/fixtures/nested-record-schema.dl": "0f5874637a16b68637a0a53b3bbe52b9cc3e7d1d4a9ffea38f5d3141df89369f",
       "verification/lean/fixtures/overlapping-successor.dl": "67911bcf126cdd11acee729084b6f60c11a013f81459e9949a027bfbcf80369a",
       "verification/lean/fixtures/reach.dl": "50f40c88cc85758d214646a9e5f4859b8e8ced80a5eccb19dc8dd626823d57d8",
       "verification/lean/fixtures/record-schema.dl": "ba0c59e081821de1e542b716bd1d94f332fd2fe57d743e4773e716d83a50aafe",
@@ -84,7 +87,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "6e7e8fa6e00e1e7157da4b09c6664f135868cc8f5d96f570bc0cfa7757c7eb56",
+  "contextDigest": "dd54e753b74edc3bb971e69db2d4bc0bb89b7ee77602c4168c7c21be090e0209",
   "entries": [
     {
       "id": "Diagonal",
@@ -105,7 +108,7 @@
       "closure": [
         "Diagonal"
       ],
-      "digest": "dd825a1d7471054bae98bb6b37f472f8022b2ec97dbfecb710a9702af471a1e9"
+      "digest": "83f0b4d1968f4ae0590e0f3310e837239221eebceb874cd53631679ade5ce0c7"
     },
     {
       "id": "DocumentSchema",
@@ -147,7 +150,7 @@
         "DocumentSchema",
         "RecordLookup"
       ],
-      "digest": "9f1489c10ac2bb3865123f2066b6554541cfce6a131873feb351f9b113e96fc2"
+      "digest": "0d437c58c04c6ef1a98cccac155ec821e2e8207ae68ebfc46224d821a40c37e1"
     },
     {
       "id": "DocumentSchema_field0",
@@ -166,7 +169,7 @@
         "DocumentSchema_field0",
         "RecordLookup"
       ],
-      "digest": "1e72ef598279a4b7d21d1a394bb67e9aa2b0f2b9232b0448dbf52bc8de7b11d6"
+      "digest": "3614c7f6c17eb769881cca216ad27b0ee260ac7a068034c89f5dddce710575a0"
     },
     {
       "id": "DocumentSchema_field1",
@@ -185,7 +188,7 @@
         "DocumentSchema_field1",
         "RecordLookup"
       ],
-      "digest": "52eedd70ac97fdd96cdaa0c037576e622e6bf769c0b770f3e8b385e91510b3ca"
+      "digest": "42330ca5406f49a9e872b11af8efa5f3a636c525c15ec862af95809c136463c5"
     },
     {
       "id": "EmptySchema",
@@ -206,7 +209,7 @@
         "EmptySchema",
         "RecordLookup"
       ],
-      "digest": "d4d9b82d93df92d3d0aecbca69574ddd580d216edd0d227fd09e0e68bcce278d"
+      "digest": "b2a3665ee1aaa4eac929e02959a7cd497fb76fa6d78aefd02078991bc2e4e414"
     },
     {
       "id": "Guarded",
@@ -227,7 +230,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "1ee564fd8375b8a76e8af280cefad696f9f72b547aa96d2b7f1c526c763ac9a5"
+      "digest": "f246425c79a8b471710a32863a606b5756898420cd88b72df955308ebdd25761"
     },
     {
       "id": "Identity",
@@ -248,7 +251,159 @@
       "closure": [
         "Identity"
       ],
-      "digest": "3bf9971fbfcf4ca92ebf8593511ab3d31aa0caea2d605f28d43fdacf83cf77a7"
+      "digest": "b21d6fbe8717715cd93aa5faf5ae00af1939cd3270cbd9d9ecce3d606419531a"
+    },
+    {
+      "id": "NestedRecords",
+      "kind": "definition",
+      "statement": "import Datamog.Semantics\n\nnamespace Datamog.Nested\n\ninductive Value where\n  | scalar (value : Datamog.Value)\n  | record (fields : List (String × Value))\n\ndef lookup : List (String × Value) → String → Option Value\n  | [], _ => none\n  | (name, value) :: rest, key =>\n    match lookup rest key with\n    | some found => some found\n    | none => if name = key then some value else none\n\ndef lookupPath : Value → List String → Option Value\n  | value, [] => some value\n  | .record fields, key :: rest => (lookup fields key).bind (fun value => lookupPath value rest)\n  | .scalar _, _ :: _ => none\n\ninductive Schema where\n  | integer\n  | record (fields : List (String × Bool × Bool × Schema))\n\ndef accepts (schema : Schema) (value : Value) : Bool :=\n  match schema, value with\n  | .integer, .scalar (.integer _) => true\n  | .record schemaFields, .record fields =>\n    schemaFields.attach.all (fun field =>\n      have _bound := List.sizeOf_lt_of_mem field.property\n      match lookup fields field.val.1 with\n      | none => field.val.2.1\n      | some (.scalar .null) => field.val.2.2.1\n      | some value => accepts field.val.2.2.2 value) &&\n    fields.all (fun entry => schemaFields.any (fun field => field.1 == entry.1))\n  | _, _ => false\ntermination_by sizeOf schema\ndecreasing_by\n  rcases field with ⟨⟨key, optional, nullable, child⟩, member⟩\n  simp_all [Schema.record.sizeOf_spec, Prod.mk.sizeOf_spec]\n  omega\n\n-- Every parent is required and non-nullable. The leaf may explicitly admit null.\ninductive RequiredPath : Schema → List String → Bool → Prop where\n  | leaf : (key, false, nullable, Schema.integer) ∈ fields →\n      RequiredPath (.record fields) [key] nullable\n  | step : (key, false, false, Schema.record children) ∈ fields →\n      RequiredPath (.record children) rest nullable →\n      RequiredPath (.record fields) (key :: rest) nullable\n\ndef leafMatches (nullable : Bool) : Value → Bool\n  | .scalar (.integer _) => true\n  | .scalar .null => nullable\n  | _ => false\n\ntheorem fieldAccepted (schema : List (String × Bool × Bool × Schema))\n    (fields : List (String × Value)) (key : String) (optional nullable : Bool) (child : Schema)\n    (member : (key, optional, nullable, child) ∈ schema)\n    (accepted : accepts (.record schema) (.record fields) = true) :\n    (match lookup fields key with\n      | none => optional\n      | some (.scalar .null) => nullable\n      | some value => accepts child value) = true := by\n  simp only [accepts, Bool.and_eq_true, List.all_eq_true] at accepted\n  exact accepted.1 ⟨(key, optional, nullable, child), member⟩ (by simp)\n\ntheorem requiredPathLookup {schema : Schema} {path : List String} {nullable : Bool}\n    (required : RequiredPath schema path nullable) (value : Value)\n    (accepted : accepts schema value = true) :\n    ∃ result, lookupPath value path = some result ∧ leafMatches nullable result = true := by\n  induction required generalizing value with\n  | @leaf fields key nullable member =>\n    cases value with\n    | scalar v => simp [accepts] at accepted\n    | record entries =>\n      have h := fieldAccepted fields entries key false nullable .integer member accepted\n      cases found : lookup entries key with\n      | none => simp [found] at h\n      | some v =>\n        refine ⟨v, ?_, ?_⟩\n        · simp [lookupPath, found]\n        · cases v with\n          | record r => simp [found, accepts] at h\n          | scalar v => cases v <;> simp_all [accepts, leafMatches]\n  | @step fields key children rest nullable member required ih =>\n    cases value with\n    | scalar v => simp [accepts] at accepted\n    | record entries =>\n      have h := fieldAccepted fields entries key false false (.record children) member accepted\n      cases found : lookup entries key with\n      | none => simp [found] at h\n      | some v =>\n        cases v with\n        | scalar v => cases v <;> simp [found, accepts] at h\n        | record inner =>\n          have childAccepted : accepts (.record children) (.record inner) = true := by\n            simpa [found] using h\n          obtain ⟨result, lookupResult, valid⟩ := ih (.record inner) childAccepted\n          exact ⟨result, by simpa [lookupPath, found] using lookupResult, valid⟩\n\ntheorem requiredIntegerLookup {schema : Schema} {path : List String}\n    (required : RequiredPath schema path false) (value : Value)\n    (accepted : accepts schema value = true) :\n    ∃ n : SafeInt, lookupPath value path = some (.scalar (.integer n)) := by\n  obtain ⟨result, found, valid⟩ := requiredPathLookup required value accepted\n  cases result with\n  | record fields => simp [leafMatches] at valid\n  | scalar v =>\n    cases v with\n    | null => simp [leafMatches] at valid\n    | boolean b => simp [leafMatches] at valid\n    | integer n => exact ⟨n, found⟩\n\nend Datamog.Nested\n",
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "NestedRecords"
+      ],
+      "digest": "0f16dd40b7e368a49847448ce96c493cab844e43715933f91acc82fe3c5849a7"
+    },
+    {
+      "id": "NestedSchema",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-nested-record-v1",
+        "id": "NestedSchema",
+        "predicate": "document",
+        "column": 0,
+        "fields": [
+          {
+            "name": "required",
+            "optional": false,
+            "nullable": false,
+            "children": [
+              {
+                "name": "inner",
+                "optional": false,
+                "nullable": false,
+                "children": [
+                  {
+                    "name": "n",
+                    "optional": false,
+                    "nullable": false,
+                    "children": null
+                  },
+                  {
+                    "name": "nullable",
+                    "optional": false,
+                    "nullable": true,
+                    "children": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "optional",
+            "optional": true,
+            "nullable": false,
+            "children": [
+              {
+                "name": "n",
+                "optional": false,
+                "nullable": false,
+                "children": null
+              }
+            ]
+          },
+          {
+            "name": "nullable",
+            "optional": false,
+            "nullable": true,
+            "children": [
+              {
+                "name": "n",
+                "optional": false,
+                "nullable": false,
+                "children": null
+              }
+            ]
+          },
+          {
+            "name": "maybe",
+            "optional": true,
+            "nullable": true,
+            "children": [
+              {
+                "name": "n",
+                "optional": false,
+                "nullable": false,
+                "children": null
+              }
+            ]
+          }
+        ],
+        "lean": "def NestedSchema : Datamog.Nested.Schema :=\n  (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]), false, false, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 105, Char.ofNat 110, Char.ofNat 110, Char.ofNat 101, Char.ofNat 114]), false, false, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, Datamog.Nested.Schema.integer)]))])), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer)])), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer)])), ((String.ofList [Char.ofNat 109, Char.ofNat 97, Char.ofNat 121, Char.ofNat 98, Char.ofNat 101]), true, true, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer)]))])\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedRecords"
+      ],
+      "closure": [
+        "NestedRecords",
+        "NestedSchema"
+      ],
+      "digest": "287eac922ba2da6c40ba8b3e943c789fce599e22cedd4b003e11ad9c15d1268d"
+    },
+    {
+      "id": "NestedSchema_path0",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.NestedSchema_path0",
+      "statement": {
+        "profile": "datamog-nested-record-v1",
+        "path": {
+          "keys": [
+            "required",
+            "inner",
+            "n"
+          ],
+          "nullable": false
+        },
+        "lean": "def NestedSchema_path0 : Prop :=\n  ∀ value : Datamog.Nested.Value, Datamog.Nested.accepts NestedSchema value = true →\n  ∃ n : Datamog.SafeInt, Datamog.Nested.lookupPath value [(String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]), (String.ofList [Char.ofNat 105, Char.ofNat 110, Char.ofNat 110, Char.ofNat 101, Char.ofNat 114]), (String.ofList [Char.ofNat 110])] = some (.scalar (.integer n))\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedSchema"
+      ],
+      "closure": [
+        "NestedRecords",
+        "NestedSchema",
+        "NestedSchema_path0"
+      ],
+      "digest": "2dcc9413f5f619118ae9ce52a3d673cb077420d3285a9928ed5a497511469942"
+    },
+    {
+      "id": "NestedSchema_path1",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.NestedSchema_path1",
+      "statement": {
+        "profile": "datamog-nested-record-v1",
+        "path": {
+          "keys": [
+            "required",
+            "inner",
+            "nullable"
+          ],
+          "nullable": true
+        },
+        "lean": "def NestedSchema_path1 : Prop :=\n  ∀ value : Datamog.Nested.Value, Datamog.Nested.accepts NestedSchema value = true →\n  ∃ result, Datamog.Nested.lookupPath value [(String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]), (String.ofList [Char.ofNat 105, Char.ofNat 110, Char.ofNat 110, Char.ofNat 101, Char.ofNat 114]), (String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101])] = some result\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedSchema"
+      ],
+      "closure": [
+        "NestedRecords",
+        "NestedSchema",
+        "NestedSchema_path1"
+      ],
+      "digest": "0843ff1b31d34200fc313c69b1977e51f1d365a5daceae7c36c299aa8e808ce5"
     },
     {
       "id": "Overlapping",
@@ -269,7 +424,7 @@
       "closure": [
         "Overlapping"
       ],
-      "digest": "8c5f940a44b882fe72bda9c4a142899a0f25a639a9de520e64142d694ae67df6"
+      "digest": "ebf82ac13d25e1133c9f4d033093fcee486891f3d72d52b8a19ffb909e748b29"
     },
     {
       "id": "Reach",
@@ -290,7 +445,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "e6c479d0cdfbd2669d44e34654e9a759c32004f8baf79cb609c093b95ec27429"
+      "digest": "3ea257c4f733733dc1dfc446bc8907edf9e6979ed336ba2f9bd7addab0e07583"
     },
     {
       "id": "RecordLookup",
@@ -301,7 +456,7 @@
       "closure": [
         "RecordLookup"
       ],
-      "digest": "306072fee583fcd694a62b8c1623a13f9713350d9d7259ea7c32d0ff2f43bb62"
+      "digest": "5cf5516137a4c34df9770e7076f80cc7cf4438e92759a4ef41d7056789cf10ee"
     },
     {
       "id": "Saturating",
@@ -322,7 +477,7 @@
       "closure": [
         "Saturating"
       ],
-      "digest": "7da6091ec810a5997424062f76e9f09e109fa61e7591173396d8bb34719b9468"
+      "digest": "80ac324e3f5cffd986c1ed23d40790bb0d5b76adc820228988e6288d147af8f6"
     },
     {
       "id": "Successor",
@@ -343,7 +498,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "1529d0c185b7d4c6080d53d94245fe4017570373b495a5355d3d54c47fdc87cd"
+      "digest": "1b8847f0d4f98bd086d47d8575bbf5b3e91df9cdfa1f45ad8e545daca59568e9"
     },
     {
       "id": "diagonalTotal",
@@ -370,7 +525,7 @@
         "Diagonal",
         "diagonalTotal"
       ],
-      "digest": "c96f234420765ad36bc160429d7566148335f182e0c835890c79a88d7423ffa8"
+      "digest": "a8b9e6f3e72b3da87437c0946e98947101249fe7a10af58113c68af77134088d"
     },
     {
       "id": "diagonalTotal_refuted",
@@ -386,7 +541,7 @@
         "diagonalTotal",
         "diagonalTotal_refuted"
       ],
-      "digest": "866833009ed330c157542385aff5cb5a37999b0ba1c33b61aae7a4f4fe26db5d"
+      "digest": "6ee5446b5b3b1d39d2bd910b8312df47e6d75b1f4a2e01e54c1729b08bf27df2"
     },
     {
       "id": "diagonalUnique",
@@ -414,7 +569,7 @@
         "Diagonal",
         "diagonalUnique"
       ],
-      "digest": "26819a99a1eefb5fe90830c9e1f95149c814c4f5e00924ee6aeb323176575d12"
+      "digest": "8e3b398afecdf03a5ecdb577154e75391f5e6a359c6f23aeb7852efd4a060824"
     },
     {
       "id": "emptySchemaExact",
@@ -432,7 +587,7 @@
         "RecordLookup",
         "emptySchemaExact"
       ],
-      "digest": "54b65dc8faca7de2d5c22c7b90c6f5998e7a90a1f82ef192e889ebc147894679"
+      "digest": "7023aef23d43833f6a677146520998b16261b0e6ed52d5caa6ce388dd1622268"
     },
     {
       "id": "falseGoal",
@@ -533,7 +688,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "09a4159337c7fa2c2e3d8efec966cc3ac21414fec3c7464569dc1e262fe96b18"
+      "digest": "b19d231849d36f9ecc4e1175934220bc59fd61f49ebe25fba2b0c64383fe8ae3"
     },
     {
       "id": "falseGoal_refuted",
@@ -548,7 +703,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "baf23e5f13afe71bf64eb2f9aadc89dee3f5f5c1a941ecf18b009890176a0126"
+      "digest": "58db6f702d59056758d8ab7e9a57eba1ff55f978812853b8d0f7dbdc279fb789"
     },
     {
       "id": "guardedCoverage",
@@ -582,7 +737,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "e064e5ed464b0146c87e6e2c4f1d5473a593950c39feec82267d7652179990e3"
+      "digest": "fca01e40de73cf855fde81f1c6260732b07c1df2f33410a33be32680862fee6b"
     },
     {
       "id": "guardedTotal",
@@ -609,7 +764,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "699d2de90e2032776ec85a9f1410a7c83643e07b8014360f29c9bf25062653be"
+      "digest": "1ac717bb99aa37bb723679cdcb832bdcf3f6769e6ede9fbd20c6c32854da7571"
     },
     {
       "id": "guardedTotal_refuted",
@@ -625,7 +780,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "e19bb9418d523e3cd2b2320d89d3e917f3dfbc31cd7398e45b2fd31a0e25b72e"
+      "digest": "95f4bd689d1685506eb84d652fc85973775b4374b31c9e32925a15cf1bd2cff0"
     },
     {
       "id": "identityUnique",
@@ -653,7 +808,25 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "d5be6634460d1029447bdc73e999e104c59d9007e710f079b3f09b7252f3403d"
+      "digest": "057b92624420b0073ffcbc0f5e3b3439ad71e1a6d74b81ded0aea87c60ee4676"
+    },
+    {
+      "id": "nestedRequiredPath",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.nestedRequiredPath",
+      "statement": {
+        "profile": "datamog-nested-record-v1",
+        "lean": "def nestedRequiredPath : Prop :=\n  ∀ (schema : Nested.Schema) (path : List String) (nullable : Bool),\n  Nested.RequiredPath schema path nullable → ∀ value,\n  Nested.accepts schema value = true →\n  ∃ result, Nested.lookupPath value path = some result ∧ Nested.leafMatches nullable result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedRecords"
+      ],
+      "closure": [
+        "NestedRecords",
+        "nestedRequiredPath"
+      ],
+      "digest": "83769abc4f98a3d4125e5c008bcac4c0e8dcd41fe230577b28e4b1463c093091"
     },
     {
       "id": "nonnullableFieldInteger",
@@ -671,7 +844,26 @@
         "RecordLookup",
         "nonnullableFieldInteger"
       ],
-      "digest": "addc77b8162a7cc2f92da6ba14e68f692781e26eb0c8abe1051e1ae94a2c32c1"
+      "digest": "fb3a79133b4ba9fccbc3ac73a7996e490bac9a90757395892ecb7fa98ff0ac61"
+    },
+    {
+      "id": "nullableParentTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.nullableParentTotal_refuted",
+      "statement": {
+        "profile": "datamog-nested-record-v1",
+        "lean": "def nullableParentTotal_refuted : Prop :=\n  ¬ (∀ value, Nested.accepts NestedSchema value = true →\n  ∃ result, Nested.lookupPath value [\"nullable\", \"n\"] = some result)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedSchema"
+      ],
+      "closure": [
+        "NestedRecords",
+        "NestedSchema",
+        "nullableParentTotal_refuted"
+      ],
+      "digest": "1e0b84b031c3d7105510498b4fc78371a6b43f67a70c97eb93b3c473c8d12fdf"
     },
     {
       "id": "optionalFieldTotal_refuted",
@@ -689,7 +881,26 @@
         "RecordLookup",
         "optionalFieldTotal_refuted"
       ],
-      "digest": "7d6d466319ae39824fa5fd1e85645a6fbe0e3f599708da576992f16bf78f965f"
+      "digest": "56338140e96271d16396bec2855c6f4cf505f9e4962b995825c488ea330c5a9c"
+    },
+    {
+      "id": "optionalParentTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.optionalParentTotal_refuted",
+      "statement": {
+        "profile": "datamog-nested-record-v1",
+        "lean": "def optionalParentTotal_refuted : Prop :=\n  ¬ (∀ value, Nested.accepts NestedSchema value = true →\n  ∃ result, Nested.lookupPath value [\"optional\", \"n\"] = some result)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "NestedSchema"
+      ],
+      "closure": [
+        "NestedRecords",
+        "NestedSchema",
+        "optionalParentTotal_refuted"
+      ],
+      "digest": "d4dd004780b4ba5b64565d546c5799d2cdff8bc7c36036b179a83b8cc6b5c7c8"
     },
     {
       "id": "overlappingUnique",
@@ -716,7 +927,7 @@
         "Overlapping",
         "overlappingUnique"
       ],
-      "digest": "670a45acdd25457c015ea338765004b33770fa4a157db6eef5566e345fcfd87d"
+      "digest": "cef5076b05db68f24a9292150e096d5cb01733337b805a1f981faab316a740a7"
     },
     {
       "id": "overlappingUnique_refuted",
@@ -732,7 +943,7 @@
         "overlappingUnique",
         "overlappingUnique_refuted"
       ],
-      "digest": "6c385cf82890487c43f408491e4f0a7406858d055ab7ff1837ed32c20a4f8537"
+      "digest": "823579a825c4d9f4c6e716b6cc89a564ecd12f7e32da2977d809db5fd134051a"
     },
     {
       "id": "reachPreserves",
@@ -749,7 +960,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "2c0cb414ed213702979fb3bfa4ff6e9be0275ef9229974c74e8796953ba03b1d"
+      "digest": "61f687ddd9eefe6a710db81ac8040b481690d43a546085f0baa9f118a52527d3"
     },
     {
       "id": "reachTransitive",
@@ -764,7 +975,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "29c22ef235b37d1ce2f3987cbc055387bdc13ae46632f36773cf86ad953048d9"
+      "digest": "0a855211449a6dca5058887b2e537cc78be5e2ae678b5b5b00dbbcf98da2a5c0"
     },
     {
       "id": "reachUnique",
@@ -791,7 +1002,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "537b9d439eb6b82ca7e9ddd3c214f5436e40b8c87afcb85c40ebb4791826d3a6"
+      "digest": "4eaa78b3a97846bd48f08877cafbfa33699529bd1f04c21234c8ea91b820e068"
     },
     {
       "id": "reachUnique_refuted",
@@ -807,7 +1018,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "4b03cb7f431412b00c228102067b56f8fdd1ccee34dba556f45942f382e1581b"
+      "digest": "fd378422218730c90708c1a4c23ab2b0345bdabf2dfafdea6d51a0028bf2cc78"
     },
     {
       "id": "recordAbsent",
@@ -825,7 +1036,7 @@
         "RecordLookup",
         "recordAbsent"
       ],
-      "digest": "3296340df30ef77784c34d6087009f09713e404726b126819ce07fc3a3050b15"
+      "digest": "0098d991b521030d6e41aa71b893f2899a9ac23faba28ad3c3d7805ecd7b2615"
     },
     {
       "id": "recordLastWrite",
@@ -843,7 +1054,7 @@
         "RecordLookup",
         "recordLastWrite"
       ],
-      "digest": "3c67e9d5e23dbce08975f75a30732e78fa03ec73b81cfaf55f3a59fb24f7e78d"
+      "digest": "9037598a4682cb3df6459ab6d9c20e2ed4444ddd1979438f3ae914e6d3341a08"
     },
     {
       "id": "recordNullDistinct",
@@ -863,7 +1074,7 @@
         "recordLastWrite",
         "recordNullDistinct"
       ],
-      "digest": "15e37b97562d576da32cd821314e50fde2e92428d729aa266eb3a75fc43cbbeb"
+      "digest": "9f4458884b1e886f673eca0a3943e057d76d6e0fd175371b9ba51a833434b9e6"
     },
     {
       "id": "requiredFieldPresent",
@@ -881,7 +1092,7 @@
         "RecordLookup",
         "requiredFieldPresent"
       ],
-      "digest": "24335f52c72ea87908972aba523949d85ec0a482d56561c9c1e1953cc576fe08"
+      "digest": "a9dfea19608ba99ab20421b306abe7cddb15fd5c5973074e5c4339002563b3d4"
     },
     {
       "id": "saturatingCoverage",
@@ -909,7 +1120,7 @@
         "Saturating",
         "saturatingCoverage"
       ],
-      "digest": "f915e2c0d70ca8f8ce258fabecca902661284d883201bea6091f72f81ee3efbe"
+      "digest": "04c94b4bcf622de8a0fd1900059cb315e8b79efd593e5b18398ebabd74d1ef7c"
     },
     {
       "id": "saturatingUnique",
@@ -937,7 +1148,7 @@
         "Saturating",
         "saturatingUnique"
       ],
-      "digest": "652c08b209d4fca112d391b757e02118aef388c668c502996d51ded365303cde"
+      "digest": "2cfec585818be28a39a0c1fd2d3a2db253f0f2c7f56fb06d987163e67f3b5a4f"
     },
     {
       "id": "schemaClosed",
@@ -955,7 +1166,7 @@
         "RecordLookup",
         "schemaClosed"
       ],
-      "digest": "43a4edfba519d3ff651e75aca7a770eba1b1b1f4ee13270a26ca02207396fc6b"
+      "digest": "a55deeaa30f2729dfdfea56a25b1645570e8e76e21762b3ba66de49e5087f765"
     },
     {
       "id": "schemaFieldMatches",
@@ -973,7 +1184,7 @@
         "RecordLookup",
         "schemaFieldMatches"
       ],
-      "digest": "1093e89939428dd26287e6947707ca4ae8c59152fcef24f467a2846d00998354"
+      "digest": "09ee7ee2d74b5bead913bfc6d49ec0aa3ef55345172088b42195955ab515e2f8"
     },
     {
       "id": "successor",
@@ -1407,7 +1618,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "e5d6576e3b834eca6f0a5d3e4f6328b2ad9392282fde00996f62011de1414662"
+      "digest": "f7d05430e6251040044409b03b92d91e81b1bb02026895c493415747ede7dc2b"
     },
     {
       "id": "successorCoverage",
@@ -1441,7 +1652,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "60b080072311d42ee9500ad3b9acaa03c597e18ae5dd8bbf500f9acf21033cd4"
+      "digest": "5e037956a7a1682e7d732c62d7abf093bd277d8bcfc483983d2686dfe79bf007"
     },
     {
       "id": "successorTotal",
@@ -1468,7 +1679,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "d766c84a8955bf7144239c78e8f0a49c498535820ae8d710c4cc4093759b6d99"
+      "digest": "dd99af072449f35a0ac584c1b6db75f265356614ef797f4b97839974cb493e0e"
     },
     {
       "id": "successorTotal_refuted",
@@ -1484,8 +1695,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "0ff935809616b82c1a62c3f253e95a89c322908786b129ece4bbf5a8a13c3ae0"
+      "digest": "50ae69ed57927e38c2047ec9b61ddff83f0672d711b339721be2fa7875707bf5"
     }
   ],
-  "digest": "14539c84ac616721a5f61c4b30d8e5a44eaacc45fb2b2a392d8e8edfd729ed90"
+  "digest": "65fd7facfe3bd8df8dc8417364d07ad99c646b3e8c0e8227435dc3ed104c3c92"
 }
