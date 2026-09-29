@@ -9,6 +9,7 @@ import {
   exportLeanUniqueness,
 } from "../packages/core/src/obligation-lean.ts";
 import { exportLeanRecordSchema } from "../packages/core/src/record-schema-lean.ts";
+import { exportLeanStructuralSchema } from "../packages/core/src/structural-schema-lean.ts";
 import {
   assertCurrentVerificationManifest,
   createVerificationManifest,
@@ -193,6 +194,42 @@ const arraySchemas = await Promise.all(
     }),
   ),
 );
+const structuralSchemas = await Promise.all(
+  [
+    ["MixedSchema", "mixed-schema.dl"],
+    ["MixedArraySchema", "mixed-array-schema.dl"],
+    ["MixedOptionalSchema", "mixed-optional-schema.dl"],
+  ].map(async ([id, fixture]) =>
+    exportLeanStructuralSchema(
+      compile(await Bun.file(new URL(`fixtures/${fixture}`, project)).text()),
+      { id: id!, predicate: "items", column: 0 },
+    ),
+  ),
+);
+const structuralGoals = [
+  {
+    id: "structuralRequiredLookup",
+    statement: `def structuralRequiredLookup : Prop :=
+  ∀ schema path nullable, Structural.RequiredPath schema path nullable →
+  ∀ value, Structural.accepts schema value = true → Structural.ArrayBounds value path →
+  ∃ result, Structural.lookupPath value path = some result ∧ Structural.leafMatches nullable result = true
+`,
+  },
+  ...[
+    [
+      "mixedEmptyTotal_refuted",
+      '[.field "teams", .index 0, .field "members", .index 0, .field "age"]',
+    ],
+    ["mixedOptionalTotal_refuted", '[.field "optional", .field "age"]'],
+    ["mixedNullTotal_refuted", '[.field "nullable", .field "age"]'],
+  ].map(([id, path]) => ({
+    id: id!,
+    statement: `def ${id} : Prop :=
+  ¬ (∀ value, Structural.accepts MixedSchema value = true →
+  ∃ result, Structural.lookupPath value ${path} = some result)
+`,
+  })),
+];
 const nestedArraySchemas = await Promise.all(
   [
     ["NestedArray", "nested-array.dl"],
@@ -329,9 +366,12 @@ import Datamog.Records
 import Datamog.NestedRecords
 import Datamog.Arrays
 import Datamog.NestedArrays
+import Datamog.Structural
 namespace Datamog.Generated
 ${exportLeanObligation(successor[0]!, "successor")}
 ${exportLeanObligation(falseGoal, "falseGoal")}
+${structuralSchemas.map((schema) => schema.source + schema.goals.map((goal) => goal.statement).join("\n")).join("\n")}
+${structuralGoals.map((goal) => goal.statement).join("\n")}
 ${nestedArraySchemas.map((schema) => schema.source + schema.statement).join("\n")}
 ${nestedArrayGoals.map((goal) => goal.statement).join("\n")}
 ${arraySchemas.map((schema) => schema.source + schema.statement).join("\n")}
@@ -364,6 +404,8 @@ theorem falseGoal_refuted : ¬ Generated.falseGoal := Proofs.falseGoal_refuted
 ${claims.checker}
 ${recordSchema.checker}
 ${nestedSchema.checker}
+${structuralSchemas.map((schema) => schema.checker).join("\n")}
+${structuralGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
 ${nestedArraySchemas.map((schema) => schema.checker).join("\n")}
 ${nestedArrayGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
 ${arraySchemas.map((schema) => schema.checker).join("\n")}
@@ -385,6 +427,9 @@ const paths = new Set([
   "verification/lean/fixtures/diagonal.dl",
   "verification/lean/fixtures/record-schema.dl",
   "verification/lean/fixtures/nested-record-schema.dl",
+  "verification/lean/fixtures/mixed-schema.dl",
+  "verification/lean/fixtures/mixed-array-schema.dl",
+  "verification/lean/fixtures/mixed-optional-schema.dl",
   "verification/lean/fixtures/nested-array.dl",
   "verification/lean/fixtures/nullable-nested-array.dl",
   "verification/lean/fixtures/deep-array.dl",
@@ -425,6 +470,22 @@ const manifest = await createVerificationManifest(
     ...claims.nodes,
     ...recordSchema.nodes,
     ...nestedSchema.nodes,
+    ...structuralSchemas.flatMap((schema) => schema.nodes),
+    {
+      id: "StructuralSemantics",
+      kind: "definition",
+      statement: await Bun.file(new URL("Datamog/Structural.lean", project)).text(),
+      assumptions: [],
+      dependencies: [],
+    },
+    ...structuralGoals.map(({ id, statement }) => ({
+      id,
+      kind: "goal" as const,
+      theorem: `Datamog.Checked.${id}`,
+      statement: { profile: "datamog-structural-integer-v1", lean: statement },
+      assumptions: [],
+      dependencies: id === "structuralRequiredLookup" ? ["StructuralSemantics"] : ["MixedSchema"],
+    })),
     ...nestedArraySchemas.flatMap((schema) => schema.nodes),
     {
       id: "NestedArraySemantics",
@@ -523,7 +584,8 @@ const manifest = await createVerificationManifest(
     },
   ],
   {
-    profile: "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1+nested-array-v1",
+    profile:
+      "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1+nested-array-v1+structural-integer-v1",
     toolchain: (await Bun.file(new URL("lean-toolchain", project)).text()).trim(),
     method: "lean-kernel-checked",
     artifacts,

@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus record and nested integer-array schema export started**. This extends the future-work discussion in
+and coverage claims plus composable record/array schema export started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -133,17 +133,18 @@ lookup in flat records containing these scalar values. `NestedRecords.lean`
 adds a separate recursive record value domain and closed integer-leaf schemas.
 `Arrays.lean` models scalar arrays with integer-element schemas and partial indexing.
 `NestedArrays.lean` adds recursively nested integer arrays with per-level
-nullability and bounded path lookup. Strings as values, floats, arrays of records,
-and general structural export remain unsupported.
+nullability and bounded path lookup. Strings as values, floats, and arbitrary
+structural refinements remain unsupported.
+`Structural.lean` now composes closed records and integer-leaf arrays in a shared
+value domain and schema model.
 
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
 cases, 32 integer-field acceptance cases, 265 flat-schema acceptance cases,
-61 nested-schema cases, 114 integer-array cases, and 376 nested-array cases
-against native, SQLite, and
-configured Postgres execution and check those results by Lean kernel reduction.
+61 nested-schema cases, 114 integer-array cases, 376 nested-array cases,
+and 137 mixed structural cases against native, SQLite, and configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
 configured elsewhere. Fresh reports record concrete-case coverage separately
@@ -455,6 +456,56 @@ null parents from null array elements.
 Nullable root arrays, arrays containing records, arrays inside records, and
 non-integer leaf schemas remain unsupported by this exporter. These proofs concern
 the modeled language, not backend correctness or general structural refinements.
+
+## Composable record and array schemas
+
+`exportLeanStructuralSchema` adds a shared recursive model for closed records and
+arrays with integer leaves, under `datamog-structural-integer-v1`. It accepts
+non-null record or array input columns, including expanded aliases, and preserves
+optional record fields and nullability at every child position. For example:
+
+```prolog
+input predicate people(data: {
+  teams: [{members: [{age: integer, score?: integer?}]}]
+}).
+```
+
+The exporter generates leaf goals with literal field segments and a universally
+quantified index for every array step. Required non-nullable containers permit
+descendant goals; optional or nullable containers suppress them. Required nullable
+integer leaves retain a guarantee of an integer or explicit null. Empty record
+schemas and schemas containing only optional paths produce definitions without
+inventing total-lookup goals.
+
+`Structural.ArrayBounds` requires each array index to be in range for the actual
+array reached at that step. Field steps do not assume presence: they propagate
+bounds only if a child exists, leaving schema membership to establish required
+fields. The generic `structuralRequiredLookup` proof combines those facts by
+induction on a typed mixed path. Thus the bounds do not silently assume the
+required-field conclusion or computed-head definedness.
+
+Three generated fixture goals cover records containing arrays of records and an
+array root containing records and nested arrays. Three refutations show that
+empty arrays, absent optional fields, and null parents prevent unconditional
+lookup. These six results and the generic theorem have exact checker types,
+transitive axiom audits, manifest identities, and unconditional CI requirements.
+
+The runner compares 137 cases against native, SQLite, and Postgres loading and
+mixed-path projection. Cases include missing fields, null at each kind of parent,
+nullable array elements, optional nullable leaves, ragged and empty arrays, wrong
+shapes, extra keys at multiple depths, and safe-integer boundaries. Lean checks
+membership and nonnegative path results; runtime comparisons also exercise
+negative and wide dynamic indices independently at every array level. Reports
+record `structuralSchemaCases`. Concrete Lean checks run in sequential batches
+to limit elaborator memory; all batches must pass before a fresh report is written.
+An additional optional-only fixture emits no
+lookup theorem and cannot satisfy a requested goal ID by its schema definition.
+
+This remains an internal schema exporter. Nullable roots, non-integer leaf types,
+nominal types, and arbitrary refinements remain unsupported. It does not yet
+connect schema guarantees to generated rule-projection obligations, extend the
+SMT or relational exporters, or prove backend correctness. The earlier scoped
+record and array APIs remain available.
 
 ## Which harder claims should be expressible?
 

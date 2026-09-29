@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: aa7ad323515a86e4fdd6a2e2210ded61c98ee6761bf457ff87d91a9a397ba087
+-- Verification manifest SHA-256: 0de6c4e09b5e4f3c2b98edea24f53cbce36b62cf5c3ff8cb6014981044002885
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -52,6 +52,21 @@ theorem NestedSchema_path0 : Generated.NestedSchema_path0 := Proofs.NestedSchema
 #audit NestedSchema_path0
 theorem NestedSchema_path1 : Generated.NestedSchema_path1 := Proofs.NestedSchema_path1
 #audit NestedSchema_path1
+theorem MixedSchema_path0 : Generated.MixedSchema_path0 := Proofs.MixedSchema_path0
+#audit MixedSchema_path0
+theorem MixedSchema_path1 : Generated.MixedSchema_path1 := Proofs.MixedSchema_path1
+#audit MixedSchema_path1
+theorem MixedArraySchema_path0 : Generated.MixedArraySchema_path0 := Proofs.MixedArraySchema_path0
+#audit MixedArraySchema_path0
+
+theorem structuralRequiredLookup : Generated.structuralRequiredLookup := Proofs.structuralRequiredLookup
+#audit structuralRequiredLookup
+theorem mixedEmptyTotal_refuted : Generated.mixedEmptyTotal_refuted := Proofs.mixedEmptyTotal_refuted
+#audit mixedEmptyTotal_refuted
+theorem mixedOptionalTotal_refuted : Generated.mixedOptionalTotal_refuted := Proofs.mixedOptionalTotal_refuted
+#audit mixedOptionalTotal_refuted
+theorem mixedNullTotal_refuted : Generated.mixedNullTotal_refuted := Proofs.mixedNullTotal_refuted
+#audit mixedNullTotal_refuted
 theorem NestedArray_lookup : Generated.NestedArray_lookup := Proofs.NestedArray_lookup
 #audit NestedArray_lookup
 theorem NullableNestedArray_lookup : Generated.NullableNestedArray_lookup := Proofs.NullableNestedArray_lookup

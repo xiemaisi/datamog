@@ -4,6 +4,7 @@ import Datamog.Records
 import Datamog.NestedRecords
 import Datamog.Arrays
 import Datamog.NestedArrays
+import Datamog.Structural
 namespace Datamog.Generated
 def successor : Prop :=
   ∀ (v0 : Int) (v1 : Prop) (v2 : Int),
@@ -17,6 +18,51 @@ def falseGoal : Prop :=
   ∀ (v0 : Int),
   (((-(9007199254740991 : Int)) <= v0) ∧ (v0 <= (9007199254740991 : Int))) →
   (v0 > (0 : Int))
+
+def MixedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)])))]))), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer)]))])
+def MixedSchema_path0 : Prop :=
+  ∀ (value : Datamog.Structural.Value) (i0 : Nat) (i1 : Nat),
+  Datamog.Structural.accepts MixedSchema value = true →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] →
+  ∃ result, Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] = some result ∧
+    Datamog.Structural.leafMatches false result = true
+
+def MixedSchema_path1 : Prop :=
+  ∀ (value : Datamog.Structural.Value) (i0 : Nat) (i1 : Nat),
+  Datamog.Structural.accepts MixedSchema value = true →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →
+  ∃ result, Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result ∧
+    Datamog.Structural.leafMatches true result = true
+
+def MixedArraySchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))))]))
+def MixedArraySchema_path0 : Prop :=
+  ∀ (value : Datamog.Structural.Value) (i0 : Nat) (i1 : Nat) (i2 : Nat),
+  Datamog.Structural.accepts MixedArraySchema value = true →
+  Datamog.Structural.ArrayBounds value [.index i0, .field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1, .index i2, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result, Datamog.Structural.lookupPath value [.index i0, .field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1, .index i2, .field (String.ofList [Char.ofNat 110])] = some result ∧
+    Datamog.Structural.leafMatches false result = true
+
+def MixedOptionalSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), true, true, Datamog.Structural.Schema.integer)])))])
+
+def structuralRequiredLookup : Prop :=
+  ∀ schema path nullable, Structural.RequiredPath schema path nullable →
+  ∀ value, Structural.accepts schema value = true → Structural.ArrayBounds value path →
+  ∃ result, Structural.lookupPath value path = some result ∧ Structural.leafMatches nullable result = true
+
+def mixedEmptyTotal_refuted : Prop :=
+  ¬ (∀ value, Structural.accepts MixedSchema value = true →
+  ∃ result, Structural.lookupPath value [.field "teams", .index 0, .field "members", .index 0, .field "age"] = some result)
+
+def mixedOptionalTotal_refuted : Prop :=
+  ¬ (∀ value, Structural.accepts MixedSchema value = true →
+  ∃ result, Structural.lookupPath value [.field "optional", .field "age"] = some result)
+
+def mixedNullTotal_refuted : Prop :=
+  ¬ (∀ value, Structural.accepts MixedSchema value = true →
+  ∃ result, Structural.lookupPath value [.field "nullable", .field "age"] = some result)
 
 def NestedArray : List Bool := [false, false]
 def NestedArray_lookup : Prop :=

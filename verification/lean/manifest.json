@@ -2,7 +2,7 @@
   "purpose": "verification-plan",
   "schema": "datamog-verification-manifest-v1",
   "context": {
-    "profile": "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1+nested-array-v1",
+    "profile": "datamog-integer-v1+flat-record-v1+nested-record-v1+integer-array-v1+nested-array-v1+structural-integer-v1",
     "toolchain": "leanprover/lean4:v4.34.0",
     "method": "lean-kernel-checked",
     "artifacts": {
@@ -48,6 +48,7 @@
       "packages/core/src/semantic-widening.ts": "566b6df4f3a97b807b2f314de1785168ba8f6acf732217a44d235b9cba8b11f1",
       "packages/core/src/semantic-work.ts": "8bea87fd6b120e4e1bbcf7ae2aceeaf696e0fdd1194a055676aabcda3f61960e",
       "packages/core/src/structural-declarations.ts": "64d1bc033e10285dcbd2546fd5b0e78e6a8b3386ab513ea61bac8d5ff8fa3232",
+      "packages/core/src/structural-schema-lean.ts": "a1a826c5e661cff7a519ed90589135b9da4cc73a3015607c4cb88488456c8142",
       "packages/core/src/typed-operands.ts": "6207483c60786963b6e028476f14b4e17cf2becd1a3db28a95fabdecced65403",
       "packages/core/src/types.ts": "fd6c0d121056e9953d519348da2003d3831f74ae7d38a41b7fa8181d43762e07",
       "packages/core/src/util.ts": "b11325b8cd7e04d5958b4ec84d3661971f7821742d08683cc27a700206c5d1b1",
@@ -66,22 +67,26 @@
       "packages/parser/src/proof-metadata.ts": "95491204868b4a146caac753515b072d161d0bb74b5e0b979d340f043f7b9302",
       "packages/parser/src/refinements.ts": "eda106411a292402847e2835d27a25a9c86c697ce7f8e6f997f6760778d139cf",
       "packages/parser/src/type-aliases.ts": "4304d3910848cf852d79f98586049f9316aeb5ca0a8235908f5245d73f09d0c5",
-      "scripts/generate-lean.ts": "c6ce02909d8ba1b54170b8db975b7ba66987a0e017f7f4b4b73d28c18d35d8c2",
-      "scripts/test-lean.ts": "e1c9e68b521b55b0c651bbc0019098a265256d3e369379e76c12459d57c6d7a5",
+      "scripts/generate-lean.ts": "b2e79e3ee534c137f24d4efeedcc779d37a08cd4103c23dc5970c867c8e0d8bf",
+      "scripts/test-lean.ts": "6e55eb1cea060bad61679cc844661ad5dec8ddcba7570ce4041079ca53e0a59c",
       "verification/lean/Datamog.lean": "723c3971300fee384057b82c0eca5bf55ae6694521bfd0ac65d6ab9bdebcd921",
       "verification/lean/Datamog/Arrays.lean": "9c810a40e45ad05518678107e0a31a1c4262ee124f9e9515768dd4a7d56fec22",
       "verification/lean/Datamog/Audit.lean": "284a92ca7d952d60aecda72441716b20090e1f597c450f0e9e19f9bcfd8143b0",
       "verification/lean/Datamog/NestedArrays.lean": "453ade4cd22db54134442bfacddbbf8ef4875dfdef9c7912e2607a7ff2af62b3",
       "verification/lean/Datamog/NestedRecords.lean": "d6977de990c608dce3a30d9100ca640ef9efc01fb5ed24a438ff9806d93b33f7",
-      "verification/lean/Datamog/Proofs.lean": "c7ee92b0cd9b18d7c987d1e5020943ac951a10d080d9a3078c57649f5f11f04a",
+      "verification/lean/Datamog/Proofs.lean": "2da7acd7ff6f46bf318d090d40b0c508404c9c82a40c0ba37698681a193283de",
       "verification/lean/Datamog/Records.lean": "6b45612757719f0ec4808654c5785c38029b4fb9593d31678bc528c7cf583500",
       "verification/lean/Datamog/Semantics.lean": "83324e89ca466fe248a928df126ff73d700a1ef2d7c0e73c610184839a2fddc3",
+      "verification/lean/Datamog/Structural.lean": "d6ae66fcfc0add34c038f391289938b6a5c321e0a0cd0b823256aa13b996623f",
       "verification/lean/fixtures/deep-array.dl": "383d7625660d582520b9206c389485556dd0ac98d18119810917c6cce08148a7",
       "verification/lean/fixtures/diagonal.dl": "923978fa45dded0ddac1dfcf32c47f92e3e871f867ab82e4dd94024a6748b772",
       "verification/lean/fixtures/empty-record-schema.dl": "7be9918e3e4fad5080ddb88efcd1b302c39cdb30a0debaefee2d37e64186d685",
       "verification/lean/fixtures/guarded-successor.dl": "6a3ab3c1c0da0bb9520972a8f86f98d513d491b0ecbd85c66e6de3a63e2d6c29",
       "verification/lean/fixtures/identity.dl": "eec60f1c8984afae8771a898a6f51b679086f46998066b53e37f10de2195cccc",
       "verification/lean/fixtures/integer-array.dl": "439f33d7d8c885ef68242040292fd0e6d92feeb0b46eccfa4a9f3bed20b4009e",
+      "verification/lean/fixtures/mixed-array-schema.dl": "89f9247c899ae03899c6ddf8f65af7c684c231e0c8efcc81422eaa49854f1674",
+      "verification/lean/fixtures/mixed-optional-schema.dl": "f8cf71099fa5378f9c3b34b835ed9c7207690857fa18c5b06e5e0aa5c743190f",
+      "verification/lean/fixtures/mixed-schema.dl": "df817683a3a433ca570fafa1bcb2c526688481ebe2d1796f0a50532eac80e34a",
       "verification/lean/fixtures/nested-array.dl": "a1fec65cd409cccb6fd8a5595dffcc15a628ea70f05dfd87e13caa6af0880b24",
       "verification/lean/fixtures/nested-record-schema.dl": "0f5874637a16b68637a0a53b3bbe52b9cc3e7d1d4a9ffea38f5d3141df89369f",
       "verification/lean/fixtures/nullable-integer-array.dl": "7de4552b4bb05cc2b05cbc53297b1610ac1db207209b8da57cc62dacdd16243a",
@@ -96,7 +101,7 @@
       "verification/lean/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
     }
   },
-  "contextDigest": "c0bb607705cdbe5dc51711b17ee0ac340df4abb1e95709cf4368f25d4dd18ba2",
+  "contextDigest": "45d1777f9ccbf5d6275548d1bdf78bca9bacede7b4973eb4e35dfb07ba171351",
   "entries": [
     {
       "id": "ArraySemantics",
@@ -107,7 +112,7 @@
       "closure": [
         "ArraySemantics"
       ],
-      "digest": "f190bf14021adbff362cc34a172f11f8e7e1e594652f4877dc5f4d9045e78f2c"
+      "digest": "2d5d7b989942d174432f2c7d3a2d3ed5b1e03b403741cb0f6ac49c7b87f42a2f"
     },
     {
       "id": "DeepArray",
@@ -132,7 +137,7 @@
         "DeepArray",
         "NestedArraySemantics"
       ],
-      "digest": "2aafb124984d35638c9b035fe1972185c105b3548e1246543993371126bf7d5b"
+      "digest": "581ea0dbfaf05e72a434236d44ba27ed75b19aef5abae73a9fb7067ee360e89f"
     },
     {
       "id": "DeepArray_lookup",
@@ -151,7 +156,7 @@
         "DeepArray_lookup",
         "NestedArraySemantics"
       ],
-      "digest": "a959154eeac39ba0f382b72c9c5880031966f8fa6626782defbd4d88450b5db3"
+      "digest": "6c3e52eb6c7ee2e4cb38f042c68f8b3fdd19d010260f20373a8e3f8df75b31f7"
     },
     {
       "id": "Diagonal",
@@ -172,7 +177,7 @@
       "closure": [
         "Diagonal"
       ],
-      "digest": "7df4f69e6db1640d09978a26220e48994654591944d74c9f1cef679e060c5166"
+      "digest": "b207e1eb58cb27ce95e4d45e21c74cf8c354ee82858125cc71cb5de36381f66f"
     },
     {
       "id": "DocumentSchema",
@@ -214,7 +219,7 @@
         "DocumentSchema",
         "RecordLookup"
       ],
-      "digest": "a51ff001fa3cd3124100944bd1d5a887f22a0d40b90832a504fd0d977291196f"
+      "digest": "e9746b106299e06dbacdb81eb7559f8bebb996b0db7b5a9b4079e01ab185d56f"
     },
     {
       "id": "DocumentSchema_field0",
@@ -233,7 +238,7 @@
         "DocumentSchema_field0",
         "RecordLookup"
       ],
-      "digest": "75294099b9ad85700a6f0070575f9e1fd0b1313998644695292d17c114cb5b95"
+      "digest": "3ad4134f92efc4b3ea96440240d68a6d575aeaf46d19b3f0320d3de949841a65"
     },
     {
       "id": "DocumentSchema_field1",
@@ -252,7 +257,7 @@
         "DocumentSchema_field1",
         "RecordLookup"
       ],
-      "digest": "f101ac955facbac147d19a7bee4ee7c265357f65a663a0c755c61abc4ca34447"
+      "digest": "8d9462a39a8013de2af8b2adeef5eb9daccd583733ad09278cf08b78e44cd344"
     },
     {
       "id": "EmptySchema",
@@ -273,7 +278,7 @@
         "EmptySchema",
         "RecordLookup"
       ],
-      "digest": "6c3bf6ae3361d6e53f18714ae9d8fdb04e3635cd6113dc000ad878381cb6d3f3"
+      "digest": "e3c245d66bd862a7e895d8c183a1ed4d668fba1f3871f1af8f78fd7304792422"
     },
     {
       "id": "Guarded",
@@ -294,7 +299,7 @@
       "closure": [
         "Guarded"
       ],
-      "digest": "579d4184d0bb2cfc0209ef3388adbca0b3d3a4205f640502c49fa3f89ef9e476"
+      "digest": "aee666689f0db03286f3a8145d38d0dbf07956c095f5d592294f3b8364fbdb69"
     },
     {
       "id": "Identity",
@@ -315,7 +320,7 @@
       "closure": [
         "Identity"
       ],
-      "digest": "9b3084229f3ec961b847ce50a425208004f01ecee2390411c14e965b120bc32d"
+      "digest": "35833c5e1aad74d8f07b8f4ec255f4eb6e2de6c41c09de138269203005075f74"
     },
     {
       "id": "IntegerArray",
@@ -336,7 +341,7 @@
         "ArraySemantics",
         "IntegerArray"
       ],
-      "digest": "c11182b5f541e0a3e6c4f34bc096e03499dece8acad1fe76da24101f52d996fc"
+      "digest": "1ceda1748944c58501e2032e08ea556ebfa911bb5735bb7bc6dba5a97b04f9df"
     },
     {
       "id": "IntegerArray_lookup",
@@ -355,7 +360,342 @@
         "IntegerArray",
         "IntegerArray_lookup"
       ],
-      "digest": "e783a542fe36e8c35b5cb07aae9561b9205b848991865f68c65db1db92c9d114"
+      "digest": "030e712f06935c1699623182b6ecfc81e204bab859498c02a0e17c6dfbc0189a"
+    },
+    {
+      "id": "MixedArraySchema",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "id": "MixedArraySchema",
+        "predicate": "items",
+        "column": 0,
+        "schema": {
+          "kind": "array",
+          "nullable": false,
+          "element": {
+            "kind": "record",
+            "fields": [
+              {
+                "name": "rows",
+                "optional": false,
+                "nullable": false,
+                "schema": {
+                  "kind": "array",
+                  "nullable": false,
+                  "element": {
+                    "kind": "array",
+                    "nullable": false,
+                    "element": {
+                      "kind": "record",
+                      "fields": [
+                        {
+                          "name": "n",
+                          "optional": false,
+                          "nullable": false,
+                          "schema": {
+                            "kind": "integer"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "lean": "def MixedArraySchema : Datamog.Structural.Schema :=\n  (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))))]))\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "StructuralSemantics"
+      ],
+      "closure": [
+        "MixedArraySchema",
+        "StructuralSemantics"
+      ],
+      "digest": "1d7fe6a32bb5c9c43ea04ae9e9a8d4942da1f912ad2f82f102c5bdc2aee3bd1c"
+    },
+    {
+      "id": "MixedArraySchema_path0",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.MixedArraySchema_path0",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "path": {
+          "segments": [
+            {
+              "index": 0
+            },
+            {
+              "field": "rows"
+            },
+            {
+              "index": 1
+            },
+            {
+              "index": 2
+            },
+            {
+              "field": "n"
+            }
+          ],
+          "indices": 3,
+          "nullable": false
+        },
+        "lean": "def MixedArraySchema_path0 : Prop :=\n  ∀ (value : Datamog.Structural.Value) (i0 : Nat) (i1 : Nat) (i2 : Nat),\n  Datamog.Structural.accepts MixedArraySchema value = true →\n  Datamog.Structural.ArrayBounds value [.index i0, .field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1, .index i2, .field (String.ofList [Char.ofNat 110])] →\n  ∃ result, Datamog.Structural.lookupPath value [.index i0, .field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1, .index i2, .field (String.ofList [Char.ofNat 110])] = some result ∧\n    Datamog.Structural.leafMatches false result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "MixedArraySchema"
+      ],
+      "closure": [
+        "MixedArraySchema",
+        "MixedArraySchema_path0",
+        "StructuralSemantics"
+      ],
+      "digest": "e12e7b9b1cfdd31fa28bd067210f1dceb72382eb64624604884689f3c6fc2fb4"
+    },
+    {
+      "id": "MixedOptionalSchema",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "id": "MixedOptionalSchema",
+        "predicate": "items",
+        "column": 0,
+        "schema": {
+          "kind": "record",
+          "fields": [
+            {
+              "name": "rows",
+              "optional": true,
+              "nullable": true,
+              "schema": {
+                "kind": "array",
+                "nullable": true,
+                "element": {
+                  "kind": "record",
+                  "fields": [
+                    {
+                      "name": "n",
+                      "optional": true,
+                      "nullable": true,
+                      "schema": {
+                        "kind": "integer"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "lean": "def MixedOptionalSchema : Datamog.Structural.Schema :=\n  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), true, true, Datamog.Structural.Schema.integer)])))])\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "StructuralSemantics"
+      ],
+      "closure": [
+        "MixedOptionalSchema",
+        "StructuralSemantics"
+      ],
+      "digest": "719e61863c59392d453af1747503f7277e34b91a4543c02ed50ea068c08ca7eb"
+    },
+    {
+      "id": "MixedSchema",
+      "kind": "definition",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "id": "MixedSchema",
+        "predicate": "items",
+        "column": 0,
+        "schema": {
+          "kind": "record",
+          "fields": [
+            {
+              "name": "teams",
+              "optional": false,
+              "nullable": false,
+              "schema": {
+                "kind": "array",
+                "nullable": false,
+                "element": {
+                  "kind": "record",
+                  "fields": [
+                    {
+                      "name": "members",
+                      "optional": false,
+                      "nullable": false,
+                      "schema": {
+                        "kind": "array",
+                        "nullable": false,
+                        "element": {
+                          "kind": "record",
+                          "fields": [
+                            {
+                              "name": "age",
+                              "optional": false,
+                              "nullable": false,
+                              "schema": {
+                                "kind": "integer"
+                              }
+                            },
+                            {
+                              "name": "score",
+                              "optional": true,
+                              "nullable": true,
+                              "schema": {
+                                "kind": "integer"
+                              }
+                            },
+                            {
+                              "name": "rating",
+                              "optional": false,
+                              "nullable": true,
+                              "schema": {
+                                "kind": "integer"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "optional",
+              "optional": true,
+              "nullable": false,
+              "schema": {
+                "kind": "record",
+                "fields": [
+                  {
+                    "name": "age",
+                    "optional": false,
+                    "nullable": false,
+                    "schema": {
+                      "kind": "integer"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "nullable",
+              "optional": false,
+              "nullable": true,
+              "schema": {
+                "kind": "record",
+                "fields": [
+                  {
+                    "name": "age",
+                    "optional": false,
+                    "nullable": false,
+                    "schema": {
+                      "kind": "integer"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "lean": "def MixedSchema : Datamog.Structural.Schema :=\n  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)])))]))), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer)]))])\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "StructuralSemantics"
+      ],
+      "closure": [
+        "MixedSchema",
+        "StructuralSemantics"
+      ],
+      "digest": "3211270c7a2d9e9cd534b4f61edc78ad1b6424e28ffd77cf15e3193614f3ea19"
+    },
+    {
+      "id": "MixedSchema_path0",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.MixedSchema_path0",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "path": {
+          "segments": [
+            {
+              "field": "teams"
+            },
+            {
+              "index": 0
+            },
+            {
+              "field": "members"
+            },
+            {
+              "index": 1
+            },
+            {
+              "field": "age"
+            }
+          ],
+          "indices": 2,
+          "nullable": false
+        },
+        "lean": "def MixedSchema_path0 : Prop :=\n  ∀ (value : Datamog.Structural.Value) (i0 : Nat) (i1 : Nat),\n  Datamog.Structural.accepts MixedSchema value = true →\n  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] →\n  ∃ result, Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] = some result ∧\n    Datamog.Structural.leafMatches false result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "MixedSchema"
+      ],
+      "closure": [
+        "MixedSchema",
+        "MixedSchema_path0",
+        "StructuralSemantics"
+      ],
+      "digest": "3c248e30e41aaf6df3ffec0d1c8a603cd159ab361aab345ad3c22d90356c8ab0"
+    },
+    {
+      "id": "MixedSchema_path1",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.MixedSchema_path1",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "path": {
+          "segments": [
+            {
+              "field": "teams"
+            },
+            {
+              "index": 0
+            },
+            {
+              "field": "members"
+            },
+            {
+              "index": 1
+            },
+            {
+              "field": "rating"
+            }
+          ],
+          "indices": 2,
+          "nullable": true
+        },
+        "lean": "def MixedSchema_path1 : Prop :=\n  ∀ (value : Datamog.Structural.Value) (i0 : Nat) (i1 : Nat),\n  Datamog.Structural.accepts MixedSchema value = true →\n  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →\n  ∃ result, Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index i0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index i1, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result ∧\n    Datamog.Structural.leafMatches true result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "MixedSchema"
+      ],
+      "closure": [
+        "MixedSchema",
+        "MixedSchema_path1",
+        "StructuralSemantics"
+      ],
+      "digest": "2470728c8d639e566569aef946c33b08e85c3a5c128491932c37e034b7a79e86"
     },
     {
       "id": "NestedArray",
@@ -379,7 +719,7 @@
         "NestedArray",
         "NestedArraySemantics"
       ],
-      "digest": "af83679f1a3d159c16b51f29fd29802101c72c7a43cf9867f3ca1ca401c7f2cd"
+      "digest": "a8a5ae74b5d0b7851eac6bf4dd7f6550813c268c23abe8c3ba65941870831c75"
     },
     {
       "id": "NestedArraySemantics",
@@ -390,7 +730,7 @@
       "closure": [
         "NestedArraySemantics"
       ],
-      "digest": "bb75d3f69ce8360b8c4043db5a23b71216703a3b6fc526513f8ff5e1a4090ce4"
+      "digest": "8b3ac42c0ecff2695254fcbd7985ee6a8eb29f4db2faa7862311f052f0bce5b7"
     },
     {
       "id": "NestedArray_lookup",
@@ -409,7 +749,7 @@
         "NestedArraySemantics",
         "NestedArray_lookup"
       ],
-      "digest": "e5dc13b6b33371761dc1849264b9d3529eb84aca800c200c1297e2b7658a243c"
+      "digest": "8f77d91e3943daa10e7c9f17476c69dd5adfcb32ad5ca1d8e02ad18cd466190e"
     },
     {
       "id": "NestedRecords",
@@ -420,7 +760,7 @@
       "closure": [
         "NestedRecords"
       ],
-      "digest": "9d4d6e174ea648831918d3979f71290f7fbc5cbcaf1cd27384385df0072a0755"
+      "digest": "49de5c34e12f800b6c5d059e1cc8550cfa0314488322ccee8958b5d3ff88e24f"
     },
     {
       "id": "NestedSchema",
@@ -507,7 +847,7 @@
         "NestedRecords",
         "NestedSchema"
       ],
-      "digest": "d013b6bc5a5e111d27f0879711aa8b99e6dc1a04148d194ee8f8fa6ac517a04a"
+      "digest": "ec3bc419ee9d151d93ebb914e13bf41807124903f1bee89f44ccf769b961e51c"
     },
     {
       "id": "NestedSchema_path0",
@@ -534,7 +874,7 @@
         "NestedSchema",
         "NestedSchema_path0"
       ],
-      "digest": "57828640e99e2a4d7396263a938a174769ee42d39fb469d617078ebf11c5f001"
+      "digest": "1a9450cc6750c330a25cab662893a05bc776e026db57e5b79e0fd61aac9fe9bd"
     },
     {
       "id": "NestedSchema_path1",
@@ -561,7 +901,7 @@
         "NestedSchema",
         "NestedSchema_path1"
       ],
-      "digest": "ce56f820f209807d0122844724debdd54b6fa2584dea39e08fe5033cc4976ced"
+      "digest": "d7e4637c268b819e5971a6bee42ac2416694375dcbc166ae60b987593dfbf762"
     },
     {
       "id": "NullableIntegerArray",
@@ -582,7 +922,7 @@
         "ArraySemantics",
         "NullableIntegerArray"
       ],
-      "digest": "43e6d50c712ca99c8d8dfe16016c9e16153a5ac0b92c9cd4e416e33f674bddd9"
+      "digest": "cee8fb17aa04bedb79dd04a676f7ac0b1003011534548a6646f8beba792c4b44"
     },
     {
       "id": "NullableIntegerArray_lookup",
@@ -601,7 +941,7 @@
         "NullableIntegerArray",
         "NullableIntegerArray_lookup"
       ],
-      "digest": "58a72f09172518e387d0c1f6ccf5dd9a053796efefcdf3b3efaecbaacb83ebe1"
+      "digest": "ca6f99b5bd088fd55ce95b91c0cb9fbcc4b1156020a72ea3df187f9747f08fc4"
     },
     {
       "id": "NullableNestedArray",
@@ -625,7 +965,7 @@
         "NestedArraySemantics",
         "NullableNestedArray"
       ],
-      "digest": "ff68230b2f54b86203ad901eeaaab0702d19133956bb1db7128ffc84649c99fb"
+      "digest": "6dbb3fda7f6384fdd7ccc6618005ad9b6bfb0a374500745f80473ef7c236e190"
     },
     {
       "id": "NullableNestedArray_lookup",
@@ -644,7 +984,7 @@
         "NullableNestedArray",
         "NullableNestedArray_lookup"
       ],
-      "digest": "302ffe72269b6a5e9958dedd7f65fa1a0aca479348f9ddaedc0ac36d7357d7cc"
+      "digest": "d3708c41e16ce29a0919f2a2d80fe46429076cbd640a753d654560af4370c8bb"
     },
     {
       "id": "Overlapping",
@@ -665,7 +1005,7 @@
       "closure": [
         "Overlapping"
       ],
-      "digest": "09bcda2d4701db3f311037732c96095511dd6ec48dedd1143796b88d83f222d8"
+      "digest": "fc0606828e30f40cb0dd5e62cf1347b281093fbed9d05352b516907b995ef3fe"
     },
     {
       "id": "Reach",
@@ -686,7 +1026,7 @@
       "closure": [
         "Reach"
       ],
-      "digest": "8e486b72bbe265cf99472e2bc41981cf277eb288a9e0985ea61a527a0987d496"
+      "digest": "6637e5d69fb2dfec2123b402190701046452529547abdb7e2b1fc5ad6d819aec"
     },
     {
       "id": "RecordLookup",
@@ -697,7 +1037,7 @@
       "closure": [
         "RecordLookup"
       ],
-      "digest": "49524cc39eedf8b255b55ceee6bca3a987415b5b03d56cec49e98dbc0983e018"
+      "digest": "9e45e835a985822f5d7b182099445ae05f32cc987553a96718216904f13e18de"
     },
     {
       "id": "Saturating",
@@ -718,7 +1058,18 @@
       "closure": [
         "Saturating"
       ],
-      "digest": "cf13224760c245480300fc0a55ab5e60d25877015a8b929fbda20774ced09ee0"
+      "digest": "220e7d096429e5eecc5ec84b9150cc7ef2c9eb802534963b575a98ae22e7e06f"
+    },
+    {
+      "id": "StructuralSemantics",
+      "kind": "definition",
+      "statement": "import Datamog.Semantics\n\nnamespace Datamog.Structural\n\ninductive Value where\n  | scalar (value : Datamog.Value)\n  | record (fields : List (String × Value))\n  | array (values : List Value)\n\ninductive Schema where\n  | integer\n  | record (fields : List (String × Bool × Bool × Schema))\n  | array (nullable : Bool) (element : Schema)\n\ndef lookup : List (String × Value) → String → Option Value\n  | [], _ => none\n  | (name, value) :: rest, key =>\n    match lookup rest key with\n    | some found => some found\n    | none => if name = key then some value else none\n\ninductive Segment where\n  | field (key : String)\n  | index (index : Nat)\n\ndef step : Value → Segment → Option Value\n  | .record fields, .field key => lookup fields key\n  | .array values, .index index => values[index]?\n  | _, _ => none\n\ndef lookupPath : Value → List Segment → Option Value\n  | value, [] => some value\n  | value, segment :: rest => (step value segment).bind (lookupPath · rest)\n\ndef accepts (schema : Schema) (value : Value) : Bool :=\n  match schema, value with\n  | .integer, .scalar (.integer _) => true\n  | .record schemaFields, .record fields =>\n    schemaFields.attach.all (fun field =>\n      have _bound := List.sizeOf_lt_of_mem field.property\n      match lookup fields field.val.1 with\n      | none => field.val.2.1\n      | some (.scalar .null) => field.val.2.2.1\n      | some value => accepts field.val.2.2.2 value) &&\n    fields.all (fun entry => schemaFields.any (fun field => field.1 == entry.1))\n  | .array nullable child, .array values => values.all (fun value =>\n      match value with\n      | .scalar .null => nullable\n      | _ => accepts child value)\n  | _, _ => false\ntermination_by sizeOf schema\ndecreasing_by\n  · rcases field with ⟨⟨key, optional, nullable, child⟩, member⟩\n    simp_all [Schema.record.sizeOf_spec, Prod.mk.sizeOf_spec]\n    omega\n  · simp_all [Schema.array.sizeOf_spec]\n\n-- Only array steps impose existence/bounds. Field steps do not assume presence:\n-- schema membership must establish required fields, even when no array is below.\ndef ArrayBounds : Value → List Segment → Prop\n  | _, [] => True\n  | value, .field key :: rest =>\n      ∀ child, step value (.field key) = some child → ArrayBounds child rest\n  | .array values, .index index :: rest =>\n      ∃ bound : index < values.length, ArrayBounds values[index] rest\n  | _, .index _ :: _ => False\n\ninductive RequiredPath : Schema → List Segment → Bool → Prop where\n  | fieldLeaf : (key, false, nullable, Schema.integer) ∈ fields →\n      RequiredPath (.record fields) [.field key] nullable\n  | fieldStep : (key, false, false, child) ∈ fields →\n      RequiredPath child rest nullable → RequiredPath (.record fields) (.field key :: rest) nullable\n  | indexLeaf : RequiredPath (.array nullable .integer) [.index index] nullable\n  | indexStep : RequiredPath child rest nullable →\n      RequiredPath (.array false child) (.index index :: rest) nullable\n\ndef leafMatches (nullable : Bool) : Value → Bool\n  | .scalar (.integer _) => true\n  | .scalar .null => nullable\n  | _ => false\n\ntheorem fieldAccepted (schema : List (String × Bool × Bool × Schema))\n    (fields : List (String × Value)) (key : String) (optional nullable : Bool) (child : Schema)\n    (member : (key, optional, nullable, child) ∈ schema)\n    (accepted : accepts (.record schema) (.record fields) = true) :\n    (match lookup fields key with\n      | none => optional\n      | some (.scalar .null) => nullable\n      | some value => accepts child value) = true := by\n  simp only [accepts, Bool.and_eq_true, List.all_eq_true] at accepted\n  exact accepted.1 ⟨(key, optional, nullable, child), member⟩ (by simp)\n\ntheorem nonnullableAccepted (schema : Schema) (value : Value)\n    (h : (match value with | .scalar .null => false | _ => accepts schema value) = true) :\n    accepts schema value = true := by\n  cases value with\n  | scalar v => cases v <;> simp_all\n  | record _ => exact h\n  | array _ => exact h\n\ntheorem integerAccepted (nullable : Bool) (value : Value)\n    (h : (match value with | .scalar .null => nullable | _ => accepts .integer value) = true) :\n    leafMatches nullable value = true := by\n  cases value with\n  | scalar v => cases v <;> simp_all [accepts, leafMatches]\n  | record _ => simp [accepts] at h\n  | array _ => simp [accepts] at h\n\ntheorem requiredLookup {schema : Schema} {path : List Segment} {nullable : Bool}\n    (required : RequiredPath schema path nullable) (value : Value)\n    (accepted : accepts schema value = true) (bounds : ArrayBounds value path) :\n    ∃ result, lookupPath value path = some result ∧ leafMatches nullable result = true := by\n  induction required generalizing value with\n  | @fieldLeaf fields key nullable member =>\n    cases value with\n    | scalar _ => simp [accepts] at accepted\n    | array _ => simp [accepts] at accepted\n    | record entries =>\n      have h := fieldAccepted fields entries key false nullable .integer member accepted\n      cases found : lookup entries key with\n      | none => simp [found] at h\n      | some v =>\n        exact ⟨v, by simp [lookupPath, step, found], integerAccepted nullable v (by\n          cases v with\n          | scalar s => cases s <;> simpa [found] using h\n          | record _ => simpa [found] using h\n          | array _ => simpa [found] using h)⟩\n  | @fieldStep fields key child rest nullable member required ih =>\n    cases value with\n    | scalar _ => simp [accepts] at accepted\n    | array _ => simp [accepts] at accepted\n    | record entries =>\n      have h := fieldAccepted fields entries key false false child member accepted\n      cases found : lookup entries key with\n      | none => simp [found] at h\n      | some v =>\n        have valid := nonnullableAccepted child v (by\n          cases v with\n          | scalar s => cases s <;> simpa [found] using h\n          | record _ => simpa [found] using h\n          | array _ => simpa [found] using h)\n        obtain ⟨result, resultFound, resultValid⟩ := ih v valid (bounds v found)\n        exact ⟨result, by simpa [lookupPath, step, found] using resultFound, resultValid⟩\n  | @indexLeaf nullable index =>\n    cases value with\n    | scalar _ => simp [ArrayBounds] at bounds\n    | record _ => simp [ArrayBounds] at bounds\n    | array values =>\n      obtain ⟨bound, _⟩ := bounds\n      simp only [accepts, List.all_eq_true] at accepted\n      have h := accepted _ (List.getElem_mem bound)\n      exact ⟨values[index], by simp [lookupPath, step, bound], integerAccepted nullable values[index] h⟩\n  | @indexStep child rest nullable index required ih =>\n    cases value with\n    | scalar _ => simp [ArrayBounds] at bounds\n    | record _ => simp [ArrayBounds] at bounds\n    | array values =>\n      obtain ⟨bound, remaining⟩ := bounds\n      simp only [accepts, List.all_eq_true] at accepted\n      have h := accepted _ (List.getElem_mem bound)\n      obtain ⟨result, found, valid⟩ := ih values[index] (nonnullableAccepted child values[index] h) remaining\n      exact ⟨result, by simpa [lookupPath, step, bound] using found, valid⟩\n\nend Datamog.Structural\n",
+      "assumptions": [],
+      "dependencies": [],
+      "closure": [
+        "StructuralSemantics"
+      ],
+      "digest": "b3fb03e1e12571c44c36edfff196176f25482828a3d2ae21c879b1bc392763af"
     },
     {
       "id": "Successor",
@@ -739,7 +1090,7 @@
       "closure": [
         "Successor"
       ],
-      "digest": "7cf884aced0ab53d8545a71728fac3b8897c76a3da8ac1d8534aa18d8804a1f6"
+      "digest": "ec32328316ec51be532e7448e4817feeba5c3ed54211e980e66bb6d489271b6c"
     },
     {
       "id": "arrayElementValid",
@@ -757,7 +1108,7 @@
         "ArraySemantics",
         "arrayElementValid"
       ],
-      "digest": "382e6c1b3357b7b76085df4ced1f1b764a7b8d3ec0bf22259ebc1875f1f2490d"
+      "digest": "ac7929a0d9d29c5cf94cc17caed8320effcf38725a3a41ef0507a10c9685e884"
     },
     {
       "id": "arrayNegativeAbsent",
@@ -775,7 +1126,7 @@
         "ArraySemantics",
         "arrayNegativeAbsent"
       ],
-      "digest": "db7fc3c471cca805bef7d0a85bc1e65f2162ccde49b8f701f2ac99d5b2846350"
+      "digest": "922732ef9090a69610a6389e20206f01e0be24ea852a31574dc17a9eb0ab31b3"
     },
     {
       "id": "arrayPastEndAbsent",
@@ -793,7 +1144,7 @@
         "ArraySemantics",
         "arrayPastEndAbsent"
       ],
-      "digest": "e208b630cc5f11d785d60b038bf4eaaf0ae3bb8b4f1f9057587ab5a04304548a"
+      "digest": "9c6c45c85bcc15b43282c240083e8459f1f087ee82de494ca47b2a9a091c1d68"
     },
     {
       "id": "arrayTotal_refuted",
@@ -811,7 +1162,7 @@
         "ArraySemantics",
         "arrayTotal_refuted"
       ],
-      "digest": "8e73917d1161e1418ea3d4fc6a268b111b60918a3a326334b80f571404867520"
+      "digest": "6917db9aee52c8ccf52e39fa5db4c8b25312e567bc5f846328785b2725c8ce75"
     },
     {
       "id": "diagonalTotal",
@@ -838,7 +1189,7 @@
         "Diagonal",
         "diagonalTotal"
       ],
-      "digest": "ff3bfcd8ad8ad701f123d82946ea0683683de1d68eb0d8db4d6f654f041c18a4"
+      "digest": "d74203d272ca754f7bdc12e93f78bfd7a94adfa3e2bfee9927f6ae4f17c5c597"
     },
     {
       "id": "diagonalTotal_refuted",
@@ -854,7 +1205,7 @@
         "diagonalTotal",
         "diagonalTotal_refuted"
       ],
-      "digest": "34185ca8dab99648c9761ad663829d21899791ae44cd0cd7a47c5bc1eaaa4e84"
+      "digest": "8b75eb4e44d9a76a95628e87a4ad3fb99027872c1dba1fb5ad9f50439dbeaa1a"
     },
     {
       "id": "diagonalUnique",
@@ -882,7 +1233,7 @@
         "Diagonal",
         "diagonalUnique"
       ],
-      "digest": "323a26d4e29eba0a8ac40775d7a57ebe83063f05094fd4a735a11f66832f8c4b"
+      "digest": "089591821ee2e1a699fb876b66ed1ba04b73b4940921ad88a3c7f5d38f9f596e"
     },
     {
       "id": "emptySchemaExact",
@@ -900,7 +1251,7 @@
         "RecordLookup",
         "emptySchemaExact"
       ],
-      "digest": "8efa3ed28d6fdc0c19fd616ed3e27a6b26046de2ea321ea9a1f0e29ca2724d34"
+      "digest": "f494cc135055d2d9060c61c7cbcad9b75ba40fece33850a69e0b933f8e0e227e"
     },
     {
       "id": "falseGoal",
@@ -1001,7 +1352,7 @@
       "closure": [
         "falseGoal"
       ],
-      "digest": "320c03f850703a9bdc71c494f41093e4c2de9afa561be4815b0668e443fa6760"
+      "digest": "6247cd49aad3f61a1f031175902ee3094ce0ced6b01c85418b2db81702013186"
     },
     {
       "id": "falseGoal_refuted",
@@ -1016,7 +1367,7 @@
         "falseGoal",
         "falseGoal_refuted"
       ],
-      "digest": "b0ee6bcc53a92278584dbdb126eae96c283135c2c3582d24e8c4938a6c1f420d"
+      "digest": "083ca27e8b53be198c82c6f03a669eab56af04d39ff2dbfc9054ea7afdc0602f"
     },
     {
       "id": "guardedCoverage",
@@ -1050,7 +1401,7 @@
         "Guarded",
         "guardedCoverage"
       ],
-      "digest": "03b64b53bd64aca935eaae2ac9cb685b0151b75f57c24438e1f2c7d9bfbf2871"
+      "digest": "eb68f2e342af33c41db4c6056a834a6d56d56ee1cf93859b0b520e13509ea478"
     },
     {
       "id": "guardedTotal",
@@ -1077,7 +1428,7 @@
         "Guarded",
         "guardedTotal"
       ],
-      "digest": "b60834423e6f2ec20e6a61fe6304914e9c708f0d9fb71fa5c238e3bc67ac7244"
+      "digest": "89168600ca32650b0fbe94f59bc531d3c63b62698fa7e1f331edeef2a37ccb5a"
     },
     {
       "id": "guardedTotal_refuted",
@@ -1093,7 +1444,7 @@
         "guardedTotal",
         "guardedTotal_refuted"
       ],
-      "digest": "1ae2a7b9bcd0e34fd9bfa1a150d3e26d0e7011a01e315059047e43d350a33f46"
+      "digest": "8c5d3137ec1c04832306680deab921cfea0ae2018b2c9912c975d73e093dfb45"
     },
     {
       "id": "identityUnique",
@@ -1121,7 +1472,64 @@
         "Identity",
         "identityUnique"
       ],
-      "digest": "3fd6ec73866799c827fec5f0b793103d94668ec1f9f824efbe5a0c940b547dc1"
+      "digest": "0512d27639062818f22b4c5f2d5baca85f5b1b78332bc86d7d7d1ccc2ba211d0"
+    },
+    {
+      "id": "mixedEmptyTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.mixedEmptyTotal_refuted",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "lean": "def mixedEmptyTotal_refuted : Prop :=\n  ¬ (∀ value, Structural.accepts MixedSchema value = true →\n  ∃ result, Structural.lookupPath value [.field \"teams\", .index 0, .field \"members\", .index 0, .field \"age\"] = some result)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "MixedSchema"
+      ],
+      "closure": [
+        "MixedSchema",
+        "StructuralSemantics",
+        "mixedEmptyTotal_refuted"
+      ],
+      "digest": "afb656ae569c7cc11c12fc8530b7b04d01dadd48da58d1bbb619d3b0eec6b32f"
+    },
+    {
+      "id": "mixedNullTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.mixedNullTotal_refuted",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "lean": "def mixedNullTotal_refuted : Prop :=\n  ¬ (∀ value, Structural.accepts MixedSchema value = true →\n  ∃ result, Structural.lookupPath value [.field \"nullable\", .field \"age\"] = some result)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "MixedSchema"
+      ],
+      "closure": [
+        "MixedSchema",
+        "StructuralSemantics",
+        "mixedNullTotal_refuted"
+      ],
+      "digest": "74336cf908dea5cc74d0d58ca27d4d2a464506e782ee5ff109eb6fe0b04c469b"
+    },
+    {
+      "id": "mixedOptionalTotal_refuted",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.mixedOptionalTotal_refuted",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "lean": "def mixedOptionalTotal_refuted : Prop :=\n  ¬ (∀ value, Structural.accepts MixedSchema value = true →\n  ∃ result, Structural.lookupPath value [.field \"optional\", .field \"age\"] = some result)\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "MixedSchema"
+      ],
+      "closure": [
+        "MixedSchema",
+        "StructuralSemantics",
+        "mixedOptionalTotal_refuted"
+      ],
+      "digest": "7ec20b140b9d34ef9e5a3c7e49e8c9bfcbc11ad85b37a7891730c06241b6752a"
     },
     {
       "id": "nestedArrayTotal_refuted",
@@ -1141,7 +1549,7 @@
         "NullableNestedArray",
         "nestedArrayTotal_refuted"
       ],
-      "digest": "e09fba2b6f923e62f87d97ee35350519aa6291fe120dbbc6a793f2ba14862666"
+      "digest": "a74532a73789a1479ce171adf1e41eb2eec71229dc83abe943ca708306907e51"
     },
     {
       "id": "nestedArrayTypedLookup",
@@ -1161,7 +1569,7 @@
         "NullableNestedArray",
         "nestedArrayTypedLookup"
       ],
-      "digest": "fab1137ac7f110eb82a2ce87f4df276020a301fd466cbe4b50b7bb0ced5f9dc0"
+      "digest": "707d087cc004de0f0a5f268093fc6a5e0a0e43af995a2f8c99ef0f388adeda38"
     },
     {
       "id": "nestedRequiredPath",
@@ -1179,7 +1587,7 @@
         "NestedRecords",
         "nestedRequiredPath"
       ],
-      "digest": "21578b2c47db0f38e30432fcd72c3876eb00bcaddfa7cfc29e350e34c532ba09"
+      "digest": "4a7e35fe329ba51bb392e0ba1f49b3efcae3759d8bd29e647ab581c52a751378"
     },
     {
       "id": "nonnullableFieldInteger",
@@ -1197,7 +1605,7 @@
         "RecordLookup",
         "nonnullableFieldInteger"
       ],
-      "digest": "fd2adeea3cc804c63c9086d42ef2b184ca3712345ea78754556f4fa9b40a0955"
+      "digest": "d0c62cc5a5ab60b53cc7f7fdf65de74fb08d69611a3689981ac03fc66310a11a"
     },
     {
       "id": "nullableParentTotal_refuted",
@@ -1216,7 +1624,7 @@
         "NestedSchema",
         "nullableParentTotal_refuted"
       ],
-      "digest": "cbab85ccdbf755d1806f11da036a914d1eba9e2853341bbc55feab951ae33676"
+      "digest": "99c487b74a39056fed897f1c8c43fb6447566e599784a47abd0c39645854e4d2"
     },
     {
       "id": "optionalFieldTotal_refuted",
@@ -1234,7 +1642,7 @@
         "RecordLookup",
         "optionalFieldTotal_refuted"
       ],
-      "digest": "7f6f89b424a21e586972b5663f827b3d8ad239c1db15ee2374311d80dc86cee3"
+      "digest": "7d71c56d48bbad3f20c16af2bd7d1e5a7ddb1b16acdfd3b87c28b6946e47c84d"
     },
     {
       "id": "optionalParentTotal_refuted",
@@ -1253,7 +1661,7 @@
         "NestedSchema",
         "optionalParentTotal_refuted"
       ],
-      "digest": "d06b6e8b874d0350007655009ee2d1b1ee9fa7ea474e2601cdde48287b2ee903"
+      "digest": "a7ffb544660d3a8e2b0f8dbe7782ab3e64dd8306312d20631e9511268b465191"
     },
     {
       "id": "overlappingUnique",
@@ -1280,7 +1688,7 @@
         "Overlapping",
         "overlappingUnique"
       ],
-      "digest": "a5e4f1a61cc8b326edde66dd3d5a704c9dfaf77b54db737cbf29e542abe1915a"
+      "digest": "cf94e5ac50890e85ef45c6f8740ab164646d866ecdeec9aaa2eb7009ac04ebaa"
     },
     {
       "id": "overlappingUnique_refuted",
@@ -1296,7 +1704,7 @@
         "overlappingUnique",
         "overlappingUnique_refuted"
       ],
-      "digest": "db37c6d77517d61b5a7451498be17d793585974c07e7d26481db40d8cf26c121"
+      "digest": "93c4f7307b96f7ae7c597442dc0c26c5f08c53b25721d95055d9cf42174e1b94"
     },
     {
       "id": "reachPreserves",
@@ -1313,7 +1721,7 @@
         "Reach",
         "reachPreserves"
       ],
-      "digest": "caf15acb47e2ed73b99164a5f16051840896cc4e04978c42605fc29d5dec32c8"
+      "digest": "d781cf34107f4d10685475e5e4a8d07c80eeacbad55cab4e15959af04211f828"
     },
     {
       "id": "reachTransitive",
@@ -1328,7 +1736,7 @@
         "Reach",
         "reachTransitive"
       ],
-      "digest": "2f144b58a9fd2f40ce2d81f5df309eb499043f2f51065e826cedb898e589ba7f"
+      "digest": "34de615ec121ec238f7d484693be8cdf7e2d95d071a333363d82b9c73f140d19"
     },
     {
       "id": "reachUnique",
@@ -1355,7 +1763,7 @@
         "Reach",
         "reachUnique"
       ],
-      "digest": "917331b697d44c470b56798978379b647394219b1ab2de16aaba99752e1c68c4"
+      "digest": "ad1086234b61b971beb9717b9aa222b1deefd81c7a0935c1000fcb361f9f2a00"
     },
     {
       "id": "reachUnique_refuted",
@@ -1371,7 +1779,7 @@
         "reachUnique",
         "reachUnique_refuted"
       ],
-      "digest": "336f82e10bc379e76fdb5dd610e059f5238047803a4e09a55d2d1ac6ebf8c3b2"
+      "digest": "0602d5acdac4261cbbec773f312f22446616d709b0755b7d4c20bc8ed734e431"
     },
     {
       "id": "recordAbsent",
@@ -1389,7 +1797,7 @@
         "RecordLookup",
         "recordAbsent"
       ],
-      "digest": "eafb59bc2262edf5dfc1b1bc377d314971bfd63d08acea4ba31f6e20bf5905f7"
+      "digest": "a5f4b5ffc2f2cdf37b063e69ac9a11b13063cb50570ca58d6e6e44cc9c6b4f2c"
     },
     {
       "id": "recordLastWrite",
@@ -1407,7 +1815,7 @@
         "RecordLookup",
         "recordLastWrite"
       ],
-      "digest": "63dff1b1a506782d01a90908100931be93798b895803b47fc5b3c56df9d2b485"
+      "digest": "1e7b3f7817849975a3cc7ab4705c1dff41f73702d256b6dbc465d569f242e7ce"
     },
     {
       "id": "recordNullDistinct",
@@ -1427,7 +1835,7 @@
         "recordLastWrite",
         "recordNullDistinct"
       ],
-      "digest": "5037c93046894e84c722ab071e3720688f0428a5541ea99abf190cb8936fb4d2"
+      "digest": "ce1084778955d7a2bb0abe6c2c3aa87ea8d4fdb61cd1b25b5ce3c4dc9ee10a47"
     },
     {
       "id": "requiredFieldPresent",
@@ -1445,7 +1853,7 @@
         "RecordLookup",
         "requiredFieldPresent"
       ],
-      "digest": "e1f5ca6a578d88187b67cb7eb5b5ccf48c17397cbe254ac29e39084f50fb9c2d"
+      "digest": "d0119a0deaa6f96bc7e29e576df5857dcf467dee11b6d6e90151bd6e4fc089d3"
     },
     {
       "id": "saturatingCoverage",
@@ -1473,7 +1881,7 @@
         "Saturating",
         "saturatingCoverage"
       ],
-      "digest": "f0fb8a24b058fe92c2a767dacd9ae75894add7b1de8190b88f261973c43e91f2"
+      "digest": "9c8dcb0f39f11a6ee754f418a43b45d3c3ec5fd20f271c014a4e4498220650b4"
     },
     {
       "id": "saturatingUnique",
@@ -1501,7 +1909,7 @@
         "Saturating",
         "saturatingUnique"
       ],
-      "digest": "1da6ee020ddb07a82e95cc4498de50adbde66f3f0b64983f2d63862d0806408b"
+      "digest": "cbfaf34d97c7468f8ff1db54df1b8fcfa450a201a87df0fdfb4130efe73fe58e"
     },
     {
       "id": "schemaClosed",
@@ -1519,7 +1927,7 @@
         "RecordLookup",
         "schemaClosed"
       ],
-      "digest": "2608c0520d45b8010886b11c0fd540b317b28a745379bc8d787aaf320889c37c"
+      "digest": "389179b62479a0c0f472c78c99f5a6b6ba2630dff16ccad980e8c2918a7d1575"
     },
     {
       "id": "schemaFieldMatches",
@@ -1537,7 +1945,25 @@
         "RecordLookup",
         "schemaFieldMatches"
       ],
-      "digest": "50d9a43c00abb4326c8f82383637d038c09a9cf4ac6b07a8108cdc3105802fc4"
+      "digest": "3642f8a9afdcf98a18bc76ccee97fba9f2b65ef4b300662328835d5e07f85d70"
+    },
+    {
+      "id": "structuralRequiredLookup",
+      "kind": "goal",
+      "theorem": "Datamog.Checked.structuralRequiredLookup",
+      "statement": {
+        "profile": "datamog-structural-integer-v1",
+        "lean": "def structuralRequiredLookup : Prop :=\n  ∀ schema path nullable, Structural.RequiredPath schema path nullable →\n  ∀ value, Structural.accepts schema value = true → Structural.ArrayBounds value path →\n  ∃ result, Structural.lookupPath value path = some result ∧ Structural.leafMatches nullable result = true\n"
+      },
+      "assumptions": [],
+      "dependencies": [
+        "StructuralSemantics"
+      ],
+      "closure": [
+        "StructuralSemantics",
+        "structuralRequiredLookup"
+      ],
+      "digest": "ab26657a9abbce3422d4cdee6e36f5d1d443294584e538806bc21c4107a64ba9"
     },
     {
       "id": "successor",
@@ -1971,7 +2397,7 @@
       "closure": [
         "successor"
       ],
-      "digest": "ae7ab43af12ace7a8bd5ba1f96a8072b6ec04bcb39dd4b4400a9fe2a0bf07f58"
+      "digest": "b46358327072cfc67ad5e974d9dee0738177b3e7d2374b8b7a238aaaae098963"
     },
     {
       "id": "successorCoverage",
@@ -2005,7 +2431,7 @@
         "Successor",
         "successorCoverage"
       ],
-      "digest": "764e8b6838ec7d7cff3b1740f16298fceb358e071ae92653a14c5d6ef51a25cd"
+      "digest": "6014bc0d3c919dd6d033dca9611dc82d4a10c3d687c00df599aee9088a5d2d03"
     },
     {
       "id": "successorTotal",
@@ -2032,7 +2458,7 @@
         "Successor",
         "successorTotal"
       ],
-      "digest": "3d16cad8b5e5ee57aecb57c88fb0edb4b6f2636431f18d9358e299151d377bf2"
+      "digest": "b8d3242fc3b12a4db0d9947554fec729d0683894bd2b0f9d1a9758927613cbbe"
     },
     {
       "id": "successorTotal_refuted",
@@ -2048,8 +2474,8 @@
         "successorTotal",
         "successorTotal_refuted"
       ],
-      "digest": "94aa1751702ce9d22780547b916a0a87010fe674403b4c7b0dc5c346eedc6152"
+      "digest": "6fd1c0a53c67704ed9f3ccebc391fa0ffb2fd893140e476069003857a79ea9fe"
     }
   ],
-  "digest": "aa7ad323515a86e4fdd6a2e2210ded61c98ee6761bf457ff87d91a9a397ba087"
+  "digest": "0de6c4e09b5e4f3c2b98edea24f53cbce36b62cf5c3ff8cb6014981044002885"
 }

@@ -288,4 +288,53 @@ theorem nestedArrayTotal_refuted : Generated.nestedArrayTotal_refuted := by
   obtain ⟨result, impossible⟩ := total (.array [.scalar .null]) (by decide)
   simp [NestedArrays.lookupPath, NestedArrays.lookupIndex] at impossible
 
+theorem structuralRequiredLookup : Generated.structuralRequiredLookup := by
+  intro schema path nullable required value accepted bounds
+  exact Structural.requiredLookup required value accepted bounds
+
+theorem MixedSchema_path0 : Generated.MixedSchema_path0 := by
+  intro value i0 i1 accepted bounds
+  apply Structural.requiredLookup (value := value) _ accepted bounds
+  · apply Structural.RequiredPath.fieldStep (by simp [Generated.MixedSchema]; rfl)
+    apply Structural.RequiredPath.indexStep
+    apply Structural.RequiredPath.fieldStep (by simp; rfl)
+    apply Structural.RequiredPath.indexStep
+    exact Structural.RequiredPath.fieldLeaf (by simp)
+
+theorem MixedSchema_path1 : Generated.MixedSchema_path1 := by
+  intro value i0 i1 accepted bounds
+  apply Structural.requiredLookup (value := value) _ accepted bounds
+  · apply Structural.RequiredPath.fieldStep (by simp [Generated.MixedSchema]; rfl)
+    apply Structural.RequiredPath.indexStep
+    apply Structural.RequiredPath.fieldStep (by simp; rfl)
+    apply Structural.RequiredPath.indexStep
+    exact Structural.RequiredPath.fieldLeaf (by simp)
+
+theorem MixedArraySchema_path0 : Generated.MixedArraySchema_path0 := by
+  intro value i0 i1 i2 accepted bounds
+  apply Structural.requiredLookup (value := value) _ accepted bounds
+  · apply Structural.RequiredPath.indexStep
+    apply Structural.RequiredPath.fieldStep (by simp [Generated.MixedArraySchema]; rfl)
+    apply Structural.RequiredPath.indexStep
+    apply Structural.RequiredPath.indexStep
+    exact Structural.RequiredPath.fieldLeaf (by simp)
+
+theorem mixedEmptyTotal_refuted : Generated.mixedEmptyTotal_refuted := by
+  intro total
+  obtain ⟨result, impossible⟩ := total (.record [("teams", .array []), ("nullable", .scalar .null)])
+    (by simp [Structural.accepts, Structural.lookup, Generated.MixedSchema])
+  simp [Structural.lookupPath, Structural.step, Structural.lookup] at impossible
+
+theorem mixedOptionalTotal_refuted : Generated.mixedOptionalTotal_refuted := by
+  intro total
+  obtain ⟨result, impossible⟩ := total (.record [("teams", .array []), ("nullable", .scalar .null)])
+    (by simp [Structural.accepts, Structural.lookup, Generated.MixedSchema])
+  simp [Structural.lookupPath, Structural.step, Structural.lookup] at impossible
+
+theorem mixedNullTotal_refuted : Generated.mixedNullTotal_refuted := by
+  intro total
+  obtain ⟨result, impossible⟩ := total (.record [("teams", .array []), ("nullable", .scalar .null)])
+    (by simp [Structural.accepts, Structural.lookup, Generated.MixedSchema])
+  simp [Structural.lookupPath, Structural.step, Structural.lookup] at impossible
+
 end Datamog.Proofs

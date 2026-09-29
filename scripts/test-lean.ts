@@ -11,7 +11,10 @@ import { ident } from "../packages/engine/src/dialect.ts";
 import { DatamogExecutor } from "../packages/engine/src/executor.ts";
 import { insertRows } from "../packages/engine/src/loader.ts";
 
-import { assertCurrentVerificationManifest } from "../packages/core/src/verification-manifest.ts";
+import {
+  assertCurrentVerificationManifest,
+  canonicalVerificationJson,
+} from "../packages/core/src/verification-manifest.ts";
 import { createLeanVerificationResult } from "../packages/core/src/verification-result.ts";
 
 const root = new URL("../", import.meta.url).pathname;
@@ -346,6 +349,213 @@ try {
       : [...nestedArrayInputs, ...nestedArrayInputs.map((value) => [value])]
     ).map((value) => ({ ...spec, value })),
   );
+  type MixedValue = Scalar | MixedValue[] | { [key: string]: MixedValue };
+  const isRecord = (value: MixedValue): value is { [key: string]: MixedValue } =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  const integer = (value: MixedValue) => typeof value === "number" && Number.isSafeInteger(value);
+  const nullable = (check: (value: MixedValue) => boolean) => (value: MixedValue) =>
+    value === null || check(value);
+  const arrayOf = (check: (value: MixedValue) => boolean) => (value: MixedValue) =>
+    Array.isArray(value) && value.every(check);
+  const recordOf =
+    (
+      required: Record<string, (value: MixedValue) => boolean>,
+      optional: Record<string, (value: MixedValue) => boolean> = {},
+    ) =>
+    (value: MixedValue): boolean =>
+      isRecord(value) &&
+      Object.entries(required).every(
+        ([key, check]) => Object.hasOwn(value, key) && check(value[key]!),
+      ) &&
+      Object.entries(value).every(
+        ([key, child]) => (required[key] ?? optional[key])?.(child) === true,
+      );
+  const personCheck = recordOf(
+    { age: integer, rating: nullable(integer) },
+    { score: nullable(integer) },
+  );
+  const teamCheck = recordOf({ members: arrayOf(personCheck) });
+  const mixedCheck = recordOf(
+    { teams: arrayOf(teamCheck), nullable: nullable(recordOf({ age: integer })) },
+    { optional: recordOf({ age: integer }) },
+  );
+  const mixedArrayCheck = arrayOf(recordOf({ rows: arrayOf(arrayOf(recordOf({ n: integer }))) }));
+  const replaceMixed = (
+    value: MixedValue,
+    path: (string | number)[],
+    replacement: MixedValue | undefined,
+  ): MixedValue => {
+    if (!path.length) {
+      if (replacement === undefined) throw new Error("Cannot delete a fixture root");
+      return replacement;
+    }
+    const [part, ...rest] = path;
+    if (Array.isArray(value) && typeof part === "number")
+      return value.map((child, index) =>
+        index === part ? replaceMixed(child, rest, replacement) : child,
+      );
+    if (isRecord(value) && typeof part === "string") {
+      const result = { ...value };
+      if (!rest.length && replacement === undefined) delete result[part];
+      else result[part] = replaceMixed(result[part]!, rest, replacement);
+      return result;
+    }
+    throw new Error("Invalid fixture mutation path");
+  };
+  const mixedInputs: MixedValue[] = [];
+  const baseMixed: MixedValue = {
+    teams: [
+      {
+        members: [
+          { age: 0, rating: null },
+          { age: 9007199254740991, rating: -9007199254740991, score: null },
+        ],
+      },
+      { members: [] },
+    ],
+    nullable: null,
+  };
+  const replacements: (MixedValue | undefined)[] = [undefined, null, false, 0, [], {}, [null]];
+  for (const path of [
+    [],
+    ["teams"],
+    ["teams", 0],
+    ["teams", 0, "members"],
+    ["teams", 0, "members", 0],
+    ["teams", 0, "members", 0, "age"],
+    ["teams", 0, "members", 0, "rating"],
+    ["teams", 0, "members", 0, "score"],
+    ["optional"],
+    ["nullable"],
+  ] as (string | number)[][]) {
+    for (const replacement of replacements) {
+      if (!path.length) {
+        if (replacement !== undefined) mixedInputs.push(replacement);
+        continue;
+      }
+      // Deleting an array slot would create a JS sparse array, outside the JSON model.
+      if (replacement === undefined && typeof path.at(-1) === "number") continue;
+      mixedInputs.push(replaceMixed(baseMixed, path, replacement));
+    }
+  }
+  mixedInputs.push(
+    baseMixed,
+    { teams: [], nullable: null },
+    {
+      teams: [{ members: [{ age: -9007199254740991, rating: 9007199254740991, score: 0 }] }],
+      nullable: { age: 1 },
+      optional: { age: 2 },
+    },
+  );
+  for (const path of [[], ["teams", 0], ["teams", 0, "members", 0]] as (string | number)[][]) {
+    mixedInputs.push(replaceMixed(baseMixed, [...path, "extra"], 0));
+  }
+  const mixedArrayInputs: MixedValue[] = [
+    [],
+    [{ rows: [] }],
+    [{ rows: [[]] }],
+    [{ rows: [[{ n: -9007199254740991 }, { n: 9007199254740991 }]] }],
+    [{ rows: [[{ n: 0 }], []] }, { rows: [[{ n: 1 }]] }],
+  ];
+  for (const value of [
+    null,
+    false,
+    0,
+    {},
+    [],
+    [null],
+    [{ n: null }],
+    [{ n: false }],
+    [{ n: 0, extra: 1 }],
+    [{}],
+  ] as MixedValue[]) {
+    mixedArrayInputs.push(value, [value], [{ rows: value }], [{ rows: [value] }]);
+  }
+  const mixedOptionalInputs: MixedValue[] = [{}, null, false, [], { extra: 0 }];
+  for (const rows of [
+    null,
+    false,
+    0,
+    {},
+    [],
+    [null],
+    [{}],
+    [{ n: null }],
+    [{ n: 0 }],
+    [{ n: -9007199254740991 }, null, { n: 9007199254740991 }],
+    [{ n: false }],
+    [{ n: [] }],
+    [{ n: 0, extra: 1 }],
+    [[{ n: 0 }]],
+  ] as MixedValue[])
+    mixedOptionalInputs.push({ rows });
+  const mixedSpecs = [
+    {
+      id: "MixedOptionalSchema",
+      fixture: "mixed-optional-schema.dl",
+      values: mixedOptionalInputs,
+      check: recordOf(
+        {},
+        { rows: nullable(arrayOf(nullable(recordOf({}, { n: nullable(integer) })))) },
+      ),
+      dimensions: 1,
+      paths: [
+        ["rows", 0, "n"],
+        ["rows", 0],
+      ],
+    },
+    {
+      id: "MixedSchema",
+      fixture: "mixed-schema.dl",
+      values: mixedInputs,
+      check: mixedCheck,
+      dimensions: 2,
+      paths: [
+        ["teams", 0, "members", 1, "age"],
+        ["teams", 0, "members", 1, "rating"],
+        ["teams", 0, "members", 1, "score"],
+        ["optional", "age"],
+        ["nullable", "age"],
+      ],
+    },
+    {
+      id: "MixedArraySchema",
+      fixture: "mixed-array-schema.dl",
+      values: mixedArrayInputs,
+      check: mixedArrayCheck,
+      dimensions: 3,
+      paths: [[0, "rows", 1, 2, "n"]],
+    },
+  ];
+  const mixedCases = (
+    await Promise.all(
+      mixedSpecs.map(async (spec) => ({
+        ...spec,
+        source: await Bun.file(join(project, "fixtures", spec.fixture)).text(),
+      })),
+    )
+  ).flatMap((spec) => spec.values.map((value) => ({ ...spec, value })));
+  const leanMixed = (value: MixedValue): string =>
+    Array.isArray(value)
+      ? `(.array [${value.map(leanMixed).join(", ")}])`
+      : isRecord(value)
+        ? `(.record [${Object.entries(value)
+            .map(([key, child]) => `(${JSON.stringify(key)}, ${leanMixed(child)})`)
+            .join(", ")}])`
+        : `(.scalar ${leanScalar(value)})`;
+  const mixedLookup = (value: MixedValue, path: (string | number)[]): MixedValue | undefined => {
+    let result: MixedValue | undefined = value;
+    for (const part of path)
+      result =
+        typeof part === "number"
+          ? Array.isArray(result) && part >= 0
+            ? result[part]
+            : undefined
+          : result !== undefined && isRecord(result)
+            ? result[part]
+            : undefined;
+    return result;
+  };
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -706,6 +916,90 @@ ${outputName}(${variables.join(", ")}, V${variables.map((v) => `[${v}]`).join(""
           );
       }
     }
+    for (const [caseIndex, spec] of mixedCases.entries()) {
+      const { value, dimensions } = spec;
+      const accepted = spec.check(value);
+      const tuples = [Array(dimensions).fill(0), Array(dimensions).fill(1)] as number[][];
+      for (let level = 0; level < dimensions; level++)
+        for (const index of arrayIndices) {
+          const tuple = Array(dimensions).fill(0);
+          tuple[level] = index;
+          tuples.push(tuple);
+        }
+      const indices = [...new Map(tuples.map((tuple) => [JSON.stringify(tuple), tuple])).values()];
+      const columns = Array.from({ length: dimensions }, (_, i) => `i${i}`);
+      const variables = columns.map((_, i) => `I${i}`);
+      const items = `mixedItems${caseIndex}`;
+      const indexName = `mixedIndices${caseIndex}`;
+      const source = `${spec.source.replaceAll("items", items)}input predicate ${indexName}(${columns.map((c) => `${c}: integer`).join(", ")}).
+${spec.paths.map((path, p) => `output predicate mixedOutput${caseIndex}_${p}(${variables.join(", ")}, X) :- ${items}(V), ${indexName}(${variables.join(", ")}), X = V${path.map((part) => (typeof part === "string" ? `[${JSON.stringify(part)}]` : `[I${part}]`)).join("")}.`).join("\n")}`;
+      const expected = spec.paths.map((path) =>
+        indices.flatMap((tuple) => {
+          const result = mixedLookup(
+            value,
+            path.map((part) => (typeof part === "number" ? tuple[part]! : part)),
+          );
+          return result === undefined
+            ? []
+            : [{ ...Object.fromEntries(variables.map((v, i) => [v, tuple[i]])), X: result }];
+        }),
+      );
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "mixed-schema-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              const rows =
+                decl.predicate === items
+                  ? [{ values: value }]
+                  : indices.map((tuple) =>
+                      Object.fromEntries(columns.map((c, i) => [c, tuple[i]])),
+                    );
+              await insertRows(target, decl, rows);
+              return { rowsLoaded: rows.length };
+            },
+          },
+        ]);
+        let rejected = false;
+        let results: { rows: Record<string, unknown>[] }[] = [];
+        try {
+          results = await executor.execute(source);
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes("column 'values'")) throw error;
+          rejected = true;
+        }
+        if (rejected === accepted) throw new Error(`${name} mixed schema acceptance ${caseIndex}`);
+        if (accepted)
+          for (const [p, rows] of expected.entries()) {
+            const normalize = (rows: Record<string, unknown>[]) =>
+              rows.map(canonicalVerificationJson).sort();
+            if (JSON.stringify(normalize(results[p]!.rows)) !== JSON.stringify(normalize(rows)))
+              throw new Error(`${name} mixed path ${caseIndex}/${p}`);
+          }
+      }
+      const encoded = leanMixed(value);
+      checks.push(
+        `example : Structural.accepts Generated.${spec.id} ${encoded} = ${accepted} := by simp [Structural.accepts, Structural.lookup, Generated.${spec.id}]`,
+      );
+      for (const path of spec.paths)
+        for (const tuple of indices) {
+          const resolved = path.map((part) => (typeof part === "number" ? tuple[part]! : part));
+          if (resolved.some((part) => typeof part === "number" && part < 0)) continue; // Nat theorem paths; negative runtime indices checked above.
+          const found = mixedLookup(value, resolved);
+          const result = found === undefined ? "none" : `some ${leanMixed(found)}`;
+          const segments = resolved
+            .map((part) =>
+              typeof part === "number" ? `.index ${part}` : `.field ${JSON.stringify(part)}`,
+            )
+            .join(", ");
+          checks.push(
+            `example : Structural.lookupPath ${encoded} [${segments}] = ${result} := by rfl`,
+          );
+        }
+    }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
     const relationCases = [
@@ -807,11 +1101,16 @@ ${outputName}(${variables.join(", ")}, V${variables.map((v) => `[${v}]`).join(""
   checks.push(
     "example : Datamog.negationAsFailure none := by simp [Datamog.negationAsFailure, Datamog.Holds]",
   );
-  await Bun.write(
-    join(temp, "CrossCheck.lean"),
-    `import Datamog.Semantics\nimport Datamog.Records\nimport Datamog.Generated\nopen Datamog\n${checks.join("\n")}\n`,
-  );
-  await run(["lake", "env", "lean", "CrossCheck.lean"], temp);
+  // Keep elaborator memory bounded as structural fixtures add many lookup checks.
+  // Every batch is checked in the same fresh project; none imports prior examples.
+  const caseBatchSize = 500;
+  for (let start = 0; start < checks.length; start += caseBatchSize) {
+    await Bun.write(
+      join(temp, "CrossCheck.lean"),
+      `import Datamog.Semantics\nimport Datamog.Records\nimport Datamog.Generated\nopen Datamog\n${checks.slice(start, start + caseBatchSize).join("\n")}\n`,
+    );
+    await run(["lake", "env", "lean", "CrossCheck.lean"], temp);
+  }
   console.log(`${cases.length} Lean/${backendNames.join("/")} semantic cases passed.`);
   console.log(
     `${recordCases.length} Lean/${backendNames.join("/")} flat-record lookup cases passed.`,
@@ -827,6 +1126,9 @@ ${outputName}(${variables.join(", ")}, V${variables.map((v) => `[${v}]`).join(""
   console.log(
     `${nestedArrayCases.length} Lean/${backendNames.join("/")} nested array schema cases passed.`,
   );
+  console.log(
+    `${mixedCases.length} Lean/${backendNames.join("/")} mixed structural schema cases passed.`,
+  );
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
@@ -837,6 +1139,7 @@ ${outputName}(${variables.join(", ")}, V${variables.map((v) => `[${v}]`).join(""
     nestedSchemaCases: nestedCases.length,
     arraySchemaCases: arrayCases.length,
     nestedArraySchemaCases: nestedArrayCases.length,
+    structuralSchemaCases: mixedCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

@@ -482,3 +482,37 @@ and Postgres, then checks those results in Lean. Reports count
 indices, empty and null children, wrong depths, and integer boundaries. This also
 regresses a Postgres scalar-at-index-zero discrepancy; numeric JSON subscripts now
 require an actual array and preserve null only when it is an array element.
+
+### Composable record and array schemas
+
+`exportLeanStructuralSchema` in `packages/core/src/structural-schema-lean.ts`
+exports closed records and arrays with integer leaves in one recursive model.
+`Datamog/Structural.lean` defines membership and mixed field/index lookup under
+`datamog-structural-integer-v1`. Roots must be non-null records or arrays; field
+optionality and child nullability are preserved throughout. Non-integer leaf
+schemas and nominal types remain unsupported.
+
+Generated paths quantify over one natural-number index per array step. Their
+`ArrayBounds` premise supplies bounds for each reached array. Field steps only
+propagate bounds to children that exist, so this premise does not assume required
+field presence. `structuralRequiredLookup` proves lookup existence and integer
+leaf membership from schema membership, a required typed path, and those bounds.
+Optional or nullable containers suppress descendant goals; required nullable
+integer leaves allow an explicit null result.
+
+`MixedSchema_path0`, `MixedSchema_path1`, and `MixedArraySchema_path0` exercise
+alternating record and array layers, including an array root. The three
+`mixed{Empty,Optional,Null}Total_refuted` theorems reject unconditional lookup
+through an empty array, an absent optional field, or a null parent. All seven
+results, including the generic theorem, are registered, audited, and required in
+CI. `MixedOptionalSchema` exports a definition only, so it cannot satisfy a
+requested theorem ID.
+
+The runner compares 137 mixed-schema cases on native, SQLite, and Postgres.
+Concrete Lean examples run in sequential batches of 500 to bound elaborator
+memory; every batch must pass before a fresh result report is written.
+Lean checks membership and nonnegative mixed-path lookup results. Runtime checks
+also cover negative and wide indices at each dimension. Reports record
+`semanticChecks.structuralSchemaCases`. These checks concern the modeled fragment;
+connecting the guarantees to rule projection/refinement obligations remains future
+work.

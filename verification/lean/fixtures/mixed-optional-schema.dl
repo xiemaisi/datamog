@@ -1,0 +1,1 @@
+input predicate items(values: {rows?: [{n?: integer?}?]?}).
