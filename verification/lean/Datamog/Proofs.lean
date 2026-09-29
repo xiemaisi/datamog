@@ -244,4 +244,29 @@ theorem nullableParentTotal_refuted : Generated.nullableParentTotal_refuted := b
     simp [Generated.NestedSchema, nestedCounterexample, Nested.accepts, Nested.lookup])
   simp [nestedCounterexample, Nested.lookupPath, Nested.lookup] at impossible
 
+theorem IntegerArray_lookup : Generated.IntegerArray_lookup := by
+  intro values index accepted bound
+  exact Arrays.integerLookup values index accepted bound
+
+theorem NullableIntegerArray_lookup : Generated.NullableIntegerArray_lookup := by
+  intro values index _ bound
+  exact Arrays.inBounds values index bound
+
+theorem arrayElementValid : Generated.arrayElementValid := by
+  intro nullable values index bound accepted
+  exact Arrays.elementValid nullable values index accepted bound
+
+theorem arrayNegativeAbsent : Generated.arrayNegativeAbsent := by
+  intro values index negative
+  simp [Arrays.lookupIndex, show ¬ 0 ≤ index by omega]
+
+theorem arrayPastEndAbsent : Generated.arrayPastEndAbsent := by
+  intro values index bound
+  simp [Arrays.lookupIndex, List.getElem?_eq_none, bound]
+
+theorem arrayTotal_refuted : Generated.arrayTotal_refuted := by
+  intro nullable total
+  obtain ⟨value, impossible⟩ := total [] (by simp [Arrays.accepts])
+  simp [Arrays.lookupIndex] at impossible
+
 end Datamog.Proofs

@@ -430,3 +430,26 @@ scalar shapes, extra keys at multiple depths, and integer boundaries are covered
 Lean checks the exported membership predicate and five path lookups per case.
 Reports record `semanticChecks.nestedSchemaCases` separately. These results
 concern the modeled fragment, not general schema translation or backend proofs.
+
+### Integer-array schemas
+
+`exportLeanArraySchema` in `packages/core/src/array-schema-lean.ts` translates
+non-null `[integer]` and `[integer?]` input columns. `Datamog/Arrays.lean` checks
+each scalar element and models partial indexing with explicit null distinct from
+absence. Empty arrays are admitted; they provide no element-existence guarantee.
+Arrays of records/arrays, arrays inside records, and nullable array roots remain
+unsupported by this exporter.
+
+`IntegerArray_lookup` and `NullableIntegerArray_lookup` explicitly require a
+nonnegative index below the array length. Their conclusions give an integer
+witness or a present value, respectively. `arrayElementValid` proves element
+membership; `arrayNegativeAbsent` and `arrayPastEndAbsent` prove invalid-index
+absence. `arrayTotal_refuted` uses the empty array to refute unconditional lookup
+at zero. All six results have exact checker types, axiom audits, manifest entries,
+and CI requirements under `datamog-integer-array-v1`.
+
+The runner compares 114 short-array cases against native, SQLite, and Postgres,
+with six dynamic indices per admitted array. Lean checks every case's acceptance
+and lookup results. Reports count `semanticChecks.arraySchemaCases`. The tests
+also exposed and now cover a Postgres int32 subscript cast overflow: wide valid
+Datamog indices now yield no value rather than an SQL error.

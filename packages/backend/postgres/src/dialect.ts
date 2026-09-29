@@ -78,7 +78,12 @@ export class PostgresSqlDialect implements SqlDialect {
     // withholds the row. A present key holding a JSON null keeps its `'null'`
     // and derives a row (§8).
     const cast = indexIsString ? "TEXT" : "INTEGER";
-    return jsonNullPreserved(`(${receiverSql} -> CAST(${indexSql} AS ${cast}))`);
+    // JSONB subscripts use int32, whereas Datamog indices are safe integers.
+    // Guard inside the cast so even constant-folded wide indices cannot raise.
+    const index = indexIsString
+      ? indexSql
+      : `CASE WHEN (${indexSql}) BETWEEN 0 AND 2147483647 THEN (${indexSql}) ELSE NULL END`;
+    return jsonNullPreserved(`(${receiverSql} -> CAST(${index} AS ${cast}))`);
   }
 
   jsonSlice(receiverSql: string, startSql: string | null, endSql: string | null): string {

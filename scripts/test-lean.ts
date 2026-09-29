@@ -279,6 +279,21 @@ try {
       current = current !== null && typeof current === "object" ? current[key] : undefined;
     return current;
   };
+  const arrayInputs: Scalar[][] = [[]];
+  const arrayScalars: Scalar[] = [null, false, true, 0, -1, -9007199254740991, 9007199254740991];
+  for (const first of arrayScalars) {
+    arrayInputs.push([first]);
+    for (const second of arrayScalars) arrayInputs.push([first, second]);
+  }
+  const arrayCases = [false, true].flatMap((nullable) =>
+    arrayInputs.map((values) => ({ values, nullable })),
+  );
+  const arrayIndices = [-9007199254740991, -1, 0, 1, 2, 9007199254740991];
+  const arraySources = await Promise.all(
+    ["integer-array.dl", "nullable-integer-array.dl"].map((fixture) =>
+      Bun.file(join(project, "fixtures", fixture)).text(),
+    ),
+  );
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -505,6 +520,61 @@ try {
         );
       }
     }
+    for (const [i, { values, nullable }] of arrayCases.entries()) {
+      const accepts = values.every(
+        (value) => typeof value === "number" || (value === null && nullable),
+      );
+      const source = arraySources[nullable ? 1 : 0]!.replaceAll("items", `arrayItems${i}`)
+        .replaceAll("indices", `arrayIndices${i}`)
+        .replaceAll("project", `arrayOutput${i}`);
+      const expected = arrayIndices.flatMap((index) =>
+        index >= 0 && index < values.length ? [{ I: index, X: values[index] }] : [],
+      );
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "array-schema-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              await insertRows(
+                target,
+                decl,
+                decl.predicate === `arrayItems${i}`
+                  ? [{ values }]
+                  : arrayIndices.map((i) => ({ i })),
+              );
+              return { rowsLoaded: decl.predicate === `arrayItems${i}` ? 1 : arrayIndices.length };
+            },
+          },
+        ]);
+        let rejected = false;
+        let rows: Record<string, unknown>[] = [];
+        try {
+          rows = (await executor.execute(source))[0]!.rows;
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes("column 'values'")) throw error;
+          rejected = true;
+        }
+        if (rejected === accepts) throw new Error(`${name} array acceptance regression: ${i}`);
+        rows.sort((a, b) => Number(a.I) - Number(b.I));
+        if (accepts && JSON.stringify(rows) !== JSON.stringify(expected))
+          throw new Error(`${name} array indexing regression: ${i}: ${JSON.stringify(rows)}`);
+      }
+      const leanValues = `[${values.map(leanScalar).join(", ")}]`;
+      const schema = nullable ? "NullableIntegerArray" : "IntegerArray";
+      checks.push(
+        `example : Arrays.accepts Generated.${schema} ${leanValues} = ${accepts} := by decide`,
+      );
+      for (const index of arrayIndices) {
+        const result =
+          index >= 0 && index < values.length ? `some ${leanScalar(values[index]!)}` : "none";
+        checks.push(
+          `example : Arrays.lookupIndex ${leanValues} (${index}) = ${result} := by decide`,
+        );
+      }
+    }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
     const relationCases = [
@@ -622,6 +692,7 @@ try {
     `${schemaCases.length} Lean/${backendNames.join("/")} schema acceptance cases passed.`,
   );
   console.log(`${nestedCases.length} Lean/${backendNames.join("/")} nested schema cases passed.`);
+  console.log(`${arrayCases.length} Lean/${backendNames.join("/")} array schema cases passed.`);
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
@@ -630,6 +701,7 @@ try {
     fieldCases: fieldCases.length,
     schemaCases: schemaCases.length,
     nestedSchemaCases: nestedCases.length,
+    arraySchemaCases: arrayCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

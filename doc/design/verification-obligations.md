@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus flat and nested record schema export started**. This extends the future-work discussion in
+and coverage claims plus record and integer-array schema export started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -131,14 +131,16 @@ The semantic library distinguishes null from undefined and defines bounded
 integer operations and truth. A separate `Records.lean` library now models
 lookup in flat records containing these scalar values. `NestedRecords.lean`
 adds a separate recursive record value domain and closed integer-leaf schemas.
-Arrays, strings as values, floats, and general structural export remain unsupported.
+`Arrays.lean` models scalar arrays with integer-element schemas and partial indexing.
+Strings as values, floats, arrays of records or arrays, and general structural
+export remain unsupported.
 
 `bun run test:lean` checks reproducibility and rebuilds from project source in a
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
 cases, 32 integer-field acceptance cases, 265 flat-schema acceptance cases,
-and 61 nested-schema cases against native, SQLite, and
+61 nested-schema cases, and 114 integer-array cases against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -389,6 +391,34 @@ and rewriting. Reports count these separately as `nestedSchemaCases`.
 This exporter does not support nullable root records, arrays, non-integer leaf
 schemas, nominal types, or arbitrary structural refinements. It does not extend
 the local SMT or relational exporters, and it does not prove backend correctness.
+
+## Initial integer-array schemas
+
+The internal `exportLeanArraySchema` API translates non-null input columns of
+`[integer]` or `[integer?]`. The `datamog-integer-array-v1` profile models lists
+of scalar values, validates every element, and preserves explicit null when the
+element schema permits it. Empty arrays satisfy both schemas. This first fragment
+does not compose arrays with the record exporters or support nullable array roots.
+
+Generated lookup goals quantify over nonnegative indices and explicitly require
+an index smaller than the array length. Non-nullable element schemas yield an
+integer witness; nullable element schemas yield a present value. Generic laws
+prove element membership, absence at negative indices, and absence at or beyond
+the length. A refutation using the empty array establishes that schema membership
+alone does not imply a value at index zero. All six results are registered with
+exact checker types, transitive axiom audits, content identities, and CI requirements.
+
+The runner compares 114 arrays (all lengths zero through two over seven scalar
+values, under both element schemas) against native, SQLite, and Postgres loading.
+For accepted inputs it checks six dynamic indices, including negative values,
+ordinary positions, and both safe-integer extremes. Lean checks acceptance and
+all six lookups for every case. Reports count these as `arraySchemaCases`.
+
+These comparisons exposed a Postgres JSONB subscript cast overflow for valid
+Datamog indices above the 32-bit range. The dialect now guards the index before
+casting, so such indices yield no value. Dedicated regressions cover dynamic
+and constant wide indices, including SQL planning. This restores the existing
+indexing contract; the Lean theorems still concern the modeled language.
 
 ## Which harder claims should be expressible?
 

@@ -2,6 +2,7 @@
 import Datamog.Semantics
 import Datamog.Records
 import Datamog.NestedRecords
+import Datamog.Arrays
 namespace Datamog.Generated
 def successor : Prop :=
   ∀ (v0 : Int) (v1 : Prop) (v2 : Int),
@@ -15,6 +16,33 @@ def falseGoal : Prop :=
   ∀ (v0 : Int),
   (((-(9007199254740991 : Int)) <= v0) ∧ (v0 <= (9007199254740991 : Int))) →
   (v0 > (0 : Int))
+
+def IntegerArray : Bool := false
+def IntegerArray_lookup : Prop :=
+  ∀ (values : List Datamog.Value) (index : Nat),
+  Datamog.Arrays.accepts IntegerArray values = true → index < values.length →
+  ∃ n : Datamog.SafeInt, Datamog.Arrays.lookupIndex values (Int.ofNat index) = some (.integer n)
+
+def NullableIntegerArray : Bool := true
+def NullableIntegerArray_lookup : Prop :=
+  ∀ (values : List Datamog.Value) (index : Nat),
+  Datamog.Arrays.accepts NullableIntegerArray values = true → index < values.length →
+  ∃ value, Datamog.Arrays.lookupIndex values (Int.ofNat index) = some value
+
+def arrayElementValid : Prop :=
+  ∀ (nullable : Bool) (values : List Value) (index : Nat) (bound : index < values.length),
+  Arrays.accepts nullable values = true → Arrays.elementMatches nullable values[index] = true
+
+def arrayNegativeAbsent : Prop :=
+  ∀ (values : List Value) (index : Int), index < 0 → Arrays.lookupIndex values index = none
+
+def arrayPastEndAbsent : Prop :=
+  ∀ (values : List Value) (index : Nat), values.length ≤ index →
+  Arrays.lookupIndex values (Int.ofNat index) = none
+
+def arrayTotal_refuted : Prop :=
+  ∀ nullable : Bool, ¬ (∀ values : List Value, Arrays.accepts nullable values = true →
+  ∃ value, Arrays.lookupIndex values 0 = some value)
 
 def NestedSchema : Datamog.Nested.Schema :=
   (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]), false, false, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 105, Char.ofNat 110, Char.ofNat 110, Char.ofNat 101, Char.ofNat 114]), false, false, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, Datamog.Nested.Schema.integer)]))])), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer)])), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer)])), ((String.ofList [Char.ofNat 109, Char.ofNat 97, Char.ofNat 121, Char.ofNat 98, Char.ofNat 101]), true, true, (Datamog.Nested.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Nested.Schema.integer)]))])

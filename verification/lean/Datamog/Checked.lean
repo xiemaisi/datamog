@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: 65fd7facfe3bd8df8dc8417364d07ad99c646b3e8c0e8227435dc3ed104c3c92
+-- Verification manifest SHA-256: a44d320474521d9864c98add6216ae5b72573541908395cc3c21d27f5121523a
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -52,6 +52,18 @@ theorem NestedSchema_path0 : Generated.NestedSchema_path0 := Proofs.NestedSchema
 #audit NestedSchema_path0
 theorem NestedSchema_path1 : Generated.NestedSchema_path1 := Proofs.NestedSchema_path1
 #audit NestedSchema_path1
+theorem IntegerArray_lookup : Generated.IntegerArray_lookup := Proofs.IntegerArray_lookup
+#audit IntegerArray_lookup
+theorem NullableIntegerArray_lookup : Generated.NullableIntegerArray_lookup := Proofs.NullableIntegerArray_lookup
+#audit NullableIntegerArray_lookup
+theorem arrayElementValid : Generated.arrayElementValid := Proofs.arrayElementValid
+#audit arrayElementValid
+theorem arrayNegativeAbsent : Generated.arrayNegativeAbsent := Proofs.arrayNegativeAbsent
+#audit arrayNegativeAbsent
+theorem arrayPastEndAbsent : Generated.arrayPastEndAbsent := Proofs.arrayPastEndAbsent
+#audit arrayPastEndAbsent
+theorem arrayTotal_refuted : Generated.arrayTotal_refuted := Proofs.arrayTotal_refuted
+#audit arrayTotal_refuted
 theorem nestedRequiredPath : Generated.nestedRequiredPath := Proofs.nestedRequiredPath
 #audit nestedRequiredPath
 theorem optionalParentTotal_refuted : Generated.optionalParentTotal_refuted := Proofs.optionalParentTotal_refuted

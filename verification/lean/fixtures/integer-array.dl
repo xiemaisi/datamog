@@ -1,0 +1,4 @@
+input predicate items(values: [integer]).
+input predicate indices(i: integer).
+project(I, V[I]) :- items(V), indices(I).
+?- project(I, X).
