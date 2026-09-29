@@ -168,6 +168,34 @@ try {
       fieldInputs.map((fields) => ({ fields, optional, nullable })),
     ),
   );
+  const schemaSource = await Bun.file(join(project, "fixtures/record-schema.dl")).text();
+  const schemaCases: { record: Record<string, Scalar>; accepts: boolean }[] = [];
+  const choices = [undefined, null, 0, false] as const;
+  for (const required of choices)
+    for (const nullable of choices)
+      for (const optional of choices)
+        for (const maybe of choices) {
+          const record = Object.fromEntries(
+            Object.entries({ required, nullable, optional, maybe }).filter(
+              ([, value]) => value !== undefined,
+            ),
+          ) as Record<string, Scalar>;
+          schemaCases.push({
+            record,
+            accepts:
+              required === 0 &&
+              (nullable === 0 || nullable === null) &&
+              (optional === undefined || optional === 0) &&
+              maybe !== false,
+          });
+        }
+  for (const value of [-9007199254740991, 9007199254740991])
+    schemaCases.push({
+      record: { required: value, nullable: value, optional: value, maybe: value },
+      accepts: true,
+    });
+  for (const extra of [null, false, 0])
+    schemaCases.push({ record: { required: 0, nullable: null, extra }, accepts: false });
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -291,6 +319,46 @@ try {
         `example : integerFieldMatches ${leanFields} "x" ${optional} ${nullable} = ${accepts} := by decide`,
       );
     }
+    for (const [i, { record, accepts }] of schemaCases.entries()) {
+      const source = schemaSource
+        .replaceAll("document", `schemaInput${i}`)
+        .replaceAll("project", `schemaOutput${i}`);
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "schema-membership-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              await insertRows(target, decl, [{ r: record }]);
+              return { rowsLoaded: 1 };
+            },
+          },
+        ]);
+        let rejected = false;
+        let rows: Record<string, unknown>[] = [];
+        try {
+          rows = (await executor.execute(source))[0]!.rows;
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes("column 'r'")) throw error;
+          rejected = true;
+        }
+        if (rejected === accepts)
+          throw new Error(`${name} schema acceptance regression: case ${i}`);
+        if (
+          accepts &&
+          JSON.stringify(rows) !== JSON.stringify([{ X: record.required, Y: record.nullable }])
+        )
+          throw new Error(`${name} schema projection regression: case ${i}`);
+      }
+      const fields = `[${Object.entries(record)
+        .map(([key, value]) => `(${JSON.stringify(key)}, ${leanScalar(value)})`)
+        .join(", ")}]`;
+      checks.push(
+        `example : integerRecordMatches Generated.DocumentSchema ${fields} = ${accepts} := by decide`,
+      );
+    }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
     const relationCases = [
@@ -394,7 +462,7 @@ try {
   );
   await Bun.write(
     join(temp, "CrossCheck.lean"),
-    `import Datamog.Semantics\nimport Datamog.Records\nopen Datamog\n${checks.join("\n")}\n`,
+    `import Datamog.Semantics\nimport Datamog.Records\nimport Datamog.Generated\nopen Datamog\n${checks.join("\n")}\n`,
   );
   await run(["lake", "env", "lean", "CrossCheck.lean"], temp);
   console.log(`${cases.length} Lean/${backendNames.join("/")} semantic cases passed.`);
@@ -404,12 +472,16 @@ try {
   console.log(
     `${fieldCases.length} Lean/${backendNames.join("/")} integer-field acceptance cases passed.`,
   );
+  console.log(
+    `${schemaCases.length} Lean/${backendNames.join("/")} schema acceptance cases passed.`,
+  );
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
     relationCases: 7,
     recordCases: recordCases.length,
     fieldCases: fieldCases.length,
+    schemaCases: schemaCases.length,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

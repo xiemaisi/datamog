@@ -5,6 +5,7 @@ import {
   exportLeanObligation,
   exportLeanUniqueness,
 } from "../packages/core/src/obligation-lean.ts";
+import { exportLeanRecordSchema } from "../packages/core/src/record-schema-lean.ts";
 import {
   assertCurrentVerificationManifest,
   createVerificationManifest,
@@ -147,6 +148,10 @@ const claims = assembleLeanClaims([
   diagonalUnique,
   diagonalTotal,
 ]);
+const recordSchema = exportLeanRecordSchema(
+  compile(await Bun.file(new URL("fixtures/record-schema.dl", project)).text()),
+  { id: "DocumentSchema", predicate: "document", column: 0 },
+);
 const recordGoals = [
   {
     id: "requiredFieldPresent",
@@ -202,6 +207,8 @@ import Datamog.Records
 namespace Datamog.Generated
 ${exportLeanObligation(successor[0]!, "successor")}
 ${exportLeanObligation(falseGoal, "falseGoal")}
+${recordSchema.source}
+${recordSchema.goals.map((goal) => goal.statement).join("\n")}
 ${claims.relations}
 ${reachPreserves}
 ${reachTransitive}
@@ -222,6 +229,7 @@ theorem reachTransitive : Generated.reachTransitive := Proofs.reachTransitive
 theorem falseGoal_refuted : ¬ Generated.falseGoal := Proofs.falseGoal_refuted
 #audit falseGoal_refuted
 ${claims.checker}
+${recordSchema.checker}
 ${recordGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
 end Datamog.Checked
 `;
@@ -236,6 +244,7 @@ const paths = new Set([
   "verification/lean/fixtures/saturating-successor.dl",
   "verification/lean/fixtures/overlapping-successor.dl",
   "verification/lean/fixtures/diagonal.dl",
+  "verification/lean/fixtures/record-schema.dl",
   "scripts/generate-lean.ts",
   "scripts/test-lean.ts",
   "bun.lock",
@@ -268,6 +277,7 @@ const manifest = await createVerificationManifest(
       dependencies: [],
     },
     ...claims.nodes,
+    ...recordSchema.nodes,
     {
       id: "RecordLookup",
       kind: "definition",

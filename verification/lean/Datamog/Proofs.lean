@@ -179,4 +179,17 @@ theorem optionalFieldTotal_refuted : Generated.optionalFieldTotal_refuted := by
   obtain ⟨value, impossible⟩ := total [] "x" (by rfl)
   simp [lookupField] at impossible
 
+theorem DocumentSchema_field0 : Generated.DocumentSchema_field0 := by
+  intro fields accepted
+  have field : integerFieldMatches fields "required" false false = true := by
+    simp [integerRecordMatches, Generated.DocumentSchema] at accepted
+    exact accepted.1.1
+  exact nonnullableFieldInteger fields _ field
+
+theorem DocumentSchema_field1 : Generated.DocumentSchema_field1 := by
+  intro fields accepted
+  apply requiredFieldPresent fields _ true
+  simp [integerRecordMatches, Generated.DocumentSchema] at accepted
+  exact accepted.1.2.1
+
 end Datamog.Proofs

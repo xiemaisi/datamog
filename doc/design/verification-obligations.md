@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus flat-record lookup laws started**. This extends the future-work discussion in
+and coverage claims plus flat-record schema export started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -136,7 +136,7 @@ as values, floats, and general structural export remain unsupported.
 fresh temporary directory, with the axiom allowlist enforced. Tests reject a
 false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
-cases, and 32 integer-field acceptance cases against native, SQLite, and
+cases, 32 integer-field acceptance cases, and 261 closed-schema acceptance cases against native, SQLite, and
 configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
@@ -301,8 +301,8 @@ checks the expected results by Lean kernel reduction. Cases include missing and
 null fields, integer boundaries, Booleans, duplicate keys in both orders, dotted
 keys, and empty keys. Fresh reports count these separately as `recordCases`.
 Nested records, arrays, general structural type membership, and wrong-shape receivers
-remain outside this flat model; the existing exporters still reject structural
-claims.
+remain outside this flat model; local and relational exporters still reject
+structural claims.
 
 The flat-record library also defines `integerFieldMatches`, which checks one
 field with independent optional and nullable flags. Absence is accepted only
@@ -317,8 +317,33 @@ flag combinations against actual structural input loading on native, SQLite,
 and Postgres; accepted inputs also have their projected lookup results checked.
 Lean reduction checks the same acceptance matrix, and reports record its count
 as `fieldCases`. These tests use single-field closed declarations, while the
-formal predicate concerns just that field. General schema translation remains
-unimplemented.
+formal predicate concerns just that field.
+
+The internal `exportLeanRecordSchema` API now translates an elaborated input
+column containing a non-null, closed, flat record of integer fields. It preserves
+field names and the independent optional/nullable flags, including expanded type
+aliases. `integerRecordMatches` checks every declared field and rejects extra
+keys. The exporter generates a lookup goal for each required field: presence
+for nullable fields, and an integer witness for non-nullable fields. Optional
+fields produce no total-lookup goal. Empty schemas accept only empty records in
+the modeled domain.
+
+The multi-field fixture has two maintained proofs with exact generated checker
+types, axiom audits, and CI requirements. Manifest definitions retain the
+elaborated predicate identity, column index, field descriptors, and generated
+Lean source. Changed names, flags, fields, or predicate identities invalidate
+content identities. String keys are encoded as Unicode scalar data; unpaired
+UTF-16 surrogates are rejected.
+
+The runner compares 261 schema cases against structural input loading on native,
+SQLite, and Postgres, and checks the exported schema by Lean kernel reduction.
+These cover all combinations of missing, null, integer, and Boolean values across
+four fields, both integer boundaries, and extra keys. Accepted records also have
+their required-field projections checked. Reports count these as `schemaCases`.
+This remains a flat integer-field fragment over `FlatRecord`; nullable record
+receivers, nested schemas, arrays, other field types, and nominal membership
+remain unsupported. It does not export arbitrary structural refinements or prove
+backend correctness.
 
 ## Which harder claims should be expressible?
 

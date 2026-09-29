@@ -369,4 +369,30 @@ structural declaration; invalid inputs must be rejected by structural validation
 and valid inputs must produce the expected projected value (or no row for an
 absent optional field). Lean reduction checks the same acceptance results.
 Fresh reports count them separately as `semanticChecks.fieldCases`.
-This is a worked field-level model, not a general structural schema exporter.
+This field-level model is also used by the scoped schema exporter below.
+
+### Flat integer-record schema export
+
+The internal `packages/core/src/record-schema-lean.ts` exporter selects an
+elaborated input predicate and column. It emits a closed schema with the declared
+field names, optionality, and nullability. Only non-null record columns with
+integer fields are supported; nested schemas, arrays, other scalar field types,
+and nominal types are rejected. Expanded aliases work within this fragment.
+Keys are encoded as Unicode scalar data, with unpaired UTF-16 surrogates rejected.
+
+`integerRecordMatches` checks all declared fields and rejects undeclared keys.
+For each required field, the exporter generates an exact lookup goal: an integer
+witness for a non-nullable field, or a present value for a nullable field. It emits
+checker declarations and manifest nodes together. Optional fields generate no
+lookup guarantee. Empty schemas are supported and generate no required-field goals.
+
+`fixtures/record-schema.dl` exercises all four flag combinations. Its two
+required-field proofs (`DocumentSchema_field0` and `DocumentSchema_field1`) are
+maintained, audited, and required by Lean CI. The manifest preserves the predicate
+identity, column index, and schema descriptors. The runner compares 261 cases
+against input validation and accepted projections on native, SQLite, and Postgres,
+then checks acceptance using the generated schema by Lean reduction. Reports
+record these separately under `semanticChecks.schemaCases`.
+
+These are theorems about the flat modeled domain, not arbitrary structural
+contracts or a proof of the input validator or execution backends.

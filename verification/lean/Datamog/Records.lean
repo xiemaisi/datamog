@@ -22,4 +22,14 @@ def integerFieldMatches (fields : FlatRecord) (key : String)
   | some (.integer _) => true
   | some (.boolean _) => false
 
+structure IntegerField where
+  name : String
+  optional : Bool
+  nullable : Bool
+
+-- Validate the final value of each declared field, and reject every extra key.
+def integerRecordMatches (schema : List IntegerField) (fields : FlatRecord) : Bool :=
+  schema.all (fun field => integerFieldMatches fields field.name field.optional field.nullable) &&
+  fields.all (fun entry => schema.any (fun field => field.name == entry.1))
+
 end Datamog

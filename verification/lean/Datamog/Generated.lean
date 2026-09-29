@@ -15,6 +15,17 @@ def falseGoal : Prop :=
   (((-(9007199254740991 : Int)) <= v0) ∧ (v0 <= (9007199254740991 : Int))) →
   (v0 > (0 : Int))
 
+def DocumentSchema : List Datamog.IntegerField :=
+  [⟨(String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]), false, false⟩, ⟨(String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true⟩, ⟨(String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false⟩, ⟨(String.ofList [Char.ofNat 109, Char.ofNat 97, Char.ofNat 121, Char.ofNat 98, Char.ofNat 101]), true, true⟩]
+
+def DocumentSchema_field0 : Prop :=
+  ∀ fields : Datamog.FlatRecord, Datamog.integerRecordMatches DocumentSchema fields = true →
+  ∃ n : Datamog.SafeInt, Datamog.lookupField fields (String.ofList [Char.ofNat 114, Char.ofNat 101, Char.ofNat 113, Char.ofNat 117, Char.ofNat 105, Char.ofNat 114, Char.ofNat 101, Char.ofNat 100]) = some (Datamog.Value.integer n)
+
+def DocumentSchema_field1 : Prop :=
+  ∀ fields : Datamog.FlatRecord, Datamog.integerRecordMatches DocumentSchema fields = true →
+  ∃ value, Datamog.lookupField fields (String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]) = some value
+
 inductive Reach (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.SafeInt → Datamog.SafeInt → Prop where
   | rule0 (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) : (input0 v0 v1) → Reach input0 v0 v1
   | rule1 (v0 : Datamog.SafeInt) (v1 : Datamog.SafeInt) (v2 : Datamog.SafeInt) : (Reach input0 v0 v2) → (input0 v2 v1) → Reach input0 v0 v1

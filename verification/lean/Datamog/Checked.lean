@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: fb0568798fd6fee7af82372d22cfd7174489115dfabb8a5feb44fe09a357b9cd
+-- Verification manifest SHA-256: 0b843297ee8756e597b1c2f9ae1dda31a02caa01bd380705bfa38ede8e86dca9
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -44,6 +44,10 @@ theorem diagonalUnique : Generated.diagonalUnique := Proofs.diagonalUnique
 theorem diagonalTotal_refuted : ¬ Generated.diagonalTotal := Proofs.diagonalTotal_refuted
 #audit diagonalTotal_refuted
 
+theorem DocumentSchema_field0 : Generated.DocumentSchema_field0 := Proofs.DocumentSchema_field0
+#audit DocumentSchema_field0
+theorem DocumentSchema_field1 : Generated.DocumentSchema_field1 := Proofs.DocumentSchema_field1
+#audit DocumentSchema_field1
 theorem requiredFieldPresent : Generated.requiredFieldPresent := Proofs.requiredFieldPresent
 #audit requiredFieldPresent
 theorem nonnullableFieldInteger : Generated.nonnullableFieldInteger := Proofs.nonnullableFieldInteger
