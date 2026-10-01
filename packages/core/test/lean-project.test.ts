@@ -465,3 +465,29 @@ test("mixed family padding is fixed and inputs keep their own arities", async ()
       inputs: [{ predicate: "seed", index: 0, arity: 4 }],
     });
   }));
+
+test("nullary mutual members have no phantom quantified output", async () =>
+  fixture(async (config, output, dir) => {
+    const planPath = "verification/lean/examples/selected-mutual-flags/plan.json";
+    const original = JSON.parse(await Bun.file(planPath).text());
+    await Bun.write(config, JSON.stringify({ ...original, source: "source.dl" }));
+    await Bun.write(
+      join(dir, "source.dl"),
+      await Bun.file("verification/lean/examples/selected-mutual-flags/program.dl").text(),
+    );
+    const plan = await planProject(config, output);
+    expect(plan.goals).toEqual(["flagsSafe", "emptySafe"]);
+    const generated = plan.files["Datamog/Generated.lean"]!;
+    expect(generated).toContain("inductive emptySafeFamily  : Nat → Prop");
+    expect(generated).not.toContain("∀ ,");
+    expect(generated.split("def emptySafe")[1]).not.toContain("SafeInt");
+    expect(plan.manifest.entries.find((e) => e.id === "emptySafeFamily")!.statement).toMatchObject({
+      memberArities: [0, 0],
+      width: 0,
+      inputs: [],
+    });
+    expect(plan.manifest.entries.find((e) => e.id === "flagsSafeFamily")!.statement).toMatchObject({
+      memberArities: [0, 1],
+      width: 1,
+    });
+  }));

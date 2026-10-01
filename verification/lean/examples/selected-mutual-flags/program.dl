@@ -1,0 +1,6 @@
+input predicate seed(n: integer).
+gate(_: 0 = 0) :- seed(X).
+gate(_: 0 = 0) :- positive(X).
+positive(X, _: X > 0) :- gate(), seed(X), X > 0.
+emptyA(_: 0 > 0) :- emptyB().
+emptyB(_: 0 > 0) :- emptyA().

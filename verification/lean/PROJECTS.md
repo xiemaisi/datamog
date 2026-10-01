@@ -180,13 +180,13 @@ contracts. No member contract is a constructor premise. Adding an unguarded seed
 rule to the second predicate causes the maintained proof to fail.
 
 This initial fragment requires at least two distinct predicates forming one
-strongly connected component, non-null integer relations of positive arity,
+strongly connected component, non-null integer relations (including zero-column derived members),
 variable-only
 atoms, variable or variable-plus-safe-integer-literal heads, and supported integer
 comparison guards. All rules must carry
 supported simple refinements. Missing members, derived dependencies outside the
 component, explicit constraints, negation, parity, nullable columns, other computed
-heads, and zero-column predicates are rejected. There is one joint goal ID;
+heads are rejected. There is one joint goal ID;
 member definitions cannot independently satisfy a proof gate. Ordinary local
 proof cycles remain unsupported. The family models finite derivations and does
 not establish termination or backend correctness.
@@ -219,8 +219,16 @@ The manifest records member arities, family width, input arities, and padding.
 The maintained proof establishes both contracts by joint induction and separately
 checks that a unary derivation's padding is always zero. Changing the computed
 successor to add zero fails checking. This extends tuple representation only;
-nullable values, zero-column predicates, and general local proof-cycle assembly
-remain unsupported.
+nullable values and general local proof-cycle assembly remain unsupported.
+
+The [flag example](examples/selected-mutual-flags/program.dl) adds zero-column
+derived members. A nullary member's contract is an implication with no output
+binders; in a mixed family its slots are all canonical zero. A wholly nullary
+family has type `Nat → Prop` and requires no padding or integer arguments.
+The fixture also proves by induction that an all-nullary recursive cycle with no
+base rule has no finite derivations. Adding a base fact makes that proof fail and
+prevents a fresh report. This does not assume a cycle's contracts to prove them.
+Input declarations still require at least one column under current parser syntax.
 
 ## Worked example
 

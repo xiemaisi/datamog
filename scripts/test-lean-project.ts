@@ -340,6 +340,38 @@ try {
   console.log(
     "Selected project: mixed arities and canonical padding checked; invalid step rejected.",
   );
+  const flagsFixture = new URL(
+    "../verification/lean/examples/selected-mutual-flags/",
+    import.meta.url,
+  ).pathname;
+  await cp(flagsFixture, join(temp, "mutual-flags-input"), { recursive: true });
+  const flagsConfig = join(temp, "mutual-flags-input/plan.json");
+  const flagsOutput = join(temp, "mutual-flags-project");
+  await exportProject(flagsConfig, flagsOutput);
+  await Bun.write(
+    join(flagsOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(flagsFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(flagsConfig, flagsOutput);
+  const flagsReport = await checkProject(flagsConfig, flagsOutput);
+  if (flagsReport.entries.length !== 2 || flagsReport.entries.some((e) => e.status !== "proved"))
+    throw new Error("Expected both nullary goals");
+  const flagsSource = join(temp, "mutual-flags-input/program.dl");
+  await Bun.write(flagsSource, `${await Bun.file(flagsSource).text()}\nemptyA(_: 0 > 0).\n`);
+  await exportProject(flagsConfig, flagsOutput);
+  await Bun.write(join(flagsOutput, "verification-result.json"), "old success");
+  let flagsRejected = false;
+  try {
+    await checkProject(flagsConfig, flagsOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("assumption")) throw error;
+    flagsRejected = true;
+  }
+  if (!flagsRejected || (await Bun.file(join(flagsOutput, "verification-result.json")).exists()))
+    throw new Error("Added nullary base fact was accepted");
+  console.log(
+    "Selected project: nullary members and empty-cycle induction passed; new base fact rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

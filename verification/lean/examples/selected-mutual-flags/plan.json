@@ -1,0 +1,7 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "mutual-invariant", "id": "flagsSafe", "predicates": ["gate", "positive"] },
+    { "kind": "mutual-invariant", "id": "emptySafe", "predicates": ["emptyA", "emptyB"] }
+  ]
+}

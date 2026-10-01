@@ -36,12 +36,12 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
     const columns = typed.columnTypes.get(p);
     const nullable = typed.nullness.publishedNullness.get(p);
     if (
-      !columns?.length ||
+      !columns ||
       columns.some((c) => c !== "integer") ||
       nullable?.length !== columns.length ||
       nullable.some(Boolean)
     )
-      throw new Error("Mutual fragment requires non-null integer predicates with positive arity");
+      throw new Error("Mutual fragment requires non-null integer columns");
   };
   for (const p of predicates) {
     checkColumns(p);
@@ -151,7 +151,7 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
   const goals = contracts.map((contract, tag) => {
     const columns = Array.from({ length: memberArities[tag]! }, (_, i) => `x${i}`);
     const binders = columns.map((c) => `(${c} : Datamog.SafeInt)`).join(" ");
-    return `(∀ ${binders}, ${applied} ${tag} ${padded(columns)} → (${contract}))`;
+    return `(${binders ? `∀ ${binders}, ` : ""}${applied} ${tag} ${padded(columns)} → (${contract}))`;
   });
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;
   const nodes: VerificationNode[] = [

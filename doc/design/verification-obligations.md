@@ -1013,7 +1013,7 @@ that family. A negative regression adds an unsafe base rule to its second member
 and requires checking to fail with no surviving report. Exact goal checking,
 transitive axiom audits, source identities, and fresh builds apply to the entire
 family. This begins mutual invariant support without accepting arbitrary local
-proof cycles. Other computed heads, zero-column predicates, nullable values, negation, parity,
+proof cycles. Other computed heads, nullable values, negation, parity,
 and explicit constraints remain unsupported in this fragment. The result concerns
 finite derivations, not termination or backend correctness.
 
@@ -1044,7 +1044,16 @@ metadata includes ordered member arities, family width, padding policy, and inpu
 arities. The selected-mutual-mixed fixture checks joint induction and a separate
 canonical-padding lemma, while a changed computed step must fail checking.
 Ordinary tests also cover multiple padding slots and inputs wider than the family.
-Zero-column predicates and nullable values remain unsupported.
+Nullable values remain unsupported; zero-column derived members are covered below.
+
+Zero-column derived members are now accepted as well. Their contract goals have
+no phantom output quantifiers; wholly nullary components use a `Nat → Prop`
+family, while mixed components use canonical zero for all slots of a nullary
+member. The selected-mutual-flags fixture checks a flag/tuple component and proves
+emptiness of an all-nullary cycle without base rules by derivation induction.
+A negative regression adds a base fact and requires proof failure with no surviving
+report. This preserves least-relation semantics rather than accepting circular
+contract assumptions. Input declarations still require columns in current syntax.
 
 ## Which harder claims should be expressible?
 
