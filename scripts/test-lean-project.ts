@@ -310,6 +310,36 @@ try {
   console.log(
     "Selected project: mutual tuple order invariant passed; swapped computed outputs rejected.",
   );
+  const mixedFixture = new URL(
+    "../verification/lean/examples/selected-mutual-mixed/",
+    import.meta.url,
+  ).pathname;
+  await cp(mixedFixture, join(temp, "mutual-mixed-input"), { recursive: true });
+  const mixedConfig = join(temp, "mutual-mixed-input/plan.json");
+  const mixedOutput = join(temp, "mutual-mixed-project");
+  await exportProject(mixedConfig, mixedOutput);
+  await Bun.write(
+    join(mixedOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(mixedFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(mixedConfig, mixedOutput);
+  await checkProject(mixedConfig, mixedOutput, ["bothSafe"]);
+  const mixedSource = join(temp, "mutual-mixed-input/program.dl");
+  await Bun.write(mixedSource, (await Bun.file(mixedSource).text()).replace("X + 1", "X + 0"));
+  await exportProject(mixedConfig, mixedOutput);
+  await Bun.write(join(mixedOutput, "verification-result.json"), "old success");
+  let mixedRejected = false;
+  try {
+    await checkProject(mixedConfig, mixedOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    mixedRejected = true;
+  }
+  if (!mixedRejected || (await Bun.file(join(mixedOutput, "verification-result.json")).exists()))
+    throw new Error("Invalid mixed-arity step was accepted");
+  console.log(
+    "Selected project: mixed arities and canonical padding checked; invalid step rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

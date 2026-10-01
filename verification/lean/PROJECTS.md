@@ -180,13 +180,13 @@ contracts. No member contract is a constructor premise. Adding an unguarded seed
 rule to the second predicate causes the maintained proof to fail.
 
 This initial fragment requires at least two distinct predicates forming one
-strongly connected component, non-null integer relations of one shared positive
-arity (including input predicates), variable-only
+strongly connected component, non-null integer relations of positive arity,
+variable-only
 atoms, variable or variable-plus-safe-integer-literal heads, and supported integer
 comparison guards. All rules must carry
 supported simple refinements. Missing members, derived dependencies outside the
 component, explicit constraints, negation, parity, nullable columns, other computed
-heads, and mixed-arity predicates are rejected. There is one joint goal ID;
+heads, and zero-column predicates are rejected. There is one joint goal ID;
 member definitions cannot independently satisfy a proof gate. Ordinary local
 proof cycles remain unsupported. The family models finite derivations and does
 not establish termination or backend correctness.
@@ -206,7 +206,21 @@ The [tuple example](examples/selected-mutual-tuples/program.dl) establishes
 Every tuple position remains a separate family argument; computed columns receive
 independent bounded witnesses and sum equalities. Contracts refer to the matching
 output positions. Swapping the computed outputs fails the maintained induction
-proof. Members and inputs with differing arities remain unsupported.
+proof. Members and inputs may now have differing positive arities, as described below.
+
+The [mixed-arity example](examples/selected-mutual-mixed/program.dl) combines a
+unary member, a binary member, and differently sized input relations. The family
+uses the widest member's column count. Shorter members use the canonical bounded
+zero in trailing slots in every constructor, recursive premise, and theorem
+application. These slots are not source columns or extra quantified outputs.
+Input relations retain their own argument counts, even when wider than the family.
+The manifest records member arities, family width, input arities, and padding.
+
+The maintained proof establishes both contracts by joint induction and separately
+checks that a unary derivation's padding is always zero. Changing the computed
+successor to add zero fails checking. This extends tuple representation only;
+nullable values, zero-column predicates, and general local proof-cycle assembly
+remain unsupported.
 
 ## Worked example
 

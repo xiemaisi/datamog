@@ -422,10 +422,46 @@ test("mutual tuples preserve column order and independent computed witnesses", a
       join(dir, "source.dl"),
       "input predicate seed(x: integer, y: integer). left(X, Y, _: Y > X) :- seed(X, Y). left(X, X, _: X > 0) :- right(X). right(X, _: X > 0) :- left(X, Y).",
     );
-    await expect(exportProject(config, output)).rejects.toThrow("shared positive arity");
+    expect((await planProject(config, output)).files["Datamog/Generated.lean"]).toContain(
+      "bothSafeFamily input0 1 x0 (⟨0, by decide⟩ : Datamog.SafeInt)",
+    );
     await Bun.write(
       join(dir, "source.dl"),
       "input predicate seed(x: integer). left(X, X, _: X > 0) :- seed(X). left(X, Y, _: Y > X) :- right(X, Y). right(X, Y, _: Y > X) :- left(X, Y).",
     );
-    await expect(exportProject(config, output)).rejects.toThrow("shared positive arity");
+    expect((await planProject(config, output)).files["Datamog/Generated.lean"]).toContain(
+      "input0 : Datamog.SafeInt → Prop",
+    );
+  }));
+
+test("mixed family padding is fixed and inputs keep their own arities", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "mutual-invariant", id: "bothSafe", predicates: ["left", "right"] }],
+      }),
+    );
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(a: integer, b: integer, c: integer, d: integer). left(X, _: X > 0) :- seed(X, Y, Z, W), X > 0. left(Z, _: Z > 0) :- right(X, Y, Z). right(X, X, X, _: X > 0) :- left(X).",
+    );
+    const plan = await planProject(config, output);
+    const generated = plan.files["Datamog/Generated.lean"]!;
+    expect(generated).toContain(
+      "input0 : Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop",
+    );
+    expect(generated).toContain("(input0 v0 v1 v2 v3)");
+    expect(generated).toContain(
+      "bothSafeFamily input0 0 x0 (⟨0, by decide⟩ : Datamog.SafeInt) (⟨0, by decide⟩ : Datamog.SafeInt)",
+    );
+    expect(generated).toContain("bothSafeFamily input0 1 v0 v0 v0");
+    const family = plan.manifest.entries.find((entry) => entry.id === "bothSafeFamily")!;
+    expect(family.statement).toMatchObject({
+      memberArities: [1, 3],
+      width: 3,
+      padding: "bounded-zero",
+      inputs: [{ predicate: "seed", index: 0, arity: 4 }],
+    });
   }));

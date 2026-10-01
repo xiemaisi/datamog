@@ -1,0 +1,5 @@
+input predicate seed(n: integer).
+input predicate edge(source: integer, target: integer).
+left(X, _: X > 0) :- seed(X), X > 0.
+left(Y, _: Y > 0) :- right(X, Y).
+right(X, X + 1 as Y, _: X > 0, _: Y > X) :- left(X), edge(X, Z).

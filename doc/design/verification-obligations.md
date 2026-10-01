@@ -1013,7 +1013,7 @@ that family. A negative regression adds an unsafe base rule to its second member
 and requires checking to fail with no surviving report. Exact goal checking,
 transitive axiom audits, source identities, and fresh builds apply to the entire
 family. This begins mutual invariant support without accepting arbitrary local
-proof cycles. Other computed heads, mixed arities, nullable values, negation, parity,
+proof cycles. Other computed heads, zero-column predicates, nullable values, negation, parity,
 and explicit constraints remain unsupported in this fragment. The result concerns
 finite derivations, not termination or backend correctness.
 
@@ -1031,9 +1031,20 @@ and inputs share one positive arity. Each column is a separate family argument;
 each computed head column receives its own bounded witness. The selected-mutual-tuples
 fixture proves preservation of `Y > X` while incrementing both columns in a
 cross-member step. Swapping the computed output columns fails fresh checking.
-The manifest binds tuple order and all defining equations. Mixed arities remain
-unsupported; this extension does not change local cycle discharge or add backend
-correctness claims.
+The manifest binds tuple order and all defining equations. The mixed-arity
+extension below follows this initial same-arity fragment; neither changes local
+cycle discharge nor adds backend correctness claims.
+
+Mutual members and input relations now also support differing positive arities.
+The tagged family uses the maximum member arity, padding each shorter member with
+canonical bounded zero values. Constructor conclusions, recursive premises, and
+contract applications use the same padding. Contracts quantify only over real
+source columns; input relations keep their own arities without padding. Manifest
+metadata includes ordered member arities, family width, padding policy, and input
+arities. The selected-mutual-mixed fixture checks joint induction and a separate
+canonical-padding lemma, while a changed computed step must fail checking.
+Ordinary tests also cover multiple padding slots and inputs wider than the family.
+Zero-column predicates and nullable values remain unsupported.
 
 ## Which harder claims should be expressible?
 
