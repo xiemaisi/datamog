@@ -355,7 +355,7 @@ test("mutual invariant requires a complete unary component and binds every membe
     await writePlan(claim.predicates);
     for (const changed of [
       source.replace("right(X, _: X > 0) :- left(X)", "right(X, _: X > 0) :- seed(X)"),
-      source.replace("right(X, _: X > 0) :- left(X)", "right(X + 1 as Y, _: Y > 0) :- left(X)"),
+      source.replace("right(X, _: X > 0) :- left(X)", "right(X * 2 as Y, _: Y > 0) :- left(X)"),
       `${source}!- left(X), X < 0.`,
       source.replace("right(X, _: X > 0)", "right(X)"),
       source.replace("seed(n: integer)", "seed(n: integer?)"),
@@ -368,4 +368,28 @@ test("mutual invariant requires a complete unary component and binds every membe
       parseSelection({ source: "x", claims: [{ ...claim, polarity: "refute" }] }),
     ).toThrow();
     expect(await Bun.file(join(output, "manifest.json")).exists()).toBe(false);
+  }));
+
+test("mutual computed heads require a bounded output witness", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "mutual-invariant", id: "bothSafe", predicates: ["left", "right"] }],
+      }),
+    );
+    const source = (head: string) =>
+      `input predicate seed(n: integer). left(X, _: X > 0) :- seed(X), X > 0. left(X, _: X > 0) :- right(X). right(${head} as Y, _: Y > 1) :- left(X).`;
+    await Bun.write(join(dir, "source.dl"), source("X + 1"));
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "(w0 : Datamog.SafeInt) : (bothSafeFamily input0 0 v0) → (w0.val = v0.val + (1 : Int)) → bothSafeFamily input0 1 w0",
+    );
+    await Bun.write(join(dir, "source.dl"), source("X + 0"));
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    for (const head of ["X * 2", "X + 0.5", "X + X", "1 + X", "(X + 1) + 1"]) {
+      await Bun.write(join(dir, "source.dl"), source(head));
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
   }));

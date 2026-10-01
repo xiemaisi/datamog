@@ -999,7 +999,8 @@ arbitrary SCC discharge, termination, or backend verification.
 
 Selected projects now support `kind: "mutual-invariant"` with a joint goal ID
 and an ordered list of predicate names. The first fragment is unary non-null
-integers, variable heads and atoms, and simple comparison guards and refinements.
+integers, variable atoms, variable or variable-plus-integer-literal heads, and
+simple comparison guards and refinements.
 The selection must contain one complete strongly connected component; other
 derived dependencies are rejected. Each source predicate receives a distinct tag
 in a single inductive family, and every defining rule contributes a constructor.
@@ -1012,9 +1013,18 @@ that family. A negative regression adds an unsafe base rule to its second member
 and requires checking to fail with no surviving report. Exact goal checking,
 transitive axiom audits, source identities, and fresh builds apply to the entire
 family. This begins mutual invariant support without accepting arbitrary local
-proof cycles. Computed heads, multiple columns, nullable values, negation, parity,
+proof cycles. Other computed heads, multiple columns, nullable values, negation, parity,
 and explicit constraints remain unsupported in this fragment. The result concerns
 finite derivations, not termination or backend correctness.
+
+The mutual family now supports variable-plus-safe-integer-literal heads using an
+explicit bounded witness and equality premise. The selected-mutual-successor
+fixture proves distinct lower bounds for the two members by joint induction.
+Changing its increment from one to zero fails the maintained proof and leaves no
+success report. Auxiliary Lean boundary examples check witness existence at
+`maxSafe - 1` and its impossibility at `maxSafe`; these are separate from registered
+goal counts and do not claim runtime differential coverage. Other arithmetic,
+variable addends, and nested computations remain unsupported.
 
 ## Which harder claims should be expressible?
 

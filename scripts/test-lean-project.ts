@@ -241,6 +241,39 @@ try {
   console.log(
     "Selected project: mutual family induction passed; unsafe second-member base rejected.",
   );
+  const successorFixture = new URL(
+    "../verification/lean/examples/selected-mutual-successor/",
+    import.meta.url,
+  ).pathname;
+  await cp(successorFixture, join(temp, "mutual-successor-input"), { recursive: true });
+  const successorConfig = join(temp, "mutual-successor-input/plan.json");
+  const successorOutput = join(temp, "mutual-successor-project");
+  await exportProject(successorConfig, successorOutput);
+  await Bun.write(
+    join(successorOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(successorFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(successorConfig, successorOutput);
+  await checkProject(successorConfig, successorOutput, ["bothSafe"]);
+  const successorSource = join(temp, "mutual-successor-input/program.dl");
+  await Bun.write(
+    successorSource,
+    (await Bun.file(successorSource).text()).replace("X + 1", "X + 0"),
+  );
+  await exportProject(successorConfig, successorOutput);
+  await Bun.write(join(successorOutput, "verification-result.json"), "old success");
+  let stepRejected = false;
+  try {
+    await checkProject(successorConfig, successorOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    stepRejected = true;
+  }
+  if (!stepRejected || (await Bun.file(join(successorOutput, "verification-result.json")).exists()))
+    throw new Error("Incorrect computed step was accepted");
+  console.log(
+    "Selected project: bounded mutual successor and integer boundaries passed; incorrect step rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

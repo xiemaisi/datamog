@@ -72,8 +72,28 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
           if (!vars.has(name)) vars.set(name, `v${vars.size}`);
         }
       const head = rule.head.args[0];
-      if (head?.$type !== "Variable" || !vars.has(head.name))
-        throw new Error("Mutual heads require a bound variable");
+      let output: string;
+      const computed: string[] = [];
+      const defined: string[] = [];
+      if (head?.$type === "Variable" && vars.has(head.name)) output = vars.get(head.name)!;
+      else if (
+        head?.$type === "BinaryExpr" &&
+        head.op === "+" &&
+        head.left.$type === "Variable" &&
+        vars.has(head.left.name) &&
+        head.right.$type === "NumberLiteral" &&
+        !isFloatLiteral(head.right) &&
+        Number.isSafeInteger(head.right.value)
+      ) {
+        output = "w0";
+        computed.push(output);
+        defined.push(
+          `(${output}.val = ${vars.get(head.left.name)}.val + (${head.right.value} : Int))`,
+        );
+      } else
+        throw new Error(
+          "Mutual heads require a bound variable or variable plus safe integer literal",
+        );
       const term = (e: HeadTerm): string => {
         if (e.$type === "Variable" && vars.has(e.name)) return `${vars.get(e.name)}.val`;
         if (e.$type === "NumberLiteral" && !isFloatLiteral(e) && Number.isSafeInteger(e.value))
@@ -107,7 +127,7 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
         return `(${term(atom.expr.left)} ${ops[atom.expr.op]} ${term(atom.expr.right)})`;
       });
       constructors.push(
-        `  | rule${tag}_${ri} ${[...vars.values()].map((v) => `(${v} : Datamog.SafeInt)`).join(" ")} : ${[...premises, `${applied} ${tag} ${vars.get(head.name)}`].join(" → ")}`,
+        `  | rule${tag}_${ri} ${[...vars.values(), ...computed].map((v) => `(${v} : Datamog.SafeInt)`).join(" ")} : ${[...premises, ...defined, `${applied} ${tag} ${output}`].join(" → ")}`,
       );
     }
   const relation = `inductive ${family} ${params} : Nat → Datamog.SafeInt → Prop where\n${constructors.join("\n")}\n`;

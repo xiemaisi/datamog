@@ -181,13 +181,24 @@ rule to the second predicate causes the maintained proof to fail.
 
 This initial fragment requires at least two distinct predicates forming one
 strongly connected component, unary non-null integer relations, variable-only
-heads and atoms, and supported integer comparison guards. All rules must carry
+atoms, variable or variable-plus-safe-integer-literal heads, and supported integer
+comparison guards. All rules must carry
 supported simple refinements. Missing members, derived dependencies outside the
-component, explicit constraints, negation, parity, nullable columns, computed
+component, explicit constraints, negation, parity, nullable columns, other computed
 heads, and multi-column predicates are rejected. There is one joint goal ID;
 member definitions cannot independently satisfy a proof gate. Ordinary local
 proof cycles remain unsupported. The family models finite derivations and does
 not establish termination or backend correctness.
+
+The [mutual successor example](examples/selected-mutual-successor/program.dl)
+adds one in a cross-member rule. A constructor requires a `SafeInt` witness equal
+to the mathematical sum; overflow therefore produces no derivation. Its joint
+proof establishes positivity in the first predicate and a strict lower bound of
+one in the second. Changing the step to add zero fails checking. Maintained Lean
+boundary examples establish that `maxSafe - 1` admits a successor witness and
+`maxSafe` does not. These auxiliary checks are not additional registered goals
+or backend comparisons. Other arithmetic, nested computations, and variable
+addends remain unsupported.
 
 ## Worked example
 
