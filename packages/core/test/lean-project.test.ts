@@ -393,3 +393,39 @@ test("mutual computed heads require a bounded output witness", async () =>
       await expect(exportProject(config, output)).rejects.toThrow();
     }
   }));
+
+test("mutual tuples preserve column order and independent computed witnesses", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "mutual-invariant", id: "bothSafe", predicates: ["left", "right"] }],
+      }),
+    );
+    const source =
+      "input predicate seed(x: integer, y: integer). left(X, Y, _: Y > X) :- seed(X, Y), Y > X. left(X, Y, _: Y > X) :- right(X, Y). right(X + 1 as A, Y + 1 as B, _: B > A) :- left(X, Y).";
+    await Bun.write(join(dir, "source.dl"), source);
+    const plan = await planProject(config, output);
+    const generated = plan.files["Datamog/Generated.lean"]!;
+    expect(generated).toContain("Nat → Datamog.SafeInt → Datamog.SafeInt → Prop");
+    expect(generated).toContain(
+      "(w0.val = v0.val + (1 : Int)) → (w1.val = v1.val + (1 : Int)) → bothSafeFamily input0 1 w0 w1",
+    );
+    expect(generated).toContain("bothSafeFamily input0 1 x0 x1 → (((x1.val > x0.val)))");
+    await Bun.write(
+      join(dir, "source.dl"),
+      source.replace("X + 1 as A, Y + 1 as B", "Y + 1 as A, X + 1 as B"),
+    );
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(x: integer, y: integer). left(X, Y, _: Y > X) :- seed(X, Y). left(X, X, _: X > 0) :- right(X). right(X, _: X > 0) :- left(X, Y).",
+    );
+    await expect(exportProject(config, output)).rejects.toThrow("shared positive arity");
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(x: integer). left(X, X, _: X > 0) :- seed(X). left(X, Y, _: Y > X) :- right(X, Y). right(X, Y, _: Y > X) :- left(X, Y).",
+    );
+    await expect(exportProject(config, output)).rejects.toThrow("shared positive arity");
+  }));

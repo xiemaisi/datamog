@@ -274,6 +274,42 @@ try {
   console.log(
     "Selected project: bounded mutual successor and integer boundaries passed; incorrect step rejected.",
   );
+  const tupleFixture = new URL(
+    "../verification/lean/examples/selected-mutual-tuples/",
+    import.meta.url,
+  ).pathname;
+  await cp(tupleFixture, join(temp, "mutual-tuple-input"), { recursive: true });
+  const tupleConfig = join(temp, "mutual-tuple-input/plan.json");
+  const tupleOutput = join(temp, "mutual-tuple-project");
+  await exportProject(tupleConfig, tupleOutput);
+  await Bun.write(
+    join(tupleOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(tupleFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(tupleConfig, tupleOutput);
+  await checkProject(tupleConfig, tupleOutput, ["bothSafe"]);
+  const tupleSource = join(temp, "mutual-tuple-input/program.dl");
+  await Bun.write(
+    tupleSource,
+    (await Bun.file(tupleSource).text()).replace(
+      "X + 1 as A, Y + 1 as B",
+      "Y + 1 as A, X + 1 as B",
+    ),
+  );
+  await exportProject(tupleConfig, tupleOutput);
+  await Bun.write(join(tupleOutput, "verification-result.json"), "old success");
+  let tupleRejected = false;
+  try {
+    await checkProject(tupleConfig, tupleOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    tupleRejected = true;
+  }
+  if (!tupleRejected || (await Bun.file(join(tupleOutput, "verification-result.json")).exists()))
+    throw new Error("Swapped computed columns were accepted");
+  console.log(
+    "Selected project: mutual tuple order invariant passed; swapped computed outputs rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

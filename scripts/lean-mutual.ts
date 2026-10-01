@@ -1,4 +1,4 @@
-/** Initial unary positive mutual family. Tags identify source predicates. */
+/** Positive mutual family with a shared tuple arity. Tags identify source predicates. */
 import type { HeadTerm } from "../packages/core/src/ast.ts";
 import { isFloatLiteral } from "../packages/core/src/ast.ts";
 import type { TypedProgram } from "../packages/core/src/types.ts";
@@ -24,20 +24,30 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
   const contracts = predicates.map((p) => invariantContract(typed, p).contract);
   const inputs = new Map<string, number>();
   const edges = new Map<string, string[]>();
-  const unary = (p: string) => {
+  const arity = typed.columnTypes.get(predicates[0]!)!.length;
+  const tupleType = [...Array.from({ length: arity }, () => "Datamog.SafeInt"), "Prop"].join(" → ");
+  const checkColumns = (p: string) => {
     const columns = typed.columnTypes.get(p);
     const nullable = typed.nullness.publishedNullness.get(p);
-    if (columns?.length !== 1 || columns[0] !== "integer" || nullable?.length !== 1 || nullable[0])
-      throw new Error("Mutual fragment requires unary non-null integer predicates");
+    if (
+      arity < 1 ||
+      columns?.length !== arity ||
+      columns.some((c) => c !== "integer") ||
+      nullable?.length !== arity ||
+      nullable.some(Boolean)
+    )
+      throw new Error(
+        "Mutual fragment requires non-null integer predicates with one shared positive arity",
+      );
   };
   for (const p of predicates) {
-    unary(p);
+    checkColumns(p);
     const calls: string[] = [];
     for (const rule of typed.rules.get(p)!)
       for (const atom of rule.body) {
         if ((atom.$type === "Filter" && !atom.negated) || atom.$type === "Equality") continue;
         if (atom.$type !== "Literal" || atom.negated) throw new Error("Unsupported mutual body");
-        unary(atom.predicate);
+        checkColumns(atom.predicate);
         if (predicates.includes(atom.predicate)) calls.push(atom.predicate);
         else {
           if (!typed.extDecls.has(atom.predicate))
@@ -58,7 +68,7 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
     if (reached.size !== predicates.length)
       throw new Error("Selection must be one strongly connected component");
   }
-  const params = [...inputs.values()].map((i) => `(input${i} : Datamog.SafeInt → Prop)`).join(" ");
+  const params = [...inputs.values()].map((i) => `(input${i} : ${tupleType})`).join(" ");
   const applied = `${family}${[...inputs.values()].map((i) => ` input${i}`).join("")}`;
   const constructors: string[] = [];
   for (const [tag, p] of predicates.entries())
@@ -66,34 +76,39 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       const vars = new Map<string, string>();
       for (const atom of rule.body)
         if (atom.$type === "Literal") {
-          if (atom.args.length !== 1 || atom.args[0]!.$type !== "Variable")
-            throw new Error("Mutual atoms require one variable");
-          const name = atom.args[0]!.name;
-          if (!vars.has(name)) vars.set(name, `v${vars.size}`);
+          if (atom.args.length !== arity) throw new Error("Mutual atom arity mismatch");
+          for (const arg of atom.args) {
+            if (arg.$type !== "Variable") throw new Error("Mutual atoms require variables");
+            if (!vars.has(arg.name)) vars.set(arg.name, `v${vars.size}`);
+          }
         }
-      const head = rule.head.args[0];
-      let output: string;
       const computed: string[] = [];
       const defined: string[] = [];
-      if (head?.$type === "Variable" && vars.has(head.name)) output = vars.get(head.name)!;
-      else if (
-        head?.$type === "BinaryExpr" &&
-        head.op === "+" &&
-        head.left.$type === "Variable" &&
-        vars.has(head.left.name) &&
-        head.right.$type === "NumberLiteral" &&
-        !isFloatLiteral(head.right) &&
-        Number.isSafeInteger(head.right.value)
-      ) {
-        output = "w0";
-        computed.push(output);
-        defined.push(
-          `(${output}.val = ${vars.get(head.left.name)}.val + (${head.right.value} : Int))`,
-        );
-      } else
-        throw new Error(
-          "Mutual heads require a bound variable or variable plus safe integer literal",
-        );
+      if (rule.head.args.length !== arity) throw new Error("Mutual head arity mismatch");
+      const output = rule.head.args
+        .map((head) => {
+          if (head.$type === "Variable" && vars.has(head.name)) return vars.get(head.name)!;
+          if (
+            head.$type === "BinaryExpr" &&
+            head.op === "+" &&
+            head.left.$type === "Variable" &&
+            vars.has(head.left.name) &&
+            head.right.$type === "NumberLiteral" &&
+            !isFloatLiteral(head.right) &&
+            Number.isSafeInteger(head.right.value)
+          ) {
+            const witness = `w${computed.length}`;
+            computed.push(witness);
+            defined.push(
+              `(${witness}.val = ${vars.get(head.left.name)}.val + (${head.right.value} : Int))`,
+            );
+            return witness;
+          }
+          throw new Error(
+            "Mutual heads require a bound variable or variable plus safe integer literal",
+          );
+        })
+        .join(" ");
       const term = (e: HeadTerm): string => {
         if (e.$type === "Variable" && vars.has(e.name)) return `${vars.get(e.name)}.val`;
         if (e.$type === "NumberLiteral" && !isFloatLiteral(e) && Number.isSafeInteger(e.value))
@@ -111,7 +126,7 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       const ops: Record<string, string> = { "<": "<", "<=": "≤", ">": ">", ">=": "≥", "=": "=" };
       const premises = rule.body.map((atom) => {
         if (atom.$type === "Literal") {
-          const value = vars.get((atom.args[0] as { name: string }).name)!;
+          const value = atom.args.map((arg) => vars.get((arg as { name: string }).name)!).join(" ");
           const index = predicates.indexOf(atom.predicate);
           return index >= 0
             ? `(${applied} ${index} ${value})`
@@ -130,9 +145,11 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
         `  | rule${tag}_${ri} ${[...vars.values(), ...computed].map((v) => `(${v} : Datamog.SafeInt)`).join(" ")} : ${[...premises, ...defined, `${applied} ${tag} ${output}`].join(" → ")}`,
       );
     }
-  const relation = `inductive ${family} ${params} : Nat → Datamog.SafeInt → Prop where\n${constructors.join("\n")}\n`;
+  const relation = `inductive ${family} ${params} : Nat → ${tupleType} where\n${constructors.join("\n")}\n`;
+  const columns = Array.from({ length: arity }, (_, i) => `x${i}`);
+  const binders = columns.map((c) => `(${c} : Datamog.SafeInt)`).join(" ");
   const goals = contracts.map(
-    (contract, tag) => `(∀ (x0 : Datamog.SafeInt), ${applied} ${tag} x0 → (${contract}))`,
+    (contract, tag) => `(∀ ${binders}, ${applied} ${tag} ${columns.join(" ")} → (${contract}))`,
   );
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;
   const nodes: VerificationNode[] = [

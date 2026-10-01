@@ -180,12 +180,13 @@ contracts. No member contract is a constructor premise. Adding an unguarded seed
 rule to the second predicate causes the maintained proof to fail.
 
 This initial fragment requires at least two distinct predicates forming one
-strongly connected component, unary non-null integer relations, variable-only
+strongly connected component, non-null integer relations of one shared positive
+arity (including input predicates), variable-only
 atoms, variable or variable-plus-safe-integer-literal heads, and supported integer
 comparison guards. All rules must carry
 supported simple refinements. Missing members, derived dependencies outside the
 component, explicit constraints, negation, parity, nullable columns, other computed
-heads, and multi-column predicates are rejected. There is one joint goal ID;
+heads, and mixed-arity predicates are rejected. There is one joint goal ID;
 member definitions cannot independently satisfy a proof gate. Ordinary local
 proof cycles remain unsupported. The family models finite derivations and does
 not establish termination or backend correctness.
@@ -199,6 +200,13 @@ boundary examples establish that `maxSafe - 1` admits a successor witness and
 `maxSafe` does not. These auxiliary checks are not additional registered goals
 or backend comparisons. Other arithmetic, nested computations, and variable
 addends remain unsupported.
+
+The [tuple example](examples/selected-mutual-tuples/program.dl) establishes
+`Y > X` across two binary predicates, including a rule incrementing both columns.
+Every tuple position remains a separate family argument; computed columns receive
+independent bounded witnesses and sum equalities. Contracts refer to the matching
+output positions. Swapping the computed outputs fails the maintained induction
+proof. Members and inputs with differing arities remain unsupported.
 
 ## Worked example
 

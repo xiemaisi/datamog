@@ -1013,7 +1013,7 @@ that family. A negative regression adds an unsafe base rule to its second member
 and requires checking to fail with no surviving report. Exact goal checking,
 transitive axiom audits, source identities, and fresh builds apply to the entire
 family. This begins mutual invariant support without accepting arbitrary local
-proof cycles. Other computed heads, multiple columns, nullable values, negation, parity,
+proof cycles. Other computed heads, mixed arities, nullable values, negation, parity,
 and explicit constraints remain unsupported in this fragment. The result concerns
 finite derivations, not termination or backend correctness.
 
@@ -1025,6 +1025,15 @@ success report. Auxiliary Lean boundary examples check witness existence at
 `maxSafe - 1` and its impossibility at `maxSafe`; these are separate from registered
 goal counts and do not claim runtime differential coverage. Other arithmetic,
 variable addends, and nested computations remain unsupported.
+
+The mutual family also now supports multiple integer columns when all members
+and inputs share one positive arity. Each column is a separate family argument;
+each computed head column receives its own bounded witness. The selected-mutual-tuples
+fixture proves preservation of `Y > X` while incrementing both columns in a
+cross-member step. Swapping the computed output columns fails fresh checking.
+The manifest binds tuple order and all defining equations. Mixed arities remain
+unsupported; this extension does not change local cycle discharge or add backend
+correctness claims.
 
 ## Which harder claims should be expressible?
 
