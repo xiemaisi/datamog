@@ -514,5 +514,263 @@ memory; every batch must pass before a fresh result report is written.
 Lean checks membership and nonnegative mixed-path lookup results. Runtime checks
 also cover negative and wide indices at each dimension. Reports record
 `semanticChecks.structuralSchemaCases`. These checks concern the modeled fragment;
-connecting the guarantees to rule projection/refinement obligations remains future
-work.
+the direct-projection fragment below connects the guarantees to selected source
+rules, while general refinement obligations remain future work.
+
+### Source-derived structural projection coverage and soundness
+
+`exportLeanStructuralProjection` reads one selected rule with one positive input
+atom, one structural input column, and unannotated outputs consisting of
+field/index lookup chains. It generates the input schema, an inductive output relation, and
+exact coverage and soundness statements from the elaborated AST. Nonnegative
+safe-integer indices and literal string keys are supported. Input integer
+variables can also index arrays as described below. Filters, joins, sibling
+rules, and annotations are rejected explicitly.
+
+Coverage requires an admitted input row and bounds at each array step. It proves
+both an output derivation and integer-leaf membership (including null when the
+leaf schema allows it); head lookup definedness is not a coverage premise.
+Manifest identities include elaborated input/output predicate identities and the
+literal path, so changed indices or renamed inputs invalidate the result.
+
+`FirstAge_coverage` and `FirstRating_coverage` prove the fixture's two rules.
+`firstAgeTotal_refuted` uses an input row with an empty array to refute coverage
+without bounds. All three are audited and required in CI. The runner compares
+766 source-fixture inputs across native, SQLite, and Postgres and kernel-checks
+membership plus concrete derivations or their absence. Reports record
+`semanticChecks.structuralProjectionCases`. This remains an internal projection
+exporter, without general CLI integration or a translation-soundness theorem.
+
+
+Soundness states that every derived output satisfies its selected leaf schema,
+provided every input row satisfies the declared schema. It has no array-bounds
+or head-definedness premise and does not imply output existence. The generic
+`structuralTypedLookup` theorem proves typing for any successful lookup along a
+schema-typed path, including optional fields and nullable containers.
+
+The descriptor option `coverage: false` requests soundness alone and permits
+optional leaves, optional/nullable parents, and nullable array elements. Default
+coverage still rejects these paths explicitly. For example, the
+`optional-projection.dl` fixture projects `R["profile"]["age"]` through an optional
+nullable profile. `ProfileAge_soundness` guarantees integer outputs, while
+`optionalProfileTotal_refuted` and `nullableProfileTotal_refuted` exhibit accepted
+inputs with no output. Nullable rating projections preserve a present null leaf.
+All six projection soundness goals, the generic theorem, and both refutations
+are audited and required in CI. The 51 literal-path replay cases include 31 optional-path
+inputs, with absence, null, empty arrays, wrong shapes, and integer boundaries.
+
+
+### Dynamic indices from input rows
+
+The same exporter supports one structural input column plus any number of
+non-null integer columns in the same positive atom. Arguments must be distinct
+variables. Column order is preserved, including a structural column outside the
+first position. Literal paths and input index variables can be mixed; repeated
+uses of one index preserve the shared value.
+
+Generated relations quantify indices as signed bounded `SafeInt` values and
+require nonnegativity before converting used indices to natural numbers.
+Coverage requires those sign conditions and the existing per-array bounds.
+Soundness has no additional index premises. Unused integer columns remain
+quantified and can be negative. Nullable indices, string variables used as keys,
+arithmetic indices, and repeated variables in the input atom are rejected.
+
+`dynamic-projection.dl` supplies `DynamicAge`, `DynamicRating`, and `ReusedAge`
+coverage/soundness proofs plus `DynamicScore_soundness` for an optional nullable
+leaf. `dynamicTotal_refuted` demonstrates a negative index withholding an output
+even for a populated array. These eight results are audited and required in CI.
+The 104 additional replay cases cover independent and reused indices, ragged
+arrays, missing/null leaves, negative and wide indices, integer boundaries, and
+an unused negative column. The report records `dynamicProjectionCases` as a
+subset of the 155 `structuralProjectionCases`.
+
+
+### Multiple projected outputs
+
+`exportLeanStructuralProjection` supports several projected integer leaves from
+one structural input row, including nullable leaves and dynamic indices. Its
+ordered `projections` result records each output's path and nullability. The
+constructor requires all lookups to succeed for the same row. Any missing value
+withholds the entire tuple; explicit null values remain valid at nullable leaves.
+
+Coverage requires bounds for every path and nonnegative used indices. Soundness
+conjoins all output type guarantees. If any path is optional, requesting coverage
+fails explicitly; `coverage: false` exports tuple soundness alone. Output order,
+arity, and repeated paths are included in manifest identities. Non-integer carried values, arithmetic heads, and multiple structural input
+columns are still unsupported.
+
+`tuple-projection.dl` supplies paired and repeated-output coverage/soundness
+proofs and optional-output soundness. `pairedSameRow` records the shared input
+witness. Two refutations demonstrate that first-path bounds alone and a missing
+optional output do not establish tuple coverage. All eight new goals are audited
+and required in CI; a weaker tuple statement is rejected by the exact checker.
+
+There are 54 new tuple inputs among 209 kernel-checked projection cases, plus
+one separate four-row execution dataset that checks correlation and prevents
+partial rows from completing one another. These run on native, SQLite, and
+Postgres. Reports expose `tupleProjectionCases` and `tupleProjectionDatasets`;
+the dataset is counted separately from kernel reduction. `dynamicProjectionCases`
+continues to count the single-output dynamic fixture.
+
+
+### Carried integer input columns
+
+Projected tuples may include bare non-null integer variables from the same input
+atom. Each output descriptor distinguishes a lookup from a carried input column.
+The generated constructor equates each carried result to its original bounded
+integer value; coverage includes that equality in its conclusion. Repeated
+carried columns and carried indices preserve their output order.
+
+Carrying a column imposes no nonnegative guard unless it is also used as an array
+index. Negative identifiers are valid. All lookup positions must still be defined
+for the tuple to exist. The exporter requires at least one lookup and rejects
+whole structural values, nullable/non-integer carried columns, and computed heads.
+
+`carried-projection.dl` provides `Identified` and `Indexed` coverage/soundness,
+`OptionalIdentified_soundness`, a shared-row witness theorem, and an empty-array
+coverage refutation. These seven goals are audited and required in CI. Carried
+identifiers are not assumed unique.
+
+The 89 new carried-column cases bring projection replay to 298 kernel-checked
+cases across native, SQLite, and Postgres. A separate five-row execution dataset
+checks repeated identifiers, identifier/value association, and tuple suppression
+on failed lookups. Reports expose `carriedProjectionCases` and
+`carriedProjectionDatasets`, separately from the existing tuple dataset.
+
+
+### Integer filters on projection rules
+
+The projection exporter accepts `<`, `<=`, `>`, `>=`, `=`, and `<>` (also `!=`) between non-null
+integer input variables and safe integer literals. The single positive input atom
+can occur before or after filters. Equality must compare variables already bound
+by that atom; binding equalities and structural lookup operands are rejected.
+Arithmetic, nullable operands, negation, and compound filters remain
+unsupported.
+
+Constructor premises and coverage claims retain the ordered filter formulas.
+Coverage applies to inputs satisfying these formulas plus index signs and actual
+array bounds. It proves defined outputs without assuming lookup success.
+Soundness follows from derivations without extra filter premises.
+
+`fixtures/filtered-projection.dl` registers `Filtered_coverage`,
+`Filtered_soundness`, and `filteredTotal_refuted`. The refutation gives an
+in-bounds, defined lookup excluded by a false filter. All three goals have exact
+checker types, axiom audits, manifest identities, and CI requirements.
+
+The 96 new cases bring projection replay to 394 kernel-checked inputs compared
+on native, SQLite, and Postgres. They cover independent filter failures, negative
+and wide indices, empty arrays, and integer boundaries. Fresh reports record
+`filteredProjectionCases` separately within `structuralProjectionCases`.
+
+
+### Excluding integer keys
+
+`fixtures/excluded-projection.dl` uses `U != J` to exclude a blocked key before
+returning the key and its array projection. Integer `!=` and `<>` share the same
+Lean premise and statement identity. Nullable and structural operands remain
+unsupported.
+
+`Excluded_coverage`, `Excluded_soundness`, and `excludedTotal_refuted` have exact
+checker types, axiom audits, and CI requirements. The refutation uses equal keys
+and an in-bounds lookup to show why coverage must retain the disequality premise.
+
+The 144 additional cases exercise both spellings, equal and unequal boundary
+keys, empty arrays, and negative/wide indices on native, SQLite, and Postgres,
+with matching Lean kernel checks. Fresh reports record `excludedProjectionCases`
+within the 538 total `structuralProjectionCases`.
+
+
+### Filters on projected integer values
+
+The exporter accepts `as_integer(path)` comparisons with a safe integer
+literal on the right, where `path` matches a projected non-null integer leaf.
+The explicit conversion follows existing Datamog typing; ordering a raw `value`
+lookup is rejected. Literal and dynamic array indices are supported.
+
+`fixtures/positive-projection.dl` filters with
+`as_integer(R["rows"][I]["n"]) > 0`. Its soundness theorem proves positivity
+as well as output typing. Coverage requires that any integer returned by the
+lookup satisfies the comparison; this premise does not assert lookup existence.
+Schema membership and array bounds supply the witness independently.
+
+`Positive_coverage`, `Positive_soundness`, and `positiveTotal_refuted` have exact
+checker types, axiom audits, manifest identities, and CI requirements. The
+refutation uses a defined zero-valued lookup excluded by the filter.
+
+The 28 new cases cover positive, zero, negative, boundary, and absent lookup
+results, with native/SQLite/Postgres comparisons and matching Lean kernel checks.
+Reports record `positiveProjectionCases` within 566 `structuralProjectionCases`.
+Nullable leaves, unprojected paths, variable limits, reversed operands, arithmetic,
+and compound filters remain unsupported.
+
+
+### Conjunctions on one projected value
+
+Several comma-separated comparisons can now constrain the same projected integer
+leaf. The generated value property uses one integer witness satisfying every
+comparison. Coverage keeps separate universal comparison premises and proves
+lookup existence from schema membership and bounds. Contradictory comparisons
+remain explicit; the exporter does not discard them.
+
+`fixtures/ranged-projection.dl` combines `> 0` and `<= 10`.
+`Ranged_coverage`, `Ranged_soundness`, and `rangedUpper_refuted` have exact checker
+types, axiom audits, manifest identities, and CI requirements. The refutation
+uses 11 to show that the lower bound alone cannot guarantee output.
+
+The 56 added cases include -1, 0, 1, 10, 11, both safe-integer extremes, empty
+arrays, and invalid indices. Native/SQLite/Postgres results agree with Lean
+kernel checks. Reports record `rangedProjectionCases` within 622 total
+`structuralProjectionCases`. The extension below adds different lookup outputs;
+variable limits, nullable leaves, and general Boolean expressions remain unsupported.
+
+
+### Comparisons on distinct projected fields
+
+Lookup comparisons can target different projected non-null integer leaves.
+Conditions are grouped by output, with a separate integer witness for each
+field and every comparison retained. Coverage keeps lookup-comparison premises
+in source order and proves all results arise from the same admitted input row.
+
+`fixtures/both-positive-projection.dl` requires positive values from independently
+indexed `left` and `right` arrays. `BothPositive_coverage`,
+`BothPositive_soundness`, and `bothPositiveSecond_refuted` have exact checker
+types, manifest identities, axiom audits, and CI requirements. The refutation
+uses values 1 and 0 to show that the first field's condition and both array bounds
+cannot replace the second field's positivity premise.
+
+The 72 new cases cover independent filter outcomes, integer boundaries, empty
+arrays, invalid shapes, and independent indices. Native/SQLite/Postgres results
+agree with Lean kernel checks. Reports record `bothPositiveProjectionCases`
+within 694 total `structuralProjectionCases`. The extension below adds direct
+field comparisons; variable limits, nullable leaves, and general Boolean
+expressions remain unsupported.
+
+
+### Field-to-field comparisons
+
+The exporter accepts direct comparisons between two projected non-null integer
+lookups wrapped in `as_integer`. The value property binds both output witnesses
+and relates them with the source operator. Literal and pair comparisons can
+coexist; their coverage premises retain source order and do not assume either
+lookup exists. Schema membership and bounds establish both witnesses.
+
+`fixtures/ordered-projection.dl` requires the left value to be at most the right.
+`Ordered_coverage`, `Ordered_soundness`, and `orderedTotal_refuted` have exact
+checker types, axiom audits, manifest identities, and CI requirements. The
+refutation uses values 1 and 0 to show that array bounds alone cannot imply output.
+
+The 72 new cases cover ordered/equal/reversed boundary values, empty arrays,
+invalid shapes, and independent indices on native, SQLite, and Postgres, with
+matching Lean kernel checks. Reports record `orderedProjectionCases` within
+766 total `structuralProjectionCases`. Unprojected paths, nullable leaves,
+scalar-variable limits, arithmetic, and general Boolean expressions remain unsupported.
+
+
+## User-selected programs
+
+The optional `bun run lean:project` workflow now exports selected structural
+projection and integer uniqueness/coverage claims from a standalone Datamog source
+and checks maintained proofs
+in a fresh temporary Lean project. See [the workflow guide](PROJECTS.md) for the
+JSON selection format, worked example, regeneration steps, and trust boundary.
+This does not add a general Lean mode to `--verify`, proof caching, or proof import.

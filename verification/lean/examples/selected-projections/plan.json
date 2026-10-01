@@ -1,0 +1,7 @@
+{
+  "source": "program.dl",
+  "projections": [
+    { "id": "Picked", "predicate": "picked" },
+    { "id": "Maybe", "predicate": "maybe", "coverage": false }
+  ]
+}

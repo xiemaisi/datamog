@@ -1,0 +1,5 @@
+input predicate items(values: {profile?: {age: integer, rating?: integer?}?, rows?: [{age?: integer, rating?: integer?}?]?}).
+profileAge(R["profile"]["age"]) :- items(R).
+profileRating(R["profile"]["rating"]) :- items(R).
+optionalAge(R["rows"][0]["age"]) :- items(R).
+optionalRating(R["rows"][0]["rating"]) :- items(R).

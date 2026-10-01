@@ -1,0 +1,2 @@
+input predicate items(values: {left: [{n: integer}], right: [{n: integer}]}, outer: integer, inner: integer).
+ordered(R["left"][I]["n"], R["right"][J]["n"]) :- items(R, I, J), as_integer(R["left"][I]["n"]) <= as_integer(R["right"][J]["n"]).

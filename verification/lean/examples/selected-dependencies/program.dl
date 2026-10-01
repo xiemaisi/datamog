@@ -1,0 +1,4 @@
+input predicate sample(n: integer).
+positive(X, _: X > 0) :- sample(X), X > 0.
+forwarded(X, _: X > 0) :- positive(X).
+result(X, _: X >= 0) :- forwarded(X).

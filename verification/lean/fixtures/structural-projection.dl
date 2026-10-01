@@ -1,0 +1,3 @@
+input predicate items(values: {teams: [{members: [{age: integer, rating: integer?}]}]}).
+firstAge(R["teams"][0]["members"][0]["age"]) :- items(R).
+firstRating(R["teams"][0]["members"][0]["rating"]) :- items(R).

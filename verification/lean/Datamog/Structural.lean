@@ -161,4 +161,103 @@ theorem requiredLookup {schema : Schema} {path : List Segment} {nullable : Bool}
       obtain ⟨result, found, valid⟩ := ih values[index] (nonnullableAccepted child values[index] h) remaining
       exact ⟨result, by simpa [lookupPath, step, bound] using found, valid⟩
 
+-- Typed paths permit absence and null containers and constrain successful lookups.
+inductive TypedPath : Schema → List Segment → Bool → Prop where
+  | fieldLeaf {optional : Bool} : (key, optional, nullable, Schema.integer) ∈ fields →
+      TypedPath (.record fields) [.field key] nullable
+  | fieldStep {optional parentNullable : Bool} : (key, optional, parentNullable, child) ∈ fields →
+      TypedPath child rest nullable → TypedPath (.record fields) (.field key :: rest) nullable
+  | indexLeaf : TypedPath (.array nullable .integer) [.index index] nullable
+  | indexStep : TypedPath child rest nullable →
+      TypedPath (.array parentNullable child) (.index index :: rest) nullable
+
+theorem TypedPath.nonempty (typed : TypedPath schema path nullable) : path ≠ [] := by
+  cases typed <;> simp
+
+theorem nullLookupAbsent (path : List Segment) (nonempty : path ≠ []) :
+    lookupPath (.scalar .null) path = none := by
+  cases path with
+  | nil => contradiction
+  | cons segment rest => cases segment <;> rfl
+
+theorem lookedUpChildAccepted (schema : Schema) (value : Value) (nullable : Bool)
+    (path : List Segment) (result : Value) (nonempty : path ≠ [])
+    (accepted : (match value with | .scalar .null => nullable | _ => accepts schema value) = true)
+    (found : lookupPath value path = some result) : accepts schema value = true := by
+  cases value with
+  | scalar v =>
+    cases v with
+    | null => rw [nullLookupAbsent path nonempty] at found; contradiction
+    | integer _ => exact accepted
+    | boolean _ => exact accepted
+  | record _ => exact accepted
+  | array _ => exact accepted
+
+theorem typedLookup {schema : Schema} {path : List Segment} {nullable : Bool}
+    (typed : TypedPath schema path nullable) (value result : Value)
+    (accepted : accepts schema value = true) (found : lookupPath value path = some result) :
+    leafMatches nullable result = true := by
+  induction typed generalizing value result with
+  | @fieldLeaf fields key nullable optional member =>
+    cases value with
+    | scalar _ => simp [accepts] at accepted
+    | array _ => simp [accepts] at accepted
+    | record entries =>
+      have h := fieldAccepted fields entries key optional nullable .integer member accepted
+      have lookupResult : lookup entries key = some result := by
+        simpa [lookupPath, step] using found
+      rw [lookupResult] at h
+      exact integerAccepted nullable result (by cases result with
+        | scalar v => cases v <;> simpa using h
+        | record _ => simpa using h
+        | array _ => simpa using h)
+  | @fieldStep fields key child rest nullable optional parentNullable member typed ih =>
+    cases value with
+    | scalar _ => simp [accepts] at accepted
+    | array _ => simp [accepts] at accepted
+    | record entries =>
+      have h := fieldAccepted fields entries key optional parentNullable child member accepted
+      cases lookupResult : lookup entries key with
+      | none => simp [lookupPath, step, lookupResult] at found
+      | some v =>
+        have remaining : lookupPath v rest = some result := by
+          simpa [lookupPath, step, lookupResult] using found
+        rw [lookupResult] at h
+        exact ih v result
+          (lookedUpChildAccepted child v parentNullable rest result typed.nonempty (by
+            cases v with
+            | scalar s => cases s <;> simpa using h
+            | record _ => simpa using h
+            | array _ => simpa using h) remaining)
+          remaining
+  | @indexLeaf nullable index =>
+    cases value with
+    | scalar _ => simp [accepts] at accepted
+    | record _ => simp [accepts] at accepted
+    | array values =>
+      have lookupResult : values[index]? = some result := by
+        simpa [lookupPath, step] using found
+      have member : result ∈ values := List.mem_of_getElem? lookupResult
+      simp only [accepts, List.all_eq_true] at accepted
+      exact integerAccepted nullable result (accepted result member)
+  | @indexStep child rest nullable parentNullable index typed ih =>
+    cases value with
+    | scalar _ => simp [accepts] at accepted
+    | record _ => simp [accepts] at accepted
+    | array values =>
+      cases lookupResult : values[index]? with
+      | none => simp [lookupPath, step, lookupResult] at found
+      | some v =>
+        have remaining : lookupPath v rest = some result := by
+          simpa [lookupPath, step, lookupResult] using found
+        simp only [accepts, List.all_eq_true] at accepted
+        have h := accepted v (List.mem_of_getElem? lookupResult)
+        exact ih v result
+          (lookedUpChildAccepted child v parentNullable rest result typed.nonempty (by
+            cases v with
+            | scalar s => cases s <;> simpa using h
+            | record _ => simpa using h
+            | array _ => simpa using h) remaining)
+          remaining
+
 end Datamog.Structural

@@ -3,7 +3,7 @@
 Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
 and solver process handling implemented; stage 2 Lean spike implemented; stage 3
 manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus composable record/array schema export started**. This extends the future-work discussion in
+and coverage claims plus composable schemas and direct structural projection coverage and soundness (including dynamic indices, multiple outputs, carried integer columns, and integer filters) started**. This extends the future-work discussion in
 [refinement annotations](refinement-annotations.md), especially §§7–8. It does
 not change current syntax or runtime checks. The integer obligation IR, solver
 process hardening, dependency reporting, and optional Lean spike below are
@@ -144,7 +144,8 @@ false goal, `sorry`, an extra axiom, a weaker statement, and native computation
 axioms. They also compare 164 arithmetic/null cases, 124 flat-record lookup
 cases, 32 integer-field acceptance cases, 265 flat-schema acceptance cases,
 61 nested-schema cases, 114 integer-array cases, 376 nested-array cases,
-and 137 mixed structural cases against native, SQLite, and configured Postgres execution and check those results by Lean kernel reduction.
+137 mixed structural cases, and 766 source-projection cases against native,
+SQLite, and configured Postgres execution and check those results by Lean kernel reduction.
 Postgres comparisons use a temporary isolated schema, are required in the Lean CI
 job and devcontainer, and explicitly report a skip when no test database is
 configured elsewhere. Fresh reports record concrete-case coverage separately
@@ -187,7 +188,8 @@ run. All registered audits and semantic regressions still run, and reports
 record requested IDs. Lean CI requires successor safety, reachability
 transitivity, identity uniqueness, and the false claims' refutations. This does not add general dependency discharge or report import.
 General module manifests, cached proof reuse, finer invalidation, and arbitrary
-Lean/CLI integration remain future work.
+Lean/CLI integration remain future work. The selected structural projection workflow
+below now provides a scoped standalone-project export and checking path.
 
 ## Worked relation laws
 
@@ -502,10 +504,517 @@ An additional optional-only fixture emits no
 lookup theorem and cannot satisfy a requested goal ID by its schema definition.
 
 This remains an internal schema exporter. Nullable roots, non-integer leaf types,
-nominal types, and arbitrary refinements remain unsupported. It does not yet
-connect schema guarantees to generated rule-projection obligations, extend the
-SMT or relational exporters, or prove backend correctness. The earlier scoped
+nominal types, and arbitrary refinements remain unsupported. The separate direct-projection exporter below now uses these guarantees for a
+small rule fragment. This does not extend the general SMT or integer relational
+exporters or prove backend correctness. The earlier scoped
 record and array APIs remain available.
+
+## Initial source-derived structural projection obligations
+
+`exportLeanStructuralProjection` now reads a selected elaborated rule and derives
+its input schema and lookup path from the AST. The initial fragment is exactly
+one rule with one positive unary structural input atom and one unannotated
+projected output. Field keys and nonnegative safe-integer indices must be literals.
+For example:
+
+```prolog
+input predicate items(values: {teams: [{members: [{age: integer, rating: integer?}]}]}).
+firstAge(R["teams"][0]["members"][0]["age"]) :- items(R).
+```
+
+The exporter generates an inductive output relation whose constructor requires an
+input row and a defined lookup result. Its coverage theorem proves existence of
+an output from an admitted input row and explicit array bounds. Lookup definedness
+is proved in the conclusion's derivation, rather than assumed in the coverage
+premises. The result also satisfies the selected integer leaf schema, preserving
+null for a nullable leaf. The schema, source predicate/input identities, literal
+path, relation definition, and exact goal are registered together in the manifest.
+
+`FirstAge_coverage` and `FirstRating_coverage` instantiate the generic mixed-path
+proof for actual Datamog rules. `firstAgeTotal_refuted` shows that dropping the
+bounds is false: an input row with an empty `teams` array derives no output.
+All three have exact generated checker types, axiom audits, and CI requirements.
+The runner replays 766 fixture inputs on native, SQLite, and Postgres and checks
+schema membership plus concrete output derivations or non-derivations in Lean.
+Reports record `structuralProjectionCases` separately.
+
+Every exported projection now also gets a soundness goal: if every input row
+satisfies its declared schema, every derived output satisfies the selected integer
+leaf schema. This admission premise covers all input rows, not just one candidate
+row. Soundness assumes neither array bounds nor lookup definedness; a derivation
+itself supplies the successful lookup. It does not assert output existence.
+
+With `coverage: false`, the internal descriptor requests only soundness and accepts
+optional leaves and optional/nullable parent records, arrays, and array elements.
+Coverage remains enabled by default; requesting it for such a path throws before
+export, rather than silently dropping the requested goal. Missing fields and null
+parents yield no output, while a present null leaf is retained only when nullable.
+The generic `structuralTypedLookup` theorem proves this property by induction on
+a schema-typed path, including paths whose lookup can fail.
+
+The existing two rules and four optional-path rules have exact soundness checkers,
+manifest identities, axiom audits, and CI requirements. `ProfileAge_soundness`
+proves integer output through an optional nullable `profile`; two refutations use
+an absent profile and an explicit null profile to disprove unconditional coverage.
+The 51 literal-path replay inputs include 31 optional-path cases with wrong shapes, missing
+and null fields, empty arrays, nullable elements, and integer boundaries. These
+checks preserve the distinction between no output and an output containing null.
+
+Arithmetic indices, dynamic field keys, general structural lookup filters, joins, sibling rules, derived
+dependencies, refinements, constraints, and parity remain unsupported.
+Unsupported requests throw before producing an obligation; they do not emit an
+empty success. This is an internal API for projection coverage and output typing,
+not a general structural `--verify` mode or a proof of translation correctness.
+
+### Dynamic source-projection indices
+
+The projection exporter also accepts a single input atom with one structural
+column and additional non-null integer columns, all bound to distinct variables.
+The structural column can occur at any position. An array subscript may use an
+integer variable from that same row; field keys remain literal strings. For example:
+
+```prolog
+input predicate items(values: {rows: [{cells: [{n: integer}]}]}, outer: integer, inner: integer).
+picked(R["rows"][I]["cells"][J]["n"]) :- items(R, I, J).
+```
+
+The generated input relation preserves column order and quantifies integer columns
+as bounded signed `SafeInt` values. Each distinct used index contributes a
+nonnegative constructor premise before lookup uses its natural-number value.
+This prevents negative indices from becoming zero during Lean conversion.
+Unused integer columns remain quantified but do not get sign restrictions;
+reusing an index at multiple levels shares its value and sign guard.
+
+Coverage now requires nonnegative used indices plus the existing bounds at each
+actual array reached. Soundness still requires only admission and an output
+derivation; sign and lookup evidence come from that derivation. Optional paths
+remain soundness-only. Computed indices, string index variables, nullable index
+columns, and repeated variables in the input atom remain unsupported.
+
+Three fixture rules prove coverage and soundness for independent indices,
+nullable leaves, and a reused index. A fourth proves soundness for an optional
+nullable leaf. `dynamicTotal_refuted` uses index `-1` on a populated array to
+refute unrestricted coverage. All eight results have exact checkers, manifest
+identities, axiom audits, and unconditional CI requirements.
+
+The runner adds 104 dynamic-index inputs, bringing source-projection replay to
+155 cases on native, SQLite, and Postgres with Lean kernel checks. Cases vary
+each index independently through negative values, ordinary positions, values
+above the 32-bit range, and both safe-integer extremes. They include ragged and
+empty arrays, missing and null leaves, wrong shapes, and a negative unused
+column. Reports count the dynamic subset as `dynamicProjectionCases`, within
+`structuralProjectionCases`. This extends the modeled projection fragment; it
+does not prove backend or translator correctness.
+
+### Multiple projected output columns
+
+A selected rule can now project several integer leaves from the same structural
+input column. Each head position retains its own literal/dynamic path and leaf
+nullability. For example:
+
+```prolog
+input predicate items(values: {left: [{n: integer}], right: [{rating: integer?}]}, outer: integer, inner: integer).
+paired(R["left"][I]["n"], R["right"][J]["rating"]) :- items(R, I, J).
+```
+
+The generated constructor has one input-row premise and one successful lookup
+premise per output, all using that same row. A missing value at any position
+withholds the whole tuple; a present null at a nullable leaf remains a value.
+Repeated paths remain separate output positions and share lookup semantics.
+The internal export result and manifest retain an ordered `projections` list,
+so output arity, ordering, paths, and nullability participate in identities.
+
+Coverage takes bounds for every output path and sign conditions for the union
+of used indices, then constructs all output witnesses together. It cannot use
+outputs from different rows to fill missing positions. Soundness proves the
+conjunction of the leaf guarantees for every derived tuple. Any optional path
+requires `coverage: false` for the whole claim; unsupported head terms or paths
+reject the whole export rather than yielding partial success.
+
+The paired and repeated-output fixtures have coverage and soundness proofs;
+an optional second output has a soundness proof. `pairedSameRow` establishes a
+shared input witness for both outputs. `pairedFirstBounds_refuted` shows that
+bounds on only the first projection are insufficient, and
+`optionalPairTotal_refuted` uses an absent optional leaf to refute tuple coverage
+with a valid first projection. All eight goals have exact checker types,
+manifest identities, axiom audits, and CI requirements.
+
+The runner adds 54 tuple inputs, giving 209 source-projection cases checked on
+native, SQLite, and Postgres and by Lean kernel reduction. They cover independent
+index bounds, negative and wide indices, repeated output paths, missing leaves,
+explicit null, integer boundaries, and rejected shapes. A separate four-row
+runtime dataset checks that values from different rows cannot form a tuple and
+that partial rows cannot complete one another. Reports record
+`tupleProjectionCases` and `tupleProjectionDatasets` separately; the latter is
+execution evidence, not an additional universal theorem or Lean reduction case.
+The existing `dynamicProjectionCases` count describes the single-output dynamic
+fixture. Whole structural values, non-integer carried columns, computed heads, and multiple
+structural input columns remain unsupported by this exporter.
+
+### Carried integer input columns
+
+Head positions may now copy non-null integer columns from the same input atom
+alongside structural lookups. For example:
+
+```prolog
+input predicate items(id: integer, data: {rows: [{n: integer}]}, index: integer).
+identified(Id, R["rows"][I]["n"]) :- items(Id, R, I).
+```
+
+Each carried position records its input-column identity and contributes a
+constructor equality to that bounded integer value. Coverage explicitly includes
+those equalities in its conclusion, so it guarantees the requested input's
+identifier rather than merely some well-typed identifier. Soundness proves all
+output types, and `identifiedSameRow` supplies a shared source-row witness for
+the identifier and projected value. Carried indices and repeated carried columns
+preserve their head positions and values.
+
+Carrying an integer adds no lookup bounds or sign condition. A negative identifier
+is legal; only columns actually used as array indices require nonnegativity.
+If any projected value is missing, the entire tuple is withheld, including its
+available identifier. Optional lookups remain soundness-only. At least one
+structural lookup output is required; whole structural values, nullable or
+non-integer carried columns, and computed carried expressions remain unsupported.
+
+Two fixtures prove coverage and soundness with identifiers, nullable projected
+leaves, and repeated carried indices. An optional projection has soundness only.
+The shared-row theorem and an empty-array coverage refutation bring this addition
+to seven audited, registered goals required by CI. Copying a column does not
+establish that it is a unique key; that needs a separately stated input law.
+
+The runner adds 89 carried-column cases, bringing kernel-checked source-projection
+replay to 298 on native, SQLite, and Postgres. Cases include both integer boundaries,
+negative identifiers, repeated columns, missing and null leaves, and failed
+negative or wide indices. A separate five-row runtime dataset checks association
+with the original identifier, including duplicate identifiers with different
+outputs and rows whose projections fail. Reports record `carriedProjectionCases`
+and `carriedProjectionDatasets`, keeping execution-only datasets separate from
+kernel-reduced cases and universal theorem assurance.
+
+### Integer filters on structural input rows
+
+The projection exporter now accepts positive comparisons (`<`, `<=`, `>`, `>=`,
+`=`, `<>`, and its alias `!=`) between non-null integer columns of its input atom and safe integer literals.
+Filters may occur before or after that atom; equality requires both operands to
+be already bound by the atom. Filter order is retained among the generated
+constructor premises. Structural lookup operands, nullable operands, arithmetic,
+binding equalities, negation, and compound Boolean filters remain
+unsupported.
+
+For example, the new fixture carries a key and projects an array element only
+when the key is nonnegative and the index is below a supplied limit:
+
+```prolog
+filtered(U, R["rows"][I]["n"]) :- U >= 0, items(R, I, J, U), I < J.
+```
+
+Coverage explicitly requires both source filters, index nonnegativity, and actual
+array bounds. It proves lookup definedness and output existence within that
+stated domain; it does not claim every input row satisfies the filters. Soundness
+requires no additional filter assumptions because every derivation already
+contains their evidence. The ordered filter formulas are included in relation
+manifest identities.
+
+`Filtered_coverage`, `Filtered_soundness`, and `filteredTotal_refuted` have exact
+checker types, transitive axiom audits, and unconditional CI requirements. The
+refutation uses a populated array with index zero and limit zero: the lookup is
+defined and in bounds, but the strict comparison prevents every output.
+
+The runner adds 96 cases across native, SQLite, and Postgres, with matching Lean
+kernel checks of concrete derivations or non-derivations. These exercise true and
+false filters independently, negative and wide indices, empty arrays, and keys
+at both integer boundaries. Reports record `filteredProjectionCases` within the
+394 total `structuralProjectionCases`.
+
+### Excluding integer keys
+
+Projection comparisons also support integer disequality, written `<>` or `!=`.
+Both spellings generate the same Lean `≠` premise and manifest statement. The
+operands remain non-null integer inputs or safe integer literals; this does not
+extend the exporter to Datamog's null-aware or structural equality semantics.
+
+The `excluded-projection.dl` fixture uses `U != J` to exclude the input row's
+blocked key while carrying `U` alongside an array projection. `Excluded_coverage`
+proves output existence when the keys differ and the lookup is in bounds.
+`Excluded_soundness` proves output typing for every derivation.
+`excludedTotal_refuted` uses equal keys and a populated array to show that array
+bounds alone cannot guarantee an output. All three exact goals are audited,
+registered in the manifest, and required by Lean CI.
+
+The 144 additional cases compare equal and unequal keys at both safe-integer
+boundaries and zero, including both source spellings, negative and wide indices,
+and empty arrays. Native, SQLite, and Postgres results are checked against Lean
+concrete derivations or non-derivations. Reports record `excludedProjectionCases`
+within the 538 total `structuralProjectionCases`.
+
+### Filters on projected integer values
+
+The exporter supports comparisons of `as_integer(path)` with a safe
+integer literal, where `path` exactly matches a projected non-null integer leaf.
+Comparisons are grouped by selected output, with independent witnesses for
+distinct outputs.
+All supported scalar comparison operators are available. The path can include
+literal keys and literal or input-variable array indices. For example:
+
+```prolog
+positive(U, R["rows"][I]["n"]) :-
+  items(R, I, J, U), as_integer(R["rows"][I]["n"]) > 0.
+```
+
+The explicit `as_integer` is required by existing Datamog typing: structural
+lookups have storage type `value`, which has no ordering. The exported schema
+ensures the selected leaf contains a bounded integer, so successful lookup also
+makes the conversion defined. This extension changes no runtime or type rules.
+
+The constructor requires a lookup result and evidence that its integer value
+satisfies the comparison. Both soundness and coverage conclusions retain this
+value property alongside output typing. For the fixture, soundness proves that
+the projected integer is strictly positive for every produced tuple.
+
+Coverage assumes the comparison universally for any integer returned at the
+selected path. That premise is vacuously true when lookup fails; it does not
+assert definedness. Schema membership, required-path guarantees, index signs,
+and actual array bounds independently establish a lookup witness. The proof
+then applies the comparison premise to that witness and constructs the output.
+
+`Positive_coverage`, `Positive_soundness`, and `positiveTotal_refuted` have exact
+checker types, manifest identities, axiom audits, and CI requirements. The
+refutation uses an in-bounds zero value, whose lookup succeeds but whose
+positivity filter rejects the row. The 28 additional cases compare positive,
+zero, negative, boundary, and absent values on native, SQLite, and Postgres and
+check concrete derivations or non-derivations in Lean. Reports record
+`positiveProjectionCases` within 566 total `structuralProjectionCases`.
+
+Nullable leaves, comparisons on unprojected paths, variable comparison limits,
+reversed operands, arithmetic, and compound filters
+remain unsupported by this fragment. Existing scalar-input filters can coexist
+with the lookup comparison. Soundness-only export retains the existing support
+for paths through optional or nullable parents; coverage still rejects those paths.
+
+### Conjunctions of lookup comparisons
+
+Comma-separated lookup comparisons can now constrain the same projected integer
+with several literals. The exporter retains their order and combines them into
+one existential value property with a shared integer witness. It does not drop
+duplicate or contradictory comparisons. Each comparison contributes its own
+universal coverage premise, while schema membership and bounds continue to
+establish definedness separately.
+
+The `ranged-projection.dl` fixture requires
+`as_integer(R["rows"][I]["n"]) > 0` and
+`as_integer(R["rows"][I]["n"]) <= 10`. `Ranged_soundness` proves both bounds
+on every produced projected value; `Ranged_coverage` proves existence within
+that domain. `rangedUpper_refuted` retains the lower-bound premise and uses the
+value 11 to show that dropping the upper-bound premise makes coverage false.
+All three goals have exact checker types, axiom audits, manifest identities, and
+CI requirements.
+
+The 56 new cases cover both safe-integer extremes, -1, 0, 1, 10, 11, empty arrays,
+and negative, out-of-range, and wide indices. Lean checks the same derivations
+or non-derivations as native, SQLite, and Postgres. Reports record
+`rangedProjectionCases` within 622 total `structuralProjectionCases`.
+
+The initial extension supported several comparisons on one output path, alongside
+scalar-input filters. The next extension below adds distinct output paths. Variable
+limits, nullable leaves, and general Boolean expressions remain unsupported.
+
+### Comparisons on distinct projected fields
+
+Lookup comparisons can now select different projected non-null integer leaves
+in the same rule. The exporter groups comparisons by selected output in order of
+first occurrence, retaining comparison order within each group. Each group has
+its own integer witness; conditions on one field cannot constrain another
+field's value accidentally. The lookup-comparison coverage premises retain their
+source order.
+
+The `both-positive-projection.dl` fixture projects independently indexed `left`
+and `right` array fields and requires both selected integers to be positive.
+`BothPositive_coverage` constructs both lookup results from the same admitted
+input row, its two array bounds, and the two comparison premises.
+`BothPositive_soundness` proves positivity and integer typing for both outputs.
+`bothPositiveSecond_refuted` retains both array bounds and the first field's
+positivity premise, then uses values 1 and 0 to refute coverage without the second
+field's condition. All three exact goals have manifest identities, transitive
+axiom audits, and CI requirements.
+
+The runner adds 72 cases covering independent successful and failed comparisons,
+integer boundaries, empty arrays, malformed records, and independently varied
+negative, ordinary, out-of-range, and wide indices. Native, SQLite, and Postgres
+results are checked against Lean derivations or non-derivations. Reports record
+`bothPositiveProjectionCases` within 694 total `structuralProjectionCases`.
+The concrete checker now handles a list of output properties, preserving the
+earlier positivity and bounded-range cases through the same checking path.
+
+This initially supported separate comparisons against integer literals on different
+fields. The extension below adds direct field-to-field comparisons. Variable
+limits, nullable leaves, and general Boolean expressions remain unsupported.
+
+### Direct comparisons between projected fields
+
+The exporter also accepts comparisons between two `as_integer(path)` expressions,
+provided both paths select projected non-null integer leaves. The generated
+property records each operand's output identity and a bounded integer witness
+for each, then relates their values with the source comparison operator. This
+supports `<`, `<=`, `>`, `>=`, `=`, `<>`, and `!=`, and can coexist with literal
+comparisons and scalar-input filters.
+
+Coverage quantifies over any pair of successful integer lookups and requires the
+source comparison for that pair. This premise does not assert either lookup's
+existence. Schema membership, sign conditions, and both paths' array bounds
+supply the witnesses independently. Lookup-comparison coverage premises retain
+source order even when pair and literal comparisons are interleaved. Operand
+identities, operators, and premise ordering contribute to manifest identities.
+
+The `ordered-projection.dl` fixture selects one integer from each of two arrays
+and requires the left value to be at most the right value. `Ordered_soundness`
+proves the ordering and output typing for every tuple; `Ordered_coverage`
+constructs the output within the comparison's stated domain.
+`orderedTotal_refuted` uses left value 1 and right value 0 to disprove coverage
+from array bounds alone. All three have exact checker types, axiom audits,
+manifest identities, and CI requirements.
+
+The 72 added cases cover ordered, equal, and reversed values, safe-integer
+boundaries, invalid shapes, empty arrays, and independent indices. Lean checks
+concrete derivations or non-derivations against native, SQLite, and Postgres.
+Reports record `orderedProjectionCases` within 766 total
+`structuralProjectionCases`. Comparisons with unprojected paths, nullable leaves,
+scalar-variable limits, arithmetic, and general Boolean expressions remain
+unsupported.
+
+## Initial user-selected Lean projects
+
+`bun run lean:project export PLAN.json OUTPUT` now exports selected structural
+projection coverage/soundness goals from a standalone source file. The JSON plan
+contains a relative source path and explicit predicate/Lean-ID descriptors, with
+optional soundness-only selection. Unsupported requests and duplicate identities
+fail before writing project files. The output must be empty or an owned generated
+project. Regeneration preserves the maintained `Datamog/Proofs.lean` file.
+
+`bun run lean:project check PLAN.json OUTPUT` verifies actual project contents
+against a freshly recomputed manifest and builds a source-only snapshot in a new
+temporary directory. Generated exact checker types and the existing axiom policy
+are enforced. A final source/project recheck precedes atomic publication of a
+fresh report; old reports are removed at checking start. Repeated `--require-goal`
+options gate named goals, while all selected goals still compile and are audited.
+By default all selected goals are required. Reports are never imported as proofs.
+
+The manifest identifies source, selection, parser/core inventories, runner,
+lockfile, pinned Lean configuration, support semantics, audit policy, and maintained
+proof content. Pre-existing `.olean` files, local build caches, alternate build
+scripts, and prior reports cannot substitute for the fresh build. The checked-in
+worked example has required-field coverage/soundness and optional nullable-field
+soundness. Unit tests check reproducibility, proof preservation, stale contents,
+invalid selections, and output ownership. The separate optional integration suite
+checks fresh success, rejection of `sorry`, weaker statements, and extra axioms,
+and source mutation during compilation. Lean CI runs both project workflows.
+
+This is the first user-selected path beyond the fixed fixture project. It initially covered the structural projection fragment; the extension below adds
+integer uniqueness and coverage. It requires standalone sources
+without module/data bindings, and supports one maintained proof file. It does
+not yet expose every internal exporter, perform proof search, cache
+proofs, import certificates, or prove runtime backend correctness. It runs no
+backend differential cases for arbitrary selected programs. Locally authored Lean
+source and repository tooling remain trusted; this is not a sandbox for untrusted
+Lean projects. See [the workflow guide](../../verification/lean/PROJECTS.md).
+
+### Selected integer uniqueness and coverage
+
+The standalone project plan now also accepts a `claims` array selecting the
+existing integer uniqueness and coverage exporters. It may be combined with
+structural `projections`. Each claim has an explicit kind, descriptor, and optional
+`prove`/`refute` polarity. Selection validation rejects unknown fields and malformed
+bounds or column arrays before export; the existing exporters enforce semantic
+fragment and column-range restrictions.
+
+Integer claims use `assembleLeanClaims` to share only identical relation
+definitions, including predicate identity and input wiring. Cross-family identity
+collisions fail manifest construction. Relation definitions depend explicitly on
+the integer semantics node, and mixed plans identify both semantic profiles.
+Generated proof-file comments retain exact types, including negation for
+refutations. A false claim remains a definition; only its `ID_refuted` theorem
+can satisfy a required-goal gate.
+
+The `selected-integer` worked project proves identity uniqueness, successor
+coverage below `maxSafe`, and the failure of unrestricted successor coverage.
+Both coverage claims share a single exported `Successor` definition. The optional
+project integration suite builds these maintained proofs from source and checks
+all three exact goals. Ordinary tests cover mixed selections, duplicate identities,
+refutation signatures, malformed descriptors, and rejection of a false claim's
+statement ID as a required goal.
+
+This exposes the existing integer relation fragment through the selected-project
+workflow; it does not expand relation semantics, add Datamog assertion syntax,
+automate proof search, or introduce proof import or caching.
+
+## Selected local head-refinement obligations
+
+The standalone project workflow now accepts `kind: "local"` claims selecting a
+predicate, one-based rule, and one-based refinement index. It exports the existing
+typed integer obligation directly, retaining source and hypothesis provenance in
+the content manifest. Missing and unsupported statements fail before writing files.
+Contract dependencies now require explicit prove selections for every defining
+obligation, including sibling rules and transitive prerequisites. Batch-local IDs
+are mapped to the selected names in manifest edges. Missing proofs, refutations
+used as prerequisites, duplicate obligation selections, and recursive cycles
+fail export. Recursive dependency discharge remains unsupported in this workflow.
+
+The selected-local fixture proves successor safety and refutes a false local
+claim, with exact checker types, axiom audits, fresh reports, and optional Lean CI
+checks. Refutations register only the negative theorem as a goal. These statements
+use the local contract abstraction: head definedness is a premise, omitted body
+hypotheses remain documented, and an abstract refutation need not identify a
+reachable tuple. This adds neither coverage nor general structural refinement
+support. See [the selection guide](../../verification/lean/PROJECTS.md).
+
+The selected-dependencies fixture checks a three-predicate acyclic contract chain.
+Even a gate requesting only its final goal freshly builds and audits every
+prerequisite. An integration regression replaces the first proof with `sorry`
+and confirms the final gate fails and removes the previous report. This certifies
+the exported local statements; contract composition and the source translation
+remain trusted, with no new induction theorem or backend correctness claim.
+
+## Source-derived recursive contract invariants
+
+Selected projects now accept `kind: "invariant"` with a predicate, relation name,
+and goal ID. The generated inductive relation preserves the positive integer
+rules, including bounded computed heads. The exact theorem states that every
+finite derivation satisfies the published head contract: conjunction within a
+rule and disjunction across sibling rules. Refinements are never assumed by
+constructors. A maintained derivation-induction proof supplies the acceptance
+boundary; local dependency cycles remain rejected.
+
+The selected-recursive fixture proves positivity of guarded seeds and their
+recursive successors. Its fresh-check regression removes the seed guard and
+requires proof failure with no surviving success report. The fragment supports
+self-recursion and simple comparisons on non-null integer head columns. Every
+rule must be refined; nullable contracts, arithmetic contracts, other derived
+calls, mutual recursion, explicit constraints, negation, aggregates, and parity
+are rejected. Synthetic runtime refinement checks are excluded from the relation
+model because the theorem concerns tuples before those checks. The relation,
+source contract, exporter, and maintained proof are content-bound and audited.
+This is an explicit induction boundary for the supported relation fragment, not
+arbitrary SCC discharge, termination, or backend verification.
+
+## Initial mutually recursive invariant family
+
+Selected projects now support `kind: "mutual-invariant"` with a joint goal ID
+and an ordered list of predicate names. The first fragment is unary non-null
+integers, variable heads and atoms, and simple comparison guards and refinements.
+The selection must contain one complete strongly connected component; other
+derived dependencies are rejected. Each source predicate receives a distinct tag
+in a single inductive family, and every defining rule contributes a constructor.
+The joint theorem conjoins each member's published contract, preserving sibling
+disjunctions and per-rule conjunctions. Contracts are conclusions, never premises
+of the family constructors.
+
+The selected-mutual fixture proves a joint positivity invariant by induction on
+that family. A negative regression adds an unsafe base rule to its second member
+and requires checking to fail with no surviving report. Exact goal checking,
+transitive axiom audits, source identities, and fresh builds apply to the entire
+family. This begins mutual invariant support without accepting arbitrary local
+proof cycles. Computed heads, multiple columns, nullable values, negation, parity,
+and explicit constraints remain unsupported in this fragment. The result concerns
+finite derivations, not termination or backend correctness.
 
 ## Which harder claims should be expressible?
 

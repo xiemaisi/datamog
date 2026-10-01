@@ -100,6 +100,16 @@ try {
       "Type mismatch",
     ],
     [
+      "ProjectionWeaker",
+      "theorem weaker : ∀ (input : Datamog.Structural.Value → Prop), (∀ value, input value → Datamog.Structural.accepts Datamog.Generated.ProfileAgeSchema value = true) → True := by intros; trivial\ntheorem rejected : Datamog.Generated.ProfileAge_soundness := weaker",
+      "Type mismatch",
+    ],
+    [
+      "TupleWeaker",
+      "theorem weaker : ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) x y, Datamog.Generated.Paired input x y → True := by intros; trivial\ntheorem rejected : Datamog.Generated.Paired_soundness := weaker",
+      "Type mismatch",
+    ],
+    [
       "Native",
       "theorem rejected : (1 : Nat) = 1 := by native_decide\n#audit rejected",
       "Unapproved axiom",
@@ -556,6 +566,560 @@ try {
             : undefined;
     return result;
   };
+  const projectionSource = await Bun.file(
+    join(project, "fixtures/structural-projection.dl"),
+  ).text();
+  const projectionCheck = recordOf({
+    teams: arrayOf(
+      recordOf({ members: arrayOf(recordOf({ age: integer, rating: nullable(integer) })) }),
+    ),
+  });
+  const requiredProjectionCases: MixedValue[] = [
+    { teams: [] },
+    { teams: [{ members: [] }] },
+    { teams: [{ members: [{ age: 0, rating: null }] }] },
+    { teams: [{ members: [{ age: -9007199254740991, rating: 9007199254740991 }] }] },
+    {
+      teams: [
+        {
+          members: [
+            { age: 9007199254740991, rating: -9007199254740991 },
+            { age: 1, rating: 2 },
+          ],
+        },
+      ],
+    },
+    { teams: [{ members: [] }, { members: [{ age: 1, rating: 2 }] }] },
+    { teams: [{ members: [{ age: 1, rating: 2 }] }, { members: [{ age: 3, rating: null }] }] },
+    {},
+    { teams: null },
+    { teams: [null] },
+    { teams: [{}] },
+    { teams: [{ members: null }] },
+    { teams: [{ members: [null] }] },
+    { teams: [{ members: [{ age: null, rating: 0 }] }] },
+    { teams: [{ members: [{ age: false, rating: 0 }] }] },
+    { teams: [{ members: [{ age: 0 }] }] },
+    { teams: [{ members: [{ age: 0, rating: false }] }] },
+    { teams: [], extra: 1 },
+    null,
+    [],
+  ];
+  const optionalProjectionSource = await Bun.file(
+    join(project, "fixtures/optional-projection.dl"),
+  ).text();
+  const optionalProjectionCheck = recordOf(
+    {},
+    {
+      profile: nullable(recordOf({ age: integer }, { rating: nullable(integer) })),
+      rows: nullable(arrayOf(nullable(recordOf({}, { age: integer, rating: nullable(integer) })))),
+    },
+  );
+  const optionalProjectionCases: MixedValue[] = [
+    {},
+    { profile: null },
+    { profile: { age: 0 } },
+    { profile: { age: -9007199254740991, rating: null } },
+    { profile: { age: 9007199254740991, rating: -9007199254740991 } },
+    { profile: { age: 1, rating: 9007199254740991 } },
+    { rows: null },
+    { rows: [] },
+    { rows: [null] },
+    { rows: [{}] },
+    { rows: [{ age: 0 }] },
+    { rows: [{ rating: null }] },
+    { rows: [{ age: -9007199254740991, rating: 9007199254740991 }] },
+    { rows: [{ age: 9007199254740991, rating: -9007199254740991 }] },
+    { rows: [null, { age: 2, rating: 3 }] },
+    { profile: { age: 0, rating: null }, rows: [{ age: 1, rating: 2 }, null] },
+    { profile: {} },
+    { profile: { age: null } },
+    { profile: { age: false } },
+    { profile: { age: 0, rating: false } },
+    { profile: { age: 0, extra: 1 } },
+    { profile: [] },
+    { rows: {} },
+    { rows: [false] },
+    { rows: [{ age: null }] },
+    { rows: [{ rating: false }] },
+    { rows: [{ extra: 1 }] },
+    { extra: 1 },
+    null,
+    [],
+    false,
+  ];
+  type ProjectionOutput = {
+    usedIndices?: number[];
+    orderedOutputs?: [number, number];
+    valueChecks?: { output: number; upperBound?: number }[];
+    filters?: { holds: boolean; lean: string }[];
+    predicate: string;
+    relation: string;
+    paths: ((string | number)[] | { input: number })[];
+  };
+  const requiredOutputs: ProjectionOutput[] = [
+    { predicate: "firstAge", relation: "FirstAge", paths: [["teams", 0, "members", 0, "age"]] },
+    {
+      predicate: "firstRating",
+      relation: "FirstRating",
+      paths: [["teams", 0, "members", 0, "rating"]],
+    },
+  ];
+  const optionalOutputs: ProjectionOutput[] = [
+    { predicate: "profileAge", relation: "ProfileAge", paths: [["profile", "age"]] },
+    { predicate: "profileRating", relation: "ProfileRating", paths: [["profile", "rating"]] },
+    { predicate: "optionalAge", relation: "OptionalAge", paths: [["rows", 0, "age"]] },
+    { predicate: "optionalRating", relation: "OptionalRating", paths: [["rows", 0, "rating"]] },
+  ];
+  const dynamicProjectionSource = await Bun.file(
+    join(project, "fixtures/dynamic-projection.dl"),
+  ).text();
+  const dynamicProjectionCheck = recordOf({
+    rows: arrayOf(
+      recordOf({
+        cells: arrayOf(
+          recordOf({ n: integer, rating: nullable(integer) }, { score: nullable(integer) }),
+        ),
+      }),
+    ),
+  });
+  const dynamicValues: MixedValue[] = [
+    { rows: [] },
+    { rows: [{ cells: [] }] },
+    { rows: [{ cells: [{ n: 0, rating: null }] }] },
+    {
+      rows: [
+        {
+          cells: [
+            { n: -9007199254740991, rating: 9007199254740991, score: null },
+            { n: 9007199254740991, rating: -9007199254740991, score: 0 },
+          ],
+        },
+      ],
+    },
+    { rows: [{ cells: [] }, { cells: [{ n: 2, rating: 3, score: 4 }] }] },
+    {
+      rows: [
+        {
+          cells: [
+            { n: 0, rating: 1 },
+            { n: 2, rating: 3 },
+          ],
+        },
+        {
+          cells: [
+            { n: 4, rating: null, score: 5 },
+            { n: 6, rating: 7, score: null },
+          ],
+        },
+      ],
+    },
+  ];
+  const dynamicIndices = [-9007199254740991, -1, 0, 1, 2, 2147483648, 9007199254740991];
+  const indexPairs = [
+    ...dynamicIndices.map((i) => [i, 0]),
+    ...dynamicIndices.filter((j) => j !== 0).map((j) => [0, j]),
+    [1, 1],
+    [1, 2],
+    [2, 1],
+  ];
+  const dynamicInputs = dynamicValues.flatMap((value) =>
+    indexPairs.map(([outer, inner]) => ({
+      value,
+      indices: [outer!, inner!, -9007199254740991],
+    })),
+  );
+  for (const value of [
+    {},
+    { rows: null },
+    { rows: [null] },
+    { rows: [{ cells: null }] },
+    { rows: [{ cells: [{ n: null, rating: 0 }] }] },
+    { rows: [{ cells: [{ n: 0, rating: false }] }] },
+    { rows: [{ cells: [{ n: 0, rating: 1, score: false }] }] },
+    { rows: [], extra: 0 },
+  ] as MixedValue[])
+    dynamicInputs.push({ value, indices: [0, 0, 0] });
+  const tupleProjectionSource = await Bun.file(
+    join(project, "fixtures/tuple-projection.dl"),
+  ).text();
+  const tupleProjectionCheck = recordOf(
+    {
+      left: arrayOf(recordOf({ n: integer })),
+      right: arrayOf(recordOf({ rating: nullable(integer) })),
+    },
+    { optional: nullable(integer) },
+  );
+  const tupleValues: MixedValue[] = [
+    { left: [], right: [] },
+    { left: [{ n: 0 }], right: [] },
+    { left: [], right: [{ rating: null }] },
+    { left: [{ n: 0 }], right: [{ rating: null }] },
+    { left: [{ n: -9007199254740991 }], right: [{ rating: 9007199254740991 }], optional: null },
+    {
+      left: [{ n: 9007199254740991 }, { n: 1 }],
+      right: [{ rating: 0 }, { rating: -9007199254740991 }],
+      optional: 2,
+    },
+  ];
+  const tupleIndexPairs = [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [-1, 0],
+    [0, -1],
+    [2147483648, 0],
+    [0, 9007199254740991],
+  ];
+  const tupleInputs = tupleValues.flatMap((value) =>
+    tupleIndexPairs.map(([outer, inner]) => ({
+      value,
+      indices: [outer!, inner!],
+    })),
+  );
+  for (const value of [
+    {},
+    { left: [{ n: null }], right: [] },
+    { left: [], right: [{ rating: false }] },
+    { left: [], right: [], optional: false },
+    { left: null, right: [] },
+    { left: [], right: [null] },
+  ] as MixedValue[])
+    tupleInputs.push({ value, indices: [0, 0] });
+  const carriedProjectionSource = await Bun.file(
+    join(project, "fixtures/carried-projection.dl"),
+  ).text();
+  const carriedProjectionCheck = recordOf({
+    rows: arrayOf(
+      recordOf({ n: integer, rating: nullable(integer) }, { score: nullable(integer) }),
+    ),
+  });
+  const carriedValues: MixedValue[] = [
+    { rows: [] },
+    { rows: [{ n: 0, rating: null }] },
+    {
+      rows: [
+        { n: -9007199254740991, rating: 9007199254740991, score: null },
+        { n: 9007199254740991, rating: -9007199254740991, score: 0 },
+      ],
+    },
+    {
+      rows: [
+        { n: 1, rating: 2, score: 9007199254740991 },
+        { n: 3, rating: null },
+      ],
+    },
+  ];
+  const carriedInputs = carriedValues.flatMap((value) =>
+    dynamicIndices.flatMap((index) =>
+      [-9007199254740991, 0, 9007199254740991].map((key) => ({
+        value,
+        indices: [index, -9007199254740991, key],
+      })),
+    ),
+  );
+  for (const value of [
+    {},
+    { rows: null },
+    { rows: [{ n: null, rating: 0 }] },
+    { rows: [{ n: 0, rating: false }] },
+    { rows: [{ n: 0, rating: 0, score: false }] },
+  ] as MixedValue[])
+    carriedInputs.push({ value, indices: [0, 0, 0] });
+  const filteredProjectionSource = await Bun.file(
+    join(project, "fixtures/filtered-projection.dl"),
+  ).text();
+  const filteredInputs = carriedValues.flatMap((value) =>
+    [-1, 0, 1, 9007199254740991].flatMap((index) =>
+      [0, 2].flatMap((limit) =>
+        [-9007199254740991, 0, 9007199254740991].map((key) => ({
+          value,
+          indices: [index, limit, key],
+        })),
+      ),
+    ),
+  );
+  const excludedProjectionSource = await Bun.file(
+    join(project, "fixtures/excluded-projection.dl"),
+  ).text();
+  const excludedInputs = carriedValues.flatMap((value) =>
+    [-1, 0, 1, 9007199254740991].flatMap((index) =>
+      [-9007199254740991, 0, 9007199254740991].flatMap((blocked) =>
+        [-9007199254740991, 0, 9007199254740991].map((key) => ({
+          value,
+          indices: [index, blocked, key],
+        })),
+      ),
+    ),
+  );
+  const positiveProjectionSource = await Bun.file(
+    join(project, "fixtures/positive-projection.dl"),
+  ).text();
+  const positiveInputs = carriedValues.flatMap((value) =>
+    dynamicIndices.map((index) => ({ value, indices: [index, 0, -9007199254740991] })),
+  );
+  const rangedProjectionSource = await Bun.file(
+    join(project, "fixtures/ranged-projection.dl"),
+  ).text();
+  const rangedValues: MixedValue[] = [
+    { rows: [] },
+    ...[-9007199254740991, -1, 0, 1, 10, 11, 9007199254740991].map((n) => ({
+      rows: [{ n, rating: null }],
+    })),
+  ];
+  const rangedInputs = rangedValues.flatMap((value) =>
+    dynamicIndices.map((index) => ({ value, indices: [index, 0, -9007199254740991] })),
+  );
+  const bothPositiveSource = await Bun.file(
+    join(project, "fixtures/both-positive-projection.dl"),
+  ).text();
+  const bothPositiveCheck = recordOf({
+    left: arrayOf(recordOf({ n: integer })),
+    right: arrayOf(recordOf({ n: integer })),
+  });
+  const bothPositiveInputs: { value: MixedValue; indices: number[] }[] = [
+    -9007199254740991, 0, 1, 9007199254740991,
+  ].flatMap((left) =>
+    [-9007199254740991, 0, 1, 9007199254740991].map((right) => ({
+      value: { left: [{ n: left }], right: [{ n: right }] },
+      indices: [0, 0],
+    })),
+  );
+  for (const i of dynamicIndices)
+    for (const j of dynamicIndices)
+      bothPositiveInputs.push({
+        value: { left: [{ n: 1 }, { n: 9007199254740991 }], right: [{ n: 2 }, { n: 0 }] },
+        indices: [i, j],
+      });
+  for (const value of [
+    { left: [], right: [{ n: 1 }] },
+    { left: [{ n: 1 }], right: [] },
+    { left: [], right: [] },
+    {},
+    { left: null, right: [] },
+    { left: [{ n: null }], right: [{ n: 1 }] },
+    { left: [{ n: 1 }], right: [{ n: false }] },
+  ] as MixedValue[])
+    bothPositiveInputs.push({ value, indices: [0, 0] });
+  const orderedProjectionSource = await Bun.file(
+    join(project, "fixtures/ordered-projection.dl"),
+  ).text();
+  const projectionCases = [
+    ...bothPositiveInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: orderedProjectionSource,
+      check: bothPositiveCheck,
+      outputs: [
+        {
+          predicate: "ordered",
+          relation: "Ordered",
+          usedIndices: [0, 1],
+          orderedOutputs: [0, 1],
+          paths: [
+            ["left", indices[0]!, "n"],
+            ["right", indices[1]!, "n"],
+          ],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...bothPositiveInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: bothPositiveSource,
+      check: bothPositiveCheck,
+      outputs: [
+        {
+          predicate: "bothPositive",
+          relation: "BothPositive",
+          usedIndices: [0, 1],
+          valueChecks: [{ output: 0 }, { output: 1 }],
+          paths: [
+            ["left", indices[0]!, "n"],
+            ["right", indices[1]!, "n"],
+          ],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...rangedInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: rangedProjectionSource,
+      check: carriedProjectionCheck,
+      outputs: [
+        {
+          predicate: "ranged",
+          relation: "Ranged",
+          usedIndices: [0],
+          valueChecks: [{ output: 1, upperBound: 10 }],
+          paths: [{ input: 2 }, ["rows", indices[0]!, "n"]],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...positiveInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: positiveProjectionSource,
+      check: carriedProjectionCheck,
+      outputs: [
+        {
+          predicate: "positive",
+          relation: "Positive",
+          usedIndices: [0],
+          valueChecks: [{ output: 1 }],
+          paths: [{ input: 2 }, ["rows", indices[0]!, "n"]],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...excludedInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source:
+        indices[2] === 0 ? excludedProjectionSource.replace("!=", "<>") : excludedProjectionSource,
+      check: carriedProjectionCheck,
+      outputs: [
+        {
+          predicate: "excluded",
+          relation: "Excluded",
+          usedIndices: [0],
+          paths: [{ input: 2 }, ["rows", indices[0]!, "n"]],
+          filters: [
+            {
+              holds: indices[2] !== indices[1],
+              lean: `(${indices[2]} : Int) ≠ (${indices[1]} : Int)`,
+            },
+          ],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...filteredInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: filteredProjectionSource,
+      check: carriedProjectionCheck,
+      outputs: [
+        {
+          predicate: "filtered",
+          relation: "Filtered",
+          usedIndices: [0],
+          paths: [{ input: 2 }, ["rows", indices[0]!, "n"]],
+          filters: [
+            { holds: indices[2]! >= 0, lean: `(${indices[2]} : Int) ≥ 0` },
+            {
+              holds: indices[0]! < indices[1]!,
+              lean: `(${indices[0]} : Int) < (${indices[1]} : Int)`,
+            },
+          ],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...requiredProjectionCases.map((value) => ({
+      value,
+      indices: [] as number[],
+      source: projectionSource,
+      check: projectionCheck,
+      outputs: requiredOutputs,
+    })),
+    ...optionalProjectionCases.map((value) => ({
+      value,
+      indices: [] as number[],
+      source: optionalProjectionSource,
+      check: optionalProjectionCheck,
+      outputs: optionalOutputs,
+    })),
+    ...dynamicInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: dynamicProjectionSource,
+      check: dynamicProjectionCheck,
+      outputs: [
+        {
+          predicate: "dynamicAge",
+          relation: "DynamicAge",
+          paths: [["rows", indices[0]!, "cells", indices[1]!, "n"]],
+          usedIndices: [0, 1],
+        },
+        {
+          predicate: "dynamicRating",
+          relation: "DynamicRating",
+          paths: [["rows", indices[0]!, "cells", indices[1]!, "rating"]],
+          usedIndices: [0, 1],
+        },
+        {
+          predicate: "reusedAge",
+          relation: "ReusedAge",
+          paths: [["rows", indices[0]!, "cells", indices[0]!, "n"]],
+          usedIndices: [0],
+        },
+        {
+          predicate: "dynamicScore",
+          relation: "DynamicScore",
+          paths: [["rows", indices[0]!, "cells", indices[1]!, "score"]],
+          usedIndices: [0, 1],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...tupleInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: tupleProjectionSource,
+      check: tupleProjectionCheck,
+      outputs: [
+        {
+          predicate: "paired",
+          relation: "Paired",
+          usedIndices: [0, 1],
+          paths: [
+            ["left", indices[0]!, "n"],
+            ["right", indices[1]!, "rating"],
+          ],
+        },
+        {
+          predicate: "optionalPair",
+          relation: "OptionalPair",
+          usedIndices: [0],
+          paths: [["left", indices[0]!, "n"], ["optional"]],
+        },
+        {
+          predicate: "repeatedPair",
+          relation: "RepeatedPair",
+          usedIndices: [0, 1],
+          paths: [
+            ["left", indices[0]!, "n"],
+            ["left", indices[0]!, "n"],
+            ["right", indices[1]!, "rating"],
+          ],
+        },
+      ] as ProjectionOutput[],
+    })),
+    ...carriedInputs.map(({ value, indices }) => ({
+      value,
+      indices,
+      source: carriedProjectionSource,
+      check: carriedProjectionCheck,
+      outputs: [
+        {
+          predicate: "identified",
+          relation: "Identified",
+          usedIndices: [0],
+          paths: [{ input: 2 }, ["rows", indices[0]!, "n"]],
+        },
+        {
+          predicate: "indexed",
+          relation: "Indexed",
+          usedIndices: [0],
+          paths: [{ input: 0 }, ["rows", indices[0]!, "rating"], { input: 2 }, { input: 0 }],
+        },
+        {
+          predicate: "optionalIdentified",
+          relation: "OptionalIdentified",
+          usedIndices: [0],
+          paths: [{ input: 2 }, ["rows", indices[0]!, "score"]],
+        },
+      ] as ProjectionOutput[],
+    })),
+  ];
   const backends: [string, Backend][] = [];
   const backendNames: string[] = [];
   const checks: string[] = [];
@@ -1000,6 +1564,303 @@ ${spec.paths.map((path, p) => `output predicate mixedOutput${caseIndex}_${p}(${v
           );
         }
     }
+    for (const [caseIndex, fixture] of projectionCases.entries()) {
+      const { value } = fixture;
+      const accepted = fixture.check(value);
+      let source = fixture.source.replaceAll("items", `projectionItems${caseIndex}`);
+      for (const [index, output] of fixture.outputs.entries()) {
+        const predicate = `projectionOutput${caseIndex}_${index}`;
+        source = source.replaceAll(output.predicate, predicate);
+        const variables = output.paths.map((_, index) => `X${index}`).join(", ");
+        source += `\noutput predicate projectionResult${caseIndex}_${index}(${variables}) :- ${predicate}(${variables}).`;
+      }
+      const outputs = fixture.outputs.map(({ paths }) =>
+        paths.map((path) =>
+          Array.isArray(path) ? mixedLookup(value, path) : fixture.indices[path.input],
+        ),
+      );
+      for (const [name, backend] of backends) {
+        const executor = new DatamogExecutor(backend, [
+          {
+            name: "structural-projection-fixture",
+            async canLoad() {
+              return true;
+            },
+            async load(decl, target) {
+              await insertRows(target, decl, [
+                {
+                  values: value,
+                  ...Object.fromEntries(
+                    ["outer", "inner", "unused"]
+                      .slice(0, fixture.indices.length)
+                      .map((key, index) => [key, fixture.indices[index]]),
+                  ),
+                },
+              ]);
+              return { rowsLoaded: 1 };
+            },
+          },
+        ]);
+        // Release each fixture's views before the final schema drop. Accumulating
+        // hundreds of projections can exhaust Postgres's per-transaction locks.
+        try {
+          let rejected = false;
+          let results: { rows: Record<string, unknown>[] }[] = [];
+          try {
+            results = await executor.execute(source);
+          } catch (error) {
+            if (!(error instanceof Error) || !error.message.includes("column 'values'"))
+              throw error;
+            rejected = true;
+          }
+          if (rejected === accepted) throw new Error(`${name} projection acceptance ${caseIndex}`);
+          if (accepted)
+            for (const [index, output] of outputs.entries()) {
+              const ordered = fixture.outputs[index]!.orderedOutputs;
+              const expected =
+                output.some((value) => value === undefined) ||
+                (ordered !== undefined &&
+                  !(Number(output[ordered[0]]) <= Number(output[ordered[1]]))) ||
+                fixture.outputs[index]!.filters?.some((filter) => !filter.holds) ||
+                fixture.outputs[index]!.valueChecks?.some(
+                  ({ output: column, upperBound }) =>
+                    !(Number(output[column]) > 0) ||
+                    (upperBound !== undefined && Number(output[column]) > upperBound),
+                )
+                  ? []
+                  : [Object.fromEntries(output.map((value, column) => [`X${column}`, value]))];
+              if (
+                canonicalVerificationJson(results[index]!.rows) !==
+                canonicalVerificationJson(expected)
+              )
+                throw new Error(`${name} source projection ${caseIndex}/${index}`);
+            }
+        } finally {
+          if (backend.sqlDialect) {
+            for (const [index] of fixture.outputs.entries())
+              await backend.execute(
+                `DROP VIEW IF EXISTS ${ident(`projectionResult${caseIndex}_${index}`)}`,
+              );
+            for (const [index] of fixture.outputs.entries())
+              await backend.execute(
+                `DROP VIEW IF EXISTS ${ident(`projectionOutput${caseIndex}_${index}`)}`,
+              );
+            await backend.execute(`DROP TABLE IF EXISTS ${ident(`projectionItems${caseIndex}`)}`);
+          }
+        }
+      }
+      const encoded = leanMixed(value);
+      checks.push(
+        `example : Structural.accepts Generated.${fixture.outputs[0]!.relation}Schema ${encoded} = ${accepted} := by simp [Structural.accepts, Structural.lookup, Generated.${fixture.outputs[0]!.relation}Schema]`,
+      );
+      if (accepted)
+        for (const [index, output] of outputs.entries()) {
+          const {
+            relation,
+            usedIndices = [],
+            filters = [],
+            valueChecks = [],
+            orderedOutputs,
+          } = fixture.outputs[index]!;
+          const indexNames = fixture.indices.map((_, index) => `i${index}`);
+          const input = `(fun value ${indexNames.join(" ")} => value = ${encoded}${fixture.indices.map((n, index) => ` ∧ i${index} = (⟨(${n}), by decide⟩ : SafeInt)`).join("")})`;
+          const member = fixture.indices.length
+            ? `⟨${["rfl", ...fixture.indices.map(() => "rfl")].join(", ")}⟩`
+            : "rfl";
+          const results = output.map((_, index) => `result${index}`).join(" ");
+          const foundNames = output.map((_, index) => `found${index}`).join(" ");
+          const missing = output.findIndex((value) => value === undefined);
+          const rejected = filters.findIndex((filter) => !filter.holds);
+          const rejectedProperty = valueChecks.findIndex(
+            ({ output: column, upperBound }) =>
+              !(Number(output[column]) > 0) ||
+              (upperBound !== undefined && Number(output[column]) > upperBound),
+          );
+          const orderRejected =
+            orderedOutputs !== undefined &&
+            !(Number(output[orderedOutputs[0]]) <= Number(output[orderedOutputs[1]]));
+          const propertyRejected = rejectedProperty >= 0 || orderRejected;
+          const { output: positiveOutput, upperBound } = valueChecks[rejectedProperty] ?? {};
+          const propertyWitnesses = valueChecks.map(
+            ({ output: column, upperBound }) =>
+              `⟨⟨(${output[column]}), by decide⟩, rfl, by decide${upperBound === undefined ? "" : ", by decide"}⟩`,
+          );
+          if (orderedOutputs)
+            propertyWitnesses.push(
+              `⟨⟨(${output[orderedOutputs[0]]}), by decide⟩, ⟨(${output[orderedOutputs[1]]}), by decide⟩, rfl, rfl, by decide⟩`,
+            );
+          const propertyProof =
+            propertyWitnesses.length === 0
+              ? ""
+              : `(by exact ${propertyWitnesses.length === 1 ? propertyWitnesses[0] : `⟨${propertyWitnesses.join(", ")}⟩`})`;
+          const selectedProperty =
+            valueChecks.length === 1
+              ? "property"
+              : `property${".2".repeat(Math.max(0, rejectedProperty))}${rejectedProperty === valueChecks.length - 1 ? "" : ".1"}`;
+          if (missing < 0 && rejected < 0 && !propertyRejected)
+            checks.push(
+              `example : Generated.${relation} ${input} ${output.map((value) => leanMixed(value!)).join(" ")} := Generated.${relation}.rule (${member}) ${filters.map(() => "(by decide)").join(" ")} ${usedIndices.map(() => "(by decide)").join(" ")} ${output.map(() => "(by rfl)").join(" ")} ${propertyProof}`,
+            );
+          else {
+            const negative = usedIndices.findIndex((index) => fixture.indices[index]! < 0);
+            checks.push(`example : ¬ (∃ ${results}, Generated.${relation} ${input} ${results}) := by
+  rintro ⟨${output.map((_, index) => `result${index}`).join(", ")}, derived⟩
+  cases derived with
+  | rule member ${filters.map((_, index) => `filter${index}`).join(" ")} ${usedIndices.map((_, index) => `nonnegative${index}`).join(" ")} ${foundNames} ${propertyWitnesses.length ? "property" : ""} =>
+    ${fixture.indices.length ? `rcases member with ${member}` : "subst member"}
+    ${
+      orderRejected && missing < 0
+        ? `rcases property with ⟨n, m, rfl, rfl, ordered⟩
+    have equal1 : (⟨(${output[orderedOutputs![0]]}), by decide⟩ : SafeInt) = n := by simpa [Structural.lookupPath, Structural.step, Structural.lookup] using found${orderedOutputs![0]}
+    have equal2 : (⟨(${output[orderedOutputs![1]]}), by decide⟩ : SafeInt) = m := by simpa [Structural.lookupPath, Structural.step, Structural.lookup] using found${orderedOutputs![1]}
+    subst n
+    subst m
+    exact (by decide : ¬ ((${output[orderedOutputs![0]]} : Int) ≤ (${output[orderedOutputs![1]]} : Int))) ordered`
+        : propertyRejected && missing < 0
+          ? `rcases ${selectedProperty} with ⟨n, rfl, greater${upperBound === undefined ? "" : ", atMost"}⟩
+    have equal : (⟨(${output[positiveOutput!]}), by decide⟩ : SafeInt) = n := by simpa [Structural.lookupPath, Structural.step, Structural.lookup] using found${positiveOutput}
+    subst n
+    ${Number(output[positiveOutput!]) <= 0 ? `exact (by decide : ¬ ((${output[positiveOutput!]} : Int) > 0)) greater` : `exact (by decide : ¬ ((${output[positiveOutput!]} : Int) ≤ ${upperBound})) atMost`}`
+          : rejected >= 0
+            ? `exact (by decide : ¬ (${filters[rejected]!.lean})) filter${rejected}`
+            : negative < 0
+              ? `simp [Structural.lookupPath, Structural.step, Structural.lookup] at found${missing}`
+              : `exact (by decide : ¬ (0 ≤ (${fixture.indices[usedIndices[negative]!]} : Int))) nonnegative${negative}`
+    }`);
+          }
+        }
+    }
+
+    // A dataset check catches accidental Cartesian combinations that singleton
+    // fixtures cannot expose. Partial rows must not complete one another.
+    const tupleDataset = [
+      { values: { left: [{ n: 1 }], right: [{ rating: 10 }] }, outer: 0, inner: 0 },
+      { values: { left: [{ n: 2 }], right: [{ rating: 20 }], optional: null }, outer: 0, inner: 0 },
+      { values: { left: [{ n: 3 }], right: [] }, outer: 0, inner: 0 },
+      { values: { left: [], right: [{ rating: 40 }], optional: null }, outer: 0, inner: 0 },
+    ];
+    const tupleDatasetSource = tupleProjectionSource
+      .replaceAll("items", "tupleDatasetItems")
+      .replaceAll("paired", "tupleDatasetPaired")
+      .replaceAll("optionalPair", "tupleDatasetOptional")
+      .replaceAll("repeatedPair", "tupleDatasetRepeated");
+    for (const [name, backend] of backends) {
+      const executor = new DatamogExecutor(backend, [
+        {
+          name: "tuple-projection-dataset",
+          async canLoad() {
+            return true;
+          },
+          async load(decl, target) {
+            await insertRows(target, decl, tupleDataset);
+            return { rowsLoaded: tupleDataset.length };
+          },
+        },
+      ]);
+      try {
+        const results = await executor.execute(`${tupleDatasetSource}
+output predicate tupleDatasetResult0(X, Y) :- tupleDatasetPaired(X, Y).
+output predicate tupleDatasetResult1(X, Y) :- tupleDatasetOptional(X, Y).
+output predicate tupleDatasetResult2(X, Y, Z) :- tupleDatasetRepeated(X, Y, Z).`);
+        const expected = [
+          [
+            { X: 1, Y: 10 },
+            { X: 2, Y: 20 },
+          ],
+          [{ X: 2, Y: null }],
+          [
+            { X: 1, Y: 1, Z: 10 },
+            { X: 2, Y: 2, Z: 20 },
+          ],
+        ];
+        const normalize = (rows: Record<string, unknown>[]) =>
+          rows.map(canonicalVerificationJson).sort();
+        for (const [index, rows] of expected.entries())
+          if (JSON.stringify(normalize(results[index]!.rows)) !== JSON.stringify(normalize(rows)))
+            throw new Error(`${name} tuple projection mixed rows: ${index}`);
+      } finally {
+        if (backend.sqlDialect) {
+          for (const predicate of [
+            "tupleDatasetResult0",
+            "tupleDatasetResult1",
+            "tupleDatasetResult2",
+            "tupleDatasetPaired",
+            "tupleDatasetOptional",
+            "tupleDatasetRepeated",
+          ])
+            await backend.execute(`DROP VIEW IF EXISTS ${ident(predicate)}`);
+          await backend.execute(`DROP TABLE IF EXISTS ${ident("tupleDatasetItems")}`);
+        }
+      }
+    }
+    // Carried identifiers are data, not a uniqueness premise: repeated IDs may
+    // legitimately accompany different results, but must stay with their row.
+    const carriedDataset = [
+      { values: { rows: [{ n: 1, rating: null }] }, outer: 0, inner: -1, unused: -10 },
+      { values: { rows: [{ n: 2, rating: 20, score: null }] }, outer: 0, inner: -1, unused: 20 },
+      { values: { rows: [{ n: 3, rating: 30, score: 4 }] }, outer: 0, inner: -1, unused: -10 },
+      { values: { rows: [] }, outer: 0, inner: -1, unused: 40 },
+      { values: { rows: [{ n: 5, rating: 50, score: 6 }] }, outer: -1, inner: -1, unused: 50 },
+    ];
+    const carriedDatasetSource = carriedProjectionSource
+      .replaceAll("items", "carriedDatasetItems")
+      .replaceAll("identified", "carriedDatasetIdentified")
+      .replaceAll("indexed", "carriedDatasetIndexed")
+      .replaceAll("optionalIdentified", "carriedDatasetOptional");
+    for (const [name, backend] of backends) {
+      const executor = new DatamogExecutor(backend, [
+        {
+          name: "carried-projection-dataset",
+          async canLoad() {
+            return true;
+          },
+          async load(decl, target) {
+            await insertRows(target, decl, carriedDataset);
+            return { rowsLoaded: carriedDataset.length };
+          },
+        },
+      ]);
+      try {
+        const results = await executor.execute(`${carriedDatasetSource}
+output predicate carriedDatasetResult0(K, N) :- carriedDatasetIdentified(K, N).
+output predicate carriedDatasetResult1(I, R, K, J) :- carriedDatasetIndexed(I, R, K, J).
+output predicate carriedDatasetResult2(K, S) :- carriedDatasetOptional(K, S).`);
+        const expected = [
+          [
+            { K: -10, N: 1 },
+            { K: 20, N: 2 },
+            { K: -10, N: 3 },
+          ],
+          [
+            { I: 0, R: null, K: -10, J: 0 },
+            { I: 0, R: 20, K: 20, J: 0 },
+            { I: 0, R: 30, K: -10, J: 0 },
+          ],
+          [
+            { K: 20, S: null },
+            { K: -10, S: 4 },
+          ],
+        ];
+        const normalize = (rows: Record<string, unknown>[]) =>
+          rows.map(canonicalVerificationJson).sort();
+        for (const [index, rows] of expected.entries())
+          if (JSON.stringify(normalize(results[index]!.rows)) !== JSON.stringify(normalize(rows)))
+            throw new Error(`${name} carried projection mixed identifiers: ${index}`);
+      } finally {
+        if (backend.sqlDialect) {
+          for (const predicate of [
+            "carriedDatasetResult0",
+            "carriedDatasetResult1",
+            "carriedDatasetResult2",
+            "carriedDatasetIdentified",
+            "carriedDatasetIndexed",
+            "carriedDatasetOptional",
+          ])
+            await backend.execute(`DROP VIEW IF EXISTS ${ident(predicate)}`);
+          await backend.execute(`DROP TABLE IF EXISTS ${ident("carriedDatasetItems")}`);
+        }
+      }
+    }
     // Replay the positive uniqueness fixture and the branching counterexample.
     // These are concrete translation regressions, not universal proof evidence.
     const relationCases = [
@@ -1129,6 +1990,9 @@ ${spec.paths.map((path, p) => `output predicate mixedOutput${caseIndex}_${p}(${v
   console.log(
     `${mixedCases.length} Lean/${backendNames.join("/")} mixed structural schema cases passed.`,
   );
+  console.log(
+    `${projectionCases.length} Lean/${backendNames.join("/")} structural projection cases passed.`,
+  );
   const semanticChecks = {
     scope: "concrete-cases",
     cases: cases.length,
@@ -1140,6 +2004,18 @@ ${spec.paths.map((path, p) => `output predicate mixedOutput${caseIndex}_${p}(${v
     arraySchemaCases: arrayCases.length,
     nestedArraySchemaCases: nestedArrayCases.length,
     structuralSchemaCases: mixedCases.length,
+    structuralProjectionCases: projectionCases.length,
+    dynamicProjectionCases: dynamicInputs.length,
+    tupleProjectionCases: tupleInputs.length,
+    tupleProjectionDatasets: 1,
+    orderedProjectionCases: bothPositiveInputs.length,
+    bothPositiveProjectionCases: bothPositiveInputs.length,
+    rangedProjectionCases: rangedInputs.length,
+    positiveProjectionCases: positiveInputs.length,
+    excludedProjectionCases: excludedInputs.length,
+    filteredProjectionCases: filteredInputs.length,
+    carriedProjectionCases: carriedInputs.length,
+    carriedProjectionDatasets: 1,
     backends: backendNames,
     postgres: postgresUrl ? "passed" : "skipped",
   };

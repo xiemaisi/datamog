@@ -1,4 +1,4 @@
--- Verification manifest SHA-256: 0de6c4e09b5e4f3c2b98edea24f53cbce36b62cf5c3ff8cb6014981044002885
+-- Verification manifest SHA-256: 80beea514126c5026e8fc260980a623ce8d85efc72d9b5001d1023c4620b73b1
 -- Generated: maintained proofs must inhabit these exact types.
 import Datamog.Proofs
 import Datamog.Audit
@@ -52,6 +52,104 @@ theorem NestedSchema_path0 : Generated.NestedSchema_path0 := Proofs.NestedSchema
 #audit NestedSchema_path0
 theorem NestedSchema_path1 : Generated.NestedSchema_path1 := Proofs.NestedSchema_path1
 #audit NestedSchema_path1
+theorem FirstAge_coverage : Generated.FirstAge_coverage := Proofs.FirstAge_coverage
+#audit FirstAge_coverage
+theorem FirstAge_soundness : Generated.FirstAge_soundness := Proofs.FirstAge_soundness
+#audit FirstAge_soundness
+theorem FirstRating_coverage : Generated.FirstRating_coverage := Proofs.FirstRating_coverage
+#audit FirstRating_coverage
+theorem FirstRating_soundness : Generated.FirstRating_soundness := Proofs.FirstRating_soundness
+#audit FirstRating_soundness
+theorem ProfileAge_soundness : Generated.ProfileAge_soundness := Proofs.ProfileAge_soundness
+#audit ProfileAge_soundness
+theorem ProfileRating_soundness : Generated.ProfileRating_soundness := Proofs.ProfileRating_soundness
+#audit ProfileRating_soundness
+theorem OptionalAge_soundness : Generated.OptionalAge_soundness := Proofs.OptionalAge_soundness
+#audit OptionalAge_soundness
+theorem OptionalRating_soundness : Generated.OptionalRating_soundness := Proofs.OptionalRating_soundness
+#audit OptionalRating_soundness
+theorem DynamicAge_coverage : Generated.DynamicAge_coverage := Proofs.DynamicAge_coverage
+#audit DynamicAge_coverage
+theorem DynamicAge_soundness : Generated.DynamicAge_soundness := Proofs.DynamicAge_soundness
+#audit DynamicAge_soundness
+theorem DynamicRating_coverage : Generated.DynamicRating_coverage := Proofs.DynamicRating_coverage
+#audit DynamicRating_coverage
+theorem DynamicRating_soundness : Generated.DynamicRating_soundness := Proofs.DynamicRating_soundness
+#audit DynamicRating_soundness
+theorem ReusedAge_coverage : Generated.ReusedAge_coverage := Proofs.ReusedAge_coverage
+#audit ReusedAge_coverage
+theorem ReusedAge_soundness : Generated.ReusedAge_soundness := Proofs.ReusedAge_soundness
+#audit ReusedAge_soundness
+theorem DynamicScore_soundness : Generated.DynamicScore_soundness := Proofs.DynamicScore_soundness
+#audit DynamicScore_soundness
+theorem Paired_coverage : Generated.Paired_coverage := Proofs.Paired_coverage
+#audit Paired_coverage
+theorem Paired_soundness : Generated.Paired_soundness := Proofs.Paired_soundness
+#audit Paired_soundness
+theorem OptionalPair_soundness : Generated.OptionalPair_soundness := Proofs.OptionalPair_soundness
+#audit OptionalPair_soundness
+theorem RepeatedPair_coverage : Generated.RepeatedPair_coverage := Proofs.RepeatedPair_coverage
+#audit RepeatedPair_coverage
+theorem RepeatedPair_soundness : Generated.RepeatedPair_soundness := Proofs.RepeatedPair_soundness
+#audit RepeatedPair_soundness
+theorem Identified_coverage : Generated.Identified_coverage := Proofs.Identified_coverage
+#audit Identified_coverage
+theorem Identified_soundness : Generated.Identified_soundness := Proofs.Identified_soundness
+#audit Identified_soundness
+theorem Indexed_coverage : Generated.Indexed_coverage := Proofs.Indexed_coverage
+#audit Indexed_coverage
+theorem Indexed_soundness : Generated.Indexed_soundness := Proofs.Indexed_soundness
+#audit Indexed_soundness
+theorem OptionalIdentified_soundness : Generated.OptionalIdentified_soundness := Proofs.OptionalIdentified_soundness
+#audit OptionalIdentified_soundness
+theorem Filtered_coverage : Generated.Filtered_coverage := Proofs.Filtered_coverage
+#audit Filtered_coverage
+theorem Filtered_soundness : Generated.Filtered_soundness := Proofs.Filtered_soundness
+#audit Filtered_soundness
+theorem Excluded_coverage : Generated.Excluded_coverage := Proofs.Excluded_coverage
+#audit Excluded_coverage
+theorem Excluded_soundness : Generated.Excluded_soundness := Proofs.Excluded_soundness
+#audit Excluded_soundness
+theorem Positive_coverage : Generated.Positive_coverage := Proofs.Positive_coverage
+#audit Positive_coverage
+theorem Positive_soundness : Generated.Positive_soundness := Proofs.Positive_soundness
+#audit Positive_soundness
+theorem Ranged_coverage : Generated.Ranged_coverage := Proofs.Ranged_coverage
+#audit Ranged_coverage
+theorem Ranged_soundness : Generated.Ranged_soundness := Proofs.Ranged_soundness
+#audit Ranged_soundness
+theorem BothPositive_coverage : Generated.BothPositive_coverage := Proofs.BothPositive_coverage
+#audit BothPositive_coverage
+theorem BothPositive_soundness : Generated.BothPositive_soundness := Proofs.BothPositive_soundness
+#audit BothPositive_soundness
+theorem Ordered_coverage : Generated.Ordered_coverage := Proofs.Ordered_coverage
+#audit Ordered_coverage
+theorem Ordered_soundness : Generated.Ordered_soundness := Proofs.Ordered_soundness
+#audit Ordered_soundness
+theorem orderedTotal_refuted : Generated.orderedTotal_refuted := Proofs.orderedTotal_refuted
+#audit orderedTotal_refuted
+theorem bothPositiveSecond_refuted : Generated.bothPositiveSecond_refuted := Proofs.bothPositiveSecond_refuted
+#audit bothPositiveSecond_refuted
+theorem rangedUpper_refuted : Generated.rangedUpper_refuted := Proofs.rangedUpper_refuted
+#audit rangedUpper_refuted
+theorem positiveTotal_refuted : Generated.positiveTotal_refuted := Proofs.positiveTotal_refuted
+#audit positiveTotal_refuted
+theorem excludedTotal_refuted : Generated.excludedTotal_refuted := Proofs.excludedTotal_refuted
+#audit excludedTotal_refuted
+theorem filteredTotal_refuted : Generated.filteredTotal_refuted := Proofs.filteredTotal_refuted
+#audit filteredTotal_refuted
+theorem identifiedSameRow : Generated.identifiedSameRow := Proofs.identifiedSameRow
+#audit identifiedSameRow
+theorem identifiedTotal_refuted : Generated.identifiedTotal_refuted := Proofs.identifiedTotal_refuted
+#audit identifiedTotal_refuted
+theorem pairedFirstBounds_refuted : Generated.pairedFirstBounds_refuted := Proofs.pairedFirstBounds_refuted
+#audit pairedFirstBounds_refuted
+theorem optionalPairTotal_refuted : Generated.optionalPairTotal_refuted := Proofs.optionalPairTotal_refuted
+#audit optionalPairTotal_refuted
+theorem pairedSameRow : Generated.pairedSameRow := Proofs.pairedSameRow
+#audit pairedSameRow
+theorem firstAgeTotal_refuted : Generated.firstAgeTotal_refuted := Proofs.firstAgeTotal_refuted
+#audit firstAgeTotal_refuted
 theorem MixedSchema_path0 : Generated.MixedSchema_path0 := Proofs.MixedSchema_path0
 #audit MixedSchema_path0
 theorem MixedSchema_path1 : Generated.MixedSchema_path1 := Proofs.MixedSchema_path1
@@ -59,6 +157,14 @@ theorem MixedSchema_path1 : Generated.MixedSchema_path1 := Proofs.MixedSchema_pa
 theorem MixedArraySchema_path0 : Generated.MixedArraySchema_path0 := Proofs.MixedArraySchema_path0
 #audit MixedArraySchema_path0
 
+theorem dynamicTotal_refuted : Generated.dynamicTotal_refuted := Proofs.dynamicTotal_refuted
+#audit dynamicTotal_refuted
+theorem structuralTypedLookup : Generated.structuralTypedLookup := Proofs.structuralTypedLookup
+#audit structuralTypedLookup
+theorem optionalProfileTotal_refuted : Generated.optionalProfileTotal_refuted := Proofs.optionalProfileTotal_refuted
+#audit optionalProfileTotal_refuted
+theorem nullableProfileTotal_refuted : Generated.nullableProfileTotal_refuted := Proofs.nullableProfileTotal_refuted
+#audit nullableProfileTotal_refuted
 theorem structuralRequiredLookup : Generated.structuralRequiredLookup := Proofs.structuralRequiredLookup
 #audit structuralRequiredLookup
 theorem mixedEmptyTotal_refuted : Generated.mixedEmptyTotal_refuted := Proofs.mixedEmptyTotal_refuted

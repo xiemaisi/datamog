@@ -19,6 +19,376 @@ def falseGoal : Prop :=
   (((-(9007199254740991 : Int)) <= v0) ∧ (v0 <= (9007199254740991 : Int))) →
   (v0 > (0 : Int))
 
+def FirstAgeSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)])))])))])
+inductive FirstAge (input : Datamog.Structural.Value → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value result} : input value → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] = some result → FirstAge input result
+def FirstAge_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop) (value : Datamog.Structural.Value),
+  input value → Datamog.Structural.accepts FirstAgeSchema value = true →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] →
+  ∃ result, FirstAge input result ∧ Datamog.Structural.leafMatches false result = true
+
+def FirstAge_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop),
+  (∀ value, input value → Datamog.Structural.accepts FirstAgeSchema value = true) →
+  ∀ result, FirstAge input result → Datamog.Structural.leafMatches false result = true
+
+def FirstRatingSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)])))])))])
+inductive FirstRating (input : Datamog.Structural.Value → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value result} : input value → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result → FirstRating input result
+def FirstRating_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop) (value : Datamog.Structural.Value),
+  input value → Datamog.Structural.accepts FirstRatingSchema value = true →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →
+  ∃ result, FirstRating input result ∧ Datamog.Structural.leafMatches true result = true
+
+def FirstRating_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop),
+  (∀ value, input value → Datamog.Structural.accepts FirstRatingSchema value = true) →
+  ∀ result, FirstRating input result → Datamog.Structural.leafMatches true result = true
+
+def ProfileAgeSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 112, Char.ofNat 114, Char.ofNat 111, Char.ofNat 102, Char.ofNat 105, Char.ofNat 108, Char.ofNat 101]), true, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), true, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive ProfileAge (input : Datamog.Structural.Value → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value result} : input value → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 112, Char.ofNat 114, Char.ofNat 111, Char.ofNat 102, Char.ofNat 105, Char.ofNat 108, Char.ofNat 101]), .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] = some result → ProfileAge input result
+def ProfileAge_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop),
+  (∀ value, input value → Datamog.Structural.accepts ProfileAgeSchema value = true) →
+  ∀ result, ProfileAge input result → Datamog.Structural.leafMatches false result = true
+
+def ProfileRatingSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 112, Char.ofNat 114, Char.ofNat 111, Char.ofNat 102, Char.ofNat 105, Char.ofNat 108, Char.ofNat 101]), true, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), true, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive ProfileRating (input : Datamog.Structural.Value → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value result} : input value → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 112, Char.ofNat 114, Char.ofNat 111, Char.ofNat 102, Char.ofNat 105, Char.ofNat 108, Char.ofNat 101]), .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result → ProfileRating input result
+def ProfileRating_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop),
+  (∀ value, input value → Datamog.Structural.accepts ProfileRatingSchema value = true) →
+  ∀ result, ProfileRating input result → Datamog.Structural.leafMatches true result = true
+
+def OptionalAgeSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 112, Char.ofNat 114, Char.ofNat 111, Char.ofNat 102, Char.ofNat 105, Char.ofNat 108, Char.ofNat 101]), true, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), true, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive OptionalAge (input : Datamog.Structural.Value → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value result} : input value → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101])] = some result → OptionalAge input result
+def OptionalAge_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop),
+  (∀ value, input value → Datamog.Structural.accepts OptionalAgeSchema value = true) →
+  ∀ result, OptionalAge input result → Datamog.Structural.leafMatches false result = true
+
+def OptionalRatingSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 112, Char.ofNat 114, Char.ofNat 111, Char.ofNat 102, Char.ofNat 105, Char.ofNat 108, Char.ofNat 101]), true, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), true, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive OptionalRating (input : Datamog.Structural.Value → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value result} : input value → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index 0, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result → OptionalRating input result
+def OptionalRating_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Prop),
+  (∀ value, input value → Datamog.Structural.accepts OptionalRatingSchema value = true) →
+  ∀ result, OptionalRating input result → Datamog.Structural.leafMatches true result = true
+
+def DynamicAgeSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])))])
+inductive DynamicAge (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result} : input value i1 i2 i3 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result → DynamicAge input result
+def DynamicAge_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts DynamicAgeSchema value = true →
+  0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result, DynamicAge input result ∧ Datamog.Structural.leafMatches false result = true
+
+def DynamicAge_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts DynamicAgeSchema value = true) →
+  ∀ result, DynamicAge input result → Datamog.Structural.leafMatches false result = true
+
+def DynamicRatingSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])))])
+inductive DynamicRating (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result} : input value i1 i2 i3 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result → DynamicRating input result
+def DynamicRating_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts DynamicRatingSchema value = true →
+  0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →
+  ∃ result, DynamicRating input result ∧ Datamog.Structural.leafMatches true result = true
+
+def DynamicRating_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts DynamicRatingSchema value = true) →
+  ∀ result, DynamicRating input result → Datamog.Structural.leafMatches true result = true
+
+def ReusedAgeSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])))])
+inductive ReusedAge (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result} : input value i1 i2 i3 → 0 ≤ i1.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result → ReusedAge input result
+def ReusedAge_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts ReusedAgeSchema value = true →
+  0 ≤ i1.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result, ReusedAge input result ∧ Datamog.Structural.leafMatches false result = true
+
+def ReusedAge_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts ReusedAgeSchema value = true) →
+  ∀ result, ReusedAge input result → Datamog.Structural.leafMatches false result = true
+
+def DynamicScoreSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])))])
+inductive DynamicScore (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result} : input value i1 i2 i3 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 99, Char.ofNat 101, Char.ofNat 108, Char.ofNat 108, Char.ofNat 115]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101])] = some result → DynamicScore input result
+def DynamicScore_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts DynamicScoreSchema value = true) →
+  ∀ result, DynamicScore input result → Datamog.Structural.leafMatches true result = true
+
+def PairedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, true, Datamog.Structural.Schema.integer)])
+inductive Paired (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 result0 result1} : input value i1 i2 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result0 → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result1 → Paired input result0 result1
+def Paired_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt),
+  input value i1 i2 → Datamog.Structural.accepts PairedSchema value = true →
+  0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →
+  ∃ result0 result1, Paired input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches true result1 = true
+
+def Paired_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2, input value i1 i2 → Datamog.Structural.accepts PairedSchema value = true) →
+  ∀ result0 result1, Paired input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches true result1 = true
+
+def OptionalPairSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, true, Datamog.Structural.Schema.integer)])
+inductive OptionalPair (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 result0 result1} : input value i1 i2 → 0 ≤ i1.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result0 → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108])] = some result1 → OptionalPair input result0 result1
+def OptionalPair_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2, input value i1 i2 → Datamog.Structural.accepts OptionalPairSchema value = true) →
+  ∀ result0 result1, OptionalPair input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches true result1 = true
+
+def RepeatedPairSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, true, Datamog.Structural.Schema.integer)])
+inductive RepeatedPair (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 result0 result1 result2} : input value i1 i2 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result0 → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result2 → RepeatedPair input result0 result1 result2
+def RepeatedPair_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt),
+  input value i1 i2 → Datamog.Structural.accepts RepeatedPairSchema value = true →
+  0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →
+  ∃ result0 result1 result2, RepeatedPair input result0 result1 result2 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ Datamog.Structural.leafMatches true result2 = true
+
+def RepeatedPair_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2, input value i1 i2 → Datamog.Structural.accepts RepeatedPairSchema value = true) →
+  ∀ result0 result1 result2, RepeatedPair input result0 result1 result2 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ Datamog.Structural.leafMatches true result2 = true
+
+def IdentifiedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive Identified (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1} : input value i1 i2 i3 → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i3) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → Identified input result0 result1
+def Identified_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts IdentifiedSchema value = true →
+  0 ≤ i1.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, Identified input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ result0 = Datamog.Structural.Value.scalar (.integer i3)
+
+def Identified_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts IdentifiedSchema value = true) →
+  ∀ result0 result1, Identified input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true
+
+def IndexedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive Indexed (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1 result2 result3} : input value i1 i2 i3 → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i1) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] = some result1 → result2 = Datamog.Structural.Value.scalar (.integer i3) → result3 = Datamog.Structural.Value.scalar (.integer i1) → Indexed input result0 result1 result2 result3
+def Indexed_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts IndexedSchema value = true →
+  0 ≤ i1.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103])] →
+  ∃ result0 result1 result2 result3, Indexed input result0 result1 result2 result3 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches true result1 = true ∧ Datamog.Structural.leafMatches false result2 = true ∧ Datamog.Structural.leafMatches false result3 = true ∧ result0 = Datamog.Structural.Value.scalar (.integer i1) ∧ result2 = Datamog.Structural.Value.scalar (.integer i3) ∧ result3 = Datamog.Structural.Value.scalar (.integer i1)
+
+def Indexed_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts IndexedSchema value = true) →
+  ∀ result0 result1 result2 result3, Indexed input result0 result1 result2 result3 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches true result1 = true ∧ Datamog.Structural.leafMatches false result2 = true ∧ Datamog.Structural.leafMatches false result3 = true
+
+def OptionalIdentifiedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive OptionalIdentified (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1} : input value i1 i2 i3 → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i3) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101])] = some result1 → OptionalIdentified input result0 result1
+def OptionalIdentified_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts OptionalIdentifiedSchema value = true) →
+  ∀ result0 result1, OptionalIdentified input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches true result1 = true
+
+def FilteredSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive Filtered (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1} : input value i1 i2 i3 → (i3.val ≥ (0 : Int)) → (i1.val < i2.val) → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i3) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → Filtered input result0 result1
+def Filtered_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts FilteredSchema value = true →
+  (i3.val ≥ (0 : Int)) → (i1.val < i2.val) → 0 ≤ i1.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, Filtered input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ result0 = Datamog.Structural.Value.scalar (.integer i3)
+
+def Filtered_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts FilteredSchema value = true) →
+  ∀ result0 result1, Filtered input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true
+
+def ExcludedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive Excluded (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1} : input value i1 i2 i3 → (i3.val ≠ i2.val) → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i3) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → Excluded input result0 result1
+def Excluded_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts ExcludedSchema value = true →
+  (i3.val ≠ i2.val) → 0 ≤ i1.val → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, Excluded input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ result0 = Datamog.Structural.Value.scalar (.integer i3)
+
+def Excluded_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts ExcludedSchema value = true) →
+  ∀ result0 result1, Excluded input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true
+
+def PositiveSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive Positive (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1} : input value i1 i2 i3 → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i3) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)) → Positive input result0 result1
+def Positive_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts PositiveSchema value = true →
+  0 ≤ i1.val → (∀ (n : Datamog.SafeInt), Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer n)) → n.val > (0 : Int)) → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, Positive input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)) ∧ result0 = Datamog.Structural.Value.scalar (.integer i3)
+
+def Positive_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts PositiveSchema value = true) →
+  ∀ result0 result1, Positive input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int))
+
+def RangedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer)])))])
+inductive Ranged (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 i3 result0 result1} : input value i1 i2 i3 → 0 ≤ i1.val → result0 = Datamog.Structural.Value.scalar (.integer i3) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int) ∧ n.val ≤ (10 : Int)) → Ranged input result0 result1
+def Ranged_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt) (i3 : Datamog.SafeInt),
+  input value i1 i2 i3 → Datamog.Structural.accepts RangedSchema value = true →
+  0 ≤ i1.val → (∀ (n : Datamog.SafeInt), Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer n)) → n.val > (0 : Int)) → (∀ (n : Datamog.SafeInt), Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer n)) → n.val ≤ (10 : Int)) → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, Ranged input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int) ∧ n.val ≤ (10 : Int)) ∧ result0 = Datamog.Structural.Value.scalar (.integer i3)
+
+def Ranged_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2 i3, input value i1 i2 i3 → Datamog.Structural.accepts RangedSchema value = true) →
+  ∀ result0 result1, Ranged input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int) ∧ n.val ≤ (10 : Int))
+
+def BothPositiveSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)])))])
+inductive BothPositive (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 result0 result1} : input value i1 i2 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result0 → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → ((∃ (n : Datamog.SafeInt), result0 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)) ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int))) → BothPositive input result0 result1
+def BothPositive_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt),
+  input value i1 i2 → Datamog.Structural.accepts BothPositiveSchema value = true →
+  0 ≤ i1.val → 0 ≤ i2.val → (∀ (n : Datamog.SafeInt), Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer n)) → n.val > (0 : Int)) → (∀ (n : Datamog.SafeInt), Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer n)) → n.val > (0 : Int)) → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, BothPositive input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ ((∃ (n : Datamog.SafeInt), result0 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)) ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)))
+
+def BothPositive_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2, input value i1 i2 → Datamog.Structural.accepts BothPositiveSchema value = true) →
+  ∀ result0 result1, BothPositive input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ ((∃ (n : Datamog.SafeInt), result0 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)) ∧ (∃ (n : Datamog.SafeInt), result1 = Datamog.Structural.Value.scalar (.integer n) ∧ n.val > (0 : Int)))
+
+def OrderedSchema : Datamog.Structural.Schema :=
+  (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)]))), ((String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), false, false, Datamog.Structural.Schema.integer)])))])
+inductive Ordered (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) : Datamog.Structural.Value → Datamog.Structural.Value → Prop where
+  | rule {value i1 i2 result0 result1} : input value i1 i2 → 0 ≤ i1.val → 0 ≤ i2.val → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result0 → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] = some result1 → (∃ (n m : Datamog.SafeInt), result0 = Datamog.Structural.Value.scalar (.integer n) ∧ result1 = Datamog.Structural.Value.scalar (.integer m) ∧ n.val ≤ m.val) → Ordered input result0 result1
+def Ordered_coverage : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop) (value : Datamog.Structural.Value) (i1 : Datamog.SafeInt) (i2 : Datamog.SafeInt),
+  input value i1 i2 → Datamog.Structural.accepts OrderedSchema value = true →
+  0 ≤ i1.val → 0 ≤ i2.val → (∀ (n m : Datamog.SafeInt), Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer n)) → Datamog.Structural.lookupPath value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] = some (Datamog.Structural.Value.scalar (.integer m)) → n.val ≤ m.val) → Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 108, Char.ofNat 101, Char.ofNat 102, Char.ofNat 116]), .index i1.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  Datamog.Structural.ArrayBounds value [.field (String.ofList [Char.ofNat 114, Char.ofNat 105, Char.ofNat 103, Char.ofNat 104, Char.ofNat 116]), .index i2.val.toNat, .field (String.ofList [Char.ofNat 110])] →
+  ∃ result0 result1, Ordered input result0 result1 ∧ Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ (∃ (n m : Datamog.SafeInt), result0 = Datamog.Structural.Value.scalar (.integer n) ∧ result1 = Datamog.Structural.Value.scalar (.integer m) ∧ n.val ≤ m.val)
+
+def Ordered_soundness : Prop :=
+  ∀ (input : Datamog.Structural.Value → Datamog.SafeInt → Datamog.SafeInt → Prop),
+  (∀ value i1 i2, input value i1 i2 → Datamog.Structural.accepts OrderedSchema value = true) →
+  ∀ result0 result1, Ordered input result0 result1 → Datamog.Structural.leafMatches false result0 = true ∧ Datamog.Structural.leafMatches false result1 = true ∧ (∃ (n m : Datamog.SafeInt), result0 = Datamog.Structural.Value.scalar (.integer n) ∧ result1 = Datamog.Structural.Value.scalar (.integer m) ∧ n.val ≤ m.val)
+
+def firstAgeTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → Prop) value, input value →
+  Structural.accepts FirstAgeSchema value = true → ∃ result, FirstAge input result)
+
+def orderedTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts OrderedSchema value = true →
+  0 ≤ i.val → 0 ≤ j.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  Structural.ArrayBounds value [.field "right", .index j.val.toNat, .field "n"] →
+  ∃ first second, Ordered input first second)
+
+def bothPositiveSecond_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts BothPositiveSchema value = true →
+  0 ≤ i.val → 0 ≤ j.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  Structural.ArrayBounds value [.field "right", .index j.val.toNat, .field "n"] →
+  (∀ (n : SafeInt), Structural.lookupPath value [.field "left", .index i.val.toNat, .field "n"] = some (.scalar (.integer n)) → n.val > 0) →
+  ∃ first second, BothPositive input first second)
+
+def rangedUpper_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts RangedSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  (∀ (n : SafeInt), Structural.lookupPath value [.field "rows", .index i.val.toNat, .field "n"] = some (.scalar (.integer n)) → n.val > 0) →
+  ∃ key result, Ranged input key result)
+
+def positiveTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts PositiveSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  ∃ key result, Positive input key result)
+
+def excludedTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts ExcludedSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  ∃ key result, Excluded input key result)
+
+def filteredTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts FilteredSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  ∃ key result, Filtered input key result)
+
+def identifiedSameRow : Prop :=
+  ∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) key result,
+  Identified input key result →
+  ∃ value i j k, input value i j k ∧ key = Structural.Value.scalar (.integer k) ∧
+  Structural.lookupPath value [.field "rows", .index i.val.toNat, .field "n"] = some result
+
+def identifiedTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts IdentifiedSchema value = true →
+  0 ≤ i.val → ∃ key result, Identified input key result)
+
+def pairedFirstBounds_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts PairedSchema value = true →
+  0 ≤ i.val → 0 ≤ j.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  ∃ x y, Paired input x y)
+
+def optionalPairTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts OptionalPairSchema value = true →
+  0 ≤ i.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  ∃ x y, OptionalPair input x y)
+
+def pairedSameRow : Prop :=
+  ∀ (input : Structural.Value → SafeInt → SafeInt → Prop) x y, Paired input x y →
+  ∃ value i j, input value i j ∧
+  Structural.lookupPath value [.field "left", .index i.val.toNat, .field "n"] = some x ∧
+  Structural.lookupPath value [.field "right", .index j.val.toNat, .field "rating"] = some y
+
 def MixedSchema : Datamog.Structural.Schema :=
   (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 116, Char.ofNat 101, Char.ofNat 97, Char.ofNat 109, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 109, Char.ofNat 101, Char.ofNat 109, Char.ofNat 98, Char.ofNat 101, Char.ofNat 114, Char.ofNat 115]), false, false, (Datamog.Structural.Schema.array false (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 115, Char.ofNat 99, Char.ofNat 111, Char.ofNat 114, Char.ofNat 101]), true, true, Datamog.Structural.Schema.integer), ((String.ofList [Char.ofNat 114, Char.ofNat 97, Char.ofNat 116, Char.ofNat 105, Char.ofNat 110, Char.ofNat 103]), false, true, Datamog.Structural.Schema.integer)])))]))), ((String.ofList [Char.ofNat 111, Char.ofNat 112, Char.ofNat 116, Char.ofNat 105, Char.ofNat 111, Char.ofNat 110, Char.ofNat 97, Char.ofNat 108]), true, false, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer)])), ((String.ofList [Char.ofNat 110, Char.ofNat 117, Char.ofNat 108, Char.ofNat 108, Char.ofNat 97, Char.ofNat 98, Char.ofNat 108, Char.ofNat 101]), false, true, (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 97, Char.ofNat 103, Char.ofNat 101]), false, false, Datamog.Structural.Schema.integer)]))])
 def MixedSchema_path0 : Prop :=
@@ -46,6 +416,24 @@ def MixedArraySchema_path0 : Prop :=
 
 def MixedOptionalSchema : Datamog.Structural.Schema :=
   (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 114, Char.ofNat 111, Char.ofNat 119, Char.ofNat 115]), true, true, (Datamog.Structural.Schema.array true (Datamog.Structural.Schema.record [((String.ofList [Char.ofNat 110]), true, true, Datamog.Structural.Schema.integer)])))])
+
+def dynamicTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j u,
+  input value i j u → Structural.accepts DynamicAgeSchema value = true →
+  ∃ result, DynamicAge input result)
+
+def structuralTypedLookup : Prop :=
+  ∀ schema path nullable, Structural.TypedPath schema path nullable →
+  ∀ value result, Structural.accepts schema value = true →
+  Structural.lookupPath value path = some result → Structural.leafMatches nullable result = true
+
+def optionalProfileTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → Prop) value, input value →
+  Structural.accepts ProfileAgeSchema value = true → ∃ result, ProfileAge input result)
+
+def nullableProfileTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → Prop) value, input value →
+  Structural.accepts ProfileAgeSchema value = true → ∃ result, ProfileAge input result)
 
 def structuralRequiredLookup : Prop :=
   ∀ schema path nullable, Structural.RequiredPath schema path nullable →

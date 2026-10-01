@@ -1,0 +1,32 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "uniqueness",
+      "id": "identityUnique",
+      "predicate": "identity",
+      "relationName": "Identity",
+      "keyColumns": [0],
+      "outputColumns": [1]
+    },
+    {
+      "kind": "coverage",
+      "id": "successorCoverage",
+      "predicate": "succ",
+      "relationName": "Successor",
+      "inputPredicate": "sample",
+      "outputToInput": [0, null],
+      "bounds": [{ "column": 0, "op": "<", "value": 9007199254740991 }]
+    },
+    {
+      "kind": "coverage",
+      "id": "successorTotal",
+      "predicate": "succ",
+      "relationName": "Successor",
+      "inputPredicate": "sample",
+      "outputToInput": [0, null],
+      "bounds": [],
+      "polarity": "refute"
+    }
+  ]
+}

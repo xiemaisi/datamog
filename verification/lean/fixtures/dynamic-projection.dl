@@ -1,0 +1,5 @@
+input predicate items(values: {rows: [{cells: [{n: integer, rating: integer?, score?: integer?}]}]}, outer: integer, inner: integer, unused: integer).
+dynamicAge(R["rows"][I]["cells"][J]["n"]) :- items(R, I, J, U).
+dynamicRating(R["rows"][I]["cells"][J]["rating"]) :- items(R, I, J, U).
+reusedAge(R["rows"][I]["cells"][I]["n"]) :- items(R, I, J, U).
+dynamicScore(R["rows"][I]["cells"][J]["score"]) :- items(R, I, J, U).

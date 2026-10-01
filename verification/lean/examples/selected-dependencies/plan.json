@@ -1,0 +1,8 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "local", "id": "resultSafe", "predicate": "result", "rule": 1, "refinement": 1 },
+    { "kind": "local", "id": "positiveSafe", "predicate": "positive", "rule": 1, "refinement": 1 },
+    { "kind": "local", "id": "forwardedSafe", "predicate": "forwarded", "rule": 1, "refinement": 1 }
+  ]
+}

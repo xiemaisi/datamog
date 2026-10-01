@@ -9,6 +9,7 @@ import {
   exportLeanUniqueness,
 } from "../packages/core/src/obligation-lean.ts";
 import { exportLeanRecordSchema } from "../packages/core/src/record-schema-lean.ts";
+import { exportLeanStructuralProjection } from "../packages/core/src/structural-projection-lean.ts";
 import { exportLeanStructuralSchema } from "../packages/core/src/structural-schema-lean.ts";
 import {
   assertCurrentVerificationManifest,
@@ -194,6 +195,232 @@ const arraySchemas = await Promise.all(
     }),
   ),
 );
+const projectionProgram = compile(
+  await Bun.file(new URL("fixtures/structural-projection.dl", project)).text(),
+);
+const structuralProjections = [
+  { id: "FirstAge", predicate: "firstAge" },
+  { id: "FirstRating", predicate: "firstRating" },
+].map((descriptor) => exportLeanStructuralProjection(projectionProgram, descriptor));
+const optionalProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/optional-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  ...[
+    { id: "ProfileAge", predicate: "profileAge" },
+    { id: "ProfileRating", predicate: "profileRating" },
+    { id: "OptionalAge", predicate: "optionalAge" },
+    { id: "OptionalRating", predicate: "optionalRating" },
+  ].map((descriptor) =>
+    exportLeanStructuralProjection(optionalProjectionProgram, {
+      ...descriptor,
+      coverage: false,
+    }),
+  ),
+);
+const dynamicProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/dynamic-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  ...[
+    { id: "DynamicAge", predicate: "dynamicAge" },
+    { id: "DynamicRating", predicate: "dynamicRating" },
+    { id: "ReusedAge", predicate: "reusedAge" },
+    { id: "DynamicScore", predicate: "dynamicScore", coverage: false },
+  ].map((descriptor) => exportLeanStructuralProjection(dynamicProjectionProgram, descriptor)),
+);
+const tupleProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/tuple-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  ...[
+    { id: "Paired", predicate: "paired" },
+    { id: "OptionalPair", predicate: "optionalPair", coverage: false },
+    { id: "RepeatedPair", predicate: "repeatedPair" },
+  ].map((descriptor) => exportLeanStructuralProjection(tupleProjectionProgram, descriptor)),
+);
+const carriedProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/carried-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  ...[
+    { id: "Identified", predicate: "identified" },
+    { id: "Indexed", predicate: "indexed" },
+    { id: "OptionalIdentified", predicate: "optionalIdentified", coverage: false },
+  ].map((descriptor) => exportLeanStructuralProjection(carriedProjectionProgram, descriptor)),
+);
+const filteredProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/filtered-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  exportLeanStructuralProjection(filteredProjectionProgram, {
+    id: "Filtered",
+    predicate: "filtered",
+  }),
+);
+const excludedProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/excluded-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  exportLeanStructuralProjection(excludedProjectionProgram, {
+    id: "Excluded",
+    predicate: "excluded",
+  }),
+);
+const positiveProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/positive-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  exportLeanStructuralProjection(positiveProjectionProgram, {
+    id: "Positive",
+    predicate: "positive",
+  }),
+);
+const rangedProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/ranged-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  exportLeanStructuralProjection(rangedProjectionProgram, { id: "Ranged", predicate: "ranged" }),
+);
+const bothPositiveProgram = compile(
+  await Bun.file(new URL("fixtures/both-positive-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  exportLeanStructuralProjection(bothPositiveProgram, {
+    id: "BothPositive",
+    predicate: "bothPositive",
+  }),
+);
+const orderedProjectionProgram = compile(
+  await Bun.file(new URL("fixtures/ordered-projection.dl", project)).text(),
+);
+structuralProjections.push(
+  exportLeanStructuralProjection(orderedProjectionProgram, { id: "Ordered", predicate: "ordered" }),
+);
+const projectionLaws = [
+  {
+    id: "orderedTotal_refuted",
+    relation: "Ordered",
+    statement: `def orderedTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts OrderedSchema value = true →
+  0 ≤ i.val → 0 ≤ j.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  Structural.ArrayBounds value [.field "right", .index j.val.toNat, .field "n"] →
+  ∃ first second, Ordered input first second)
+`,
+  },
+  {
+    id: "bothPositiveSecond_refuted",
+    relation: "BothPositive",
+    statement: `def bothPositiveSecond_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts BothPositiveSchema value = true →
+  0 ≤ i.val → 0 ≤ j.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  Structural.ArrayBounds value [.field "right", .index j.val.toNat, .field "n"] →
+  (∀ (n : SafeInt), Structural.lookupPath value [.field "left", .index i.val.toNat, .field "n"] = some (.scalar (.integer n)) → n.val > 0) →
+  ∃ first second, BothPositive input first second)
+`,
+  },
+  {
+    id: "rangedUpper_refuted",
+    relation: "Ranged",
+    statement: `def rangedUpper_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts RangedSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  (∀ (n : SafeInt), Structural.lookupPath value [.field "rows", .index i.val.toNat, .field "n"] = some (.scalar (.integer n)) → n.val > 0) →
+  ∃ key result, Ranged input key result)
+`,
+  },
+  {
+    id: "positiveTotal_refuted",
+    relation: "Positive",
+    statement: `def positiveTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts PositiveSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  ∃ key result, Positive input key result)
+`,
+  },
+  {
+    id: "excludedTotal_refuted",
+    relation: "Excluded",
+    statement: `def excludedTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts ExcludedSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  ∃ key result, Excluded input key result)
+`,
+  },
+  {
+    id: "filteredTotal_refuted",
+    relation: "Filtered",
+    statement: `def filteredTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts FilteredSchema value = true →
+  0 ≤ i.val → Structural.ArrayBounds value [.field "rows", .index i.val.toNat, .field "n"] →
+  ∃ key result, Filtered input key result)
+`,
+  },
+  {
+    id: "identifiedSameRow",
+    relation: "Identified",
+    statement: `def identifiedSameRow : Prop :=
+  ∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) key result,
+  Identified input key result →
+  ∃ value i j k, input value i j k ∧ key = Structural.Value.scalar (.integer k) ∧
+  Structural.lookupPath value [.field "rows", .index i.val.toNat, .field "n"] = some result
+`,
+  },
+  {
+    id: "identifiedTotal_refuted",
+    relation: "Identified",
+    statement: `def identifiedTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j k,
+  input value i j k → Structural.accepts IdentifiedSchema value = true →
+  0 ≤ i.val → ∃ key result, Identified input key result)
+`,
+  },
+
+  {
+    id: "pairedFirstBounds_refuted",
+    relation: "Paired",
+    statement: `def pairedFirstBounds_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts PairedSchema value = true →
+  0 ≤ i.val → 0 ≤ j.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  ∃ x y, Paired input x y)
+`,
+  },
+  {
+    id: "optionalPairTotal_refuted",
+    relation: "OptionalPair",
+    statement: `def optionalPairTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → Prop) value i j,
+  input value i j → Structural.accepts OptionalPairSchema value = true →
+  0 ≤ i.val →
+  Structural.ArrayBounds value [.field "left", .index i.val.toNat, .field "n"] →
+  ∃ x y, OptionalPair input x y)
+`,
+  },
+  {
+    id: "pairedSameRow",
+    relation: "Paired",
+    statement: `def pairedSameRow : Prop :=
+  ∀ (input : Structural.Value → SafeInt → SafeInt → Prop) x y, Paired input x y →
+  ∃ value i j, input value i j ∧
+  Structural.lookupPath value [.field "left", .index i.val.toNat, .field "n"] = some x ∧
+  Structural.lookupPath value [.field "right", .index j.val.toNat, .field "rating"] = some y
+`,
+  },
+];
+const projectionRefutation = `def firstAgeTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → Prop) value, input value →
+  Structural.accepts FirstAgeSchema value = true → ∃ result, FirstAge input result)
+`;
 const structuralSchemas = await Promise.all(
   [
     ["MixedSchema", "mixed-schema.dl"],
@@ -207,6 +434,31 @@ const structuralSchemas = await Promise.all(
   ),
 );
 const structuralGoals = [
+  {
+    id: "dynamicTotal_refuted",
+    statement: `def dynamicTotal_refuted : Prop :=
+  ¬ (∀ (input : Structural.Value → SafeInt → SafeInt → SafeInt → Prop) value i j u,
+  input value i j u → Structural.accepts DynamicAgeSchema value = true →
+  ∃ result, DynamicAge input result)
+`,
+  },
+
+  {
+    id: "structuralTypedLookup",
+    statement: `def structuralTypedLookup : Prop :=
+  ∀ schema path nullable, Structural.TypedPath schema path nullable →
+  ∀ value result, Structural.accepts schema value = true →
+  Structural.lookupPath value path = some result → Structural.leafMatches nullable result = true
+`,
+  },
+  ...["optionalProfileTotal_refuted", "nullableProfileTotal_refuted"].map((id) => ({
+    id,
+    statement: `def ${id} : Prop :=
+  ¬ (∀ (input : Structural.Value → Prop) value, input value →
+  Structural.accepts ProfileAgeSchema value = true → ∃ result, ProfileAge input result)
+`,
+  })),
+
   {
     id: "structuralRequiredLookup",
     statement: `def structuralRequiredLookup : Prop :=
@@ -370,6 +622,9 @@ import Datamog.Structural
 namespace Datamog.Generated
 ${exportLeanObligation(successor[0]!, "successor")}
 ${exportLeanObligation(falseGoal, "falseGoal")}
+${structuralProjections.map((p) => p.source).join("\n")}
+${projectionRefutation}
+${projectionLaws.map((goal) => goal.statement).join("\n")}
 ${structuralSchemas.map((schema) => schema.source + schema.goals.map((goal) => goal.statement).join("\n")).join("\n")}
 ${structuralGoals.map((goal) => goal.statement).join("\n")}
 ${nestedArraySchemas.map((schema) => schema.source + schema.statement).join("\n")}
@@ -404,6 +659,10 @@ theorem falseGoal_refuted : ¬ Generated.falseGoal := Proofs.falseGoal_refuted
 ${claims.checker}
 ${recordSchema.checker}
 ${nestedSchema.checker}
+${structuralProjections.map((p) => p.checker).join("\n")}
+${projectionLaws.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
+theorem firstAgeTotal_refuted : Generated.firstAgeTotal_refuted := Proofs.firstAgeTotal_refuted
+#audit firstAgeTotal_refuted
 ${structuralSchemas.map((schema) => schema.checker).join("\n")}
 ${structuralGoals.map(({ id }) => `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}`).join("\n")}
 ${nestedArraySchemas.map((schema) => schema.checker).join("\n")}
@@ -427,6 +686,17 @@ const paths = new Set([
   "verification/lean/fixtures/diagonal.dl",
   "verification/lean/fixtures/record-schema.dl",
   "verification/lean/fixtures/nested-record-schema.dl",
+  "verification/lean/fixtures/structural-projection.dl",
+  "verification/lean/fixtures/optional-projection.dl",
+  "verification/lean/fixtures/dynamic-projection.dl",
+  "verification/lean/fixtures/tuple-projection.dl",
+  "verification/lean/fixtures/carried-projection.dl",
+  "verification/lean/fixtures/filtered-projection.dl",
+  "verification/lean/fixtures/excluded-projection.dl",
+  "verification/lean/fixtures/positive-projection.dl",
+  "verification/lean/fixtures/ranged-projection.dl",
+  "verification/lean/fixtures/both-positive-projection.dl",
+  "verification/lean/fixtures/ordered-projection.dl",
   "verification/lean/fixtures/mixed-schema.dl",
   "verification/lean/fixtures/mixed-array-schema.dl",
   "verification/lean/fixtures/mixed-optional-schema.dl",
@@ -470,6 +740,23 @@ const manifest = await createVerificationManifest(
     ...claims.nodes,
     ...recordSchema.nodes,
     ...nestedSchema.nodes,
+    ...structuralProjections.flatMap((p) => p.nodes),
+    ...projectionLaws.map(({ id, relation, statement }) => ({
+      id,
+      kind: "goal" as const,
+      theorem: `Datamog.Checked.${id}`,
+      statement: { profile: "datamog-structural-integer-v1", lean: statement },
+      assumptions: [],
+      dependencies: [relation],
+    })),
+    {
+      id: "firstAgeTotal_refuted",
+      kind: "goal",
+      theorem: "Datamog.Checked.firstAgeTotal_refuted",
+      statement: { profile: "datamog-structural-integer-v1", lean: projectionRefutation },
+      assumptions: [],
+      dependencies: ["FirstAge"],
+    },
     ...structuralSchemas.flatMap((schema) => schema.nodes),
     {
       id: "StructuralSemantics",
@@ -484,7 +771,14 @@ const manifest = await createVerificationManifest(
       theorem: `Datamog.Checked.${id}`,
       statement: { profile: "datamog-structural-integer-v1", lean: statement },
       assumptions: [],
-      dependencies: id === "structuralRequiredLookup" ? ["StructuralSemantics"] : ["MixedSchema"],
+      dependencies:
+        id === "dynamicTotal_refuted"
+          ? ["DynamicAge"]
+          : id.startsWith("structural")
+            ? ["StructuralSemantics"]
+            : id.endsWith("ProfileTotal_refuted")
+              ? ["ProfileAge"]
+              : ["MixedSchema"],
     })),
     ...nestedArraySchemas.flatMap((schema) => schema.nodes),
     {

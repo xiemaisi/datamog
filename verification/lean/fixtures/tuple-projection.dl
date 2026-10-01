@@ -1,0 +1,4 @@
+input predicate items(values: {left: [{n: integer}], right: [{rating: integer?}], optional?: integer?}, outer: integer, inner: integer).
+paired(R["left"][I]["n"], R["right"][J]["rating"]) :- items(R, I, J).
+optionalPair(R["left"][I]["n"], R["optional"]) :- items(R, I, J).
+repeatedPair(R["left"][I]["n"], R["left"][I]["n"], R["right"][J]["rating"]) :- items(R, I, J).
