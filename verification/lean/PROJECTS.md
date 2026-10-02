@@ -182,7 +182,7 @@ rule to the second predicate causes the maintained proof to fail.
 This initial fragment requires at least two distinct predicates forming one
 strongly connected component, non-null integer relations (including zero-column derived members),
 variable-only
-atoms, variable or variable-plus-safe-integer-literal heads, and supported integer
+atoms, variable or variable-plus/minus-safe-integer-literal heads, and supported integer
 comparison guards. All rules must carry
 supported simple refinements. Missing members, derived dependencies outside the
 component, explicit constraints, negation, parity, nullable columns, other computed
@@ -198,8 +198,8 @@ proof establishes positivity in the first predicate and a strict lower bound of
 one in the second. Changing the step to add zero fails checking. Maintained Lean
 boundary examples establish that `maxSafe - 1` admits a successor witness and
 `maxSafe` does not. These auxiliary checks are not additional registered goals
-or backend comparisons. Other arithmetic, nested computations, and variable
-addends remain unsupported.
+or backend comparisons. Multiplication, division, nested computations, and
+variable addends remain unsupported.
 
 The [tuple example](examples/selected-mutual-tuples/program.dl) establishes
 `Y > X` across two binary predicates, including a rule incrementing both columns.
@@ -229,6 +229,14 @@ The fixture also proves by induction that an all-nullary recursive cycle with no
 base rule has no finite derivations. Adding a base fact makes that proof fail and
 prevents a fresh report. This does not assume a cycle's contracts to prove them.
 Input declarations still require at least one column under current parser syntax.
+
+The [descent example](examples/selected-mutual-descent/program.dl) subtracts one
+under a strict positive guard and proves that both members stay nonnegative.
+Subtraction uses the same bounded-witness boundary as addition, with an explicit
+difference equation. Allowing a step from zero fails the proof. Auxiliary Lean
+checks cover a predecessor at `-maxSafe + 1` and its impossibility at `-maxSafe`.
+These prove safety and modeled definedness, not evaluation termination. Variable
+subtrahends, fractional literals, and nested arithmetic remain unsupported.
 
 ## Worked example
 

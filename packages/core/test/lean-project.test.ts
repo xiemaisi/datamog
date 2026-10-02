@@ -491,3 +491,31 @@ test("nullary mutual members have no phantom quantified output", async () =>
       width: 1,
     });
   }));
+
+test("mutual subtraction preserves the operator and bounded witness", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "mutual-invariant", id: "bothSafe", predicates: ["left", "right"] }],
+      }),
+    );
+    const source = await Bun.file(
+      "verification/lean/examples/selected-mutual-descent/program.dl",
+    ).text();
+    await Bun.write(join(dir, "source.dl"), source);
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain("(w0 : Datamog.SafeInt)");
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "(w0.val = v0.val - (1 : Int)) → bothSafeFamily input0 1 w0",
+    );
+    for (const replacement of ["X - 0", "X - 9007199254740991", "X + 1"]) {
+      await Bun.write(join(dir, "source.dl"), source.replace("X - 1", replacement));
+      expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    }
+    for (const replacement of ["X - X", "X - 0.5", "1 - X", "(X - 1) - 1"]) {
+      await Bun.write(join(dir, "source.dl"), source.replace("X - 1", replacement));
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+  }));

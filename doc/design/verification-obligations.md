@@ -1055,6 +1055,16 @@ A negative regression adds a base fact and requires proof failure with no surviv
 report. This preserves least-relation semantics rather than accepting circular
 contract assumptions. Input declarations still require columns in current syntax.
 
+Mutual computed heads now also support subtraction of a safe integer literal
+from a bound variable. Each output still requires a `SafeInt` witness, with the
+subtraction recorded exactly in its defining equation. The selected-mutual-descent
+fixture proves nonnegativity under a strict positive decrement guard; weakening
+that guard to admit zero fails checking and leaves no previous success report.
+Auxiliary Lean checks establish predecessor existence just above the minimum safe
+integer and impossibility at the minimum. Variable subtrahends, fractional
+literals, and nested expressions remain unsupported. No termination or backend
+correctness result is added.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

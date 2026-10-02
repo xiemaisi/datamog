@@ -93,7 +93,7 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
         if (head.$type === "Variable" && vars.has(head.name)) return vars.get(head.name)!;
         if (
           head.$type === "BinaryExpr" &&
-          head.op === "+" &&
+          (head.op === "+" || head.op === "-") &&
           head.left.$type === "Variable" &&
           vars.has(head.left.name) &&
           head.right.$type === "NumberLiteral" &&
@@ -103,12 +103,12 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
           const witness = `w${computed.length}`;
           computed.push(witness);
           defined.push(
-            `(${witness}.val = ${vars.get(head.left.name)}.val + (${head.right.value} : Int))`,
+            `(${witness}.val = ${vars.get(head.left.name)}.val ${head.op} (${head.right.value} : Int))`,
           );
           return witness;
         }
         throw new Error(
-          "Mutual heads require a bound variable or variable plus safe integer literal",
+          "Mutual heads require a bound variable or variable plus/minus safe integer literal",
         );
       });
       const term = (e: HeadTerm): string => {

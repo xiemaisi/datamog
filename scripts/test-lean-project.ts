@@ -372,6 +372,39 @@ try {
   console.log(
     "Selected project: nullary members and empty-cycle induction passed; new base fact rejected.",
   );
+  const descentFixture = new URL(
+    "../verification/lean/examples/selected-mutual-descent/",
+    import.meta.url,
+  ).pathname;
+  await cp(descentFixture, join(temp, "mutual-descent-input"), { recursive: true });
+  const descentConfig = join(temp, "mutual-descent-input/plan.json");
+  const descentOutput = join(temp, "mutual-descent-project");
+  await exportProject(descentConfig, descentOutput);
+  await Bun.write(
+    join(descentOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(descentFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(descentConfig, descentOutput);
+  await checkProject(descentConfig, descentOutput, ["bothSafe"]);
+  const descentSource = join(temp, "mutual-descent-input/program.dl");
+  await Bun.write(descentSource, (await Bun.file(descentSource).text()).replace("X > 0", "X >= 0"));
+  await exportProject(descentConfig, descentOutput);
+  await Bun.write(join(descentOutput, "verification-result.json"), "old success");
+  let descentRejected = false;
+  try {
+    await checkProject(descentConfig, descentOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    descentRejected = true;
+  }
+  if (
+    !descentRejected ||
+    (await Bun.file(join(descentOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Unsafe decrement guard was accepted");
+  console.log(
+    "Selected project: mutual descent and lower bounds checked; unsafe zero step rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }
