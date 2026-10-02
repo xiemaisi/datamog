@@ -96,11 +96,14 @@ export function parseSelection(value: unknown): Selection {
       claim.kind === "mutual-invariant"
     ) {
       const mutual: Record<string, unknown> = claim;
-      keys(mutual, ["kind", "id", "predicates"]);
+      keys(mutual, ["kind", "id", "predicates", "polarity"]);
       if (
         typeof mutual.id !== "string" ||
         !Array.isArray(mutual.predicates) ||
-        mutual.predicates.some((p) => typeof p !== "string")
+        mutual.predicates.some((p) => typeof p !== "string") ||
+        (mutual.polarity !== undefined &&
+          mutual.polarity !== "prove" &&
+          mutual.polarity !== "refute")
       )
         throw new Error("Mutual selection requires id and predicate names");
       continue;

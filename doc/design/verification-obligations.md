@@ -1065,6 +1065,16 @@ integer and impossibility at the minimum. Variable subtrahends, fractional
 literals, and nested expressions remain unsupported. No termination or backend
 correctness result is added.
 
+Mutual invariant descriptors now accept explicit proof/refutation polarity.
+A refutation registers `ID_refuted : ¬ Generated.ID` as the goal and keeps the
+original claim as a definition. Its manifest closure includes the exact joint
+statement and all generated member rules. The selected-mutual-refutation fixture
+constructs a violating recursive derivation; repairing its computed step makes
+the counterexample proof fail. Required-goal gates reject the original false
+claim ID, and polarity changes invalidate content identities. Refuting the joint
+contract needs one failing member and does not assert that every member is unsafe.
+These remain modeled-language proofs rather than backend counterexample traces.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

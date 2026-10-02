@@ -238,6 +238,16 @@ checks cover a predecessor at `-maxSafe + 1` and its impossibility at `-maxSafe`
 These prove safety and modeled definedness, not evaluation termination. Variable
 subtrahends, fractional literals, and nested arithmetic remain unsupported.
 
+Mutual invariant selections also accept `"polarity": "refute"` (the default is
+`"prove"`). The [refutation example](examples/selected-mutual-refutation/plan.json)
+constructs a seed and a recursive derivation violating the second member's bound.
+Its proof has the exact type `¬ Generated.bothSafe`. Only `bothSafe_refuted` is a
+registered goal; `bothSafe` remains a definition and cannot satisfy `--require-goal`.
+The refutation concerns the joint claim, so one failing member suffices; it does
+not say that every member contract is false. Repairing the source step invalidates
+the maintained counterexample, and a failed check removes the previous report.
+This is a proof about a generated derivation, not a backend execution trace.
+
 ## Worked example
 
 The checked-in [selection](examples/selected-projections/plan.json),

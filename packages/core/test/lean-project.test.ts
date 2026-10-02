@@ -365,7 +365,7 @@ test("mutual invariant requires a complete unary component and binds every membe
       await expect(exportProject(config, output)).rejects.toThrow();
     }
     expect(() =>
-      parseSelection({ source: "x", claims: [{ ...claim, polarity: "refute" }] }),
+      parseSelection({ source: "x", claims: [{ ...claim, polarity: "unknown" }] }),
     ).toThrow();
     expect(await Bun.file(join(output, "manifest.json")).exists()).toBe(false);
   }));
@@ -518,4 +518,45 @@ test("mutual subtraction preserves the operator and bounded witness", async () =
       await Bun.write(join(dir, "source.dl"), source.replace("X - 1", replacement));
       await expect(exportProject(config, output)).rejects.toThrow();
     }
+  }));
+
+test("mutual refutations register only the exact negative theorem", async () =>
+  fixture(async (config, output, dir) => {
+    const source = await Bun.file(
+      "verification/lean/examples/selected-mutual-refutation/program.dl",
+    ).text();
+    await Bun.write(join(dir, "source.dl"), source);
+    const claim = {
+      kind: "mutual-invariant",
+      id: "bothSafe",
+      predicates: ["left", "right"],
+      polarity: "refute",
+    };
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [claim] }));
+    const plan = await exportProject(config, output);
+    expect(plan.goals).toEqual(["bothSafe_refuted"]);
+    expect(plan.files["Datamog/Proofs.lean"]).toContain(
+      "theorem bothSafe_refuted : ¬ Generated.bothSafe := by ...",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "bothSafe")!.kind).toBe("definition");
+    expect(plan.manifest.entries.find((e) => e.id === "bothSafe_refuted")!.closure).toEqual([
+      "IntegerSemantics",
+      "bothSafe",
+      "bothSafeFamily",
+      "bothSafe_refuted",
+    ]);
+    await expect(checkProject(config, output, ["bothSafe"])).rejects.toThrow("Unknown");
+    await Bun.write(
+      config,
+      JSON.stringify({ source: "source.dl", claims: [{ ...claim, polarity: "prove" }] }),
+    );
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [claim, { ...claim, id: "bothSafe_refuted", polarity: "prove" }],
+      }),
+    );
+    await expect(exportProject(config, output)).rejects.toThrow("Duplicate verification identity");
   }));

@@ -9,6 +9,7 @@ export interface MutualClaim {
   kind: "mutual-invariant";
   id: string;
   predicates: string[];
+  polarity?: "prove" | "refute";
 }
 export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
   const { id, predicates } = claim;
@@ -154,6 +155,9 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
     return `(${binders ? `∀ ${binders}, ` : ""}${applied} ${tag} ${padded(columns)} → (${contract}))`;
   });
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;
+  const refute = claim.polarity === "refute";
+  const proofName = refute ? `${id}_refuted` : id;
+  const expected = `${refute ? "¬ " : ""}Generated.${id}`;
   const nodes: VerificationNode[] = [
     {
       id: family,
@@ -175,16 +179,25 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
     },
     {
       id,
-      kind: "goal",
-      theorem: `Datamog.Checked.${id}`,
+      kind: refute ? "definition" : "goal",
+      ...(refute ? {} : { theorem: `Datamog.Checked.${id}` }),
       statement: { claim, source: statement },
       assumptions: [],
       dependencies: [family],
     },
   ];
+  if (refute)
+    nodes.push({
+      id: proofName,
+      kind: "goal",
+      theorem: `Datamog.Checked.${proofName}`,
+      statement: { negationOf: id, expected },
+      assumptions: [],
+      dependencies: [id],
+    });
   return {
     source: `${relation}\n${statement}`,
     nodes,
-    checker: `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}\n`,
+    checker: `theorem ${proofName} : ${expected} := Proofs.${proofName}\n#audit ${proofName}\n`,
   };
 }

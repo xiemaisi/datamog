@@ -405,6 +405,50 @@ try {
   console.log(
     "Selected project: mutual descent and lower bounds checked; unsafe zero step rejected.",
   );
+  const refutationFixture = new URL(
+    "../verification/lean/examples/selected-mutual-refutation/",
+    import.meta.url,
+  ).pathname;
+  await cp(refutationFixture, join(temp, "mutual-refutation-input"), { recursive: true });
+  const refutationConfig = join(temp, "mutual-refutation-input/plan.json");
+  const refutationOutput = join(temp, "mutual-refutation-project");
+  await exportProject(refutationConfig, refutationOutput);
+  await Bun.write(
+    join(refutationOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(refutationFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(refutationConfig, refutationOutput);
+  const refutationReport = await checkProject(refutationConfig, refutationOutput, [
+    "bothSafe_refuted",
+  ]);
+  if (
+    refutationReport.entries.length !== 1 ||
+    refutationReport.entries[0]!.id !== "bothSafe_refuted" ||
+    refutationReport.entries[0]!.status !== "proved"
+  )
+    throw new Error("False mutual claim reported as proved");
+  const refutationSource = join(temp, "mutual-refutation-input/program.dl");
+  await Bun.write(
+    refutationSource,
+    (await Bun.file(refutationSource).text()).replace("X + 0", "X + 1"),
+  );
+  await exportProject(refutationConfig, refutationOutput);
+  await Bun.write(join(refutationOutput, "verification-result.json"), "old success");
+  let repairedRejected = false;
+  try {
+    await checkProject(refutationConfig, refutationOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("rfl")) throw error;
+    repairedRejected = true;
+  }
+  if (
+    !repairedRejected ||
+    (await Bun.file(join(refutationOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Obsolete mutual counterexample was accepted");
+  console.log(
+    "Selected project: exact mutual refutation passed; repaired rule invalidates counterexample.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }
