@@ -606,6 +606,44 @@ try {
   console.log(
     "Selected project: negated invariant contracts passed; false tightened bound rejected.",
   );
+  const pipelineFixture = new URL(
+    "../verification/lean/examples/selected-program-invariant/",
+    import.meta.url,
+  ).pathname;
+  await cp(pipelineFixture, join(temp, "pipeline-input"), { recursive: true });
+  const pipelineConfig = join(temp, "pipeline-input/plan.json");
+  const pipelineOutput = join(temp, "pipeline-project");
+  await exportProject(pipelineConfig, pipelineOutput);
+  await Bun.write(
+    join(pipelineOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(pipelineFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(pipelineConfig, pipelineOutput);
+  const pipelineReport = await checkProject(pipelineConfig, pipelineOutput);
+  if (pipelineReport.entries.length !== 1 || pipelineReport.entries[0]?.status !== "proved")
+    throw new Error("Expected composed program invariant proof");
+  const pipelineSource = join(temp, "pipeline-input/program.dl");
+  const originalPipeline = await Bun.file(pipelineSource).text();
+  for (const changed of [
+    originalPipeline.replace(", X > 0.", "."),
+    `${originalPipeline}\nvalidated(X) :- seed(X).`,
+  ]) {
+    await Bun.write(pipelineSource, changed);
+    await exportProject(pipelineConfig, pipelineOutput);
+    await Bun.write(join(pipelineOutput, "verification-result.json"), "old success");
+    let rejected = false;
+    try {
+      await checkProject(pipelineConfig, pipelineOutput);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(pipelineOutput, "verification-result.json")).exists()))
+      throw new Error("Unsafe upstream rule accepted by downstream proof");
+  }
+  console.log(
+    "Selected project: composed invariant passed; weakened upstream guard and extra unsafe sibling rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

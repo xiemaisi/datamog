@@ -785,3 +785,9 @@ Before authoring proofs, `bun run lean:project inspect PLAN.json OUTPUT` preview
 the exact goals, assumptions, dependency closures, and generated checker types as
 JSON. It needs no Lean installation and does not modify the project or its report.
 Inspection is a proposed verification plan, not a successful check.
+
+`program-invariant` selections now close over positive derived dependencies,
+including unrefined helpers and multiple recursive components. Every reachable
+source rule contributes to the generated inductive family; selected contracts
+are proved without assuming upstream contracts. The [pipeline example](examples/selected-program-invariant/plan.json)
+and workflow guide show the selection and maintained proof.

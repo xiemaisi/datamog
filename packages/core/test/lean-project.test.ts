@@ -739,3 +739,88 @@ test("inspection leaves maintained files and reports untouched and exposes refut
       "stale generated file\n",
     );
   }));
+
+test("program invariants close over unrefined helpers and multiple recursive components", async () =>
+  fixture(async (config, output, dir) => {
+    const source = await Bun.file(
+      "verification/lean/examples/selected-program-invariant/program.dl",
+    ).text();
+    const claim = { kind: "program-invariant", id: "pipelineSafe", predicates: ["output"] };
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [claim] }));
+    await Bun.write(join(dir, "source.dl"), source);
+    const plan = await planProject(config, output);
+    const goal = plan.manifest.entries.find((e) => e.id === "pipelineSafe")!;
+    expect(goal.closure).toEqual([
+      "IntegerSemantics",
+      "pipelineSafe",
+      "pipelineSafeFamily",
+      ...[0, 1, 2, 3, 4].map((i) => `pipelineSafeRules${i}`),
+    ]);
+    const family = plan.manifest.entries.find((e) => e.id === "pipelineSafeFamily")!;
+    expect(family.statement).toMatchObject({
+      predicates: ["output", "left", "forwarded", "right", "validated"],
+      selectedPredicates: ["output"],
+      components: [["output"], ["left", "right"], ["forwarded"], ["validated"]],
+      inputs: [{ predicate: "seed", index: 0, arity: 1 }],
+    });
+    expect(plan.manifest.entries.find((e) => e.id === "pipelineSafeRules1")!.dependencies).toEqual([
+      "pipelineSafeRules2",
+      "pipelineSafeRules3",
+    ]);
+    expect(plan.manifest.entries.find((e) => e.id === "pipelineSafeRules3")!.dependencies).toEqual([
+      "pipelineSafeRules1",
+    ]);
+    expect(plan.manifest.entries.every((e) => e.assumptions.length === 0)).toBe(true);
+    expect((await inspectProject(config, output)).goals[0]!.closure).toEqual(goal.closure);
+    for (const changed of [
+      source.replace(", X > 0.", "."),
+      `${source}\nvalidated(X) :- seed(X).`,
+    ]) {
+      await Bun.write(join(dir, "source.dl"), changed);
+      const next = await planProject(config, output);
+      expect(next.manifest.entries.find((e) => e.id === "pipelineSafe")!.digest).not.toBe(
+        goal.digest,
+      );
+      expect(next.files["Datamog/Generated.lean"]).not.toBe(plan.files["Datamog/Generated.lean"]);
+    }
+    await Bun.write(join(dir, "source.dl"), source);
+    await Bun.write(
+      config,
+      JSON.stringify({ source: "source.dl", claims: [{ ...claim, polarity: "refute" }] }),
+    );
+    const refutation = await planProject(config, output);
+    expect(refutation.goals).toEqual(["pipelineSafe_refuted"]);
+    expect(refutation.files["Datamog/Checked.lean"]).toContain(
+      "theorem pipelineSafe_refuted : ¬ Generated.pipelineSafe",
+    );
+  }));
+
+test("program invariants reject unsupported upstream rules and invalid root selections", async () =>
+  fixture(async (config, output, dir) => {
+    const source = await Bun.file(
+      "verification/lean/examples/selected-program-invariant/program.dl",
+    ).text();
+    const writePlan = (predicates: string[]) =>
+      Bun.write(
+        config,
+        JSON.stringify({
+          source: "source.dl",
+          claims: [{ kind: "program-invariant", id: "pipelineSafe", predicates }],
+        }),
+      );
+    await Bun.write(join(dir, "source.dl"), source);
+    for (const roots of [[], ["output", "output"], ["missing"], ["seed"], ["validated"]]) {
+      await writePlan(roots);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await writePlan(["output"]);
+    for (const changed of [
+      source.replace("validated(X) :- seed(X), X > 0", "validated(X * 2) :- seed(X), X > 0"),
+      source.replace("forwarded(X) :- validated(X)", "forwarded(X) :- seed(X), not validated(X)"),
+      source.replace("seed(n: integer)", "seed(n: integer?)"),
+    ]) {
+      await Bun.write(join(dir, "source.dl"), changed);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));

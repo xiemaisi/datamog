@@ -298,6 +298,44 @@ shows what the current source would generate, even when disk-generated files are
 stale; it does not validate those files or establish proof success. `--require-goal`
 applies only to `check`.
 
+## Invariants across derived dependencies
+
+A `program-invariant` claim selects one or more predicates and follows every
+positive derived call transitively:
+
+```json
+{"kind": "program-invariant", "id": "pipelineSafe", "predicates": ["output"]}
+```
+
+The [pipeline example](examples/selected-program-invariant/program.dl) passes
+positive input through two unrefined helpers, a mutually recursive component,
+and a refined output predicate. Its [proof](examples/selected-program-invariant/Proofs.lean)
+uses induction on the complete generated family. Only selected predicates need
+head contracts; upstream contracts are never assumed. Every defining rule of
+every reachable predicate becomes a constructor, including sibling rules.
+
+The exporter puts all reachable derived predicates in one tagged inductive
+family, preserving finite-derivation semantics across multiple recursive
+components. The manifest records component membership, derived-call edges, and
+per-predicate rule definitions in the goal's dependency closure. Changes to an
+upstream guard or rule invalidate the content identity. Fresh-check regressions
+remove the positive input guard and add an unsafe upstream sibling separately;
+both changes make the maintained downstream proof fail and leave no success report.
+
+This uses the existing mutual fragment: non-null integer columns, mixed arities,
+variable-only relation arguments, supported comparison guards, and variable or
+variable-plus/minus-literal heads. Selected head contracts support comparisons
+combined with `&&`, `||`, and `!`. Optional `"polarity": "refute"` requests a proof
+of the negated claim. A single selected predicate is allowed; duplicate or empty
+root selections are rejected. Unrefined helpers may be included automatically,
+but selecting an unrefined predicate as a goal is rejected.
+
+Negation in rule bodies, parity, aggregates, module imports, structural columns,
+and unsupported expressions remain outside this fragment. This exports source
+definitions together; it does not compose separately checked theorem reports or
+introduce modular proof import. The narrower `mutual-invariant` selection still
+requires exactly one complete strongly connected component.
+
 ## Worked example
 
 The checked-in [selection](examples/selected-projections/plan.json),

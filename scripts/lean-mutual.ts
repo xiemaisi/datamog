@@ -11,18 +11,54 @@ export interface MutualClaim {
   predicates: string[];
   polarity?: "prove" | "refute";
 }
+export interface ProgramInvariantClaim {
+  kind: "program-invariant";
+  id: string;
+  predicates: string[];
+  polarity?: "prove" | "refute";
+}
+
+/** Close over source definitions, never abstract a derived call as an input. */
+export function exportProgramInvariant(typed: TypedProgram, claim: ProgramInvariantClaim) {
+  const closure = [...claim.predicates];
+  const seen = new Set(closure);
+  for (let i = 0; i < closure.length; i++) {
+    const rules = typed.rules.get(closure[i]!);
+    if (!rules?.length) throw new Error(`No defining rules for ${closure[i]}`);
+    for (const rule of rules)
+      for (const atom of rule.body) {
+        if (atom.$type !== "Literal" || atom.negated || typed.extDecls.has(atom.predicate))
+          continue;
+        if (!seen.has(atom.predicate)) {
+          seen.add(atom.predicate);
+          closure.push(atom.predicate);
+        }
+      }
+  }
+  return exportFamily(typed, claim, closure);
+}
+
 export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
-  const { id, predicates } = claim;
+  return exportFamily(typed, claim, claim.predicates);
+}
+
+function exportFamily(
+  typed: TypedProgram,
+  claim: MutualClaim | ProgramInvariantClaim,
+  predicates: string[],
+) {
+  const { id } = claim;
+  const program = claim.kind === "program-invariant";
   if (
     !/^[A-Za-z][A-Za-z0-9_]*$/.test(id) ||
-    predicates.length < 2 ||
+    claim.predicates.length < (program ? 1 : 2) ||
     new Set(predicates).size !== predicates.length
   )
     throw new Error("Mutual invariant requires a name and distinct predicates");
   if (typed.maximalPredicates.size || typed.constraints.some((c) => !c.synthetic))
     throw new Error("Unsupported mutual parity or explicit constraints");
   const family = `${id}Family`;
-  const contracts = predicates.map((p) => invariantContract(typed, p).contract);
+  const contracts = claim.predicates.map((p) => invariantContract(typed, p).contract);
   const inputs = new Map<string, number>();
   const edges = new Map<string, string[]>();
   const arityOf = (p: string) => typed.columnTypes.get(p)!.length;
@@ -61,6 +97,7 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       }
     edges.set(p, calls);
   }
+  const reachable = new Map<string, Set<string>>();
   for (const p of predicates) {
     const reached = new Set<string>();
     const visit = (q: string) => {
@@ -69,8 +106,19 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       edges.get(q)!.forEach(visit);
     };
     visit(p);
-    if (reached.size !== predicates.length)
+    reachable.set(p, reached);
+    if (!program && reached.size !== predicates.length)
       throw new Error("Selection must be one strongly connected component");
+  }
+  const components: string[][] = [];
+  const assigned = new Set<string>();
+  for (const p of predicates) {
+    if (assigned.has(p)) continue;
+    const component = predicates.filter(
+      (q) => reachable.get(p)!.has(q) && reachable.get(q)!.has(p),
+    );
+    for (const q of component) assigned.add(q);
+    components.push(component);
   }
   const params = [...inputs].map(([p, i]) => `(input${i} : ${relationType(arityOf(p))})`).join(" ");
   const applied = `${family}${[...inputs.values()].map((i) => ` input${i}`).join("")}`;
@@ -149,7 +197,8 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       );
     }
   const relation = `inductive ${family} ${params} : Nat → ${relationType(width)} where\n${constructors.join("\n")}\n`;
-  const goals = contracts.map((contract, tag) => {
+  const goals = contracts.map((contract, selected) => {
+    const tag = predicates.indexOf(claim.predicates[selected]!);
     const columns = Array.from({ length: memberArities[tag]! }, (_, i) => `x${i}`);
     const binders = columns.map((c) => `(${c} : Datamog.SafeInt)`).join(" ");
     return `(${binders ? `∀ ${binders}, ` : ""}${applied} ${tag} ${padded(columns)} → (${contract}))`;
@@ -165,6 +214,12 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       statement: {
         predicates,
         memberArities,
+        selectedPredicates: claim.predicates,
+        components,
+        derivedDependencies: [...edges].map(([predicate, dependencies]) => ({
+          predicate,
+          dependencies,
+        })),
         width,
         padding: "bounded-zero",
         inputs: [...inputs].map(([predicate, index]) => ({
@@ -175,7 +230,10 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
         source: relation,
       },
       assumptions: [],
-      dependencies: ["IntegerSemantics"],
+      dependencies: [
+        "IntegerSemantics",
+        ...(program ? predicates.map((_, tag) => `${id}Rules${tag}`) : []),
+      ],
     },
     {
       id,
@@ -186,6 +244,23 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
       dependencies: [family],
     },
   ];
+  if (program)
+    predicates.forEach((predicate, tag) =>
+      nodes.push({
+        id: `${id}Rules${tag}`,
+        kind: "definition",
+        statement: {
+          predicate,
+          tag,
+          arity: memberArities[tag],
+          constructors: constructors.filter((line) => line.startsWith(`  | rule${tag}_`)),
+        },
+        assumptions: [],
+        dependencies: [...new Set(edges.get(predicate)!)].map(
+          (dependency) => `${id}Rules${predicates.indexOf(dependency)}`,
+        ),
+      }),
+    );
   if (refute)
     nodes.push({
       id: proofName,

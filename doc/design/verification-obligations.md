@@ -1139,6 +1139,27 @@ verify that a missing output directory stays absent, and ensure existing proof,
 manifest, generated, and report files remain unchanged. Refutation previews retain
 the exact negative theorem type. Export and fresh checking remain separate steps.
 
+## Selected invariants across positive dependency graphs
+
+The selected-project `program-invariant` claim now follows positive derived calls
+from one or more selected predicates. All reachable definitions, including
+unrefined helpers and multiple recursive components, become one tagged inductive
+family. Selected predicates supply the goal contracts; upstream contracts are
+never introduced as assumptions. This reuses the supported non-null integer
+mutual fragment and preserves all sibling rules and bounded computed outputs.
+
+Manifest entries record the selected roots, component membership, derived-call
+edges, and per-predicate constructor definitions. The complete rule closure is
+included in goal identities and fresh reports. The maintained pipeline fixture
+proves positivity from a guarded input through two helpers, a mutually recursive
+component, and the selected output. Removing the upstream guard or adding an
+unsafe sibling invalidates the identity and causes its proof to fail.
+
+This is source-definition composition within one generated project. Separate
+proof import, module interfaces, negation, aggregates, structural relation
+columns, and general expression translation remain open. Existing single-relation
+and single-component selections retain their narrower boundaries.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

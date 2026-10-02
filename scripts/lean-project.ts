@@ -23,7 +23,12 @@ import { parse } from "../packages/parser/src/index.ts";
 
 import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 
-import { type MutualClaim, exportMutual } from "./lean-mutual.ts";
+import {
+  type MutualClaim,
+  type ProgramInvariantClaim,
+  exportMutual,
+  exportProgramInvariant,
+} from "./lean-mutual.ts";
 
 const root = new URL("../", import.meta.url).pathname;
 const library = join(root, "verification/lean");
@@ -49,6 +54,7 @@ type Claim = (
   | LocalClaim
   | InvariantClaim
   | MutualClaim
+  | ProgramInvariantClaim
   | ({ kind: "uniqueness" } & UniquenessClaim)
   | ({ kind: "coverage" } & CoverageClaim)
 ) & { polarity?: "prove" | "refute" };
@@ -93,7 +99,7 @@ export function parseSelection(value: unknown): Selection {
       claim &&
       typeof claim === "object" &&
       "kind" in claim &&
-      claim.kind === "mutual-invariant"
+      (claim.kind === "mutual-invariant" || claim.kind === "program-invariant")
     ) {
       const mutual: Record<string, unknown> = claim;
       keys(mutual, ["kind", "id", "predicates", "polarity"]);
@@ -224,8 +230,12 @@ export async function planProject(configInput: string, outputInput: string) {
     exportLeanStructuralProjection(typed, descriptor),
   );
   const mutuals = selection.claims
-    .filter((claim) => claim.kind === "mutual-invariant")
-    .map((claim) => exportMutual(typed, claim));
+    .filter((claim) => claim.kind === "mutual-invariant" || claim.kind === "program-invariant")
+    .map((claim) =>
+      claim.kind === "mutual-invariant"
+        ? exportMutual(typed, claim)
+        : exportProgramInvariant(typed, claim),
+    );
   const invariants = selection.claims
     .filter((claim) => claim.kind === "invariant")
     .map((claim) => exportInvariant(typed, claim));
@@ -304,7 +314,10 @@ export async function planProject(configInput: string, outputInput: string) {
   const claimBundles = selection.claims
     .filter(
       (claim) =>
-        claim.kind !== "local" && claim.kind !== "invariant" && claim.kind !== "mutual-invariant",
+        claim.kind !== "local" &&
+        claim.kind !== "invariant" &&
+        claim.kind !== "mutual-invariant" &&
+        claim.kind !== "program-invariant",
     )
     .map(({ kind, polarity, ...descriptor }) =>
       kind === "uniqueness"
