@@ -780,3 +780,8 @@ the checked verification plan, so statements, assumptions, dependencies, and
 proof/refutation identities can be inspected alongside the fresh result. This
 applies to `lean:project check`; the fixed-project report format above is unchanged.
 The embedded evidence is descriptive, not a certificate-import or replay format.
+
+Before authoring proofs, `bun run lean:project inspect PLAN.json OUTPUT` previews
+the exact goals, assumptions, dependency closures, and generated checker types as
+JSON. It needs no Lean installation and does not modify the project or its report.
+Inspection is a proposed verification plan, not a successful check.

@@ -1124,6 +1124,21 @@ new check. Regressions verify snapshot hashes, complete goal dependencies, saved
 report equality, and proof/refutation roles. The fixed-project report format is
 unchanged.
 
+## Read-only goal inspection
+
+`lean:project inspect PLAN.json OUTPUT` now emits the current source-derived
+verification plan before proof authoring, without invoking Lean or writing files.
+The JSON includes exact goal statements and checker declarations, relation
+definitions, assumptions, dependencies and closures, and source/selection
+snapshots. It is explicitly labeled `inspection-only` and carries no proof-success
+statuses. Existing proofs contribute to the planned identity, but stale generated
+files and old reports are neither accepted as evidence nor modified.
+
+Tests run the command with an empty PATH to establish that Lean is unnecessary,
+verify that a missing output directory stays absent, and ensure existing proof,
+manifest, generated, and report files remain unchanged. Refutation previews retain
+the exact negative theorem type. Export and fresh checking remain separate steps.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

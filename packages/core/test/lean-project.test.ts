@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdtemp, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   checkProject,
   exportProject,
+  inspectProject,
   parseSelection,
   planProject,
 } from "../../../scripts/lean-project.ts";
@@ -668,4 +669,73 @@ test("project evidence preserves exact source and selection text with manifest i
     expect(changed.sourceSnapshot.text).toBe(`${source}\n\n`);
     expect(changed.sourceSnapshot.digest).not.toBe(plan.sourceSnapshot.digest);
     expect(changed.selectionSnapshot).toEqual(plan.selectionSnapshot);
+  }));
+
+test("inspection previews exact goals without creating files or invoking Lean", async () =>
+  fixture(async (config, output) => {
+    const child = Bun.spawn(
+      [process.execPath, "scripts/lean-project.ts", "inspect", config, output],
+      { stdout: "pipe", stderr: "pipe", env: { ...process.env, PATH: "" } },
+    );
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(code).toBe(0);
+    expect(stderr).toBe("");
+    const preview = JSON.parse(stdout);
+    expect(preview.purpose).toBe("inspection-only");
+    expect(preview.goals.map((g: { id: string }) => g.id)).toEqual([
+      "Picked_coverage",
+      "Picked_soundness",
+    ]);
+    expect(preview.generated.checker).toContain(
+      "theorem Picked_coverage : Generated.Picked_coverage := Proofs.Picked_coverage",
+    );
+    expect(
+      preview.goals.every(
+        (g: Record<string, unknown>) => g.status === undefined && g.assurance === undefined,
+      ),
+    ).toBe(true);
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("inspection leaves maintained files and reports untouched and exposes refutations", async () =>
+  fixture(async (config, output, dir) => {
+    const claim = {
+      kind: "invariant",
+      id: "growSafe",
+      predicate: "grow",
+      relationName: "Grow",
+      polarity: "refute",
+    };
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [claim] }));
+    await Bun.write(
+      join(dir, "source.dl"),
+      await Bun.file("verification/lean/examples/selected-recursive-refutation/program.dl").text(),
+    );
+    await exportProject(config, output);
+    const before = await Bun.file(join(output, "manifest.json")).text();
+    await Bun.write(join(output, "Datamog/Proofs.lean"), "-- user work\n");
+    await Bun.write(join(output, "verification-result.json"), "previous report\n");
+    await Bun.write(join(output, "Datamog/Generated.lean"), "stale generated file\n");
+    const preview = await inspectProject(config, output);
+    expect(preview.goals.map((g) => g.id)).toEqual(["growSafe_refuted"]);
+    expect(preview.generated.checker).toContain("theorem growSafe_refuted : ¬ Generated.growSafe");
+    expect(preview.generated.definitions).toContain("inductive Grow");
+    expect(preview.goals[0]!.closure).toEqual([
+      "Grow",
+      "IntegerSemantics",
+      "growSafe",
+      "growSafe_refuted",
+    ]);
+    expect(await Bun.file(join(output, "manifest.json")).text()).toBe(before);
+    expect(await Bun.file(join(output, "Datamog/Proofs.lean")).text()).toBe("-- user work\n");
+    expect(await Bun.file(join(output, "verification-result.json")).text()).toBe(
+      "previous report\n",
+    );
+    expect(await Bun.file(join(output, "Datamog/Generated.lean")).text()).toBe(
+      "stale generated file\n",
+    );
   }));

@@ -413,6 +413,33 @@ export async function planProject(configInput: string, outputInput: string) {
   };
 }
 
+/** Read-only preview of the current source-derived plan; never proof evidence. */
+export async function inspectProject(configPath: string, outputInput: string) {
+  const plan = await planProject(configPath, outputInput);
+  const byId = new Map(plan.manifest.entries.map((entry) => [entry.id, entry]));
+  return {
+    schema: "datamog-selected-inspection-v1",
+    purpose: "inspection-only",
+    sourceSnapshot: plan.sourceSnapshot,
+    selectionSnapshot: plan.selectionSnapshot,
+    verificationPlan: plan.manifest,
+    generated: {
+      definitions: plan.files["Datamog/Generated.lean"],
+      checker: plan.files["Datamog/Checked.lean"],
+    },
+    goals: plan.manifest.entries
+      .filter((entry) => entry.kind === "goal")
+      .map((entry) => ({
+        id: entry.id,
+        theorem: entry.theorem,
+        statement: entry.statement,
+        dependencies: entry.dependencies,
+        closure: entry.closure,
+        assumptions: [...new Set(entry.closure.flatMap((id) => byId.get(id)!.assumptions))].sort(),
+      })),
+  };
+}
+
 export async function exportProject(configPath: string, outputInput: string) {
   const output = resolve(outputInput);
   await owned(output, true);
@@ -508,13 +535,15 @@ if (import.meta.main) {
     if (
       !config ||
       !output ||
-      !["export", "check"].includes(command!) ||
-      (command === "export" && rest.length)
+      !["inspect", "export", "check"].includes(command!) ||
+      (command !== "check" && rest.length)
     )
       throw new Error(
-        "Usage: bun run lean:project <export|check> PLAN.json OUTPUT [--require-goal ID ...]",
+        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--require-goal ID ...]",
       );
-    if (command === "export") {
+    if (command === "inspect") {
+      console.log(JSON.stringify(await inspectProject(config, output), null, 2));
+    } else if (command === "export") {
       const plan = await exportProject(config, output);
       console.log(
         `Exported ${plan.goals.length} goals to ${resolve(output)}. Maintain Datamog/Proofs.lean, then export again and check.`,

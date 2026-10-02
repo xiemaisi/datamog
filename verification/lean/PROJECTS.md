@@ -276,6 +276,28 @@ structure. Tightening the bound to exclude the reachable value three fails check
 This supports expression-level `!`; it does not add negation-as-failure to relation
 bodies or define how nullable/undefined operands behave in the invariant model.
 
+## Inspect before writing proofs
+
+Use the same selection and intended output directory with the read-only command:
+
+```bash
+bun run lean:project inspect plan.json my-project > /tmp/datamog-goals.json
+```
+
+Inspection requires Bun but no Lean installation. It regenerates the current plan
+in memory and emits JSON labeled `inspection-only`: selected goal IDs, theorem
+names, exact statements, dependencies, complete closures, assumptions, generated
+Lean definitions, and exact checker declarations. Source/selection snapshots and
+the plan manifest are included. Unsupported selections fail with the same errors
+as export.
+
+The command does not create the output directory, alter maintained proofs, refresh
+generated files, or remove an earlier report. If proofs already exist in the
+intended directory, they contribute to the planned content identity. Inspection
+shows what the current source would generate, even when disk-generated files are
+stale; it does not validate those files or establish proof success. `--require-goal`
+applies only to `check`.
+
 ## Worked example
 
 The checked-in [selection](examples/selected-projections/plan.json),
@@ -285,6 +307,7 @@ and soundness for a required integer field and soundness for an optional nullabl
 field. From the repository root:
 
 ```bash
+bun run lean:project inspect verification/lean/examples/selected-projections/plan.json /tmp/datamog-selected-example > /tmp/datamog-goals.json
 bun run lean:project export verification/lean/examples/selected-projections/plan.json /tmp/datamog-selected-example
 cp verification/lean/examples/selected-projections/Proofs.lean /tmp/datamog-selected-example/Datamog/Proofs.lean
 bun run lean:project export verification/lean/examples/selected-projections/plan.json /tmp/datamog-selected-example
