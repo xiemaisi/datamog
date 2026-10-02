@@ -769,8 +769,14 @@ scalar-variable limits, arithmetic, and general Boolean expressions remain unsup
 ## User-selected programs
 
 The optional `bun run lean:project` workflow now exports selected structural
-projection and integer uniqueness/coverage claims from a standalone Datamog source
-and checks maintained proofs
-in a fresh temporary Lean project. See [the workflow guide](PROJECTS.md) for the
+projections, integer uniqueness/coverage claims, local head refinements, and
+recursive invariants from a standalone Datamog source. It checks maintained
+proofs or refutations in a fresh temporary Lean project. See [the workflow guide](PROJECTS.md) for the
 JSON selection format, worked example, regeneration steps, and trust boundary.
 This does not add a general Lean mode to `--verify`, proof caching, or proof import.
+
+Selected-project reports now embed the exact source and selection snapshots plus
+the checked verification plan, so statements, assumptions, dependencies, and
+proof/refutation identities can be inspected alongside the fresh result. This
+applies to `lean:project check`; the fixed-project report format above is unchanged.
+The embedded evidence is descriptive, not a certificate-import or replay format.

@@ -332,6 +332,16 @@ this runner's current scope.
 
 A previous report is removed at the start of checking; a failed check cannot
 leave it as a current success. Successful export also removes any previous report.
+Selected-project reports carry `evidenceSchema: "datamog-selected-evidence-v1"`.
+`sourceSnapshot` contains the original source path, exact text, and digest;
+`selectionSnapshot` contains the exact selection text and digest. `verificationPlan`
+embeds the checked manifest, including goal statements, relation definitions,
+dependency closures, semantic profile, and artifact identities. The snapshot
+digests match that manifest's source/selection artifacts, and each result entry
+matches its registered goal digest. Refuted claims remain definitions while their
+negative theorems are goals. This makes a report self-contained for inspection;
+it does not include all files needed to reproduce the build.
+
 Reports identify modeled-language theorems. They are not certificates, are never
 imported to discharge goals, and do not claim backend correctness or concrete
 input coverage. Unlike the fixed-project `test:lean` suite, this workflow does

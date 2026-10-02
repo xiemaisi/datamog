@@ -1106,6 +1106,24 @@ mutual recursion. Tightening the contract while retaining a rule that reaches th
 fails fresh checking and removes the previous report. Ordinary regressions cover
 negation nesting, content invalidation, and rejection of nullable/partial leaves.
 
+## Self-contained selected-project result evidence
+
+Fresh selected-project reports now include the exact source and selection text,
+their content digests, and the complete checked verification plan under
+`datamog-selected-evidence-v1`. The embedded plan records exact statements,
+definitions, assumptions, dependency closures, semantic profile, and artifact
+identities. Results retain their goal and manifest digests; refutations retain
+the distinction between the original statement definition and its negative goal.
+The report returned by the checking API is identical to the atomically written
+JSON report.
+
+The existing fresh-build and final content-recheck boundaries still control
+publication. Embedded evidence is for inspection, not certificate import or
+standalone replay: maintained proof and toolchain files are still required for a
+new check. Regressions verify snapshot hashes, complete goal dependencies, saved
+report equality, and proof/refutation roles. The fixed-project report format is
+unchanged.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

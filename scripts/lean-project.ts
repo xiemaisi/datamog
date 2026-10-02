@@ -404,7 +404,13 @@ export async function planProject(configInput: string, outputInput: string) {
       throw new Error("Project output would overwrite the selection or source");
     await regular(target);
   }
-  return { files, manifest, goals: goals.map((goal) => goal.id) };
+  return {
+    files,
+    manifest,
+    goals: goals.map((goal) => goal.id),
+    sourceSnapshot: { path: selection.source, text: source, digest: artifacts.source! },
+    selectionSnapshot: { text: configText, digest: artifacts.selection! },
+  };
 }
 
 export async function exportProject(configPath: string, outputInput: string) {
@@ -469,17 +475,21 @@ export async function checkProject(
     if (!version.includes("version 4.34.0,"))
       throw new Error(`Unexpected Lean toolchain: ${version}`);
     const build = await run(["lake", "build"], temp);
-    const report = createLeanVerificationResult(plan.manifest, build, required);
+    const report = {
+      ...createLeanVerificationResult(plan.manifest, build, required),
+      workflow: "selected-lean-claims-v1" as const,
+      evidenceSchema: "datamog-selected-evidence-v1" as const,
+      sourceSnapshot: plan.sourceSnapshot,
+      selectionSnapshot: plan.selectionSnapshot,
+      verificationPlan: plan.manifest,
+    };
     const current = await planProject(configPath, output);
     assertCurrentVerificationManifest(plan.manifest, current.manifest);
     await assertFiles(output, current);
     const path = join(output, reportFile);
     await regular(path);
     await regular(`${path}.tmp`);
-    await Bun.write(
-      `${path}.tmp`,
-      `${JSON.stringify({ ...report, workflow: "selected-lean-claims-v1" }, null, 2)}\n`,
-    );
+    await Bun.write(`${path}.tmp`, `${JSON.stringify(report, null, 2)}\n`);
     await rename(`${path}.tmp`, path);
     return report;
   } finally {

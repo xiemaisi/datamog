@@ -648,3 +648,24 @@ test("invariant negation preserves nesting and rejects partial or nullable leave
       await expect(exportProject(config, output)).rejects.toThrow();
     }
   }));
+
+test("project evidence preserves exact source and selection text with manifest identities", async () =>
+  fixture(async (config, output, dir) => {
+    const source = await Bun.file(join(dir, "source.dl")).text();
+    const selection = await Bun.file(config).text();
+    const plan = await planProject(config, output);
+    expect(plan.sourceSnapshot).toEqual({
+      path: "source.dl",
+      text: source,
+      digest: plan.manifest.context.artifacts.source,
+    });
+    expect(plan.selectionSnapshot).toEqual({
+      text: selection,
+      digest: plan.manifest.context.artifacts.selection,
+    });
+    await Bun.write(join(dir, "source.dl"), `${source}\n\n`);
+    const changed = await planProject(config, output);
+    expect(changed.sourceSnapshot.text).toBe(`${source}\n\n`);
+    expect(changed.sourceSnapshot.digest).not.toBe(plan.sourceSnapshot.digest);
+    expect(changed.selectionSnapshot).toEqual(plan.selectionSnapshot);
+  }));

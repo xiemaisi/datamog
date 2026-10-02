@@ -2,6 +2,7 @@
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { verificationDigest } from "../packages/core/src/verification-manifest.ts";
 import { checkProject, exportProject } from "./lean-project.ts";
 
 const fixture = new URL("../verification/lean/examples/selected-projections/", import.meta.url)
@@ -21,6 +22,29 @@ try {
   await Bun.write(join(output, ".lake/build/lib/lean/Datamog/Checked.olean"), "poisoned cache");
   await Bun.write(reportPath, '{"status":"proved"}');
   const report = await checkProject(config, output);
+  const savedReport = await Bun.file(reportPath).json();
+  if (
+    JSON.stringify(savedReport) !== JSON.stringify(report) ||
+    report.verificationPlan.digest !== report.manifestDigest ||
+    report.sourceSnapshot.text !== (await Bun.file(join(temp, "input/program.dl")).text()) ||
+    report.selectionSnapshot.text !== (await Bun.file(config).text()) ||
+    (await verificationDigest(report.sourceSnapshot.text)) !==
+      report.verificationPlan.context.artifacts.source ||
+    (await verificationDigest(report.selectionSnapshot.text)) !==
+      report.verificationPlan.context.artifacts.selection
+  )
+    throw new Error("Fresh report lost its exact source, selection, or checked plan");
+  for (const result of report.entries) {
+    const goal = report.verificationPlan.entries.find((entry) => entry.id === result.id);
+    if (
+      !goal ||
+      goal.kind !== "goal" ||
+      goal.digest !== result.digest ||
+      !goal.statement ||
+      goal.closure.some((id) => !report.verificationPlan.entries.some((entry) => entry.id === id))
+    )
+      throw new Error("Fresh report lacks an exact checked goal or dependency");
+  }
   if (report.entries.length !== 3 || report.entries.some((entry) => entry.status !== "proved"))
     throw new Error("Expected three fresh unconditional goals");
   console.log(
@@ -427,6 +451,14 @@ try {
     refutationReport.entries[0]!.status !== "proved"
   )
     throw new Error("False mutual claim reported as proved");
+  if (
+    refutationReport.verificationPlan.entries.find((entry) => entry.id === "bothSafe")?.kind !==
+      "definition" ||
+    refutationReport.verificationPlan.entries.find((entry) => entry.id === "bothSafe_refuted")
+      ?.kind !== "goal" ||
+    JSON.parse(refutationReport.selectionSnapshot.text).claims[0].polarity !== "refute"
+  )
+    throw new Error("Self-contained report lost refutation polarity");
   const refutationSource = join(temp, "mutual-refutation-input/program.dl");
   await Bun.write(
     refutationSource,
