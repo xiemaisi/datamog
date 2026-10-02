@@ -319,7 +319,7 @@ test("recursive invariant exports actual constructors and the sibling-disjunctio
       await expect(exportProject(config, output)).rejects.toThrow();
     }
     expect(() =>
-      parseSelection({ source: "x", claims: [{ ...claim, polarity: "refute" }] }),
+      parseSelection({ source: "x", claims: [{ ...claim, polarity: "unknown" }] }),
     ).toThrow();
     expect(() => parseSelection({ source: "x", claims: [{ ...claim, rule: 1 }] })).toThrow();
     expect(await Bun.file(join(output, "manifest.json")).exists()).toBe(false);
@@ -559,4 +559,40 @@ test("mutual refutations register only the exact negative theorem", async () =>
       }),
     );
     await expect(exportProject(config, output)).rejects.toThrow("Duplicate verification identity");
+  }));
+
+test("single-relation invariant refutations preserve polarity and reject name collisions", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      await Bun.file("verification/lean/examples/selected-recursive-refutation/program.dl").text(),
+    );
+    const claim = {
+      kind: "invariant",
+      id: "growSafe",
+      predicate: "grow",
+      relationName: "Grow",
+      polarity: "refute",
+    };
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [claim] }));
+    const plan = await exportProject(config, output);
+    expect(plan.goals).toEqual(["growSafe_refuted"]);
+    expect(plan.files["Datamog/Proofs.lean"]).toContain(
+      "theorem growSafe_refuted : ¬ Generated.growSafe := by ...",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "growSafe")!.kind).toBe("definition");
+    await expect(checkProject(config, output, ["growSafe"])).rejects.toThrow("Unknown");
+    await Bun.write(
+      config,
+      JSON.stringify({ source: "source.dl", claims: [{ ...claim, polarity: "prove" }] }),
+    );
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ ...claim, relationName: "growSafe_refuted" }],
+      }),
+    );
+    await expect(exportProject(config, output)).rejects.toThrow("Conflicting invariant proof name");
   }));

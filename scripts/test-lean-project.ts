@@ -449,6 +449,52 @@ try {
   console.log(
     "Selected project: exact mutual refutation passed; repaired rule invalidates counterexample.",
   );
+  const singleRefutationFixture = new URL(
+    "../verification/lean/examples/selected-recursive-refutation/",
+    import.meta.url,
+  ).pathname;
+  await cp(singleRefutationFixture, join(temp, "single-refutation-input"), { recursive: true });
+  const singleRefutationConfig = join(temp, "single-refutation-input/plan.json");
+  const singleRefutationOutput = join(temp, "single-refutation-project");
+  await exportProject(singleRefutationConfig, singleRefutationOutput);
+  await Bun.write(
+    join(singleRefutationOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(singleRefutationFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(singleRefutationConfig, singleRefutationOutput);
+  const singleRefutationReport = await checkProject(
+    singleRefutationConfig,
+    singleRefutationOutput,
+    ["growSafe_refuted"],
+  );
+  if (
+    singleRefutationReport.entries.length !== 1 ||
+    singleRefutationReport.entries[0]!.id !== "growSafe_refuted" ||
+    singleRefutationReport.entries[0]!.status !== "proved"
+  )
+    throw new Error("False recursive invariant reported as proved");
+  const singleRefutationSource = join(temp, "single-refutation-input/program.dl");
+  await Bun.write(
+    singleRefutationSource,
+    (await Bun.file(singleRefutationSource).text()).replace("X + 1", "X + 0"),
+  );
+  await exportProject(singleRefutationConfig, singleRefutationOutput);
+  await Bun.write(join(singleRefutationOutput, "verification-result.json"), "old success");
+  let singleRepairedRejected = false;
+  try {
+    await checkProject(singleRefutationConfig, singleRefutationOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("rfl")) throw error;
+    singleRepairedRejected = true;
+  }
+  if (
+    !singleRepairedRejected ||
+    (await Bun.file(join(singleRefutationOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Obsolete recursive counterexample was accepted");
+  console.log(
+    "Selected project: recursive invariant refutation passed; repaired step rejects the counterexample.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

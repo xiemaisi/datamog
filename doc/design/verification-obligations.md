@@ -1075,6 +1075,14 @@ claim ID, and polarity changes invalidate content identities. Refuting the joint
 contract needs one failing member and does not assert that every member is unsafe.
 These remain modeled-language proofs rather than backend counterexample traces.
 
+Single-relation `invariant` selections now use the same proof/refutation polarity
+boundary as mutual invariants. The selected-recursive-refutation fixture builds a
+contract-satisfying base tuple followed by a violating recursive step. Only the
+negative theorem is registered as a proved goal, and repairing the step rejects
+the maintained counterexample. Proof-name collisions, positive-ID goal requests,
+and polarity changes are covered by export and freshness regressions. This does
+not broaden the single-relation exporter or discharge local contract cycles.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

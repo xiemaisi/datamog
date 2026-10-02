@@ -1,0 +1,12 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "invariant",
+      "id": "growSafe",
+      "predicate": "grow",
+      "relationName": "Grow",
+      "polarity": "refute"
+    }
+  ]
+}

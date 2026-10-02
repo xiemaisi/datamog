@@ -157,10 +157,17 @@ and simple comparisons between head positions and safe integer literals. The
 existing positive relation fragment supports self-recursion, variable-only atoms,
 comparison guards, and variable or variable-plus-literal heads. Mutual recursion,
 other derived dependencies, parity, negation, aggregates, arithmetic in the
-contract, and nullable contracts remain unsupported. Only prove polarity is
+contract, and nullable contracts remain unsupported. Both prove and refute polarity are
 accepted. The manifest binds the exact relation and theorem, and fresh checking
 audits the maintained proof. This is a direct invariant proof, not automatic
 assembly of local proof cycles or an evaluation-termination proof.
+
+For `"polarity": "refute"`, the [recursive refutation example](examples/selected-recursive-refutation/plan.json)
+constructs a safe base tuple and a recursive step violating the claimed upper bound.
+The exact goal is `growSafe_refuted : ¬ Generated.growSafe`. The positive statement
+remains a definition and cannot satisfy a required-goal gate. Repairing the step
+invalidates the counterexample proof. As with mutual refutations, this establishes
+a modeled derivation counterexample rather than a backend execution trace.
 
 ## Initial mutual invariants
 

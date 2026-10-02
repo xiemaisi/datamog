@@ -10,6 +10,7 @@ export interface InvariantClaim {
   id: string;
   predicate: string;
   relationName: string;
+  polarity?: "prove" | "refute";
 }
 
 export function exportInvariant(typed: TypedProgram, claim: InvariantClaim) {
@@ -53,6 +54,10 @@ export function exportInvariant(typed: TypedProgram, claim: InvariantClaim) {
   );
   const application = `${relationName} ${inputs.map((_, i) => `input${i}`).join(" ")} ${columns.join(" ")}`;
   const statement = `def ${id} : Prop :=\n  ∀ ${[...params, ...columns.map((column) => `(${column} : Datamog.SafeInt)`)].join(" ")},\n  ${application} → (${contract})\n`;
+  const refute = claim.polarity === "refute";
+  const proofName = refute ? `${id}_refuted` : id;
+  if (proofName === relationName) throw new Error("Conflicting invariant proof name");
+  const expected = `${refute ? "¬ " : ""}Generated.${id}`;
   const nodes: VerificationNode[] = [
     {
       id: relationName,
@@ -63,17 +68,26 @@ export function exportInvariant(typed: TypedProgram, claim: InvariantClaim) {
     },
     {
       id,
-      kind: "goal",
-      theorem: `Datamog.Checked.${id}`,
+      kind: refute ? "definition" : "goal",
+      ...(refute ? {} : { theorem: `Datamog.Checked.${id}` }),
       statement: { claim, source: statement },
       assumptions: [],
       dependencies: [relationName],
     },
   ];
+  if (refute)
+    nodes.push({
+      id: proofName,
+      kind: "goal",
+      theorem: `Datamog.Checked.${proofName}`,
+      statement: { negationOf: id, expected },
+      assumptions: [],
+      dependencies: [id],
+    });
   return {
     source: `${relation}\n${statement}`,
     nodes,
-    checker: `theorem ${id} : Generated.${id} := Proofs.${id}\n#audit ${id}\n`,
+    checker: `theorem ${proofName} : ${expected} := Proofs.${proofName}\n#audit ${proofName}\n`,
   };
 }
 

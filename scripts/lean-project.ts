@@ -147,16 +147,14 @@ export function parseSelection(value: unknown): Selection {
       (claim.polarity !== undefined && claim.polarity !== "prove" && claim.polarity !== "refute")
     )
       throw new Error("Claims require names and prove/refute polarity");
-    if (claim.kind === "invariant") {
-      if (claim.polarity === "refute") throw new Error("Invariant claims require prove polarity");
-    } else if (claim.kind === "local") {
+    if (claim.kind === "local") {
       if (![claim.rule, claim.refinement].every((v) => Number.isSafeInteger(v) && Number(v) > 0))
         throw new Error("Local selectors require positive one-based rule and refinement indices");
     } else if (claim.kind === "uniqueness") {
       for (const columns of [claim.keyColumns, claim.outputColumns])
         if (!Array.isArray(columns) || columns.some((c) => typeof c !== "number"))
           throw new Error("Uniqueness requires numeric column arrays");
-    } else {
+    } else if (claim.kind === "coverage") {
       if (
         typeof claim.inputPredicate !== "string" ||
         !Array.isArray(claim.outputToInput) ||
