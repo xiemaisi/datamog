@@ -1087,13 +1087,24 @@ The shared invariant-contract translator now accepts explicit `&&` and `||`
 junctions over supported integer comparisons. It preserves the full Boolean tree,
 then conjoins multiple refinements per rule and disjoins sibling contracts. All
 accepted leaves are total over non-null integers; null/undefined Boolean behavior,
-arithmetic comparison operands, negation, and compound body filters remain outside
-this extension. Unsupported leaves reject the entire export.
+arithmetic comparison operands and compound body filters remain outside
+this extension; logical negation is added below. Unsupported leaves reject the entire export.
 
 The selected-boolean-contracts fixture proves a disjunctive bounded-interval
 contract for both self-recursive and mutual definitions. Allowing a step past the
 upper bound fails the maintained proofs and removes the earlier report. Tests
 also cover grouping, changed connective identities, and unsupported leaves.
+
+Invariant contracts now also admit expression-level `!` over the supported total
+integer/Boolean fragment. The translator recursively validates the operand before
+emitting Lean negation, preserving nested and double negations. Nullable columns,
+partial arithmetic leaves, and negated body calls remain unsupported. This does
+not conflate logical negation with negation-as-failure.
+
+The selected-negated-contracts fixture proves `!(X < 0 || X > 3)` for self and
+mutual recursion. Tightening the contract while retaining a rule that reaches three
+fails fresh checking and removes the previous report. Ordinary regressions cover
+negation nesting, content invalidation, and rejection of nullable/partial leaves.
 
 ## Which harder claims should be expressible?
 

@@ -615,8 +615,36 @@ test("invariant junctions retain nesting and reject unsupported leaves", async (
     );
     await Bun.write(join(dir, "source.dl"), source("X = 0 && (X > 0 || X <= 3)"));
     expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
-    for (const formula of ["X = 0 || X + 1 > 0", "X = 0 || X > 0.5", "!(X = 0)"]) {
+    for (const formula of ["X = 0 || X + 1 > 0", "X = 0 || X > 0.5", "!(X + 1 = 0)"]) {
       await Bun.write(join(dir, "source.dl"), source(formula));
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+  }));
+
+test("invariant negation preserves nesting and rejects partial or nullable leaves", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "invariant", id: "safe", predicate: "p", relationName: "P" }],
+      }),
+    );
+    const source = (formula: string, type = "integer") =>
+      `input predicate seed(n: ${type}). p(X, _: ${formula}) :- seed(X).`;
+    await Bun.write(join(dir, "source.dl"), source("!!(X >= 0 && !(X > 3))"));
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "(¬ (¬ ((x0.val ≥ (0 : Int)) ∧ (¬ (x0.val > (3 : Int))))))",
+    );
+    await Bun.write(join(dir, "source.dl"), source("!(X >= 0 && !(X > 3))"));
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    for (const text of [
+      source("!(X + 1 > 0)"),
+      source("!(X / 0 = 0)"),
+      source("!(X < 0 || X > 3)", "integer?"),
+    ]) {
+      await Bun.write(join(dir, "source.dl"), text);
       await expect(exportProject(config, output)).rejects.toThrow();
     }
   }));

@@ -536,6 +536,44 @@ try {
   console.log(
     "Selected project: Boolean invariant junctions passed; out-of-interval step rejected.",
   );
+  const negatedFixture = new URL(
+    "../verification/lean/examples/selected-negated-contracts/",
+    import.meta.url,
+  ).pathname;
+  await cp(negatedFixture, join(temp, "negated-input"), { recursive: true });
+  const negatedConfig = join(temp, "negated-input/plan.json");
+  const negatedOutput = join(temp, "negated-project");
+  await exportProject(negatedConfig, negatedOutput);
+  await Bun.write(
+    join(negatedOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(negatedFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(negatedConfig, negatedOutput);
+  const negatedReport = await checkProject(negatedConfig, negatedOutput);
+  if (
+    negatedReport.entries.length !== 2 ||
+    negatedReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected both negated contract goals");
+  const negatedSource = join(temp, "negated-input/program.dl");
+  await Bun.write(negatedSource, (await Bun.file(negatedSource).text()).replaceAll("> 3", "> 2"));
+  await exportProject(negatedConfig, negatedOutput);
+  await Bun.write(join(negatedOutput, "verification-result.json"), "old success");
+  let negatedRejected = false;
+  try {
+    await checkProject(negatedConfig, negatedOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    negatedRejected = true;
+  }
+  if (
+    !negatedRejected ||
+    (await Bun.file(join(negatedOutput, "verification-result.json")).exists())
+  )
+    throw new Error("False tightened negated contract was accepted");
+  console.log(
+    "Selected project: negated invariant contracts passed; false tightened bound rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

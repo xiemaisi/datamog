@@ -129,8 +129,10 @@ export function invariantContract(typed: TypedProgram, predicate: string) {
       "=": "=",
     };
     const proposition = (formula: HeadTerm): string => {
+      if (formula.$type === "UnaryExpr" && formula.op === "!")
+        return `(¬ ${proposition(formula.operand)})`;
       if (formula.$type !== "BinaryExpr")
-        throw new Error("Invariant contracts require integer comparisons and Boolean junctions");
+        throw new Error("Invariant contracts require integer comparisons and Boolean connectives");
       if (formula.op === "&&" || formula.op === "||")
         return `(${proposition(formula.left)} ${formula.op === "&&" ? "∧" : "∨"} ${proposition(formula.right)})`;
       if (!Object.hasOwn(operators, formula.op))

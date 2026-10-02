@@ -154,7 +154,7 @@ are omitted from this derivation model; explicit constraints are rejected.
 
 This first fragment requires non-null integer columns, refinements on every rule,
 and comparisons between head positions and safe integer literals, optionally
-combined using `&&` and `||`. The
+combined using `&&`, `||`, and `!`. The
 existing positive relation fragment supports self-recursion, variable-only atoms,
 comparison guards, and variable or variable-plus-literal heads. Mutual recursion,
 other derived dependencies, parity, negation, aggregates, arithmetic in the
@@ -192,7 +192,7 @@ strongly connected component, non-null integer relations (including zero-column 
 variable-only
 atoms, variable or variable-plus/minus-safe-integer-literal heads, and supported integer
 comparison guards. All rules must carry
-supported comparison refinements, optionally combined using `&&` and `||`. Missing members, derived dependencies outside the
+supported comparison refinements, optionally combined using `&&`, `||`, and `!`. Missing members, derived dependencies outside the
 component, explicit constraints, negation, parity, nullable columns, other computed
 heads are rejected. There is one joint goal ID;
 member definitions cannot independently satisfy a proof gate. Ordinary local
@@ -256,7 +256,7 @@ not say that every member contract is false. Repairing the source step invalidat
 the maintained counterexample, and a failed check removes the previous report.
 This is a proof about a generated derivation, not a backend execution trace.
 
-Both invariant exporters accept nested `&&` and `||` in head refinements when
+Both invariant exporters accept nested `&&`, `||`, and `!` in head refinements when
 every leaf is a supported integer comparison. The [Boolean contract example](examples/selected-boolean-contracts/program.dl)
 proves `X = 0 || (X > 0 && X <= 3)` by induction for both self and mutual recursion.
 Relaxing the step guard to admit an output of four fails checking. Formula nesting
@@ -265,8 +265,16 @@ rule and sibling contracts still disjoin.
 
 Every accepted comparison is total over the non-null integer domain. This does
 not extend null/undefined Boolean semantics, arithmetic inside comparisons,
-logical negation, or compound body filters. Unsupported leaves fail the whole
+negated relation calls, or compound body filters. Unsupported leaves fail the whole
 export, including when another disjunct might make them unnecessary.
+
+The [negated contract example](examples/selected-negated-contracts/program.dl)
+proves `!(X < 0 || X > 3)` for self and mutual recursion. Logical negation becomes
+Lean negation only after recursively checking that its operand uses supported
+total comparisons and Boolean connectives. Nested negations preserve their source
+structure. Tightening the bound to exclude the reachable value three fails checking.
+This supports expression-level `!`; it does not add negation-as-failure to relation
+bodies or define how nullable/undefined operands behave in the invariant model.
 
 ## Worked example
 
