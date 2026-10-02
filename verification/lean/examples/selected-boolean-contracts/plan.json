@@ -1,0 +1,7 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "mutual-invariant", "id": "bothSafe", "predicates": ["left", "right"] },
+    { "kind": "invariant", "id": "singleSafe", "predicate": "single", "relationName": "Single" }
+  ]
+}

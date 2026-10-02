@@ -495,6 +495,47 @@ try {
   console.log(
     "Selected project: recursive invariant refutation passed; repaired step rejects the counterexample.",
   );
+  const booleanFixture = new URL(
+    "../verification/lean/examples/selected-boolean-contracts/",
+    import.meta.url,
+  ).pathname;
+  await cp(booleanFixture, join(temp, "boolean-input"), { recursive: true });
+  const booleanConfig = join(temp, "boolean-input/plan.json");
+  const booleanOutput = join(temp, "boolean-project");
+  await exportProject(booleanConfig, booleanOutput);
+  await Bun.write(
+    join(booleanOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(booleanFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(booleanConfig, booleanOutput);
+  const booleanReport = await checkProject(booleanConfig, booleanOutput);
+  if (
+    booleanReport.entries.length !== 2 ||
+    booleanReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected both Boolean contract goals");
+  const booleanSource = join(temp, "boolean-input/program.dl");
+  await Bun.write(
+    booleanSource,
+    (await Bun.file(booleanSource).text()).replaceAll("X < 3", "X <= 3"),
+  );
+  await exportProject(booleanConfig, booleanOutput);
+  await Bun.write(join(booleanOutput, "verification-result.json"), "old success");
+  let booleanRejected = false;
+  try {
+    await checkProject(booleanConfig, booleanOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    booleanRejected = true;
+  }
+  if (
+    !booleanRejected ||
+    (await Bun.file(join(booleanOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Invalid Boolean contract boundary was accepted");
+  console.log(
+    "Selected project: Boolean invariant junctions passed; out-of-interval step rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

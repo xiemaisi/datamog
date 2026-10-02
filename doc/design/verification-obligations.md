@@ -1083,6 +1083,18 @@ the maintained counterexample. Proof-name collisions, positive-ID goal requests,
 and polarity changes are covered by export and freshness regressions. This does
 not broaden the single-relation exporter or discharge local contract cycles.
 
+The shared invariant-contract translator now accepts explicit `&&` and `||`
+junctions over supported integer comparisons. It preserves the full Boolean tree,
+then conjoins multiple refinements per rule and disjoins sibling contracts. All
+accepted leaves are total over non-null integers; null/undefined Boolean behavior,
+arithmetic comparison operands, negation, and compound body filters remain outside
+this extension. Unsupported leaves reject the entire export.
+
+The selected-boolean-contracts fixture proves a disjunctive bounded-interval
+contract for both self-recursive and mutual definitions. Allowing a step past the
+upper bound fails the maintained proofs and removes the earlier report. Tests
+also cover grouping, changed connective identities, and unsupported leaves.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

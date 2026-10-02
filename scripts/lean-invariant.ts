@@ -128,13 +128,18 @@ export function invariantContract(typed: TypedProgram, predicate: string) {
       ">=": "≥",
       "=": "=",
     };
-    return `(${rule.head
-      .refinements!.map(({ formula }) => {
-        if (formula.$type !== "BinaryExpr" || !Object.hasOwn(operators, formula.op))
-          throw new Error("Invariant contracts require simple integer comparisons");
-        return `(${term(formula.left)} ${operators[formula.op]} ${term(formula.right)})`;
-      })
-      .join(" ∧ ")})`;
+    const proposition = (formula: HeadTerm): string => {
+      if (formula.$type !== "BinaryExpr")
+        throw new Error("Invariant contracts require integer comparisons and Boolean junctions");
+      if (formula.op === "&&" || formula.op === "||")
+        return `(${proposition(formula.left)} ${formula.op === "&&" ? "∧" : "∨"} ${proposition(formula.right)})`;
+      if (!Object.hasOwn(operators, formula.op))
+        throw new Error("Unsupported invariant contract operator");
+      return `(${term(formula.left)} ${operators[formula.op]} ${term(formula.right)})`;
+    };
+    // Every supported leaf is total over non-null bounded integers, so these
+    // junctions preserve Datamog truth without null or undefined cases.
+    return `(${rule.head.refinements!.map(({ formula }) => proposition(formula)).join(" ∧ ")})`;
   });
   return { columns, contract: contracts.join(" ∨ ") };
 }

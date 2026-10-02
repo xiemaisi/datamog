@@ -153,7 +153,8 @@ premises from the existing relation model. Synthetic runtime refinement checks
 are omitted from this derivation model; explicit constraints are rejected.
 
 This first fragment requires non-null integer columns, refinements on every rule,
-and simple comparisons between head positions and safe integer literals. The
+and comparisons between head positions and safe integer literals, optionally
+combined using `&&` and `||`. The
 existing positive relation fragment supports self-recursion, variable-only atoms,
 comparison guards, and variable or variable-plus-literal heads. Mutual recursion,
 other derived dependencies, parity, negation, aggregates, arithmetic in the
@@ -191,7 +192,7 @@ strongly connected component, non-null integer relations (including zero-column 
 variable-only
 atoms, variable or variable-plus/minus-safe-integer-literal heads, and supported integer
 comparison guards. All rules must carry
-supported simple refinements. Missing members, derived dependencies outside the
+supported comparison refinements, optionally combined using `&&` and `||`. Missing members, derived dependencies outside the
 component, explicit constraints, negation, parity, nullable columns, other computed
 heads are rejected. There is one joint goal ID;
 member definitions cannot independently satisfy a proof gate. Ordinary local
@@ -254,6 +255,18 @@ The refutation concerns the joint claim, so one failing member suffices; it does
 not say that every member contract is false. Repairing the source step invalidates
 the maintained counterexample, and a failed check removes the previous report.
 This is a proof about a generated derivation, not a backend execution trace.
+
+Both invariant exporters accept nested `&&` and `||` in head refinements when
+every leaf is a supported integer comparison. The [Boolean contract example](examples/selected-boolean-contracts/program.dl)
+proves `X = 0 || (X > 0 && X <= 3)` by induction for both self and mutual recursion.
+Relaxing the step guard to admit an output of four fails checking. Formula nesting
+is preserved inside each refinement; multiple refinements still conjoin within a
+rule and sibling contracts still disjoin.
+
+Every accepted comparison is total over the non-null integer domain. This does
+not extend null/undefined Boolean semantics, arithmetic inside comparisons,
+logical negation, or compound body filters. Unsupported leaves fail the whole
+export, including when another disjunct might make them unnecessary.
 
 ## Worked example
 

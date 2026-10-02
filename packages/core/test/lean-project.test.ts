@@ -596,3 +596,27 @@ test("single-relation invariant refutations preserve polarity and reject name co
     );
     await expect(exportProject(config, output)).rejects.toThrow("Conflicting invariant proof name");
   }));
+
+test("invariant junctions retain nesting and reject unsupported leaves", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "invariant", id: "safe", predicate: "p", relationName: "P" }],
+      }),
+    );
+    const source = (formula: string) =>
+      `input predicate seed(n: integer). p(X, _: ${formula}, _: X <= 3) :- seed(X). p(X, _: X = 4) :- p(X).`;
+    await Bun.write(join(dir, "source.dl"), source("X = 0 || (X > 0 && X <= 3)"));
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "(((x0.val = (0 : Int)) ∨ ((x0.val > (0 : Int)) ∧ (x0.val ≤ (3 : Int)))) ∧ (x0.val ≤ (3 : Int))) ∨ ((x0.val = (4 : Int)))",
+    );
+    await Bun.write(join(dir, "source.dl"), source("X = 0 && (X > 0 || X <= 3)"));
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    for (const formula of ["X = 0 || X + 1 > 0", "X = 0 || X > 0.5", "!(X = 0)"]) {
+      await Bun.write(join(dir, "source.dl"), source(formula));
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+  }));
