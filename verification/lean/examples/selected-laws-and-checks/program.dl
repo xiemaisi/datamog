@@ -1,0 +1,8 @@
+input predicate seed(n: integer).
+positive(X) :- seed(X), X > 0.
+positive(X) :- carry(X).
+carry(X) :- positive(X).
+output(X, _: X > 0) :- positive(X).
+error predicate bad(X) :- positive(X), X <= 0.
+!- positive(X), X <= 0.
+!- seed(X), X <= 0.

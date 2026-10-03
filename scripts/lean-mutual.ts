@@ -90,7 +90,9 @@ function exportFamily(
     new Set(predicates).size !== predicates.length
   )
     throw new Error("Mutual invariant requires a name and distinct predicates");
-  if (typed.maximalPredicates.size || typed.constraints.some((c) => !c.synthetic))
+  // Program laws concern derivations before runtime checks. Constraints never
+  // restrict their inputs or supply constructor premises.
+  if (typed.maximalPredicates.size || (!program && typed.constraints.some((c) => !c.synthetic)))
     throw new Error("Unsupported mutual parity or explicit constraints");
   const family = `${id}Family`;
   const contracts =

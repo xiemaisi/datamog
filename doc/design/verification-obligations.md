@@ -1233,8 +1233,8 @@ fresh result reports retain the existing trust boundary.
 
 This handles ordinary derived violation predicates in the supported integer
 fragment. The separate constraint selection below now handles explicit `!-`
-statements; named error selections are described below. Ordinary emptiness selections
-retain their explicit-constraint restriction. Runtime checks are unchanged.
+statements; named error selections are described below. Composed laws can now
+coexist with checks as described below. Runtime checks are unchanged.
 
 ## Selected explicit constraint obligations
 
@@ -1277,7 +1277,26 @@ use the existing family and checker model.
 
 This remains the positive non-null integer fragment with runtime checks enabled.
 Negation, parity, aggregates, and general structural error relations remain
-unsupported; other claim families keep their existing explicit-check restrictions.
+unsupported; older single-relation and single-component APIs retain their restrictions.
+
+## Composed laws alongside runtime checks
+
+Composed `program-*` laws now accept sources containing explicit constraints and
+named errors, and can be selected alongside their check goals. Check presence
+does not narrow quantified inputs, remove rule derivations, or introduce premises.
+Only explicitly selected checks receive registered proof or refutation goals.
+
+The combined fixture proves an invariant, bounded coverage, a constraint, and a
+named error goal while leaving another input constraint unselected. Tests confirm
+that adding checks leaves the generated logical definitions and statements for
+all five composed law kinds unchanged, while source identities invalidate. A fresh
+regression removes the positivity guard and selects only its invariant: the
+unchanged runtime checks cannot make the unsafe invariant proof succeed.
+
+This is integration of existing selected goals, not automatic verification of
+all program checks or an input-law mechanism. The legacy single-relation and
+single-component APIs retain their restrictions, unsupported fragments remain
+unsupported, and runtime enforcement stays enabled.
 
 ## Which harder claims should be expressible?
 

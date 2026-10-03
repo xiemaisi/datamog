@@ -1132,7 +1132,8 @@ test("program emptiness quantifies every tuple and retains complete rule depende
     }
     await writePlan();
     await Bun.write(join(dir, "source.dl"), `${source}\n!- violation(X,Y).`);
-    await expect(exportProject(config, output)).rejects.toThrow("explicit constraints");
+    const checkedSource = await planProject(config, output);
+    expect(checkedSource.manifest.entries.every((e) => !e.assumptions.length)).toBe(true);
     await expect(readdir(output)).rejects.toThrow();
   }));
 
@@ -1314,4 +1315,46 @@ test("explicit constraints and named errors may be selected together", async () 
       "input predicate seed(n: integer). error predicate bad() :- seed(X), not seed(X). !- bad().",
     );
     await expect(exportProject(config, output)).rejects.toThrow("Unsupported mutual body");
+  }));
+
+test("all composed laws remain unchanged when explicit and named runtime checks are added", async () =>
+  fixture(async (config, output, dir) => {
+    const source =
+      "input predicate seed(n: integer). output(X, _: X > 0) :- seed(X). pair(X,X) :- seed(X). other(X,Y) :- pair(X,Y). violation(X) :- seed(X), X < 0, X >= 0.";
+    const claims = [
+      { kind: "program-invariant", id: "safe", predicates: ["output"] },
+      {
+        kind: "program-coverage",
+        id: "covered",
+        predicate: "output",
+        inputPredicate: "seed",
+        outputToInput: [0],
+        bounds: [],
+      },
+      {
+        kind: "program-uniqueness",
+        id: "unique",
+        predicate: "pair",
+        keyColumns: [0],
+        outputColumns: [1],
+      },
+      { kind: "program-equivalence", id: "same", predicates: ["pair", "other"] },
+      { kind: "program-emptiness", id: "empty", predicate: "violation" },
+    ];
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims }));
+    await Bun.write(join(dir, "source.dl"), source);
+    const before = await planProject(config, output);
+    await Bun.write(
+      join(dir, "source.dl"),
+      `${source}\n!- seed(X), X <= 0.\nerror predicate bad(X) :- violation(X).`,
+    );
+    const after = await planProject(config, output);
+    expect(after.files["Datamog/Generated.lean"]).toBe(before.files["Datamog/Generated.lean"]);
+    expect(after.files["Datamog/Checked.lean"].replaceAll(after.manifest.digest, "DIGEST")).toBe(
+      before.files["Datamog/Checked.lean"].replaceAll(before.manifest.digest, "DIGEST"),
+    );
+    expect(after.goals).toEqual(before.goals);
+    expect(after.manifest.entries.every((e) => !e.assumptions.length)).toBe(true);
+    expect(after.manifest.digest).not.toBe(before.manifest.digest);
+    expect(after.goals).not.toContain("bad");
   }));

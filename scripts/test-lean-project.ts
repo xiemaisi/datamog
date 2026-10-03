@@ -895,6 +895,53 @@ try {
   console.log(
     "Selected project: named error proof and mixed refutations passed; unsafe guard and unmarked sibling rejected.",
   );
+  const lawsFixture = new URL(
+    "../verification/lean/examples/selected-laws-and-checks/",
+    import.meta.url,
+  ).pathname;
+  await cp(lawsFixture, join(temp, "laws-input"), { recursive: true });
+  const lawsConfig = join(temp, "laws-input/plan.json");
+  const lawsOutput = join(temp, "laws-project");
+  const lawsProof = await Bun.file(join(lawsFixture, "Proofs.lean")).text();
+  await exportProject(lawsConfig, lawsOutput);
+  await Bun.write(join(lawsOutput, "Datamog/Proofs.lean"), lawsProof);
+  await exportProject(lawsConfig, lawsOutput);
+  const lawsReport = await checkProject(lawsConfig, lawsOutput);
+  if (lawsReport.entries.length !== 4 || lawsReport.entries.some((e) => e.status !== "proved"))
+    throw new Error("Expected combined program laws and selected checks");
+  const lawsSource = join(temp, "laws-input/program.dl");
+  await Bun.write(
+    lawsSource,
+    (await Bun.file(lawsSource).text()).replace("seed(X), X > 0", "seed(X)"),
+  );
+  const unsafeConfig = join(temp, "laws-input/unsafe-plan.json");
+  await Bun.write(
+    unsafeConfig,
+    JSON.stringify({
+      source: "program.dl",
+      claims: [{ kind: "program-invariant", id: "safe", predicates: ["output"] }],
+    }),
+  );
+  const unsafeOutput = join(temp, "laws-unsafe-project");
+  await exportProject(unsafeConfig, unsafeOutput);
+  await Bun.write(
+    join(unsafeOutput, "Datamog/Proofs.lean"),
+    `${lawsProof.split("\ntheorem covered")[0]}\nend Datamog.Proofs\n`,
+  );
+  await exportProject(unsafeConfig, unsafeOutput);
+  await Bun.write(join(unsafeOutput, "verification-result.json"), "old success");
+  let unsafeRejected = false;
+  try {
+    await checkProject(unsafeConfig, unsafeOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    unsafeRejected = true;
+  }
+  if (!unsafeRejected || (await Bun.file(join(unsafeOutput, "verification-result.json")).exists()))
+    throw new Error("Runtime checks were assumed to prove an unsafe invariant");
+  console.log(
+    "Selected project: composed laws and checks coexist; checks cannot discharge an unsafe invariant.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

@@ -453,8 +453,8 @@ previous success report.
 
 This provides a way to prove ordinary named violation predicates empty in the
 supported positive integer fragment. The separate `constraint` selection below imports explicit `!-` statements;
-named errors use the `error-predicate` selection below. `program-emptiness`
-itself still rejects explicit constraints. Runtime checks remain enabled.
+named errors use the `error-predicate` selection below. Composed program laws can coexist with these checks as described below.
+Runtime checks remain enabled.
 
 ## Explicit source constraints
 
@@ -486,9 +486,8 @@ Supported bodies use positive variable-only relation atoms and the existing
 integer comparison guards. Unsupported bodies, invalid indices, and generated
 predicate-name collisions fail before export. `"polarity": "refute"` proves the
 negation of the selected universal constraint. Explicit constraints and named
-error goals may be selected together. Other claim kinds retain their existing explicit
-constraint restrictions; this first selection does not automatically attach
-constraint goals to them. Runtime checks are unchanged.
+error goals and composed program laws may be selected together. Checks do not
+automatically become selected goals. Runtime checks are unchanged.
 
 ## Named error predicates
 
@@ -516,7 +515,32 @@ an upstream guard admits zero or an unmarked sibling introduces reachable errors
 error predicates are supported. The existing positive integer fragment, fresh
 checking, and axiom audit apply. Explicit constraint selection can now traverse
 named error definitions as well. Runtime error reporting remains enabled, and
-other claim kinds retain their existing restrictions on programs with checks.
+the older single-relation and single-component claim APIs retain their restrictions.
+
+## Combining program laws and runtime checks
+
+All composed `program-*` claims can now be selected in sources containing explicit
+constraints and named errors. A plan may combine those laws with `constraint` and
+`error-predicate` goals. Each goal still quantifies arbitrary typed inputs and
+models derivations before runtime checks. Checks neither restrict the input domain
+nor add hypotheses to a program law.
+
+The [combined example](examples/selected-laws-and-checks/plan.json) proves a
+recursive invariant, input-bounded coverage, an explicit constraint, and a named
+error goal in one fresh project. An additional input constraint is deliberately
+unselected: its presence is not proof that it holds. Reports cover only selected
+goals, and `--require-goal` continues to refer to registered goal IDs.
+
+Regressions compare generated definitions and theorem statements for all five
+composed law kinds before and after checks are added; they remain identical,
+while the source identity changes. A fresh Lean regression removes the actual
+positivity guard and selects only the invariant. The proof then fails even though
+runtime checks reject nonpositive input, demonstrating that those checks cannot
+be used as assumptions to discharge the law.
+
+The older `invariant` and `mutual-invariant` exporters retain their explicit-check
+restrictions. This does not automatically select every source check or permit
+unsupported rule bodies. Runtime checking remains enabled.
 
 ## Worked example
 

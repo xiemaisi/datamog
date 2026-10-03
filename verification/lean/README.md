@@ -823,3 +823,8 @@ Exact constraint text and source locations are bound into the manifest. Named er
 rules empty, including unmarked siblings. The [named error example](examples/selected-error-predicates/plan.json)
 checks recursive safety and counterexamples alongside an explicit constraint.
 Every defining rule has source provenance, and no error check becomes a premise.
+
+Composed `program-*` laws can now coexist with explicit constraints and named
+errors in one selected project. Checks never restrict theorem inputs or supply
+hypotheses. The [combined example](examples/selected-laws-and-checks/plan.json)
+proves laws and selected checks together; unselected checks remain unproved.
