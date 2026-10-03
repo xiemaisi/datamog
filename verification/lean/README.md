@@ -807,3 +807,8 @@ Upstream filters and computed-head definedness must be proved through the rules.
 union of their positive dependency graphs. Its exact theorem requires both
 inclusion directions. The [equivalence example](examples/selected-program-equivalence/plan.json)
 proves two recursive paths equivalent and refutes equivalence to a filtered path.
+
+`program-emptiness` proves that a selected derived relation has no rows for any
+admitted inputs. The [emptiness example](examples/selected-program-emptiness/plan.json)
+proves a named violation relation and a base-free cycle empty, and refutes
+emptiness of a reachable relation. Direct constraint import remains unsupported.

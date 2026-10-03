@@ -428,6 +428,34 @@ reachable rule are included in the statement identity and fresh report. This
 compares modeled relations in the supported positive integer fragment; it does
 not prove SQL translation correctness or compare separately imported modules.
 
+## Emptiness and named violation relations
+
+`program-emptiness` proves that no tuple belongs to a selected derived predicate:
+
+```json
+{"kind": "program-emptiness", "id": "noViolation", "predicate": "violation"}
+```
+
+The exact goal quantifies every input relation and output column, then concludes
+`False` from an output derivation. A nullary predicate needs no tuple quantifiers.
+All reachable rules, including sibling rules and recursive components, contribute
+to the generated family and manifest. No input law or head contract is assumed.
+`"polarity": "refute"` instead requests a proof that universal emptiness is false.
+
+The [worked violation relation](examples/selected-program-emptiness/program.dl)
+selects nonpositive rows from a recursively propagated positive relation. Its
+[proof](examples/selected-program-emptiness/Proofs.lean) shows no such derivation
+exists. A second proof shows that a nullary cycle with no base rule is empty;
+a refutation constructs a positive row to disprove emptiness of the source
+relation. Fresh regressions weaken the positivity guard and add an unsafe
+violation sibling; both reject the maintained emptiness proof and remove any
+previous success report.
+
+This provides a way to prove ordinary named violation predicates empty in the
+supported positive integer fragment. It does not yet import `!-` constraints
+or special error-predicate declarations; explicit constraints remain rejected
+rather than treated as assumptions. It does not disable runtime checks.
+
 ## Worked example
 
 The checked-in [selection](examples/selected-projections/plan.json),

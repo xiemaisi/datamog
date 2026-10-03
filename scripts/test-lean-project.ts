@@ -772,6 +772,48 @@ try {
   console.log(
     "Selected project: composed equivalence and refutation passed; losses on either side rejected.",
   );
+  const emptinessFixture = new URL(
+    "../verification/lean/examples/selected-program-emptiness/",
+    import.meta.url,
+  ).pathname;
+  await cp(emptinessFixture, join(temp, "emptiness-input"), { recursive: true });
+  const emptinessConfig = join(temp, "emptiness-input/plan.json");
+  const emptinessOutput = join(temp, "emptiness-project");
+  await exportProject(emptinessConfig, emptinessOutput);
+  await Bun.write(
+    join(emptinessOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(emptinessFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(emptinessConfig, emptinessOutput);
+  const emptinessReport = await checkProject(emptinessConfig, emptinessOutput);
+  if (
+    emptinessReport.entries.length !== 3 ||
+    emptinessReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected violation and base-free cycle emptiness plus nonempty refutation");
+  const emptinessSource = join(temp, "emptiness-input/program.dl");
+  const emptinessOriginal = await Bun.file(emptinessSource).text();
+  for (const changed of [
+    emptinessOriginal.replace("X > 0", "X >= 0"),
+    `${emptinessOriginal}\nviolation(X) :- seed(X).`,
+  ]) {
+    await Bun.write(emptinessSource, changed);
+    await exportProject(emptinessConfig, emptinessOutput);
+    await Bun.write(join(emptinessOutput, "verification-result.json"), "old success");
+    let rejected = false;
+    try {
+      await checkProject(emptinessConfig, emptinessOutput);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+        throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(emptinessOutput, "verification-result.json")).exists()))
+      throw new Error("Reachable violation accepted as empty");
+  }
+  console.log(
+    "Selected project: violation and base-free cycle emptiness plus refutation passed; reachable violations rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

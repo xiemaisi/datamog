@@ -1,0 +1,7 @@
+input predicate seed(n: integer).
+positive(X) :- seed(X), X > 0.
+positive(X) :- carry(X).
+carry(X) :- positive(X).
+violation(X) :- positive(X), X <= 0.
+flag() :- otherFlag().
+otherFlag() :- flag().

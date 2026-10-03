@@ -1216,6 +1216,26 @@ the existing fresh-check boundary. This establishes equality of modeled relation
 within the supported integer fragment, not correctness of backend translations
 or general modular equivalence.
 
+## Selected emptiness of named violation relations
+
+`program-emptiness` now quantifies all input relations and selected output columns
+and proves that an output derivation implies `False`. It uses the complete
+positive dependency family, including all sibling rules, without assuming input
+laws or upstream contracts. Nullary predicates have no tuple quantifiers;
+refutation polarity registers the negation of universal emptiness.
+
+The worked fixture proves a named violation relation empty using positivity
+preserved through recursion, proves a nullary cycle without a base empty, and
+refutes emptiness of a reachable positive relation. Fresh regressions weaken an
+upstream guard and introduce an unsafe violation sibling; both invalidate the
+maintained emptiness proof. Exact checker types, complete rule identities, and
+fresh result reports retain the existing trust boundary.
+
+This handles ordinary derived violation predicates in the supported integer
+fragment. Direct extraction from `!-` constraints and special error declarations
+remains open; explicit constraints are still rejected, never assumed to make a
+violation relation empty. Runtime checks are unchanged.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

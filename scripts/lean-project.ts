@@ -26,6 +26,7 @@ import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 import {
   type MutualClaim,
   type ProgramCoverageClaim,
+  type ProgramEmptinessClaim,
   type ProgramEquivalenceClaim,
   type ProgramInvariantClaim,
   type ProgramUniquenessClaim,
@@ -60,6 +61,7 @@ type Claim = (
   | ProgramInvariantClaim
   | ProgramCoverageClaim
   | ProgramEquivalenceClaim
+  | ProgramEmptinessClaim
   | ProgramUniquenessClaim
   | ({ kind: "uniqueness" } & UniquenessClaim)
   | ({ kind: "coverage" } & CoverageClaim)
@@ -159,6 +161,7 @@ export function parseSelection(value: unknown): Selection {
       "refinement",
     ]);
     if (
+      claim.kind !== "program-emptiness" &&
       claim.kind !== "coverage" &&
       claim.kind !== "program-coverage" &&
       claim.kind !== "uniqueness" &&
@@ -169,19 +172,22 @@ export function parseSelection(value: unknown): Selection {
     const fields = ["kind", "polarity", "id", "predicate"];
     keys(claim, [
       ...fields,
-      ...(claim.kind === "local"
-        ? ["rule", "refinement"]
-        : claim.kind === "program-coverage"
-          ? ["inputPredicate", "outputToInput", "bounds"]
-          : claim.kind === "coverage"
-            ? ["relationName", "inputPredicate", "outputToInput", "bounds"]
-            : claim.kind === "invariant"
-              ? ["relationName"]
-              : ["relationName", "keyColumns", "outputColumns"]),
+      ...(claim.kind === "program-emptiness"
+        ? []
+        : claim.kind === "local"
+          ? ["rule", "refinement"]
+          : claim.kind === "program-coverage"
+            ? ["inputPredicate", "outputToInput", "bounds"]
+            : claim.kind === "coverage"
+              ? ["relationName", "inputPredicate", "outputToInput", "bounds"]
+              : claim.kind === "invariant"
+                ? ["relationName"]
+                : ["relationName", "keyColumns", "outputColumns"]),
     ]);
     if (
       [claim.id, claim.predicate].some((v) => typeof v !== "string") ||
-      (claim.kind !== "local" &&
+      (claim.kind !== "program-emptiness" &&
+        claim.kind !== "local" &&
         claim.kind !== "program-coverage" &&
         typeof claim.relationName !== "string") ||
       (claim.polarity !== undefined && claim.polarity !== "prove" && claim.polarity !== "refute")
@@ -270,7 +276,8 @@ export async function planProject(configInput: string, outputInput: string) {
         claim.kind === "program-invariant" ||
         claim.kind === "program-uniqueness" ||
         claim.kind === "program-coverage" ||
-        claim.kind === "program-equivalence",
+        claim.kind === "program-equivalence" ||
+        claim.kind === "program-emptiness",
     )
     .map((claim) =>
       claim.kind === "mutual-invariant"
@@ -361,7 +368,8 @@ export async function planProject(configInput: string, outputInput: string) {
         claim.kind !== "program-invariant" &&
         claim.kind !== "program-uniqueness" &&
         claim.kind !== "program-coverage" &&
-        claim.kind !== "program-equivalence",
+        claim.kind !== "program-equivalence" &&
+        claim.kind !== "program-emptiness",
     )
     .map(({ kind, polarity, ...descriptor }) =>
       kind === "uniqueness"

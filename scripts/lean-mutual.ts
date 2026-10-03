@@ -37,11 +37,18 @@ export interface ProgramEquivalenceClaim {
   predicates: [string, string];
   polarity?: "prove" | "refute";
 }
+export interface ProgramEmptinessClaim {
+  kind: "program-emptiness";
+  id: string;
+  predicate: string;
+  polarity?: "prove" | "refute";
+}
 type ProgramClaim =
   | ProgramInvariantClaim
   | ProgramUniquenessClaim
   | ProgramCoverageClaim
-  | ProgramEquivalenceClaim;
+  | ProgramEquivalenceClaim
+  | ProgramEmptinessClaim;
 const roots = (claim: MutualClaim | ProgramClaim) =>
   "predicate" in claim ? [claim.predicate] : claim.predicates;
 
@@ -298,6 +305,13 @@ function exportFamily(
     const binders = columns.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
     goals.push(
       `(${columns.length ? `∀ ${binders}, ` : ""}${applied} 0 ${padded(columns)} ↔ ${applied} 1 ${padded(columns)})`,
+    );
+  }
+  if (claim.kind === "program-emptiness") {
+    const columns = Array.from({ length: memberArities[0]! }, (_, i) => `x${i}`);
+    const binders = columns.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
+    goals.push(
+      `(${columns.length ? `∀ ${binders}, ` : ""}${applied} 0 ${padded(columns)} → False)`,
     );
   }
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;

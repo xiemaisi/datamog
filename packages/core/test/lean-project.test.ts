@@ -1087,3 +1087,74 @@ test("program equivalence uses fixed padding for unary and nullary goals", async
       expect(plan.files["Datamog/Generated.lean"]).not.toContain("∀ ,");
     }
   }));
+
+test("program emptiness quantifies every tuple and retains complete rule dependencies", async () =>
+  fixture(async (config, output, dir) => {
+    const source =
+      "input predicate seed(a: integer, b: integer). helper(X,Y) :- seed(X,Y). violation(X,Y) :- helper(X,Y), X < Y, X >= Y.";
+    await Bun.write(join(dir, "source.dl"), source);
+    const claim = { kind: "program-emptiness", id: "empty", predicate: "violation" };
+    const writePlan = (change: object = {}) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims: [{ ...claim, ...change }] }));
+    await writePlan();
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "∀ (x0 : Datamog.SafeInt) (x1 : Datamog.SafeInt), emptyFamily input0 0 x0 x1 → False",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "empty")!.closure).toEqual([
+      "IntegerSemantics",
+      "empty",
+      "emptyFamily",
+      "emptyRules0",
+      "emptyRules1",
+    ]);
+    expect(plan.manifest.entries.every((e) => !e.assumptions.length)).toBe(true);
+    await writePlan({ polarity: "refute" });
+    const negative = await planProject(config, output);
+    expect(negative.goals).toEqual(["empty_refuted"]);
+    expect(negative.files["Datamog/Checked.lean"]).toContain(
+      "theorem empty_refuted : ¬ Generated.empty",
+    );
+    await writePlan();
+    await Bun.write(join(dir, "source.dl"), `${source}\nviolation(X,Y) :- seed(X,Y).`);
+    const changed = await planProject(config, output);
+    expect(changed.manifest.digest).not.toBe(plan.manifest.digest);
+    expect(changed.files["Datamog/Generated.lean"]).toContain("rule0_1");
+    for (const change of [
+      { predicate: "seed" },
+      { predicate: "missing" },
+      { polarity: "unknown" },
+      { relationName: "Unexpected" },
+      { bounds: [] },
+    ]) {
+      await writePlan(change);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await writePlan();
+    await Bun.write(join(dir, "source.dl"), `${source}\n!- violation(X,Y).`);
+    await expect(exportProject(config, output)).rejects.toThrow("explicit constraints");
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("program emptiness supports nullary cycles and fixed padding", async () =>
+  fixture(async (config, output, dir) => {
+    for (const [source, expected] of [
+      ["flag() :- other(). other() :- flag().", "emptyFamily 0  → False"],
+      [
+        "input predicate seed(n: integer). helper(X) :- seed(X). flag() :- helper(X).",
+        "emptyFamily input0 0 (⟨0, by decide⟩ : Datamog.SafeInt) → False",
+      ],
+    ]) {
+      await Bun.write(join(dir, "source.dl"), source!);
+      await Bun.write(
+        config,
+        JSON.stringify({
+          source: "source.dl",
+          claims: [{ kind: "program-emptiness", id: "empty", predicate: "flag" }],
+        }),
+      );
+      const plan = await planProject(config, output);
+      expect(plan.files["Datamog/Generated.lean"]).toContain(expected!);
+      expect(plan.files["Datamog/Generated.lean"]).not.toContain("∀ ,");
+    }
+  }));
