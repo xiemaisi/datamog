@@ -31,7 +31,17 @@ export interface ProgramCoverageClaim extends Omit<CoverageClaim, "relationName"
   kind: "program-coverage";
   polarity?: "prove" | "refute";
 }
-type ProgramClaim = ProgramInvariantClaim | ProgramUniquenessClaim | ProgramCoverageClaim;
+export interface ProgramEquivalenceClaim {
+  kind: "program-equivalence";
+  id: string;
+  predicates: [string, string];
+  polarity?: "prove" | "refute";
+}
+type ProgramClaim =
+  | ProgramInvariantClaim
+  | ProgramUniquenessClaim
+  | ProgramCoverageClaim
+  | ProgramEquivalenceClaim;
 const roots = (claim: MutualClaim | ProgramClaim) =>
   "predicate" in claim ? [claim.predicate] : claim.predicates;
 
@@ -77,7 +87,7 @@ function exportFamily(
     throw new Error("Unsupported mutual parity or explicit constraints");
   const family = `${id}Family`;
   const contracts =
-    claim.kind === "program-uniqueness" || claim.kind === "program-coverage"
+    claim.kind !== "mutual-invariant" && claim.kind !== "program-invariant"
       ? []
       : selectedPredicates.map((p) => invariantContract(typed, p).contract);
   const inputs = new Map<string, number>();
@@ -279,6 +289,15 @@ function exportFamily(
     ];
     goals.push(
       `(∀ ${binders(variables)}, ${premises.join(" → ")} → ${witnesses.length ? `∃ ${binders(witnesses)}, ` : ""}${applied} 0 ${padded(outputs)})`,
+    );
+  }
+  if (claim.kind === "program-equivalence") {
+    if (claim.predicates.length !== 2 || memberArities[0] !== memberArities[1])
+      throw new Error("Equivalence requires two distinct derived predicates of equal arity");
+    const columns = Array.from({ length: memberArities[0]! }, (_, i) => `x${i}`);
+    const binders = columns.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
+    goals.push(
+      `(${columns.length ? `∀ ${binders}, ` : ""}${applied} 0 ${padded(columns)} ↔ ${applied} 1 ${padded(columns)})`,
     );
   }
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;

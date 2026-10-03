@@ -1198,6 +1198,24 @@ is strengthened to exclude zero or the domain is widened to admit an overflowing
 successor. These are modeled-language results within the existing integer fragment;
 module proof import and backend correctness remain outside this workflow.
 
+## Selected equivalence across positive dependency graphs
+
+`program-equivalence` selects two distinct derived predicates of equal arity and
+exports the union of their positive dependency graphs in one tagged family.
+The theorem quantifies all input relations and the complete output tuple, with
+an exact biconditional between membership in the two selected predicates.
+Shared inputs have one parameter; distinct inputs remain independent. Nullary
+predicates and mixed-arity helpers preserve the existing canonical-padding model.
+No head refinements or assumed upstream contracts are required.
+
+The worked fixture proves equivalence of two recursive paths from the same input
+and refutes equivalence to a filtered path. Fresh tests separately restrict either
+side and reject the maintained proof, testing both inclusion directions. Exact
+checker types, proof/refutation registration, and the complete rule manifest use
+the existing fresh-check boundary. This establishes equality of modeled relations
+within the supported integer fragment, not correctness of backend translations
+or general modular equivalence.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

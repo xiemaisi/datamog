@@ -802,3 +802,8 @@ with explicit input bounds and copied columns or independent existential witness
 The [coverage pipeline](examples/selected-program-coverage/plan.json) constructs a
 bounded successor through mutual recursion and refutes unrestricted coverage.
 Upstream filters and computed-head definedness must be proved through the rules.
+
+`program-equivalence` compares two derived predicates of equal arity over the
+union of their positive dependency graphs. Its exact theorem requires both
+inclusion directions. The [equivalence example](examples/selected-program-equivalence/plan.json)
+proves two recursive paths equivalent and refutes equivalence to a filtered path.

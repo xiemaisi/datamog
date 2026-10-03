@@ -1011,3 +1011,79 @@ test("program coverage preserves canonical padding and nullary output existence"
       expect(plan.files["Datamog/Generated.lean"]).toContain(`input0 x0 x1 → ${expected}`);
     }
   }));
+
+test("program equivalence quantifies both input relations and compares the same complete tuple", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate a(x: integer, y: integer). input predicate b(x: integer, y: integer). left(X,Y) :- a(X,Y). helper(X,Y) :- b(X,Y). right(X,Y) :- helper(X,Y).",
+    );
+    const claim = { kind: "program-equivalence", id: "equivalent", predicates: ["left", "right"] };
+    const writePlan = (change: object = {}) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims: [{ ...claim, ...change }] }));
+    await writePlan();
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "∀ (input0 : Datamog.SafeInt → Datamog.SafeInt → Prop) (input1 : Datamog.SafeInt → Datamog.SafeInt → Prop)",
+    );
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "∀ (x0 : Datamog.SafeInt) (x1 : Datamog.SafeInt), equivalentFamily input0 input1 0 x0 x1 ↔ equivalentFamily input0 input1 1 x0 x1",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "equivalent")!.closure).toEqual([
+      "IntegerSemantics",
+      "equivalent",
+      "equivalentFamily",
+      "equivalentRules0",
+      "equivalentRules1",
+      "equivalentRules2",
+    ]);
+    await writePlan({ polarity: "refute" });
+    const negative = await planProject(config, output);
+    expect(negative.goals).toEqual(["equivalent_refuted"]);
+    expect(negative.files["Datamog/Checked.lean"]).toContain(
+      "theorem equivalent_refuted : ¬ Generated.equivalent",
+    );
+    for (const predicates of [
+      [],
+      ["left"],
+      ["left", "left"],
+      ["left", "right", "helper"],
+      ["left", "missing"],
+      ["left", "a"],
+    ]) {
+      await writePlan({ predicates });
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await writePlan();
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate a(x: integer, y: integer). left(X,Y) :- a(X,Y). right(X) :- a(X,Y).",
+    );
+    await expect(exportProject(config, output)).rejects.toThrow("equal arity");
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("program equivalence uses fixed padding for unary and nullary goals", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(x: integer, y: integer). helper(X,Y) :- seed(X,Y). left(X) :- helper(X,Y). right(X) :- helper(X,Y). flag() :- helper(X,Y). other() :- helper(X,Y).",
+    );
+    for (const [predicates, args] of [
+      [["left", "right"], "x0 (⟨0, by decide⟩ : Datamog.SafeInt)"],
+      [["flag", "other"], "(⟨0, by decide⟩ : Datamog.SafeInt) (⟨0, by decide⟩ : Datamog.SafeInt)"],
+    ] as const) {
+      await Bun.write(
+        config,
+        JSON.stringify({
+          source: "source.dl",
+          claims: [{ kind: "program-equivalence", id: "same", predicates }],
+        }),
+      );
+      const plan = await planProject(config, output);
+      expect(plan.files["Datamog/Generated.lean"]).toContain(
+        `sameFamily input0 0 ${args} ↔ sameFamily input0 1 ${args}`,
+      );
+      expect(plan.files["Datamog/Generated.lean"]).not.toContain("∀ ,");
+    }
+  }));

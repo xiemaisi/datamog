@@ -26,6 +26,7 @@ import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 import {
   type MutualClaim,
   type ProgramCoverageClaim,
+  type ProgramEquivalenceClaim,
   type ProgramInvariantClaim,
   type ProgramUniquenessClaim,
   exportMutual,
@@ -58,6 +59,7 @@ type Claim = (
   | MutualClaim
   | ProgramInvariantClaim
   | ProgramCoverageClaim
+  | ProgramEquivalenceClaim
   | ProgramUniquenessClaim
   | ({ kind: "uniqueness" } & UniquenessClaim)
   | ({ kind: "coverage" } & CoverageClaim)
@@ -124,7 +126,9 @@ export function parseSelection(value: unknown): Selection {
       claim &&
       typeof claim === "object" &&
       "kind" in claim &&
-      (claim.kind === "mutual-invariant" || claim.kind === "program-invariant")
+      (claim.kind === "mutual-invariant" ||
+        claim.kind === "program-invariant" ||
+        claim.kind === "program-equivalence")
     ) {
       const mutual: Record<string, unknown> = claim;
       keys(mutual, ["kind", "id", "predicates", "polarity"]);
@@ -265,7 +269,8 @@ export async function planProject(configInput: string, outputInput: string) {
         claim.kind === "mutual-invariant" ||
         claim.kind === "program-invariant" ||
         claim.kind === "program-uniqueness" ||
-        claim.kind === "program-coverage",
+        claim.kind === "program-coverage" ||
+        claim.kind === "program-equivalence",
     )
     .map((claim) =>
       claim.kind === "mutual-invariant"
@@ -355,7 +360,8 @@ export async function planProject(configInput: string, outputInput: string) {
         claim.kind !== "mutual-invariant" &&
         claim.kind !== "program-invariant" &&
         claim.kind !== "program-uniqueness" &&
-        claim.kind !== "program-coverage",
+        claim.kind !== "program-coverage" &&
+        claim.kind !== "program-equivalence",
     )
     .map(({ kind, polarity, ...descriptor }) =>
       kind === "uniqueness"

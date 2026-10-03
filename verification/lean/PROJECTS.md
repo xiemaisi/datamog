@@ -399,6 +399,35 @@ The selection supports `"polarity": "refute"`, exact checker types, full rule
 closures, and fresh results like the other composed claims. It retains the
 same non-null integer source fragment and does not establish backend correctness.
 
+## Equivalence across derived dependencies
+
+`program-equivalence` compares two distinct derived predicates of equal arity:
+
+```json
+{"kind": "program-equivalence", "id": "sameRows", "predicates": ["first", "second"]}
+```
+
+The exporter follows the union of both positive dependency graphs and generates
+one family. Its exact goal universally quantifies all input relations and each
+output column, then states that the same tuple belongs to the first predicate
+if and only if it belongs to the second. Shared input predicates use the same
+relation parameter; distinct inputs remain independent. Head refinements are
+not required. Nullary predicates compare proposition membership, and mixed-arity
+helpers retain canonical padding without adding data columns to the goal.
+
+The [worked example](examples/selected-program-equivalence/program.dl) proves
+that two recursive paths from a shared input produce the same tuples. Its
+[proof](examples/selected-program-equivalence/Proofs.lean) establishes both
+inclusion directions by inspecting finite derivations. A companion refutation
+uses input zero to distinguish an unfiltered path from a positive-only path.
+Fresh regressions add a filter on either side separately; both break the exact
+equivalence proof and remove any previous success report.
+
+The descriptor supports `"polarity": "refute"`. Both predicates and every
+reachable rule are included in the statement identity and fresh report. This
+compares modeled relations in the supported positive integer fragment; it does
+not prove SQL translation correctness or compare separately imported modules.
+
 ## Worked example
 
 The checked-in [selection](examples/selected-projections/plan.json),

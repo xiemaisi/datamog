@@ -727,6 +727,51 @@ try {
   console.log(
     "Selected project: composed coverage and refutation passed; stricter upstream guard and overflowing input bound rejected.",
   );
+  const equivalenceFixture = new URL(
+    "../verification/lean/examples/selected-program-equivalence/",
+    import.meta.url,
+  ).pathname;
+  await cp(equivalenceFixture, join(temp, "equivalence-input"), { recursive: true });
+  const equivalenceConfig = join(temp, "equivalence-input/plan.json");
+  const equivalenceOutput = join(temp, "equivalence-project");
+  await exportProject(equivalenceConfig, equivalenceOutput);
+  await Bun.write(
+    join(equivalenceOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(equivalenceFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(equivalenceConfig, equivalenceOutput);
+  const equivalenceReport = await checkProject(equivalenceConfig, equivalenceOutput);
+  if (
+    equivalenceReport.entries.length !== 2 ||
+    equivalenceReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected composed equivalence and filtered refutation");
+  const equivalenceSource = join(temp, "equivalence-input/program.dl");
+  const equivalenceOriginal = await Bun.file(equivalenceSource).text();
+  for (const predicate of ["first", "helper"]) {
+    await Bun.write(
+      equivalenceSource,
+      equivalenceOriginal.replace(
+        `${predicate}(X) :- seed(X).`,
+        `${predicate}(X) :- seed(X), X > 0.`,
+      ),
+    );
+    await exportProject(equivalenceConfig, equivalenceOutput);
+    await Bun.write(join(equivalenceOutput, "verification-result.json"), "old success");
+    let rejected = false;
+    try {
+      await checkProject(equivalenceConfig, equivalenceOutput);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+        throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(equivalenceOutput, "verification-result.json")).exists()))
+      throw new Error("One-sided inclusion accepted as equivalence");
+  }
+  console.log(
+    "Selected project: composed equivalence and refutation passed; losses on either side rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }
