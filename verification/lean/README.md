@@ -1,4 +1,18 @@
-# Optional Lean verification spike
+# Optional Lean verification
+
+There are two workflows:
+
+- **User-selected programs:** [support matrix and workflow guide](PROJECTS.md),
+  with an [end-to-end example](examples/selected-laws-and-checks/README.md).
+  Use `lean:project inspect`, `export`, and `check` for selected source claims.
+- **Fixed semantics/proof regression project:** `generate:lean` and `test:lean`,
+  described below. It checks maintained library laws, exported fixtures, and
+  concrete backend comparisons.
+
+Both check the modeled language. Neither certifies the native evaluator or SQL
+translator, disables runtime checks, or adds a general Lean mode to `--verify`.
+The scoped exporters described below have different limits; the selected-project
+support matrix is the current entry point for program verification.
 
 This project pins Lean **4.34.0** and has no third-party Lean dependencies.
 Ordinary Datamog builds and `bun test` do not require Lean. With Elan/Lean and
@@ -24,8 +38,7 @@ propositions, with Boolean equality represented by logical equivalence.
 The recursive theorem uses an inductive `Reach` generated from both Datamog
 rules over `SafeInt`. It proves preservation of an arbitrary property, conditional
 on the input edges preserving that property. It does not establish the premise
-for a loaded graph, nor prove evaluation termination. The relational exporter
-currently accepts one positive, possibly self-recursive predicate with
+for a loaded graph, nor prove evaluation termination. The fixed project's original integer relational exporter accepts one positive, possibly self-recursive predicate with
 variable-only body atoms and simple integer comparison guards over non-null integers, with variable or
 variable-plus-integer-literal heads; other derived calls, mutual recursion,
 negation, aggregates, other computed terms, and constraints are rejected.

@@ -1,9 +1,46 @@
 # User-selected Lean projects
 
-`bun run lean:project` exports and checks structural projections, integer relation claims, and local head refinements for a
-standalone Datamog source file. This is an optional repository workflow; ordinary
-Datamog execution and `--verify` do not require Lean. Export needs only Bun.
-Checking requires the repository's pinned Lean 4.34.0 toolchain through `lake`.
+`bun run lean:project` exports and checks selected claims from a standalone
+Datamog source file. It supports structural projections, local head refinements,
+positive recursive program laws, explicit constraints, and named error predicates.
+Export and inspection need only Bun; checking uses pinned Lean **4.34.0** through
+`lake`. Ordinary execution and `--verify` do not require Lean.
+
+Start with the [end-to-end walkthrough](examples/selected-laws-and-checks/README.md).
+It checks an invariant, coverage, an explicit constraint, and a named error goal
+in one project, and explains what the resulting report does and does not establish.
+
+## Support at a glance
+
+| Selection | Implemented scope | Main boundary |
+|---|---|---|
+| `program-invariant` | Head contracts across positive derived dependencies and mutual recursion | Non-null integers; comparison contracts with `&&`, `||`, `!` |
+| `program-uniqueness` | Two tuples sharing selected keys must agree on selected outputs | All non-key columns vary independently |
+| `program-coverage` | An input row yields an output, with copied columns or existential witnesses | Explicit input bounds; filters and computed-head definedness must be proved |
+| `program-equivalence` | Both inclusion directions for two derived predicates | Same output arity and column order |
+| `program-emptiness` | No tuple can be derived, including nullary relations | Proves universal emptiness, not absence in one dataset |
+| `constraint`, `error-predicate` | Explicit `!-` statements and complete named error relations | Checks are goals, never assumptions; all error siblings participate |
+| `projections` | Record/array integer-leaf projection soundness and coverage | One rule/input atom; supported paths, indices, carried integers, and filters |
+| `local` | Integer/Boolean head-refinement obligations | Selected acyclic contract dependencies must also be proved |
+| `invariant`, `mutual-invariant`, `uniqueness`, `coverage` | Earlier single-relation or single-component APIs | Narrower dependency and explicit-check support; prefer composed laws for pipelines |
+
+All composed laws share a positive, non-null integer relation fragment: variable-only
+relation arguments, simple comparison guards, and heads containing variables or
+variables plus/minus safe integer literals. Mixed arities and nullary derived
+relations are supported. Structural projections are a separate fragment; their
+support does not extend to general recursive structural relations.
+
+Every goal can have a maintained proof; claims supporting `polarity` can instead
+register a refutation. Unsupported selections fail explicitly. Reports cover
+only registered goals. Runtime checks remain enabled, and adding checks does not
+restrict a theorem's quantified inputs.
+
+Modules/data bindings (`:=`), general negation, aggregates, parity recursion,
+floats, arbitrary expression translation, and general structural relation laws
+remain outside this workflow. Proof caching/import, automatic proof search, and
+backend correctness are also outside its current scope.
+
+## Structural projection selection
 
 A selection file names the source relative to itself and one or more projections:
 

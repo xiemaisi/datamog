@@ -1,13 +1,21 @@
 # Richer verification obligations and Lean proofs
 
-Status: **partially implemented; stage 1 typed obligations, provenance, dependencies,
-and solver process handling implemented; stage 2 Lean spike implemented; stage 3
-manifest identities and fresh result reports started; stage 4 internal uniqueness
-and coverage claims plus composable schemas and direct structural projection coverage and soundness (including dynamic indices, multiple outputs, carried integer columns, and integer filters) started**. This extends the future-work discussion in
-[refinement annotations](refinement-annotations.md), especially §§7–8. It does
-not change current syntax or runtime checks. The integer obligation IR, solver
-process hardening, dependency reporting, and optional Lean spike below are
-implemented; the broader verification architecture remains proposed.
+Status: **implemented for scoped fragments; broader architecture remains in progress**.
+The SMT obligation IR, provenance/dependency reporting, pinned Lean semantics
+project, and user-selected Lean workflow are implemented. Selected projects support
+positive recursive invariants, uniqueness, coverage, equivalence, emptiness,
+explicit constraints, named errors, and a separate structural projection fragment.
+Exact checker types, axiom audits, content identities, and fresh result reports are
+implemented for these workflows. General module verification, proof reuse/import,
+broader semantics, automation, and translation correctness remain future work.
+
+Start with the [current support matrix](../../verification/lean/PROJECTS.md#support-at-a-glance)
+and [end-to-end walkthrough](../../verification/lean/examples/selected-laws-and-checks/README.md).
+The implementation sections below record how the supported fragments developed;
+earlier scoped exporters retain their narrower limits. This extends
+[refinement annotations](refinement-annotations.md), especially §§7–8, without
+changing Datamog syntax or removing runtime checks.
+
 External-tool references were consulted on 2026-09-24; implementation must pin
 and test specific versions rather than rely on the moving documentation links.
 
@@ -26,9 +34,10 @@ as coverage, uniqueness, and equivalence need their own named goals. Do not
 require Lean to run Datamog, and do not remove runtime checks merely because an
 external prover succeeded.
 
-The first useful milestone is a small, reproducible Lean project that proves an
-existing arithmetic obligation and a recursive relation invariant. It is not a
-formal verification of the SQL translator or all Datamog backends.
+The initial milestone—a reproducible Lean project proving an arithmetic obligation
+and a recursive relation invariant—is implemented, along with the selected-program
+workflow described below. These results do not formally verify the SQL translator
+or Datamog backends.
 
 ## What exists today
 
@@ -1586,7 +1595,9 @@ Lean explicitly distinguishes ordinary kernel reasoning from axioms introduced
 by native computation; do not silently widen the trust policy to make a tactic
 work. [Lean axiom reference](https://lean-lang.org/doc/reference/latest/Axioms/)
 
-A proposed workflow, with commands and artifact schemas to be designed later:
+The selected workflow already provides inspection, export, exact checking, and
+fresh reports. A broader multi-prover workflow remains proposed; its orchestration,
+cache/import protocol, and general CLI interface still need design:
 
 1. Generate obligations and a manifest without running a prover. Show unsupported
    constructs and all external assumptions before spending solver time.
@@ -1624,21 +1635,22 @@ but its remaining input premises must stay visible at every importing boundary.
 
 ## Delivery plan and acceptance criteria
 
-| Stage | Changes | Exit criteria |
+| Stage | Current implementation | Remaining work |
 |---|---|---|
-| 1. Make current results explicit | Refactor `core/src/obligations.ts` around a minimal typed obligation IR; retain SMT output; add hypothesis provenance and dependency tracking. Harden `cli/src/verify.ts` process/result handling. | Existing integer regressions retain their verdicts; omitted hypotheses are reported; partial or cyclic discharge cannot yield a complete success. |
-| 2. Build the semantics library and Lean spike | Add an optional Lean package for bounded integers, null/undefined, truth, and positive derivations; export local goals and one recursive example. | Check an existing arithmetic theorem and the reachability invariant in pinned Lean CI with the axiom policy enforced. Include a false goal that remains unproved. |
-| 3. Establish the statement/checking boundary | Generate theorem types, maintained proof slots, final checker modules, manifests, and cache keys. | Changed goals/imports invalidate proofs; `sorry`, extra axioms, a weaker theorem, and a stale certificate cannot discharge a goal. Ordinary Datamog builds require no Lean installation. |
-| 4. Add useful claim families | Introduce named relation-level claims, starting with uniqueness and coverage; add finite quantifiers, structural lookup, and ordinary stratified negation incrementally. | Prove a nontrivial coverage theorem with explicit bounds and reject the overflowing variant; distinguish absent fields from null; prove a two-tuple uniqueness law. Runtime-capable claims agree with execution. |
-| 5. Increase automation and semantics coverage | Benchmark CHCs and richer SMT; prototype one certificate route; add a proved finite-group aggregate model. | Measure solved goals, search/checking time, artifact size, and maintenance effort. Unsupported theories and incomplete certificates remain visible failures to discharge. |
-| 6. Reduce translation trust | Deeply embed the supported core and prove translation/obligation-generation soundness; consider implementation correspondence separately. | State and check the soundness theorem for the precise supported fragment, with remaining frontend and backend assumptions listed. |
+| 1. Explicit current results | Typed SMT obligations, provenance, dependencies, bounded solver invocations, conditional discharge | Stronger process containment, memory limits, and CLI resource configuration |
+| 2. Semantics and Lean spike | Pinned Lean project, arithmetic and recursive proofs, structural libraries, fixed-fixture backend comparisons | Extend supported semantic profiles as needed |
+| 3. Statement/checking boundary | Exact theorem types, axiom audits, content manifests, fresh isolated builds, selected-project inspection and reports | Module identities, reusable proof artifacts, cache/import protocol, finer invalidation; reports are not certificates |
+| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Module-aware programs, explicit input laws, broader structural relation claims, finite quantifiers and stratified negation |
+| 5. Automation and wider semantics | SMT remains the automatic route; maintained Lean proofs check the supported fragments | CHC benchmarks, richer SMT, a certificate route, and a proved finite-group aggregate model |
+| 6. Reduce translation trust | Exporter/frontend/semantic model remain trusted; differential regressions check concrete cases | Deep embedding and a soundness theorem for translation/obligation generation; backend correspondence is separate |
 
-The first two stages should be small enough to evaluate the approach before
-committing to a new assertion grammar or multi-prover infrastructure. Start from
-[`08-verify.dl`](../invariants/code/08-verify.dl), a recursive reachability
-example, and one currently skipped structural claim. Keep the proposed body type
-guards separate: [that design](body-type-guards.md) concerns filtering/refinement
-of runtime values, not supplying proofs of arbitrary propositions.
+The initial arithmetic and reachability milestones are complete. The current
+consolidated workflow is demonstrated by the combined laws-and-checks example.
+The next architectural packet is module-aware source loading and identities,
+followed by carefully scoped interface/input-law support; neither is implemented
+by the current standalone-source selection. Keep proposed body type guards
+separate: [that design](body-type-guards.md) concerns runtime filtering and type
+refinement rather than assumptions for arbitrary proofs.
 
 Validation must include null and missing-field cases, zero divisors, negative
 division/modulo, safe-integer boundaries, vacuous contracts, mutually recursive
