@@ -824,3 +824,91 @@ test("program invariants reject unsupported upstream rules and invalid root sele
     }
     await expect(readdir(output)).rejects.toThrow();
   }));
+
+test("program uniqueness varies every non-key column and binds upstream definitions", async () =>
+  fixture(async (config, output, dir) => {
+    const source =
+      "input predicate seed(a: integer, b: integer, c: integer). helper(X,Y,Z) :- seed(X,Y,Z). result(X,Y,Z) :- helper(X,Y,Z).";
+    const claim = {
+      kind: "program-uniqueness",
+      id: "unique",
+      predicate: "result",
+      keyColumns: [0],
+      outputColumns: [1],
+    };
+    const writePlan = (change: object = {}) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims: [{ ...claim, ...change }] }));
+    await Bun.write(join(dir, "source.dl"), source);
+    await writePlan();
+    const plan = await planProject(config, output);
+    const generated = plan.files["Datamog/Generated.lean"]!;
+    expect(generated).toContain(
+      "uniqueFamily input0 0 x0 x1 x2 → uniqueFamily input0 0 x0 y1 y2 → (x1 = y1)",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "unique")!.closure).toEqual([
+      "IntegerSemantics",
+      "unique",
+      "uniqueFamily",
+      "uniqueRules0",
+      "uniqueRules1",
+    ]);
+    await writePlan({ keyColumns: [], outputColumns: [0, 2] });
+    const global = await planProject(config, output);
+    expect(global.files["Datamog/Generated.lean"]).toContain(
+      "uniqueFamily input0 0 x0 x1 x2 → uniqueFamily input0 0 y0 y1 y2 → (x0 = y0 ∧ x2 = y2)",
+    );
+    expect(global.manifest.digest).not.toBe(plan.manifest.digest);
+    await writePlan({ polarity: "refute" });
+    const refutation = await planProject(config, output);
+    expect(refutation.goals).toEqual(["unique_refuted"]);
+    expect(refutation.files["Datamog/Checked.lean"]).toContain(
+      "theorem unique_refuted : ¬ Generated.unique",
+    );
+    for (const change of [
+      { outputColumns: [] },
+      { keyColumns: [0, 0] },
+      { outputColumns: [1, 1] },
+      { outputColumns: [0] },
+      { outputColumns: [3] },
+      { keyColumns: [-1] },
+      { keyColumns: [0.5] },
+      { predicate: "missing" },
+      { predicate: "seed" },
+      { outputColumns: "1" },
+      { outputColumns: ["1"] },
+      { polarity: "unknown" },
+      { typo: true },
+    ]) {
+      await writePlan(change);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("composed uniqueness pads tuples to helper width without quantifying padding", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(a: integer, b: integer, c: integer). helper(X,Y,Z) :- seed(X,Y,Z). result(X,Y) :- helper(X,Y,Z).",
+    );
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [
+          {
+            kind: "program-uniqueness",
+            id: "unique",
+            predicate: "result",
+            keyColumns: [0],
+            outputColumns: [1],
+          },
+        ],
+      }),
+    );
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "uniqueFamily input0 0 x0 x1 (⟨0, by decide⟩ : Datamog.SafeInt) → uniqueFamily input0 0 x0 y1 (⟨0, by decide⟩ : Datamog.SafeInt)",
+    );
+    expect(plan.files["Datamog/Generated.lean"]).not.toContain("(x2 : Datamog.SafeInt)");
+  }));

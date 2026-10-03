@@ -26,8 +26,9 @@ import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 import {
   type MutualClaim,
   type ProgramInvariantClaim,
+  type ProgramUniquenessClaim,
   exportMutual,
-  exportProgramInvariant,
+  exportProgramClaim,
 } from "./lean-mutual.ts";
 
 const root = new URL("../", import.meta.url).pathname;
@@ -55,6 +56,7 @@ type Claim = (
   | InvariantClaim
   | MutualClaim
   | ProgramInvariantClaim
+  | ProgramUniquenessClaim
   | ({ kind: "uniqueness" } & UniquenessClaim)
   | ({ kind: "coverage" } & CoverageClaim)
 ) & { polarity?: "prove" | "refute" };
@@ -95,6 +97,27 @@ export function parseSelection(value: unknown): Selection {
       throw new Error("Each projection requires id, predicate, and optional Boolean coverage");
   }
   for (const claim of claims) {
+    if (
+      claim &&
+      typeof claim === "object" &&
+      "kind" in claim &&
+      claim.kind === "program-uniqueness"
+    ) {
+      const unique: Record<string, unknown> = claim;
+      keys(unique, ["kind", "id", "predicate", "keyColumns", "outputColumns", "polarity"]);
+      if (
+        typeof unique.id !== "string" ||
+        typeof unique.predicate !== "string" ||
+        !Array.isArray(unique.keyColumns) ||
+        !Array.isArray(unique.outputColumns) ||
+        [...unique.keyColumns, ...unique.outputColumns].some((c) => typeof c !== "number") ||
+        (unique.polarity !== undefined &&
+          unique.polarity !== "prove" &&
+          unique.polarity !== "refute")
+      )
+        throw new Error("Program uniqueness requires id, predicate and column arrays");
+      continue;
+    }
     if (
       claim &&
       typeof claim === "object" &&
@@ -230,11 +253,16 @@ export async function planProject(configInput: string, outputInput: string) {
     exportLeanStructuralProjection(typed, descriptor),
   );
   const mutuals = selection.claims
-    .filter((claim) => claim.kind === "mutual-invariant" || claim.kind === "program-invariant")
+    .filter(
+      (claim) =>
+        claim.kind === "mutual-invariant" ||
+        claim.kind === "program-invariant" ||
+        claim.kind === "program-uniqueness",
+    )
     .map((claim) =>
       claim.kind === "mutual-invariant"
         ? exportMutual(typed, claim)
-        : exportProgramInvariant(typed, claim),
+        : exportProgramClaim(typed, claim),
     );
   const invariants = selection.claims
     .filter((claim) => claim.kind === "invariant")
@@ -317,7 +345,8 @@ export async function planProject(configInput: string, outputInput: string) {
         claim.kind !== "local" &&
         claim.kind !== "invariant" &&
         claim.kind !== "mutual-invariant" &&
-        claim.kind !== "program-invariant",
+        claim.kind !== "program-invariant" &&
+        claim.kind !== "program-uniqueness",
     )
     .map(({ kind, polarity, ...descriptor }) =>
       kind === "uniqueness"

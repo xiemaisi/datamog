@@ -1,0 +1,12 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-uniqueness",
+      "id": "pipelineUnique",
+      "predicate": "output",
+      "keyColumns": [0],
+      "outputColumns": [1]
+    }
+  ]
+}

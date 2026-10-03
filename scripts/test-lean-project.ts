@@ -644,6 +644,40 @@ try {
   console.log(
     "Selected project: composed invariant passed; weakened upstream guard and extra unsafe sibling rejected.",
   );
+  const uniqueFixture = new URL(
+    "../verification/lean/examples/selected-program-uniqueness/",
+    import.meta.url,
+  ).pathname;
+  await cp(uniqueFixture, join(temp, "unique-input"), { recursive: true });
+  const uniqueConfig = join(temp, "unique-input/plan.json");
+  const uniqueOutput = join(temp, "unique-project");
+  await exportProject(uniqueConfig, uniqueOutput);
+  await Bun.write(
+    join(uniqueOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(uniqueFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(uniqueConfig, uniqueOutput);
+  const uniqueReport = await checkProject(uniqueConfig, uniqueOutput);
+  if (uniqueReport.entries.length !== 1 || uniqueReport.entries[0]?.status !== "proved")
+    throw new Error("Expected composed uniqueness proof");
+  const uniqueSource = join(temp, "unique-input/program.dl");
+  await Bun.write(
+    uniqueSource,
+    `${await Bun.file(uniqueSource).text()}\nidentity(X, X + 1) :- seed(X).`,
+  );
+  await exportProject(uniqueConfig, uniqueOutput);
+  await Bun.write(join(uniqueOutput, "verification-result.json"), "old success");
+  let uniqueRejected = false;
+  try {
+    await checkProject(uniqueConfig, uniqueOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("simp_all made no progress"))
+      throw error;
+    uniqueRejected = true;
+  }
+  if (!uniqueRejected || (await Bun.file(join(uniqueOutput, "verification-result.json")).exists()))
+    throw new Error("Nonunique upstream sibling accepted by downstream uniqueness proof");
+  console.log("Selected project: composed uniqueness passed; upstream second output rejected.");
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

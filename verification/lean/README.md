@@ -791,3 +791,8 @@ including unrefined helpers and multiple recursive components. Every reachable
 source rule contributes to the generated inductive family; selected contracts
 are proved without assuming upstream contracts. The [pipeline example](examples/selected-program-invariant/plan.json)
 and workflow guide show the selection and maintained proof.
+
+`program-uniqueness` uses that dependency closure for two-tuple key/output laws,
+without requiring head refinements. The [uniqueness pipeline](examples/selected-program-uniqueness/plan.json)
+proves a key determines its output through mutual recursion; an unsafe upstream
+sibling makes the maintained proof fail.

@@ -18,9 +18,21 @@ export interface ProgramInvariantClaim {
   polarity?: "prove" | "refute";
 }
 
+export interface ProgramUniquenessClaim {
+  kind: "program-uniqueness";
+  id: string;
+  predicate: string;
+  keyColumns: number[];
+  outputColumns: number[];
+  polarity?: "prove" | "refute";
+}
+type ProgramClaim = ProgramInvariantClaim | ProgramUniquenessClaim;
+const roots = (claim: MutualClaim | ProgramClaim) =>
+  claim.kind === "program-uniqueness" ? [claim.predicate] : claim.predicates;
+
 /** Close over source definitions, never abstract a derived call as an input. */
-export function exportProgramInvariant(typed: TypedProgram, claim: ProgramInvariantClaim) {
-  const closure = [...claim.predicates];
+export function exportProgramClaim(typed: TypedProgram, claim: ProgramClaim) {
+  const closure = [...roots(claim)];
   const seen = new Set(closure);
   for (let i = 0; i < closure.length; i++) {
     const rules = typed.rules.get(closure[i]!);
@@ -44,21 +56,25 @@ export function exportMutual(typed: TypedProgram, claim: MutualClaim) {
 
 function exportFamily(
   typed: TypedProgram,
-  claim: MutualClaim | ProgramInvariantClaim,
+  claim: MutualClaim | ProgramClaim,
   predicates: string[],
 ) {
   const { id } = claim;
-  const program = claim.kind === "program-invariant";
+  const program = claim.kind !== "mutual-invariant";
+  const selectedPredicates = roots(claim);
   if (
     !/^[A-Za-z][A-Za-z0-9_]*$/.test(id) ||
-    claim.predicates.length < (program ? 1 : 2) ||
+    selectedPredicates.length < (program ? 1 : 2) ||
     new Set(predicates).size !== predicates.length
   )
     throw new Error("Mutual invariant requires a name and distinct predicates");
   if (typed.maximalPredicates.size || typed.constraints.some((c) => !c.synthetic))
     throw new Error("Unsupported mutual parity or explicit constraints");
   const family = `${id}Family`;
-  const contracts = claim.predicates.map((p) => invariantContract(typed, p).contract);
+  const contracts =
+    claim.kind === "program-uniqueness"
+      ? []
+      : selectedPredicates.map((p) => invariantContract(typed, p).contract);
   const inputs = new Map<string, number>();
   const edges = new Map<string, string[]>();
   const arityOf = (p: string) => typed.columnTypes.get(p)!.length;
@@ -198,11 +214,30 @@ function exportFamily(
     }
   const relation = `inductive ${family} ${params} : Nat → ${relationType(width)} where\n${constructors.join("\n")}\n`;
   const goals = contracts.map((contract, selected) => {
-    const tag = predicates.indexOf(claim.predicates[selected]!);
+    const tag = predicates.indexOf(selectedPredicates[selected]!);
     const columns = Array.from({ length: memberArities[tag]! }, (_, i) => `x${i}`);
     const binders = columns.map((c) => `(${c} : Datamog.SafeInt)`).join(" ");
     return `(${binders ? `∀ ${binders}, ` : ""}${applied} ${tag} ${padded(columns)} → (${contract}))`;
   });
+  if (claim.kind === "program-uniqueness") {
+    const arity = arityOf(claim.predicate);
+    const columns = [...claim.keyColumns, ...claim.outputColumns];
+    if (
+      !claim.outputColumns.length ||
+      new Set(columns).size !== columns.length ||
+      columns.some((c) => !Number.isInteger(c) || c < 0 || c >= arity)
+    )
+      throw new Error("Uniqueness requires distinct valid key/output columns and nonempty outputs");
+    const left = Array.from({ length: arity }, (_, i) => `x${i}`);
+    const right = left.map((x, i) => (claim.keyColumns.includes(i) ? x : `y${i}`));
+    const binders = [...new Set([...left, ...right])]
+      .map((x) => `(${x} : Datamog.SafeInt)`)
+      .join(" ");
+    const equalities = claim.outputColumns.map((i) => `${left[i]} = ${right[i]}`).join(" ∧ ");
+    goals.push(
+      `(∀ ${binders}, ${applied} 0 ${padded(left)} → ${applied} 0 ${padded(right)} → (${equalities}))`,
+    );
+  }
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;
   const refute = claim.polarity === "refute";
   const proofName = refute ? `${id}_refuted` : id;
@@ -214,7 +249,7 @@ function exportFamily(
       statement: {
         predicates,
         memberArities,
-        selectedPredicates: claim.predicates,
+        selectedPredicates,
         components,
         derivedDependencies: [...edges].map(([predicate, dependencies]) => ({
           predicate,

@@ -1160,6 +1160,23 @@ proof import, module interfaces, negation, aggregates, structural relation
 columns, and general expression translation remain open. Existing single-relation
 and single-component selections retain their narrower boundaries.
 
+## Selected uniqueness across positive dependency graphs
+
+`program-uniqueness` reuses the complete source-derived family for a two-tuple
+relation law. A descriptor selects a predicate and zero-based key/output columns.
+Only key columns are shared; every other tuple column varies independently.
+Selected outputs must agree, and empty keys express global uniqueness. Invalid,
+duplicate, or overlapping columns and empty outputs are rejected. Mixed-arity
+padding remains fixed rather than adding quantified data columns.
+
+Head refinements are unnecessary. The worked fixture propagates identity pairs
+through mutually recursive predicates and proves downstream uniqueness by
+induction on the generated family. Adding an upstream sibling that produces a
+second output makes the maintained proof fail. Statements, complete rule closures,
+proof/refutation polarity, and exact checker types use the same fresh-check
+boundary as composed invariants. Composed coverage and modular proof import
+remain future work.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser

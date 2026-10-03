@@ -336,6 +336,35 @@ definitions together; it does not compose separately checked theorem reports or
 introduce modular proof import. The narrower `mutual-invariant` selection still
 requires exactly one complete strongly connected component.
 
+## Uniqueness across derived dependencies
+
+`program-uniqueness` uses the same complete positive dependency export to compare
+two tuples from a selected predicate:
+
+```json
+{"kind": "program-uniqueness", "id": "pipelineUnique", "predicate": "output", "keyColumns": [0], "outputColumns": [1]}
+```
+
+Columns are zero-based. Both tuples share only the key columns; every other
+column varies independently, including columns not selected as outputs. The
+conclusion equates each selected output column. Empty keys request global
+uniqueness. Empty outputs, duplicate or overlapping columns, and out-of-range
+indices are rejected. Canonical padding for mixed-arity families is fixed and
+is not an extra quantified tuple column.
+
+No head refinements are required. The [worked pipeline](examples/selected-program-uniqueness/program.dl)
+creates identity pairs and propagates them through mutual recursion to an output.
+Its [proof](examples/selected-program-uniqueness/Proofs.lean) establishes equality
+of each pair by induction, then proves uniqueness for two derivations. A fresh
+regression adds an upstream rule producing a second value for the same key;
+the unchanged proof fails and no success report remains.
+
+All reachable rules contribute to the manifest closure, exact checker, and
+fresh result. `"polarity": "refute"` requests the negated uniqueness statement.
+The supported source fragment and trust boundary are the same as for
+`program-invariant`; this does not yet add composed coverage claims or imports
+of separately checked proofs.
+
 ## Worked example
 
 The checked-in [selection](examples/selected-projections/plan.json),
