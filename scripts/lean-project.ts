@@ -21,6 +21,7 @@ import {
 import { createLeanVerificationResult } from "../packages/core/src/verification-result.ts";
 import { parse } from "../packages/parser/src/index.ts";
 
+import { type ConstraintClaim, exportConstraint } from "./lean-constraint.ts";
 import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 
 import {
@@ -55,6 +56,7 @@ type LocalClaim = {
   refinement: number;
 };
 type Claim = (
+  | ConstraintClaim
   | LocalClaim
   | InvariantClaim
   | MutualClaim
@@ -103,6 +105,22 @@ export function parseSelection(value: unknown): Selection {
       throw new Error("Each projection requires id, predicate, and optional Boolean coverage");
   }
   for (const claim of claims) {
+    if (claim && typeof claim === "object" && "kind" in claim && claim.kind === "constraint") {
+      const selected: Record<string, unknown> = claim;
+      keys(selected, ["kind", "id", "constraint", "polarity"]);
+      if (
+        typeof selected.id !== "string" ||
+        !Number.isSafeInteger(selected.constraint) ||
+        Number(selected.constraint) < 1 ||
+        (selected.polarity !== undefined &&
+          selected.polarity !== "prove" &&
+          selected.polarity !== "refute")
+      )
+        throw new Error(
+          "Constraint selection requires id and a positive one-based constraint index",
+        );
+      continue;
+    }
     if (
       claim &&
       typeof claim === "object" &&
@@ -269,6 +287,17 @@ export async function planProject(configInput: string, outputInput: string) {
   const exports = selection.projections.map((descriptor) =>
     exportLeanStructuralProjection(typed, descriptor),
   );
+  const explicitConstraints = program.statements.filter(
+    (statement) => statement.$type === "Query" && statement.isError && !statement.synthetic,
+  );
+  const constraintBundles = selection.claims
+    .filter((claim) => claim.kind === "constraint")
+    .map((claim) => {
+      const query = explicitConstraints[claim.constraint - 1];
+      if (!query || query.$type !== "Query")
+        throw new Error(`No explicit constraint ${claim.constraint}`);
+      return exportConstraint(typed, query, claim);
+    });
   const mutuals = selection.claims
     .filter(
       (claim) =>
@@ -362,6 +391,7 @@ export async function planProject(configInput: string, outputInput: string) {
   const claimBundles = selection.claims
     .filter(
       (claim) =>
+        claim.kind !== "constraint" &&
         claim.kind !== "local" &&
         claim.kind !== "invariant" &&
         claim.kind !== "mutual-invariant" &&
@@ -389,6 +419,7 @@ export async function planProject(configInput: string, outputInput: string) {
     ...localNodes,
     ...invariants.flatMap((bundle) => bundle.nodes),
     ...mutuals.flatMap((bundle) => bundle.nodes),
+    ...constraintBundles.flatMap((bundle) => bundle.nodes),
   ];
   const checker = [
     ...exports.map((bundle) => bundle.checker),
@@ -396,6 +427,7 @@ export async function planProject(configInput: string, outputInput: string) {
     ...localCheckers,
     ...invariants.map((bundle) => bundle.checker),
     ...mutuals.map((bundle) => bundle.checker),
+    ...constraintBundles.map((bundle) => bundle.checker),
   ].join("\n");
   const goals = nodes.filter((node) => node.kind === "goal");
   const signatures = checker
@@ -410,7 +442,7 @@ export async function planProject(configInput: string, outputInput: string) {
     ".datamog-lean-project": marker,
     ".gitignore": ".lake/\nverification-result.json\nverification-result.json.tmp\n",
     "Datamog.lean": "import Datamog.Checked\n",
-    "Datamog/Generated.lean": `-- Generated; edit the source program and selection instead.\nimport Datamog.Structural\nnamespace Datamog.Generated\n${exports.map((bundle) => bundle.source).join("\n")}\n${assembled?.relations ?? ""}\n${assembled?.statements ?? ""}\n${localSources.join("\n")}\n${invariants.map((bundle) => bundle.source).join("\n")}\n${mutuals.map((bundle) => bundle.source).join("\n")}\nend Datamog.Generated\n`,
+    "Datamog/Generated.lean": `-- Generated; edit the source program and selection instead.\nimport Datamog.Structural\nnamespace Datamog.Generated\n${exports.map((bundle) => bundle.source).join("\n")}\n${assembled?.relations ?? ""}\n${assembled?.statements ?? ""}\n${localSources.join("\n")}\n${invariants.map((bundle) => bundle.source).join("\n")}\n${mutuals.map((bundle) => bundle.source).join("\n")}\n${constraintBundles.map((bundle) => bundle.source).join("\n")}\nend Datamog.Generated\n`,
     [proofFile]: proofs,
   };
   for (const path of support) files[path] = await Bun.file(join(library, path)).text();
@@ -422,6 +454,7 @@ export async function planProject(configInput: string, outputInput: string) {
     "scripts/lean-project.ts",
     "scripts/lean-invariant.ts",
     "scripts/lean-mutual.ts",
+    "scripts/lean-constraint.ts",
     "bun.lock",
   ]);
   for (const directory of ["packages/core/src", "packages/parser/src"])

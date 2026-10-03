@@ -1232,9 +1232,31 @@ maintained emptiness proof. Exact checker types, complete rule identities, and
 fresh result reports retain the existing trust boundary.
 
 This handles ordinary derived violation predicates in the supported integer
-fragment. Direct extraction from `!-` constraints and special error declarations
-remains open; explicit constraints are still rejected, never assumed to make a
-violation relation empty. Runtime checks are unchanged.
+fragment. The separate constraint selection below now handles explicit `!-`
+statements; special error declarations remain open. Ordinary emptiness selections
+retain their explicit-constraint restriction. Runtime checks are unchanged.
+
+## Selected explicit constraint obligations
+
+The selected-project `constraint` descriptor now identifies an explicit `!-`
+statement by one-based source order, excluding ordinary queries and synthesized
+refinement checks. Its body becomes a generated nullary violation relation, and
+its positive dependency closure is exported through the existing family model.
+The exact theorem states that no violation derivation exists for arbitrary typed
+input relations. Neither the selected constraint nor other checks are hypotheses.
+
+Manifest provenance includes the selection, exact source text, offsets and
+line/column, alongside the complete rule closure and source snapshot identity.
+Invalid indices, unsupported bodies, and generated predicate-name collisions
+fail before export. Refutation polarity negates the exact constraint theorem.
+
+The fixture proves a constraint over positive values propagated through recursion
+and refutes `!- seed(X).` using a nonempty input. Fresh regressions alter the
+upstream guard and selected constraint comparison, and reject the unchanged
+proof in both cases. This exercises the boundary that constraints are goals,
+not premises assumed to hold. Special error declarations and automatic constraint
+integration with other claim kinds remain future work. Runtime enforcement is
+unchanged; these proofs concern the supported modeled integer fragment.
 
 ## Which harder claims should be expressible?
 

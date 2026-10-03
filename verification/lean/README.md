@@ -811,4 +811,11 @@ proves two recursive paths equivalent and refutes equivalence to a filtered path
 `program-emptiness` proves that a selected derived relation has no rows for any
 admitted inputs. The [emptiness example](examples/selected-program-emptiness/plan.json)
 proves a named violation relation and a base-free cycle empty, and refutes
-emptiness of a reachable relation. Direct constraint import remains unsupported.
+emptiness of a reachable relation.
+
+The `constraint` selection now imports an explicit `!-` statement by one-based
+source order, excluding synthesized checks. Its generated violation relation
+must be proved empty without assuming any constraint holds. The [constraint example](examples/selected-constraints/plan.json)
+proves recursive safety and refutes a claim that arbitrary input is empty.
+Exact constraint text and source locations are bound into the manifest. Special
+`error predicate` declarations remain unsupported; runtime checks stay enabled.

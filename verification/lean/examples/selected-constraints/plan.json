@@ -1,0 +1,7 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "constraint", "id": "noViolation", "constraint": 1 },
+    { "kind": "constraint", "id": "inputEmpty", "constraint": 2, "polarity": "refute" }
+  ]
+}

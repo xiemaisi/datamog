@@ -1158,3 +1158,78 @@ test("program emptiness supports nullary cycles and fixed padding", async () =>
       expect(plan.files["Datamog/Generated.lean"]).not.toContain("∀ ,");
     }
   }));
+
+test("constraint selection excludes synthesized checks and binds exact source provenance", async () =>
+  fixture(async (config, output, dir) => {
+    const source =
+      "input predicate seed(n: integer).\npositive(X, _: X > 0) :- seed(X), X > 0.\n?- seed(X).\n!- positive(X), X <= 0.\n!- seed(X).\n";
+    const writePlan = (change: object = {}) =>
+      Bun.write(
+        config,
+        JSON.stringify({
+          source: "source.dl",
+          claims: [{ kind: "constraint", id: "safe", constraint: 1, ...change }],
+        }),
+      );
+    await Bun.write(join(dir, "source.dl"), source);
+    await writePlan();
+    const plan = await planProject(config, output);
+    const origin = plan.manifest.entries.find((e) => e.id === "safeConstraint")!;
+    expect(origin.statement).toEqual({
+      claim: { kind: "constraint", id: "safe", constraint: 1 },
+      text: "!- positive(X), X <= 0.",
+      span: {
+        offset: source.indexOf("!-"),
+        end: source.indexOf("!- seed") - 1,
+        line: 4,
+        column: 1,
+      },
+    });
+    expect(plan.manifest.entries.find((e) => e.id === "safe")!.closure).toContain("safeConstraint");
+    expect(plan.manifest.entries.every((e) => e.assumptions.length === 0)).toBe(true);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "safeFamily input0 0 (⟨0, by decide⟩ : Datamog.SafeInt) → False",
+    );
+    await writePlan({ constraint: 2, polarity: "refute" });
+    const negative = await planProject(config, output);
+    expect(negative.goals).toEqual(["safe_refuted"]);
+    expect(negative.files["Datamog/Checked.lean"]).toContain(
+      "theorem safe_refuted : ¬ Generated.safe",
+    );
+    expect(
+      negative.manifest.entries.find((e) => e.id === "safeConstraint")!.statement,
+    ).toMatchObject({ text: "!- seed(X)." });
+    await writePlan();
+    await Bun.write(join(dir, "source.dl"), `\n${source}`);
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    for (const constraint of [0, -1, 1.5, 3, "1"]) {
+      await writePlan({ constraint });
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await writePlan({ predicate: "positive" });
+    await expect(exportProject(config, output)).rejects.toThrow();
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("constraint export rejects unsupported bodies, named errors, and generated-name collisions", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "constraint", id: "safe", constraint: 1 }],
+      }),
+    );
+    for (const source of [
+      "input predicate seed(n: integer). !- seed(X), not seed(X).",
+      "input predicate seed(n: integer). !- seed(X), X + 1 < 0.",
+      "input predicate seed(n: integer). !- seed(X), Y = X + 1.",
+      "input predicate seed(n: integer?). !- seed(X).",
+      "input predicate seed(n: integer). error predicate bad(X) :- seed(X). !- seed(X).",
+      "input predicate seed(n: integer). __lean_constraint_safe() :- seed(X). !- seed(X).",
+    ]) {
+      await Bun.write(join(dir, "source.dl"), source);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));

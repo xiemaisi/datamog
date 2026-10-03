@@ -814,6 +814,48 @@ try {
   console.log(
     "Selected project: violation and base-free cycle emptiness plus refutation passed; reachable violations rejected.",
   );
+  const constraintFixture = new URL(
+    "../verification/lean/examples/selected-constraints/",
+    import.meta.url,
+  ).pathname;
+  await cp(constraintFixture, join(temp, "constraint-input"), { recursive: true });
+  const constraintConfig = join(temp, "constraint-input/plan.json");
+  const constraintOutput = join(temp, "constraint-project");
+  await exportProject(constraintConfig, constraintOutput);
+  await Bun.write(
+    join(constraintOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(constraintFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(constraintConfig, constraintOutput);
+  const constraintReport = await checkProject(constraintConfig, constraintOutput);
+  if (
+    constraintReport.entries.length !== 2 ||
+    constraintReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected explicit constraint proof and input-law refutation");
+  const constraintSource = join(temp, "constraint-input/program.dl");
+  const constraintOriginal = await Bun.file(constraintSource).text();
+  for (const changed of [
+    constraintOriginal.replace("X > 0", "X >= 0"),
+    constraintOriginal.replace("X <= 0", "X <= 1"),
+  ]) {
+    await Bun.write(constraintSource, changed);
+    await exportProject(constraintConfig, constraintOutput);
+    await Bun.write(join(constraintOutput, "verification-result.json"), "old success");
+    let rejected = false;
+    try {
+      await checkProject(constraintConfig, constraintOutput);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+        throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(constraintOutput, "verification-result.json")).exists()))
+      throw new Error("Reachable constraint violation accepted as impossible");
+  }
+  console.log(
+    "Selected project: explicit constraint proof and refutation passed; changed source guard and constraint body rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

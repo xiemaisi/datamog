@@ -452,9 +452,43 @@ violation sibling; both reject the maintained emptiness proof and remove any
 previous success report.
 
 This provides a way to prove ordinary named violation predicates empty in the
-supported positive integer fragment. It does not yet import `!-` constraints
-or special error-predicate declarations; explicit constraints remain rejected
-rather than treated as assumptions. It does not disable runtime checks.
+supported positive integer fragment. The separate `constraint` selection below imports explicit `!-` statements;
+special error-predicate declarations remain unsupported. `program-emptiness`
+itself still rejects explicit constraints. Runtime checks remain enabled.
+
+## Explicit source constraints
+
+Select an explicit `!-` statement by its one-based position among explicit
+constraints in the source:
+
+```json
+{"kind": "constraint", "id": "noViolation", "constraint": 1}
+```
+
+Ordinary queries and synthesized refinement checks do not count toward this
+index. The exporter copies the selected constraint body into a generated nullary
+violation relation, follows its positive dependencies, and proves that relation
+empty. The manifest binds the descriptor, exact constraint text, source offsets,
+line/column, and all reachable definitions. Source and selection snapshots identify
+the file; moving or editing a constraint invalidates the content identity.
+
+Neither the selected constraint nor other constraints become hypotheses. The
+theorem ranges over arbitrary typed input relations before runtime constraint
+checks. It must establish that the selected violation cannot arise. In particular,
+`!- seed(X).` is not accepted merely because it appears in the program: the
+[worked fixture](examples/selected-constraints/program.dl) refutes that claim
+with an input row, alongside a proved constraint over recursively propagated
+positive integers. Its [maintained proofs](examples/selected-constraints/Proofs.lean)
+are checked against exact generated types. Changing the upstream positivity guard
+or the constraint comparison makes the maintained safety proof fail.
+
+Supported bodies use positive variable-only relation atoms and the existing
+integer comparison guards. Unsupported bodies, invalid indices, and generated
+predicate-name collisions fail before export. `"polarity": "refute"` proves the
+negation of the selected universal constraint. Special `error predicate`
+declarations remain rejected. Other claim kinds retain their existing explicit
+constraint restrictions; this first selection does not automatically attach
+constraint goals to them. Runtime checks are unchanged.
 
 ## Worked example
 
