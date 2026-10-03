@@ -678,6 +678,55 @@ try {
   if (!uniqueRejected || (await Bun.file(join(uniqueOutput, "verification-result.json")).exists()))
     throw new Error("Nonunique upstream sibling accepted by downstream uniqueness proof");
   console.log("Selected project: composed uniqueness passed; upstream second output rejected.");
+  const coverageFixture = new URL(
+    "../verification/lean/examples/selected-program-coverage/",
+    import.meta.url,
+  ).pathname;
+  await cp(coverageFixture, join(temp, "coverage-input"), { recursive: true });
+  const coverageConfig = join(temp, "coverage-input/plan.json");
+  const coverageOutput = join(temp, "coverage-project");
+  await exportProject(coverageConfig, coverageOutput);
+  await Bun.write(
+    join(coverageOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(coverageFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(coverageConfig, coverageOutput);
+  const coverageReport = await checkProject(coverageConfig, coverageOutput);
+  if (
+    coverageReport.entries.length !== 2 ||
+    coverageReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected composed coverage and totality refutation");
+  const coverageSource = join(temp, "coverage-input/program.dl");
+  const coverageOriginal = await Bun.file(coverageSource).text();
+  const coveragePlanOriginal = await Bun.file(coverageConfig).text();
+  for (const mutation of ["guard", "bound"] as const) {
+    await Bun.write(
+      coverageSource,
+      mutation === "guard" ? coverageOriginal.replace("X >= 0", "X > 0") : coverageOriginal,
+    );
+    const plan = JSON.parse(coveragePlanOriginal);
+    if (mutation === "bound") plan.claims[0].bounds[1].op = "<=";
+    await Bun.write(coverageConfig, JSON.stringify(plan));
+    await exportProject(coverageConfig, coverageOutput);
+    await Bun.write(join(coverageOutput, "verification-result.json"), "old success");
+    let rejected = false;
+    try {
+      await checkProject(coverageConfig, coverageOutput);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes(mutation === "guard" ? "type mismatch" : "omega")
+      )
+        throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(coverageOutput, "verification-result.json")).exists()))
+      throw new Error("Invalid composed coverage admitted by fresh check");
+  }
+  console.log(
+    "Selected project: composed coverage and refutation passed; stricter upstream guard and overflowing input bound rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

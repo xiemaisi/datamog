@@ -1,6 +1,7 @@
 /** Positive mutual family with canonical padding for mixed tuple arities. Tags identify source predicates. */
 import type { HeadTerm } from "../packages/core/src/ast.ts";
 import { isFloatLiteral } from "../packages/core/src/ast.ts";
+import type { CoverageClaim } from "../packages/core/src/obligation-lean.ts";
 import type { TypedProgram } from "../packages/core/src/types.ts";
 import type { VerificationNode } from "../packages/core/src/verification-manifest.ts";
 import { invariantContract } from "./lean-invariant.ts";
@@ -26,9 +27,13 @@ export interface ProgramUniquenessClaim {
   outputColumns: number[];
   polarity?: "prove" | "refute";
 }
-type ProgramClaim = ProgramInvariantClaim | ProgramUniquenessClaim;
+export interface ProgramCoverageClaim extends Omit<CoverageClaim, "relationName"> {
+  kind: "program-coverage";
+  polarity?: "prove" | "refute";
+}
+type ProgramClaim = ProgramInvariantClaim | ProgramUniquenessClaim | ProgramCoverageClaim;
 const roots = (claim: MutualClaim | ProgramClaim) =>
-  claim.kind === "program-uniqueness" ? [claim.predicate] : claim.predicates;
+  "predicate" in claim ? [claim.predicate] : claim.predicates;
 
 /** Close over source definitions, never abstract a derived call as an input. */
 export function exportProgramClaim(typed: TypedProgram, claim: ProgramClaim) {
@@ -72,7 +77,7 @@ function exportFamily(
     throw new Error("Unsupported mutual parity or explicit constraints");
   const family = `${id}Family`;
   const contracts =
-    claim.kind === "program-uniqueness"
+    claim.kind === "program-uniqueness" || claim.kind === "program-coverage"
       ? []
       : selectedPredicates.map((p) => invariantContract(typed, p).contract);
   const inputs = new Map<string, number>();
@@ -236,6 +241,44 @@ function exportFamily(
     const equalities = claim.outputColumns.map((i) => `${left[i]} = ${right[i]}`).join(" ∧ ");
     goals.push(
       `(∀ ${binders}, ${applied} 0 ${padded(left)} → ${applied} 0 ${padded(right)} → (${equalities}))`,
+    );
+  }
+  if (claim.kind === "program-coverage") {
+    const inputIndex = inputs.get(claim.inputPredicate);
+    if (inputIndex === undefined)
+      throw new Error("Coverage requires an input dependency of the exported program");
+    const inputArity = arityOf(claim.inputPredicate);
+    const validColumn = (c: number) => Number.isInteger(c) && c >= 0 && c < inputArity;
+    if (
+      claim.outputToInput.length !== arityOf(claim.predicate) ||
+      claim.outputToInput.some((c) => c !== null && !validColumn(c))
+    )
+      throw new Error("Invalid coverage output mapping");
+    const operators = { "<": "<", "<=": "≤", ">": ">", ">=": "≥" };
+    for (const bound of claim.bounds)
+      if (
+        !validColumn(bound.column) ||
+        !Object.hasOwn(operators, bound.op) ||
+        !Number.isSafeInteger(bound.value)
+      )
+        throw new Error("Invalid coverage input bound");
+    const variables = Array.from({ length: inputArity }, (_, i) => `x${i}`);
+    const witnesses: string[] = [];
+    const outputs = claim.outputToInput.map((column, i) => {
+      if (column !== null) return variables[column]!;
+      const witness = `w${i}`;
+      witnesses.push(witness);
+      return witness;
+    });
+    const binders = (names: string[]) => names.map((v) => `(${v} : Datamog.SafeInt)`).join(" ");
+    const premises = [
+      `input${inputIndex} ${variables.join(" ")}`,
+      ...claim.bounds.map(
+        (b) => `${variables[b.column]}.val ${operators[b.op]} (${b.value} : Int)`,
+      ),
+    ];
+    goals.push(
+      `(∀ ${binders(variables)}, ${premises.join(" → ")} → ${witnesses.length ? `∃ ${binders(witnesses)}, ` : ""}${applied} 0 ${padded(outputs)})`,
     );
   }
   const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;

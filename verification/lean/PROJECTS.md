@@ -362,8 +362,42 @@ the unchanged proof fails and no success report remains.
 All reachable rules contribute to the manifest closure, exact checker, and
 fresh result. `"polarity": "refute"` requests the negated uniqueness statement.
 The supported source fragment and trust boundary are the same as for
-`program-invariant`; this does not yet add composed coverage claims or imports
-of separately checked proofs.
+`program-invariant`; this does not import separately checked proofs.
+
+## Coverage across derived dependencies
+
+`program-coverage` proves that an input tuple produces an output through the
+complete positive dependency graph:
+
+```json
+{"kind": "program-coverage", "id": "pipelineCoverage", "predicate": "output", "inputPredicate": "seed", "outputToInput": [0, null], "bounds": [{"column": 0, "op": ">=", "value": 0}, {"column": 0, "op": "<", "value": 9007199254740991}]}
+```
+
+The selected input must be a declared input dependency reachable from the output.
+Every input column is universally quantified, including columns not copied to
+outputs. Each output mapping is a zero-based input column or `null` for an
+independent existential bounded-integer witness. A mapping with no witnesses
+expresses direct inclusion; an empty mapping is allowed for a nullary output.
+Other input relations remain universally quantified, without additional promises
+that they contain matching rows.
+
+Bounds use `<`, `<=`, `>`, or `>=` and safe integer literals. They restrict the
+claimed input domain; they do not assert a law about the entire input dataset.
+All upstream filters and computed heads stay in the generated constructors.
+The theorem assumes neither head definedness nor intermediate derivations.
+Invalid mappings, bounds, or input selections fail before export.
+
+The [coverage pipeline](examples/selected-program-coverage/program.dl) filters
+nonnegative inputs, computes their successors, and forwards them through mutual
+recursion. Its [proof](examples/selected-program-coverage/Proofs.lean) constructs
+a bounded successor and the complete output derivation. A companion refutation
+uses input `-1` to disprove unrestricted coverage. Fresh regressions strengthen
+the upstream filter to exclude zero and widen the input bound to include
+`maxSafe`; both invalidate the maintained coverage proof and remove any old report.
+
+The selection supports `"polarity": "refute"`, exact checker types, full rule
+closures, and fresh results like the other composed claims. It retains the
+same non-null integer source fragment and does not establish backend correctness.
 
 ## Worked example
 

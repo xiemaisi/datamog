@@ -25,6 +25,7 @@ import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 
 import {
   type MutualClaim,
+  type ProgramCoverageClaim,
   type ProgramInvariantClaim,
   type ProgramUniquenessClaim,
   exportMutual,
@@ -56,6 +57,7 @@ type Claim = (
   | InvariantClaim
   | MutualClaim
   | ProgramInvariantClaim
+  | ProgramCoverageClaim
   | ProgramUniquenessClaim
   | ({ kind: "uniqueness" } & UniquenessClaim)
   | ({ kind: "coverage" } & CoverageClaim)
@@ -154,6 +156,7 @@ export function parseSelection(value: unknown): Selection {
     ]);
     if (
       claim.kind !== "coverage" &&
+      claim.kind !== "program-coverage" &&
       claim.kind !== "uniqueness" &&
       claim.kind !== "local" &&
       claim.kind !== "invariant"
@@ -164,15 +167,19 @@ export function parseSelection(value: unknown): Selection {
       ...fields,
       ...(claim.kind === "local"
         ? ["rule", "refinement"]
-        : claim.kind === "coverage"
-          ? ["relationName", "inputPredicate", "outputToInput", "bounds"]
-          : claim.kind === "invariant"
-            ? ["relationName"]
-            : ["relationName", "keyColumns", "outputColumns"]),
+        : claim.kind === "program-coverage"
+          ? ["inputPredicate", "outputToInput", "bounds"]
+          : claim.kind === "coverage"
+            ? ["relationName", "inputPredicate", "outputToInput", "bounds"]
+            : claim.kind === "invariant"
+              ? ["relationName"]
+              : ["relationName", "keyColumns", "outputColumns"]),
     ]);
     if (
       [claim.id, claim.predicate].some((v) => typeof v !== "string") ||
-      (claim.kind !== "local" && typeof claim.relationName !== "string") ||
+      (claim.kind !== "local" &&
+        claim.kind !== "program-coverage" &&
+        typeof claim.relationName !== "string") ||
       (claim.polarity !== undefined && claim.polarity !== "prove" && claim.polarity !== "refute")
     )
       throw new Error("Claims require names and prove/refute polarity");
@@ -183,7 +190,7 @@ export function parseSelection(value: unknown): Selection {
       for (const columns of [claim.keyColumns, claim.outputColumns])
         if (!Array.isArray(columns) || columns.some((c) => typeof c !== "number"))
           throw new Error("Uniqueness requires numeric column arrays");
-    } else if (claim.kind === "coverage") {
+    } else if (claim.kind === "coverage" || claim.kind === "program-coverage") {
       if (
         typeof claim.inputPredicate !== "string" ||
         !Array.isArray(claim.outputToInput) ||
@@ -257,7 +264,8 @@ export async function planProject(configInput: string, outputInput: string) {
       (claim) =>
         claim.kind === "mutual-invariant" ||
         claim.kind === "program-invariant" ||
-        claim.kind === "program-uniqueness",
+        claim.kind === "program-uniqueness" ||
+        claim.kind === "program-coverage",
     )
     .map((claim) =>
       claim.kind === "mutual-invariant"
@@ -346,7 +354,8 @@ export async function planProject(configInput: string, outputInput: string) {
         claim.kind !== "invariant" &&
         claim.kind !== "mutual-invariant" &&
         claim.kind !== "program-invariant" &&
-        claim.kind !== "program-uniqueness",
+        claim.kind !== "program-uniqueness" &&
+        claim.kind !== "program-coverage",
     )
     .map(({ kind, polarity, ...descriptor }) =>
       kind === "uniqueness"

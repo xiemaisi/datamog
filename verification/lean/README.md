@@ -796,3 +796,9 @@ and workflow guide show the selection and maintained proof.
 without requiring head refinements. The [uniqueness pipeline](examples/selected-program-uniqueness/plan.json)
 proves a key determines its output through mutual recursion; an unsafe upstream
 sibling makes the maintained proof fail.
+
+`program-coverage` proves output existence from a reachable input dependency,
+with explicit input bounds and copied columns or independent existential witnesses.
+The [coverage pipeline](examples/selected-program-coverage/plan.json) constructs a
+bounded successor through mutual recursion and refutes unrestricted coverage.
+Upstream filters and computed-head definedness must be proved through the rules.

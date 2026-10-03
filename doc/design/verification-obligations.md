@@ -1174,8 +1174,29 @@ through mutually recursive predicates and proves downstream uniqueness by
 induction on the generated family. Adding an upstream sibling that produces a
 second output makes the maintained proof fail. Statements, complete rule closures,
 proof/refutation polarity, and exact checker types use the same fresh-check
-boundary as composed invariants. Composed coverage and modular proof import
-remain future work.
+boundary as composed invariants. Modular proof import remains future work.
+
+## Selected coverage across positive dependency graphs
+
+`program-coverage` now reuses the complete positive family to prove output
+existence from a reachable declared input dependency. Descriptors map output
+columns to input columns or independent existential bounded-integer witnesses,
+and may restrict input columns with explicit integer bounds. Every input column
+remains universally quantified. Empty bounds request all admitted input tuples;
+a witness-free mapping expresses direct inclusion, including nullary outputs.
+
+Generated premises contain only the input row and declared bounds. Filters and
+computed-head definedness remain constructor premises to establish in the proof,
+including those in upstream helpers. Other input relations are quantified without
+assuming that any needed matching rows exist. Unsupported descriptors fail before
+export, and proof/refutation polarity uses exact checker types and full rule closures.
+
+The worked fixture constructs a bounded successor from nonnegative input through
+mutual recursion. Its companion refutation uses a negative input excluded by an
+upstream guard. Fresh checks reject the maintained coverage proof when that guard
+is strengthened to exclude zero or the domain is widened to admit an overflowing
+successor. These are modeled-language results within the existing integer fragment;
+module proof import and backend correctness remain outside this workflow.
 
 ## Which harder claims should be expressible?
 

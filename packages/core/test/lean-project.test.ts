@@ -912,3 +912,102 @@ test("composed uniqueness pads tuples to helper width without quantifying paddin
     );
     expect(plan.files["Datamog/Generated.lean"]).not.toContain("(x2 : Datamog.SafeInt)");
   }));
+
+test("program coverage quantifies all input columns and independent bounded witnesses", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate auxiliary(a: integer). input predicate seed(a: integer, b: integer). helper(X,Y,Z) :- auxiliary(X), seed(Y,Z). result(X,Y,Z) :- helper(X,Y,Z).",
+    );
+    const claim = {
+      kind: "program-coverage",
+      id: "covered",
+      predicate: "result",
+      inputPredicate: "seed",
+      outputToInput: [null, 0, null],
+      bounds: [{ column: 1, op: ">=", value: -2 }],
+    };
+    const writePlan = (change: object = {}) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims: [{ ...claim, ...change }] }));
+    await writePlan();
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "∀ (x0 : Datamog.SafeInt) (x1 : Datamog.SafeInt), input1 x0 x1 → x1.val ≥ (-2 : Int) → ∃ (w0 : Datamog.SafeInt) (w2 : Datamog.SafeInt), coveredFamily input0 input1 0 w0 x0 w2",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "covered")!.closure).toEqual([
+      "IntegerSemantics",
+      "covered",
+      "coveredFamily",
+      "coveredRules0",
+      "coveredRules1",
+    ]);
+    await writePlan({ outputToInput: [0, 1, 0], bounds: [] });
+    const direct = await planProject(config, output);
+    expect(direct.files["Datamog/Generated.lean"]).toContain(
+      "input1 x0 x1 → coveredFamily input0 input1 0 x0 x1 x0",
+    );
+    expect(direct.files["Datamog/Generated.lean"]).not.toContain("∃");
+    expect(direct.manifest.digest).not.toBe(plan.manifest.digest);
+    await writePlan({ polarity: "refute" });
+    const refutation = await planProject(config, output);
+    expect(refutation.goals).toEqual(["covered_refuted"]);
+    expect(refutation.files["Datamog/Checked.lean"]).toContain(
+      "theorem covered_refuted : ¬ Generated.covered",
+    );
+    for (const change of [
+      { inputPredicate: "helper" },
+      { inputPredicate: "missing" },
+      { outputToInput: [] },
+      { outputToInput: [null, 2, null] },
+      { outputToInput: [null, -1, null] },
+      { outputToInput: [null, 0.5, null] },
+      { outputToInput: [null, "0", null] },
+      { bounds: [{ column: 2, op: ">", value: 0 }] },
+      { bounds: [{ column: 0, op: "=", value: 0 }] },
+      { bounds: [{ column: 0, op: "<", value: 9007199254740992 }] },
+      { bounds: [{ column: 0, op: "<", value: 1.5 }] },
+      { bounds: [{ column: 0, op: "<", value: 1, typo: true }] },
+      { bounds: [null] },
+      { bounds: "none" },
+      { relationName: "Unexpected" },
+    ]) {
+      await writePlan(change);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("program coverage preserves canonical padding and nullary output existence", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(a: integer, b: integer). helper(X,Y) :- seed(X,Y). result(X) :- helper(X,Y). flag() :- helper(X,Y).",
+    );
+    for (const [predicate, mapping, expected] of [
+      ["result", [0], "coveredFamily input0 0 x0 (⟨0, by decide⟩ : Datamog.SafeInt)"],
+      [
+        "flag",
+        [],
+        "coveredFamily input0 0 (⟨0, by decide⟩ : Datamog.SafeInt) (⟨0, by decide⟩ : Datamog.SafeInt)",
+      ],
+    ] as const) {
+      await Bun.write(
+        config,
+        JSON.stringify({
+          source: "source.dl",
+          claims: [
+            {
+              kind: "program-coverage",
+              id: "covered",
+              predicate,
+              inputPredicate: "seed",
+              outputToInput: mapping,
+              bounds: [],
+            },
+          ],
+        }),
+      );
+      const plan = await planProject(config, output);
+      expect(plan.files["Datamog/Generated.lean"]).toContain(`input0 x0 x1 → ${expected}`);
+    }
+  }));
