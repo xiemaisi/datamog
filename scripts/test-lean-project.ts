@@ -856,6 +856,45 @@ try {
   console.log(
     "Selected project: explicit constraint proof and refutation passed; changed source guard and constraint body rejected.",
   );
+  const errorFixture = new URL(
+    "../verification/lean/examples/selected-error-predicates/",
+    import.meta.url,
+  ).pathname;
+  await cp(errorFixture, join(temp, "error-input"), { recursive: true });
+  const errorConfig = join(temp, "error-input/plan.json");
+  const errorOutput = join(temp, "error-project");
+  await exportProject(errorConfig, errorOutput);
+  await Bun.write(
+    join(errorOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(errorFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(errorConfig, errorOutput);
+  const errorReport = await checkProject(errorConfig, errorOutput);
+  if (errorReport.entries.length !== 3 || errorReport.entries.some((e) => e.status !== "proved"))
+    throw new Error("Expected named error proof and independent error/constraint refutations");
+  const errorSource = join(temp, "error-input/program.dl");
+  const errorOriginal = await Bun.file(errorSource).text();
+  for (const changed of [
+    errorOriginal.replace("X > 0", "X >= 0"),
+    `${errorOriginal}\nbad(X) :- seed(X).`,
+  ]) {
+    await Bun.write(errorSource, changed);
+    await exportProject(errorConfig, errorOutput);
+    await Bun.write(join(errorOutput, "verification-result.json"), "old success");
+    let rejected = false;
+    try {
+      await checkProject(errorConfig, errorOutput);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+        throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(errorOutput, "verification-result.json")).exists()))
+      throw new Error("Reachable named error accepted as impossible");
+  }
+  console.log(
+    "Selected project: named error proof and mixed refutations passed; unsafe guard and unmarked sibling rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

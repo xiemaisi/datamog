@@ -16,8 +16,6 @@ export function exportConstraint(typed: TypedProgram, query: Query, claim: Const
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(claim.id)) throw new Error("Invalid constraint claim name");
   if (!query.isError || query.synthetic || !query.$cstNode || query.outputName)
     throw new Error("Constraint selection requires an explicit source !- statement");
-  if (typed.constraints.some((q) => q.outputName && !q.synthetic))
-    throw new Error("Constraint export does not support error predicate declarations");
   const predicate = `__lean_constraint_${claim.id}`;
   if (typed.rules.has(predicate) || typed.extDecls.has(predicate))
     throw new Error("Generated constraint predicate conflicts with source predicate");
@@ -57,6 +55,59 @@ export function exportConstraint(typed: TypedProgram, query: Query, claim: Const
         column: cst.range.start.character + 1,
       },
     },
+  });
+  const node = bundle.nodes.find((node) => node.id === claim.id)!;
+  node.statement = { claim, source: (node.statement as { source: string }).source };
+  node.dependencies = [...node.dependencies, origin];
+  return bundle;
+}
+
+export interface ErrorPredicateClaim {
+  kind: "error-predicate";
+  id: string;
+  predicate: string;
+  polarity?: "prove" | "refute";
+}
+
+/** Error status applies to the whole relation, including unmarked sibling rules. */
+export function exportErrorPredicate(typed: TypedProgram, claim: ErrorPredicateClaim) {
+  const rules = typed.rules.get(claim.predicate);
+  if (
+    !rules?.length ||
+    !typed.constraints.some((q) => q.outputName === claim.predicate && !q.synthetic)
+  )
+    throw new Error("Selection requires a declared error predicate");
+  const definitions = rules.map((rule) => {
+    const cst = rule.$cstNode;
+    if (!cst) throw new Error("Error predicate definitions require source provenance");
+    return {
+      error: rule.error,
+      text: cst.text,
+      span: {
+        offset: cst.offset,
+        end: cst.end,
+        line: cst.range.start.line + 1,
+        column: cst.range.start.character + 1,
+      },
+    };
+  });
+  // All checks are goals, not restrictions on the modeled inputs or derivations.
+  const bundle = exportProgramClaim(
+    { ...typed, constraints: [] },
+    {
+      kind: "program-emptiness",
+      id: claim.id,
+      predicate: claim.predicate,
+      polarity: claim.polarity,
+    },
+  );
+  const origin = `${claim.id}ErrorPredicate`;
+  bundle.nodes.push({
+    id: origin,
+    kind: "definition",
+    statement: { claim, definitions },
+    assumptions: [],
+    dependencies: [],
   });
   const node = bundle.nodes.find((node) => node.id === claim.id)!;
   node.statement = { claim, source: (node.statement as { source: string }).source };

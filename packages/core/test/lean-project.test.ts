@@ -1211,7 +1211,7 @@ test("constraint selection excludes synthesized checks and binds exact source pr
     await expect(readdir(output)).rejects.toThrow();
   }));
 
-test("constraint export rejects unsupported bodies, named errors, and generated-name collisions", async () =>
+test("constraint export rejects unsupported bodies and generated-name collisions", async () =>
   fixture(async (config, output, dir) => {
     await Bun.write(
       config,
@@ -1225,11 +1225,93 @@ test("constraint export rejects unsupported bodies, named errors, and generated-
       "input predicate seed(n: integer). !- seed(X), X + 1 < 0.",
       "input predicate seed(n: integer). !- seed(X), Y = X + 1.",
       "input predicate seed(n: integer?). !- seed(X).",
-      "input predicate seed(n: integer). error predicate bad(X) :- seed(X). !- seed(X).",
       "input predicate seed(n: integer). __lean_constraint_safe() :- seed(X). !- seed(X).",
     ]) {
       await Bun.write(join(dir, "source.dl"), source);
       await expect(exportProject(config, output)).rejects.toThrow();
     }
     await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("named error goals retain every sibling and source declaration without assuming checks", async () =>
+  fixture(async (config, output, dir) => {
+    const source =
+      "input predicate seed(n: integer).\nerror predicate bad(X) :- seed(X), X < 0.\nbad(X) :- seed(X), X > 0.\n!- seed(X).\n";
+    await Bun.write(join(dir, "source.dl"), source);
+    const claim = { kind: "error-predicate", id: "noBad", predicate: "bad" };
+    const writePlan = (change: object = {}) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims: [{ ...claim, ...change }] }));
+    await writePlan();
+    const plan = await planProject(config, output);
+    expect(plan.files["Datamog/Generated.lean"]).toContain("rule0_1");
+    expect(plan.files["Datamog/Generated.lean"]).toContain("noBadFamily input0 0 x0 → False");
+    expect(
+      plan.manifest.entries.find((e) => e.id === "noBadErrorPredicate")!.statement,
+    ).toMatchObject({
+      claim,
+      definitions: [
+        {
+          error: true,
+          text: "error predicate bad(X) :- seed(X), X < 0.",
+          span: { line: 2, column: 1 },
+        },
+        { error: false, text: "bad(X) :- seed(X), X > 0.", span: { line: 3, column: 1 } },
+      ],
+    });
+    expect(plan.manifest.entries.find((e) => e.id === "noBad")!.closure).toContain(
+      "noBadErrorPredicate",
+    );
+    expect(plan.manifest.entries.every((e) => e.assumptions.length === 0)).toBe(true);
+    await writePlan({ polarity: "refute" });
+    const negative = await planProject(config, output);
+    expect(negative.goals).toEqual(["noBad_refuted"]);
+    expect(negative.files["Datamog/Checked.lean"]).toContain(
+      "theorem noBad_refuted : ¬ Generated.noBad",
+    );
+    await writePlan();
+    await Bun.write(join(dir, "source.dl"), source.replace("X > 0", "X >= 0"));
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    await Bun.write(join(dir, "source.dl"), source.replace("error predicate ", ""));
+    await expect(exportProject(config, output)).rejects.toThrow("declared error predicate");
+    for (const change of [
+      { predicate: "seed" },
+      { predicate: "missing" },
+      { constraint: 1 },
+      { relationName: "Bad" },
+      { polarity: "unknown" },
+    ]) {
+      await writePlan(change);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("explicit constraints and named errors may be selected together", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(n: integer). error predicate bad() :- seed(X). !- bad().",
+    );
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [
+          { kind: "error-predicate", id: "noBad", predicate: "bad" },
+          { kind: "constraint", id: "checkBad", constraint: 1 },
+        ],
+      }),
+    );
+    const plan = await planProject(config, output);
+    expect([...plan.goals].sort()).toEqual(["checkBad", "noBad"]);
+    expect(plan.files["Datamog/Generated.lean"]).toContain("noBadFamily input0 0  → False");
+    expect(plan.manifest.entries.find((e) => e.id === "checkBad")!.closure).toContain(
+      "checkBadRules1",
+    );
+    expect(plan.manifest.entries.every((e) => e.assumptions.length === 0)).toBe(true);
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate seed(n: integer). error predicate bad() :- seed(X), not seed(X). !- bad().",
+    );
+    await expect(exportProject(config, output)).rejects.toThrow("Unsupported mutual body");
   }));

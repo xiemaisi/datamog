@@ -1233,7 +1233,7 @@ fresh result reports retain the existing trust boundary.
 
 This handles ordinary derived violation predicates in the supported integer
 fragment. The separate constraint selection below now handles explicit `!-`
-statements; special error declarations remain open. Ordinary emptiness selections
+statements; named error selections are described below. Ordinary emptiness selections
 retain their explicit-constraint restriction. Runtime checks are unchanged.
 
 ## Selected explicit constraint obligations
@@ -1254,9 +1254,30 @@ The fixture proves a constraint over positive values propagated through recursio
 and refutes `!- seed(X).` using a nonempty input. Fresh regressions alter the
 upstream guard and selected constraint comparison, and reject the unchanged
 proof in both cases. This exercises the boundary that constraints are goals,
-not premises assumed to hold. Special error declarations and automatic constraint
-integration with other claim kinds remain future work. Runtime enforcement is
+not premises assumed to hold. Named error selections are now supported below;
+automatic constraint integration with other claim kinds remains future work. Runtime enforcement is
 unchanged; these proofs concern the supported modeled integer fragment.
+
+## Selected named error predicate obligations
+
+The `error-predicate` selection identifies a declared error relation and proves
+its entire relation empty for arbitrary typed inputs. All defining rules are
+included, including unmarked siblings and recursive rules. Provenance records
+source text, locations, and error flags for each definition, and the complete
+positive dependency closure contributes to the statement identity. Non-error
+predicates cannot be selected through this descriptor.
+
+Named error goals and explicit constraints can coexist, and explicit constraint
+bodies may refer to named error relations. All checks remain goals rather than
+assumptions. The fixture proves a recursive error relation empty and refutes both
+a reachable error relation and an explicit input-emptiness constraint. Fresh tests
+weaken an upstream guard and add an unmarked error sibling; both reject the
+maintained safety proof. Nullary error relations and exact refutation registration
+use the existing family and checker model.
+
+This remains the positive non-null integer fragment with runtime checks enabled.
+Negation, parity, aggregates, and general structural error relations remain
+unsupported; other claim families keep their existing explicit-check restrictions.
 
 ## Which harder claims should be expressible?
 

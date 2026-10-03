@@ -21,7 +21,12 @@ import {
 import { createLeanVerificationResult } from "../packages/core/src/verification-result.ts";
 import { parse } from "../packages/parser/src/index.ts";
 
-import { type ConstraintClaim, exportConstraint } from "./lean-constraint.ts";
+import {
+  type ConstraintClaim,
+  type ErrorPredicateClaim,
+  exportConstraint,
+  exportErrorPredicate,
+} from "./lean-constraint.ts";
 import { type InvariantClaim, exportInvariant } from "./lean-invariant.ts";
 
 import {
@@ -57,6 +62,7 @@ type LocalClaim = {
 };
 type Claim = (
   | ConstraintClaim
+  | ErrorPredicateClaim
   | LocalClaim
   | InvariantClaim
   | MutualClaim
@@ -179,6 +185,7 @@ export function parseSelection(value: unknown): Selection {
       "refinement",
     ]);
     if (
+      claim.kind !== "error-predicate" &&
       claim.kind !== "program-emptiness" &&
       claim.kind !== "coverage" &&
       claim.kind !== "program-coverage" &&
@@ -190,7 +197,7 @@ export function parseSelection(value: unknown): Selection {
     const fields = ["kind", "polarity", "id", "predicate"];
     keys(claim, [
       ...fields,
-      ...(claim.kind === "program-emptiness"
+      ...(claim.kind === "error-predicate" || claim.kind === "program-emptiness"
         ? []
         : claim.kind === "local"
           ? ["rule", "refinement"]
@@ -204,7 +211,8 @@ export function parseSelection(value: unknown): Selection {
     ]);
     if (
       [claim.id, claim.predicate].some((v) => typeof v !== "string") ||
-      (claim.kind !== "program-emptiness" &&
+      (claim.kind !== "error-predicate" &&
+        claim.kind !== "program-emptiness" &&
         claim.kind !== "local" &&
         claim.kind !== "program-coverage" &&
         typeof claim.relationName !== "string") ||
@@ -298,6 +306,11 @@ export async function planProject(configInput: string, outputInput: string) {
         throw new Error(`No explicit constraint ${claim.constraint}`);
       return exportConstraint(typed, query, claim);
     });
+  constraintBundles.push(
+    ...selection.claims
+      .filter((claim) => claim.kind === "error-predicate")
+      .map((claim) => exportErrorPredicate(typed, claim)),
+  );
   const mutuals = selection.claims
     .filter(
       (claim) =>
@@ -391,6 +404,7 @@ export async function planProject(configInput: string, outputInput: string) {
   const claimBundles = selection.claims
     .filter(
       (claim) =>
+        claim.kind !== "error-predicate" &&
         claim.kind !== "constraint" &&
         claim.kind !== "local" &&
         claim.kind !== "invariant" &&

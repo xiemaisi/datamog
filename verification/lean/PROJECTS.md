@@ -453,7 +453,7 @@ previous success report.
 
 This provides a way to prove ordinary named violation predicates empty in the
 supported positive integer fragment. The separate `constraint` selection below imports explicit `!-` statements;
-special error-predicate declarations remain unsupported. `program-emptiness`
+named errors use the `error-predicate` selection below. `program-emptiness`
 itself still rejects explicit constraints. Runtime checks remain enabled.
 
 ## Explicit source constraints
@@ -485,10 +485,38 @@ or the constraint comparison makes the maintained safety proof fail.
 Supported bodies use positive variable-only relation atoms and the existing
 integer comparison guards. Unsupported bodies, invalid indices, and generated
 predicate-name collisions fail before export. `"polarity": "refute"` proves the
-negation of the selected universal constraint. Special `error predicate`
-declarations remain rejected. Other claim kinds retain their existing explicit
+negation of the selected universal constraint. Explicit constraints and named
+error goals may be selected together. Other claim kinds retain their existing explicit
 constraint restrictions; this first selection does not automatically attach
 constraint goals to them. Runtime checks are unchanged.
+
+## Named error predicates
+
+Select a declared error relation by its predicate name:
+
+```json
+{"kind": "error-predicate", "id": "noBad", "predicate": "bad"}
+```
+
+The goal proves that no tuple of the error relation can be derived for any typed
+inputs. Every defining rule participates, including siblings without an `error`
+marker and recursive rules. The source provenance records all defining rules,
+their error flags, exact text, and locations; the manifest includes the full
+positive dependency closure. An ordinary predicate without an error declaration
+cannot satisfy this selector; use `program-emptiness` for that case.
+
+The [worked example](examples/selected-error-predicates/program.dl) proves a
+recursive error relation empty and refutes emptiness of an error relation that
+copies input rows. It also refutes an explicit `!-` constraint in the same
+project. Neither named errors nor explicit constraints are assumed to hold.
+The [maintained proofs](examples/selected-error-predicates/Proofs.lean) fail if
+an upstream guard admits zero or an unmarked sibling introduces reachable errors.
+
+`"polarity": "refute"` negates the exact universal emptiness theorem. Nullary
+error predicates are supported. The existing positive integer fragment, fresh
+checking, and axiom audit apply. Explicit constraint selection can now traverse
+named error definitions as well. Runtime error reporting remains enabled, and
+other claim kinds retain their existing restrictions on programs with checks.
 
 ## Worked example
 

@@ -817,5 +817,9 @@ The `constraint` selection now imports an explicit `!-` statement by one-based
 source order, excluding synthesized checks. Its generated violation relation
 must be proved empty without assuming any constraint holds. The [constraint example](examples/selected-constraints/plan.json)
 proves recursive safety and refutes a claim that arbitrary input is empty.
-Exact constraint text and source locations are bound into the manifest. Special
-`error predicate` declarations remain unsupported; runtime checks stay enabled.
+Exact constraint text and source locations are bound into the manifest. Named errors use the selection below; runtime checks stay enabled.
+
+`error-predicate` selects a declared error relation by name and proves all of its
+rules empty, including unmarked siblings. The [named error example](examples/selected-error-predicates/plan.json)
+checks recursive safety and counterexamples alongside an explicit constraint.
+Every defining rule has source provenance, and no error check becomes a premise.
