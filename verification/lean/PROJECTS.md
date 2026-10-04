@@ -1,7 +1,6 @@
 # User-selected Lean projects
 
-`bun run lean:project` exports and checks selected claims from a standalone
-Datamog source file. It supports structural projections, local head refinements,
+`bun run lean:project` exports and checks selected claims from a Datamog source file. It supports structural projections, local head refinements,
 positive recursive program laws, explicit constraints, and named error predicates.
 Export and inspection need only Bun; checking uses pinned Lean **4.34.0** through
 `lake`. Ordinary execution and `--verify` do not require Lean.
@@ -35,7 +34,8 @@ register a refutation. Unsupported selections fail explicitly. Reports cover
 only registered goals. Runtime checks remain enabled, and adding checks does not
 restrict a theorem's quantified inputs.
 
-Modules/data bindings (`:=`), general negation, aggregates, parity recursion,
+Local `.dl` module imports are supported for composed `program-*` claims (see
+[modules](#local-module-programs)). Data-file bindings, general negation, aggregates, parity recursion,
 floats, arbitrary expression translation, and general structural relation laws
 remain outside this workflow. Proof caching/import, automatic proof search, and
 backend correctness are also outside its current scope.
@@ -58,8 +58,8 @@ Each projection selects an existing predicate and a Lean declaration prefix.
 Coverage defaults to true; `coverage: false` requests soundness only for a path
 that may be absent. Unsupported programs or paths fail export. Unknown selection
 fields, duplicate identities, empty selections, and invalid descriptors fail
-rather than silently dropping goals. The current source must have no module or
-data bindings (`:=`); ordinary input declarations quantify over admitted data.
+rather than silently dropping goals. Structural projection selections require a source without module or data
+bindings (`:=`); ordinary input declarations quantify over admitted data.
 
 The supported fragment is the existing structural projection exporter: one rule
 and one positive input atom per selected predicate, one structural input column,
@@ -578,6 +578,37 @@ be used as assumptions to discharge the law.
 The older `invariant` and `mutual-invariant` exporters retain their explicit-check
 restrictions. This does not automatically select every source check or permit
 unsupported rule bodies. Runtime checking remains enabled.
+
+## Local module programs
+
+Composed `program-*` claims can now select predicates in a source using local
+`.dl` imports. Select the entry program's alias or derived predicate as usual;
+the exporter follows the elaborated dependency graph through imported definitions.
+The [nested-module example](examples/selected-modules/README.md) proves positivity
+through two levels of imports.
+
+The loader uses the same raw parsing, elaboration, post-processing, inference,
+and module-boundary checking sequence as execution. Imports resolve relative to
+the importing file. Each resolver call receives a fresh AST, while repeated reads
+of one canonical file share a source snapshot. Elaborated predicate identities
+preserve separate instances and wiring; shared instances follow the elaborator's
+existing rules. Boundary checks enforce declared types, nullability, and polarity.
+
+Module plans add `moduleSources` to inspection and fresh reports: exact text,
+entry-relative path, and digest for the entry and every resolved module file.
+`ModuleSources` in the manifest records those identities, import edges, and
+boundary metadata, and belongs to every selected goal's closure. Changes to a
+transitive import invalidate the plan even when the entry file is unchanged.
+Check re-resolves the complete source graph when checking freshness. The source
+snapshot and selection snapshot retain their existing entry-point meaning.
+
+This first scope supports composed integer program laws only. Structural
+projection, local, explicit-constraint, and named-error selections in module
+sources are rejected. Runtime checks inside modules do not become assumptions.
+Data-file bindings, remote imports, separate interface-law assumptions, and proof
+imports remain unsupported. Module cycles, missing files, and incompatible
+boundaries fail before export. This expands source loading; it does not prove the
+elaborator correct or establish a reusable assume-guarantee module theorem.
 
 ## Worked example
 

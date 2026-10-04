@@ -84,7 +84,7 @@ test("duplicate identities and bound sources fail without output mutation", asyn
       join(dir, "source.dl"),
       'input predicate items(v: {n: integer}) := "input.jsonl". picked(V["n"]) :- items(V).',
     );
-    await expect(planProject(config, output)).rejects.toThrow("standalone");
+    await expect(planProject(config, output)).rejects.toThrow("program-* claims only");
   }));
 test("export refuses unrelated directories and symlinked managed files", async () =>
   fixture(async (config, output, dir) => {
@@ -1357,4 +1357,118 @@ test("all composed laws remain unchanged when explicit and named runtime checks 
     expect(after.manifest.entries.every((e) => !e.assumptions.length)).toBe(true);
     expect(after.manifest.digest).not.toBe(before.manifest.digest);
     expect(after.goals).not.toContain("bad");
+  }));
+
+test("module plans snapshot transitive sources and invalidate imported changes", async () =>
+  fixture(async (config, output, dir) => {
+    for (const file of ["filter.dl", "pipeline.dl"])
+      await Bun.write(
+        join(dir, file),
+        await Bun.file(`verification/lean/examples/selected-modules/${file}`).text(),
+      );
+    await Bun.write(
+      join(dir, "source.dl"),
+      await Bun.file("verification/lean/examples/selected-modules/program.dl").text(),
+    );
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "program-invariant", id: "safe", predicates: ["output"] }],
+      }),
+    );
+    const plan = await exportProject(config, output);
+    // File comparisons use serialized bytes, not only canonical digests.
+    for (let attempt = 0; attempt < 5; attempt++)
+      expect((await planProject(config, output)).files["manifest.json"]).toBe(
+        plan.files["manifest.json"],
+      );
+    expect(plan.moduleSources?.map((s) => s.path)).toEqual([
+      "filter.dl",
+      "pipeline.dl",
+      "source.dl",
+    ]);
+    expect(plan.manifest.entries.find((e) => e.id === "safe")!.closure).toContain("ModuleSources");
+    const graph = plan.manifest.entries.find((e) => e.id === "ModuleSources")!.statement;
+    expect(graph).toMatchObject({
+      imports: [
+        { importer: "source.dl", reference: "pipeline.dl", file: "pipeline.dl" },
+        { importer: "pipeline.dl", reference: "filter.dl", file: "filter.dl" },
+      ],
+    });
+    const preview = await inspectProject(config, output);
+    expect(preview.moduleSources).toEqual(plan.moduleSources);
+    for (const file of plan.moduleSources!)
+      expect(file.digest).toBe(plan.manifest.context.artifacts[`module-source/${file.path}`]);
+    await Bun.write(
+      join(dir, "filter.dl"),
+      (await Bun.file(join(dir, "filter.dl")).text()).replace("X > 0", "X >= 0"),
+    );
+    await Bun.write(join(output, "verification-result.json"), "old success");
+    await expect(checkProject(config, output)).rejects.toThrow("Stale or altered");
+    expect(await Bun.file(join(output, "verification-result.json")).exists()).toBe(false);
+    const changed = await planProject(config, output);
+    expect(changed.manifest.digest).not.toBe(plan.manifest.digest);
+    expect(changed.files["Datamog/Generated.lean"]).not.toBe(plan.files["Datamog/Generated.lean"]);
+  }));
+
+test("module instances preserve distinct wiring while sharing source snapshots", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "filter.dl"),
+      await Bun.file("verification/lean/examples/selected-modules/filter.dl").text(),
+    );
+    const source =
+      'input predicate a(n: integer). input predicate b(n: integer). input predicate first(n: integer) := positive from "filter.dl"(item = a). input predicate second(n: integer) := positive from "filter.dl"(item = b). input predicate third(n: integer) := positive from "filter.dl"(item = a).';
+    await Bun.write(join(dir, "source.dl"), source);
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "program-equivalence", id: "same", predicates: ["first", "second"] }],
+      }),
+    );
+    const plan = await planProject(config, output);
+    expect(plan.moduleSources).toHaveLength(2);
+    expect(plan.manifest.entries.find((e) => e.id === "sameFamily")!.statement).toMatchObject({
+      inputs: [
+        { predicate: "a", index: 0, arity: 1 },
+        { predicate: "b", index: 1, arity: 1 },
+      ],
+    });
+    expect(plan.files["Datamog/Generated.lean"]).toContain("input1 : Datamog.SafeInt → Prop");
+    await Bun.write(join(dir, "source.dl"), source.replace("item = b", "item = a"));
+    const shared = await planProject(config, output);
+    expect(shared.files["Datamog/Generated.lean"]).not.toContain("input1 :");
+    expect(shared.manifest.digest).not.toBe(plan.manifest.digest);
+  }));
+
+test("module verification rejects invalid boundaries, cycles, missing files and data bindings", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "source.dl",
+        claims: [{ kind: "program-emptiness", id: "empty", predicate: "out" }],
+      }),
+    );
+    await Bun.write(
+      join(dir, "filter.dl"),
+      await Bun.file("verification/lean/examples/selected-modules/filter.dl").text(),
+    );
+    await Bun.write(
+      join(dir, "cycle.dl"),
+      'input predicate item(n: integer). input predicate p(n: integer) := result from "cycle.dl"(item = item). output predicate result(X) :- p(X).',
+    );
+    for (const source of [
+      'input predicate seed(n: integer) := "data.jsonl". out(X) :- seed(X).',
+      'input predicate seed(n: integer). input predicate out(n: boolean) := positive from "filter.dl"(item = seed).',
+      'input predicate seed(n: integer). input predicate out(n: integer) := positive from "missing.dl"(item = seed).',
+      'input predicate seed(n: integer). input predicate out(n: integer) := result from "cycle.dl"(item = seed).',
+      'input predicate seed(n: integer). input predicate out(n: integer) := positive from "https://example.com/filter.dl"(item = seed).',
+    ]) {
+      await Bun.write(join(dir, "source.dl"), source);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
   }));

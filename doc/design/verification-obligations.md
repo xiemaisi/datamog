@@ -6,7 +6,8 @@ project, and user-selected Lean workflow are implemented. Selected projects supp
 positive recursive invariants, uniqueness, coverage, equivalence, emptiness,
 explicit constraints, named errors, and a separate structural projection fragment.
 Exact checker types, axiom audits, content identities, and fresh result reports are
-implemented for these workflows. General module verification, proof reuse/import,
+implemented for these workflows. Local module loading and source identities are supported for composed laws;
+general module-interface verification, proof reuse/import,
 broader semantics, automation, and translation correctness remain future work.
 
 Start with the [current support matrix](../../verification/lean/PROJECTS.md#support-at-a-glance)
@@ -1307,6 +1308,28 @@ all program checks or an input-law mechanism. The legacy single-relation and
 single-component APIs retain their restrictions, unsupported fragments remain
 unsupported, and runtime enforcement stays enabled.
 
+## Local modules for selected composed laws
+
+The selected workflow now loads local `.dl` modules for composed `program-*`
+claims using the existing raw parser, elaborator, post-processing, type inference,
+and module-boundary checks. Entry aliases and imported definitions retain their
+elaborated predicate identities; distinct input wiring remains distinct. Repeated
+imports receive fresh ASTs over a consistent per-file snapshot.
+
+Inspection and reports include exact entry-relative source snapshots and digests
+for every resolved file. A `ModuleSources` manifest node records source identities,
+import edges, and boundary metadata, and is included in every selected goal's
+closure. Both initial and final freshness checks re-resolve the source graph.
+Tests cover nested imports, separate/shared wiring, boundary errors, missing
+files, cycles, and unsupported bindings. A maintained nested-module invariant
+fails after its transitive input guard is weakened.
+
+This does not introduce module interface assumptions or imported proof reuse.
+Only composed integer laws are supported for module sources; imported check and
+structural projection selections remain outside this initial scope. Remote
+modules and active data-file bindings are rejected. The frontend and elaborator
+remain trusted, and runtime checks do not become theorem hypotheses.
+
 ## Which harder claims should be expressible?
 
 The following formulas are mathematical specifications, **not proposed parser
@@ -1639,16 +1662,16 @@ but its remaining input premises must stay visible at every importing boundary.
 |---|---|---|
 | 1. Explicit current results | Typed SMT obligations, provenance, dependencies, bounded solver invocations, conditional discharge | Stronger process containment, memory limits, and CLI resource configuration |
 | 2. Semantics and Lean spike | Pinned Lean project, arithmetic and recursive proofs, structural libraries, fixed-fixture backend comparisons | Extend supported semantic profiles as needed |
-| 3. Statement/checking boundary | Exact theorem types, axiom audits, content manifests, fresh isolated builds, selected-project inspection and reports | Module identities, reusable proof artifacts, cache/import protocol, finer invalidation; reports are not certificates |
-| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Module-aware programs, explicit input laws, broader structural relation claims, finite quantifiers and stratified negation |
+| 3. Statement/checking boundary | Exact theorem types, axiom audits, content manifests, fresh isolated builds, selected-project inspection and reports | General module-interface identities, reusable proof artifacts, cache/import protocol, finer invalidation; reports are not certificates |
+| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Module check/projection selections, explicit interface/input laws, broader structural relation claims, finite quantifiers and stratified negation |
 | 5. Automation and wider semantics | SMT remains the automatic route; maintained Lean proofs check the supported fragments | CHC benchmarks, richer SMT, a certificate route, and a proved finite-group aggregate model |
 | 6. Reduce translation trust | Exporter/frontend/semantic model remain trusted; differential regressions check concrete cases | Deep embedding and a soundness theorem for translation/obligation generation; backend correspondence is separate |
 
 The initial arithmetic and reachability milestones are complete. The current
 consolidated workflow is demonstrated by the combined laws-and-checks example.
-The next architectural packet is module-aware source loading and identities,
-followed by carefully scoped interface/input-law support; neither is implemented
-by the current standalone-source selection. Keep proposed body type guards
+Local module loading and source identities are now implemented for composed
+program laws. Module-interface/input-law support and imported structural/check
+selections remain future work. Keep proposed body type guards
 separate: [that design](body-type-guards.md) concerns runtime filtering and type
 refinement rather than assumptions for arbitrary proofs.
 

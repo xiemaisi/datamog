@@ -19,7 +19,7 @@ import {
   verificationDigest,
 } from "../packages/core/src/verification-manifest.ts";
 import { createLeanVerificationResult } from "../packages/core/src/verification-result.ts";
-import { parse } from "../packages/parser/src/index.ts";
+import { parse, parseRaw } from "../packages/parser/src/index.ts";
 
 import {
   type ConstraintClaim,
@@ -39,6 +39,8 @@ import {
   exportMutual,
   exportProgramClaim,
 } from "./lean-mutual.ts";
+
+import { loadLeanModules } from "./lean-modules.ts";
 
 const root = new URL("../", import.meta.url).pathname;
 const library = join(root, "verification/lean");
@@ -286,12 +288,19 @@ export async function planProject(configInput: string, outputInput: string) {
   const selection = parseSelection(JSON.parse(configText));
   const sourcePath = resolve(dirname(configPath), selection.source);
   const source = await Bun.file(sourcePath).text();
-  const program = parse(source);
-  if (program.statements.some((statement) => statement.$type === "ExtDecl" && statement.binding))
-    throw new Error(
-      "This project workflow supports standalone sources without module or data bindings",
-    );
-  const typed = inferTypes(analyze(program));
+  const standalone = parseRaw(source, sourcePath);
+  const hasBindings = standalone.statements.some(
+    (statement) => statement.$type === "ExtDecl" && statement.binding,
+  );
+  if (
+    hasBindings &&
+    (selection.projections.length ||
+      selection.claims.some((claim) => !claim.kind.startsWith("program-")))
+  )
+    throw new Error("Module verification currently supports composed program-* claims only");
+  const modules = hasBindings ? loadLeanModules(source, sourcePath) : undefined;
+  const program = modules?.program ?? parse(source);
+  const typed = modules?.typed ?? inferTypes(analyze(program));
   const exports = selection.projections.map((descriptor) =>
     exportLeanStructuralProjection(typed, descriptor),
   );
@@ -469,6 +478,7 @@ export async function planProject(configInput: string, outputInput: string) {
     "scripts/lean-invariant.ts",
     "scripts/lean-mutual.ts",
     "scripts/lean-constraint.ts",
+    "scripts/lean-modules.ts",
     "bun.lock",
   ]);
   for (const directory of ["packages/core/src", "packages/parser/src"])
@@ -477,6 +487,31 @@ export async function planProject(configInput: string, outputInput: string) {
       onlyFiles: true,
     }))
       if (/\.(ts|langium)$/.test(path)) paths.add(`${directory}/${path}`);
+  const moduleSources = modules
+    ? await Promise.all(
+        modules.sources.map(async ({ path, text }) => {
+          const digest = await verificationDigest(text);
+          return { path, text, digest };
+        }),
+      )
+    : undefined;
+  // Preserve source order regardless of asynchronous digest completion order.
+  for (const file of moduleSources ?? []) artifacts[`module-source/${file.path}`] = file.digest;
+  if (modules) {
+    nodes.push({
+      id: "ModuleSources",
+      kind: "definition",
+      assumptions: [],
+      dependencies: [],
+      statement: {
+        sources: moduleSources!.map(({ path, digest }) => ({ path, digest })),
+        imports: modules.imports,
+        boundaries: modules.boundaries,
+      },
+    });
+    for (const node of nodes)
+      if (node.kind === "goal") node.dependencies = [...node.dependencies, "ModuleSources"];
+  }
   for (const path of [...paths].sort())
     artifacts[path] = await verificationDigest(await Bun.file(join(root, path)).text());
   for (const [path, content] of Object.entries(files))
@@ -512,12 +547,17 @@ export async function planProject(configInput: string, outputInput: string) {
   files["manifest.json"] = `${JSON.stringify(manifest, null, 2)}\n`;
   for (const path of Object.keys(files)) {
     const target = join(output, path);
-    if (target === configPath || target === sourcePath)
+    if (
+      target === configPath ||
+      target === sourcePath ||
+      modules?.sources.some(({ file }) => file === target)
+    )
       throw new Error("Project output would overwrite the selection or source");
     await regular(target);
   }
   return {
     files,
+    moduleSources,
     manifest,
     goals: goals.map((goal) => goal.id),
     sourceSnapshot: { path: selection.source, text: source, digest: artifacts.source! },
@@ -532,6 +572,7 @@ export async function inspectProject(configPath: string, outputInput: string) {
   return {
     schema: "datamog-selected-inspection-v1",
     purpose: "inspection-only",
+    ...(plan.moduleSources ? { moduleSources: plan.moduleSources } : {}),
     sourceSnapshot: plan.sourceSnapshot,
     selectionSnapshot: plan.selectionSnapshot,
     verificationPlan: plan.manifest,
@@ -618,6 +659,7 @@ export async function checkProject(
       ...createLeanVerificationResult(plan.manifest, build, required),
       workflow: "selected-lean-claims-v1" as const,
       evidenceSchema: "datamog-selected-evidence-v1" as const,
+      ...(plan.moduleSources ? { moduleSources: plan.moduleSources } : {}),
       sourceSnapshot: plan.sourceSnapshot,
       selectionSnapshot: plan.selectionSnapshot,
       verificationPlan: plan.manifest,

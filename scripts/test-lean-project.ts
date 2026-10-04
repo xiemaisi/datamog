@@ -942,6 +942,46 @@ try {
   console.log(
     "Selected project: composed laws and checks coexist; checks cannot discharge an unsafe invariant.",
   );
+  const modulesFixture = new URL("../verification/lean/examples/selected-modules/", import.meta.url)
+    .pathname;
+  await cp(modulesFixture, join(temp, "modules-input"), { recursive: true });
+  const modulesConfig = join(temp, "modules-input/plan.json");
+  const modulesOutput = join(temp, "modules-project");
+  await exportProject(modulesConfig, modulesOutput);
+  await Bun.write(
+    join(modulesOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(modulesFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(modulesConfig, modulesOutput);
+  const modulesReport = await checkProject(modulesConfig, modulesOutput);
+  if (
+    modulesReport.entries.length !== 1 ||
+    modulesReport.entries[0]?.status !== "proved" ||
+    modulesReport.moduleSources?.length !== 3
+  )
+    throw new Error("Expected nested-module proof and complete source snapshots");
+  const importedSource = join(temp, "modules-input/filter.dl");
+  await Bun.write(
+    importedSource,
+    (await Bun.file(importedSource).text()).replace("X > 0", "X >= 0"),
+  );
+  await exportProject(modulesConfig, modulesOutput);
+  await Bun.write(join(modulesOutput, "verification-result.json"), "old success");
+  let modulesRejected = false;
+  try {
+    await checkProject(modulesConfig, modulesOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    modulesRejected = true;
+  }
+  if (
+    !modulesRejected ||
+    (await Bun.file(join(modulesOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Unsafe imported definition accepted by the final invariant");
+  console.log(
+    "Selected project: nested modules and source snapshots checked; unsafe imported guard rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

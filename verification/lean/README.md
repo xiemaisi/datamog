@@ -783,7 +783,8 @@ scalar-variable limits, arithmetic, and general Boolean expressions remain unsup
 
 The optional `bun run lean:project` workflow now exports selected structural
 projections, integer uniqueness/coverage claims, local head refinements, and
-recursive invariants from a standalone Datamog source. It checks maintained
+recursive invariants from Datamog source. Composed program laws also support local
+module imports. It checks maintained
 proofs or refutations in a fresh temporary Lean project. See [the workflow guide](PROJECTS.md) for the
 JSON selection format, worked example, regeneration steps, and trust boundary.
 This does not add a general Lean mode to `--verify`, proof caching, or proof import.
@@ -841,3 +842,8 @@ Composed `program-*` laws can now coexist with explicit constraints and named
 errors in one selected project. Checks never restrict theorem inputs or supply
 hypotheses. The [combined example](examples/selected-laws-and-checks/plan.json)
 proves laws and selected checks together; unselected checks remain unproved.
+
+Composed `program-*` selections now support local `.dl` modules through the existing
+elaborator and boundary checks. The [nested-module example](examples/selected-modules/README.md)
+records all source snapshots and import identities and rejects a changed upstream
+guard. Data bindings and separately proved module interfaces remain unsupported.

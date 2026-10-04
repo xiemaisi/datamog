@@ -1,0 +1,2 @@
+input predicate item(n: integer).
+output predicate positive(X) :- item(X), X > 0.

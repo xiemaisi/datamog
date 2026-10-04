@@ -1,0 +1,3 @@
+input predicate seed(n: integer).
+input predicate imported(n: integer) := result from "pipeline.dl"(item = seed).
+output(X, _: X > 0) :- imported(X).
