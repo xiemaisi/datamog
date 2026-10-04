@@ -1163,6 +1163,59 @@ try {
   console.log(
     "Selected project: conditional coverage and boundary refutation passed; inclusive law and strict gate rejected.",
   );
+  const checkLawFixture = new URL(
+    "../verification/lean/examples/selected-input-law-checks/",
+    import.meta.url,
+  ).pathname;
+  const checkLawInput = join(temp, "check-law-input");
+  const checkLawOutput = join(temp, "check-law-project");
+  await cp(checkLawFixture, checkLawInput, { recursive: true });
+  const checkLawConfig = join(checkLawInput, "plan.json");
+  await exportProject(checkLawConfig, checkLawOutput);
+  await Bun.write(
+    join(checkLawOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(checkLawFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(checkLawConfig, checkLawOutput);
+  const checkLawReport = await checkProject(
+    checkLawConfig,
+    checkLawOutput,
+    ["unrestricted_refuted"],
+    true,
+  );
+  if (
+    checkLawReport.entries.filter((e) => e.status === "conditional").length !== 3 ||
+    checkLawReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved"
+  )
+    throw new Error("Check law assumptions leaked or disappeared");
+  let checkGateRejected = false;
+  try {
+    await checkProject(checkLawConfig, checkLawOutput, ["check"], true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("remains conditional")) throw error;
+    checkGateRejected = true;
+  }
+  if (
+    !checkGateRejected ||
+    (await Bun.file(join(checkLawOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Conditional source check bypassed the strict gate");
+  const weakenedCheck = JSON.parse(await Bun.file(checkLawConfig).text());
+  for (const claim of weakenedCheck.claims) if (claim.inputLaws) claim.inputLaws[0].op = ">=";
+  await Bun.write(checkLawConfig, JSON.stringify(weakenedCheck));
+  await exportProject(checkLawConfig, checkLawOutput);
+  let weakCheckRejected = false;
+  try {
+    await checkProject(checkLawConfig, checkLawOutput, undefined, true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+      throw error;
+    weakCheckRejected = true;
+  }
+  if (!weakCheckRejected) throw new Error("Weakened check premises retained invalid proofs");
+  console.log(
+    "Selected project: conditional source checks and emptiness passed; weakened premises and strict gate rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

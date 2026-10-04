@@ -1765,3 +1765,13 @@ upper bound; removing the law admits `maxSafe` and has an unconditional
 refutation. Coverage row bounds remain distinct from laws about the entire input
 relation. Fresh regressions reject both unconditional gating of the conditional
 goal and a weakened law that admits the overflowing boundary.
+
+Explicit integer input laws now also apply to selected program emptiness,
+constraints, and named errors. Wrapper exports preserve their premises and law
+identity nodes alongside source provenance, including selected module instances.
+A worked example has three conditional checks under a law on the actual entry
+input and an unconditional refutation of the unrestricted constraint. Laws are
+claim-local and never inferred from source checks. Fresh regressions reject
+weakened premises and unconditional gating of a conditional check. Module-local
+parameter names are not implicitly resolved as interface laws; laws must name a
+reachable input in the elaborated dependency graph.

@@ -48,6 +48,7 @@ export interface ProgramEquivalenceClaim {
 }
 export interface ProgramEmptinessClaim {
   kind: "program-emptiness";
+  inputLaws?: InputLaw[];
   id: string;
   predicate: string;
   polarity?: "prove" | "refute";

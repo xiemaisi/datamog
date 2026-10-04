@@ -2,7 +2,7 @@
 import { type Query, asCoreRule } from "../packages/core/src/ast.ts";
 import type { TypedProgram } from "../packages/core/src/types.ts";
 import { parse } from "../packages/parser/src/index.ts";
-import { exportProgramClaim } from "./lean-mutual.ts";
+import { type InputLaw, exportProgramClaim } from "./lean-mutual.ts";
 
 export interface ConstraintClaim {
   kind: "constraint";
@@ -10,6 +10,7 @@ export interface ConstraintClaim {
   /** One-based index among explicit !- statements, excluding synthesized checks. */
   constraint: number;
   instance?: string;
+  inputLaws?: InputLaw[];
   polarity?: "prove" | "refute";
 }
 
@@ -42,7 +43,13 @@ export function exportConstraint(
       constraints: [],
       nullness: { ...typed.nullness, publishedNullness },
     },
-    { kind: "program-emptiness", id: claim.id, predicate, polarity: claim.polarity },
+    {
+      kind: "program-emptiness",
+      id: claim.id,
+      predicate,
+      polarity: claim.polarity,
+      inputLaws: claim.inputLaws,
+    },
   );
   const origin = `${claim.id}Constraint`;
   const cst = query.$cstNode;
@@ -74,6 +81,7 @@ export interface ErrorPredicateClaim {
   id: string;
   predicate: string;
   instance?: string;
+  inputLaws?: InputLaw[];
   polarity?: "prove" | "refute";
 }
 
@@ -111,6 +119,7 @@ export function exportErrorPredicate(
       kind: "program-emptiness",
       id: claim.id,
       predicate: resolvedPredicate,
+      inputLaws: claim.inputLaws,
       polarity: claim.polarity,
     },
   );

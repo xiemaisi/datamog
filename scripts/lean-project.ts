@@ -133,7 +133,8 @@ export function parseSelection(value: unknown): Selection {
   for (const claim of claims) {
     if (claim && typeof claim === "object" && "kind" in claim && claim.kind === "constraint") {
       const selected: Record<string, unknown> = claim;
-      keys(selected, ["kind", "id", "constraint", "polarity", "instance"]);
+      keys(selected, ["kind", "id", "constraint", "polarity", "instance", "inputLaws"]);
+      validateInputLaws(selected.inputLaws);
       if (
         (selected.instance !== undefined &&
           (typeof selected.instance !== "string" || !selected.instance.length)) ||
@@ -225,12 +226,14 @@ export function parseSelection(value: unknown): Selection {
       claim.kind !== "invariant"
     )
       throw new Error("Unknown Lean claim kind");
+    if (claim.kind === "error-predicate" || claim.kind === "program-emptiness")
+      validateInputLaws(claim.inputLaws);
     const fields = ["kind", "polarity", "id", "predicate"];
     keys(claim, [
       ...fields,
       ...(claim.kind === "error-predicate" ? ["instance"] : []),
       ...(claim.kind === "error-predicate" || claim.kind === "program-emptiness"
-        ? []
+        ? ["inputLaws"]
         : claim.kind === "local"
           ? ["rule", "refinement"]
           : claim.kind === "program-coverage"

@@ -1694,7 +1694,9 @@ test("explicit input laws become named premises and content identities", async (
     }
     await write([{ ...claim, polarity: "refute" }]);
     await expect(exportProject(config, output)).rejects.toThrow("proofs only");
-    await write([{ kind: "program-emptiness", id: "bad", predicate: "out", inputLaws: [law] }]);
+    await write([
+      { kind: "program-equivalence", id: "bad", predicates: ["out", "out"], inputLaws: [law] },
+    ]);
     await expect(exportProject(config, output)).rejects.toThrow();
     await expect(readdir(output)).rejects.toThrow();
   }));
@@ -1751,5 +1753,44 @@ test("coverage input laws remain distinct from row-domain bounds", async () =>
     await expect(exportProject(config, output)).rejects.toThrow("proofs only");
     await write([{ ...claim, kind: "coverage", relationName: "Successor" }]);
     await expect(exportProject(config, output)).rejects.toThrow();
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("input laws survive constraint and error origins without leaking to other checks", async () =>
+  fixture(async (config, output, dir) => {
+    const base = "verification/lean/examples/selected-input-law-checks/";
+    for (const file of ["checks.dl", "program.dl"])
+      await Bun.write(join(dir, file), await Bun.file(`${base}${file}`).text());
+    const selection = JSON.parse(await Bun.file(`${base}plan.json`).text());
+    await Bun.write(config, JSON.stringify(selection));
+    const preview = await inspectProject(config, output);
+    for (const id of ["check", "noBad", "empty"]) {
+      const goal = preview.goals.find((g) => g.id === id)!;
+      expect(goal.assumptions).toHaveLength(1);
+      expect(goal.assumptions[0]).toContain("positiveSeed:");
+      expect(goal.closure).toContain(`${id}InputLaw0`);
+      expect(goal.closure).toContain("ModuleSources");
+    }
+    expect(preview.goals.find((g) => g.id === "unrestricted_refuted")!.assumptions).toEqual([]);
+    for (const descriptor of selection.claims.slice(0, 3)) {
+      for (const inputLaws of [
+        [],
+        [{ ...descriptor.inputLaws[0], predicate: "item" }],
+        [{ ...descriptor.inputLaws[0], predicate: "imported" }],
+        [{ ...descriptor.inputLaws[0], column: 1 }],
+        [{ ...descriptor.inputLaws[0], typo: true }],
+      ]) {
+        await Bun.write(
+          config,
+          JSON.stringify({ ...selection, claims: [{ ...descriptor, inputLaws }] }),
+        );
+        await expect(exportProject(config, output)).rejects.toThrow();
+      }
+      await Bun.write(
+        config,
+        JSON.stringify({ ...selection, claims: [{ ...descriptor, polarity: "refute" }] }),
+      );
+      await expect(exportProject(config, output)).rejects.toThrow("proofs only");
+    }
     await expect(readdir(output)).rejects.toThrow();
   }));

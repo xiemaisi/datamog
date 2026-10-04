@@ -1,0 +1,3 @@
+input predicate seed(n: integer).
+input predicate imported(n: integer) := result from "checks.dl"(item = seed).
+violation(X) :- seed(X), X <= 0.

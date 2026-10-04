@@ -756,8 +756,8 @@ source change made during compilation. The dedicated Lean CI job runs this suite
 
 ## Explicit integer input laws
 
-A `program-invariant` or `program-coverage` proof can declare a nonempty
-`inputLaws` array. Each law has
+A `program-invariant`, `program-coverage`, `program-emptiness`, `constraint`, or
+`error-predicate` proof can declare a nonempty `inputLaws` array. Each law has
 `id`, `predicate`, zero-based `column`, comparison `op` (`<`, `<=`, `>`, `>=`, `=`),
 and a safe integer `value`. Names must be distinct within the claim. The predicate
 must be a reachable non-null integer input; derived relations and unrelated
@@ -774,8 +774,8 @@ Laws affect only their selected claim. They appear in its exact theorem type,
 manifest dependency closure, inspection output, and fresh report. Their names,
 formulas, and descriptors participate in content identities. Source constraints
 and error predicates remain independent goals and never supply these premises.
-This fragment supports invariant and coverage proofs, not conditional refutations,
-other claim kinds, arbitrary formulas, or module-interface proof reuse.
+This fragment supports the proof kinds listed above, not conditional refutations,
+uniqueness/equivalence premises, arbitrary formulas, or module-interface proof reuse.
 
 By default `check` still requires all selected goals to be unconditional.
 `check --allow-conditional` checks and audits every selected proof, then permits
@@ -794,3 +794,12 @@ laws quantify over every row of the named input. Both can coexist and neither
 silently discharges the other. Changing `< maxSafe` to `<= maxSafe` breaks the
 maintained coverage proof. The generated conclusion still requires a bounded
 output witness and its derivation; head definedness is never an assumed law.
+
+The [source-check example](examples/selected-input-law-checks/README.md) proves an
+imported constraint, a named error goal, and a violation relation empty under an
+explicit positive-input law. Those three results remain conditional; a separate
+unrestricted refutation remains unconditional. Source origin nodes retain both
+check descriptors and their input-law dependencies. Laws on instance-selected
+checks name the actual reachable input after wiring (such as entry input `seed`),
+not a module-local parameter or a derived alias. Existing nested selectors also
+retain their normal meaning; this does not introduce interface-law instantiation.
