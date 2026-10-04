@@ -90,6 +90,24 @@ function keys(value: unknown, allowed: string[]): asserts value is Record<string
   )
     throw new Error(`Expected an object with only: ${allowed.join(", ")}`);
 }
+function validateInputLaws(inputLaws: unknown) {
+  if (inputLaws !== undefined) {
+    if (!Array.isArray(inputLaws) || !inputLaws.length)
+      throw new Error("Input laws must be a nonempty array");
+    for (const law of inputLaws) {
+      keys(law, ["id", "predicate", "column", "op", "value"]);
+      if (
+        typeof law.id !== "string" ||
+        typeof law.predicate !== "string" ||
+        !Number.isSafeInteger(law.column) ||
+        Number(law.column) < 0 ||
+        !["<", "<=", ">", ">=", "="].includes(String(law.op)) ||
+        !Number.isSafeInteger(law.value)
+      )
+        throw new Error("Invalid integer input law");
+    }
+  }
+}
 export function parseSelection(value: unknown): Selection {
   keys(value, ["source", "projections", "claims"]);
   if (
@@ -168,22 +186,7 @@ export function parseSelection(value: unknown): Selection {
         "polarity",
         ...(claim.kind === "program-invariant" ? ["inputLaws"] : []),
       ]);
-      if (mutual.inputLaws !== undefined) {
-        if (!Array.isArray(mutual.inputLaws) || !mutual.inputLaws.length)
-          throw new Error("Input laws must be a nonempty array");
-        for (const law of mutual.inputLaws) {
-          keys(law, ["id", "predicate", "column", "op", "value"]);
-          if (
-            typeof law.id !== "string" ||
-            typeof law.predicate !== "string" ||
-            !Number.isSafeInteger(law.column) ||
-            Number(law.column) < 0 ||
-            !["<", "<=", ">", ">=", "="].includes(String(law.op)) ||
-            !Number.isSafeInteger(law.value)
-          )
-            throw new Error("Invalid integer input law");
-        }
-      }
+      validateInputLaws(mutual.inputLaws);
       if (
         typeof mutual.id !== "string" ||
         !Array.isArray(mutual.predicates) ||
@@ -210,6 +213,7 @@ export function parseSelection(value: unknown): Selection {
       "rule",
       "refinement",
       "instance",
+      "inputLaws",
     ]);
     if (
       claim.kind !== "error-predicate" &&
@@ -230,7 +234,7 @@ export function parseSelection(value: unknown): Selection {
         : claim.kind === "local"
           ? ["rule", "refinement"]
           : claim.kind === "program-coverage"
-            ? ["inputPredicate", "outputToInput", "bounds"]
+            ? ["inputPredicate", "outputToInput", "bounds", "inputLaws"]
             : claim.kind === "coverage"
               ? ["relationName", "inputPredicate", "outputToInput", "bounds"]
               : claim.kind === "invariant"
@@ -258,6 +262,7 @@ export function parseSelection(value: unknown): Selection {
         if (!Array.isArray(columns) || columns.some((c) => typeof c !== "number"))
           throw new Error("Uniqueness requires numeric column arrays");
     } else if (claim.kind === "coverage" || claim.kind === "program-coverage") {
+      if (claim.kind === "program-coverage") validateInputLaws(claim.inputLaws);
       if (
         typeof claim.inputPredicate !== "string" ||
         !Array.isArray(claim.outputToInput) ||

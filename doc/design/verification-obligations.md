@@ -1688,7 +1688,7 @@ The initial arithmetic and reachability milestones are complete. The current
 consolidated workflow is demonstrated by the combined laws-and-checks example.
 Local module loading and source identities are now implemented for composed
 program laws and instance checks. Named integer input bounds now support conditional
-invariant proofs; reusable module-interface laws and imported structural selections
+invariant and coverage proofs; reusable module-interface laws and imported structural selections
 remain future work. Keep proposed body type guards
 separate: [that design](body-type-guards.md) concerns runtime filtering and type
 refinement rather than assumptions for arbitrary proofs.
@@ -1743,7 +1743,7 @@ module selections and reusable module-interface proofs remain open.
 
 ## Initial explicit input laws
 
-Selected `program-invariant` proofs now accept named comparisons between a column
+Selected `program-invariant` and `program-coverage` proofs now accept named comparisons between a column
 of a reachable non-null integer input and a safe integer literal. All input
 columns remain universally quantified. Each law becomes an explicit theorem
 premise and a manifest definition; its name and exact formula remain visible in
@@ -1758,3 +1758,10 @@ Fresh checks reject the proof after weakening the premise and reject conditional
 goals at strict gates. This first fragment does not support laws on other claim
 kinds, conditional refutations, arbitrary formulas, dataset validation, or reusable
 module-interface discharge.
+
+Coverage input laws reuse the same premise and reporting boundary. A worked
+successor theorem constructs an output for every input row under a named strict
+upper bound; removing the law admits `maxSafe` and has an unconditional
+refutation. Coverage row bounds remain distinct from laws about the entire input
+relation. Fresh regressions reject both unconditional gating of the conditional
+goal and a weakened law that admits the overflowing boundary.

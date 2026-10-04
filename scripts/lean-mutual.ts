@@ -37,6 +37,7 @@ export interface ProgramUniquenessClaim {
 }
 export interface ProgramCoverageClaim extends Omit<CoverageClaim, "relationName"> {
   kind: "program-coverage";
+  inputLaws?: InputLaw[];
   polarity?: "prove" | "refute";
 }
 export interface ProgramEquivalenceClaim {
@@ -324,9 +325,9 @@ function exportFamily(
       `(${columns.length ? `∀ ${binders}, ` : ""}${applied} 0 ${padded(columns)} → False)`,
     );
   }
-  const laws = claim.kind === "program-invariant" ? (claim.inputLaws ?? []) : [];
+  const laws = "inputLaws" in claim ? (claim.inputLaws ?? []) : [];
   if (laws.length && claim.polarity === "refute")
-    throw new Error("Input laws currently support invariant proofs only");
+    throw new Error("Input laws currently support proofs only");
   if (new Set(laws.map((law) => law.id)).size !== laws.length)
     throw new Error("Input law names must be distinct");
   const lawFormulas = laws.map((law) => {

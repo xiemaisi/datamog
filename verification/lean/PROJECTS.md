@@ -756,7 +756,8 @@ source change made during compilation. The dedicated Lean CI job runs this suite
 
 ## Explicit integer input laws
 
-A `program-invariant` proof can declare a nonempty `inputLaws` array. Each law has
+A `program-invariant` or `program-coverage` proof can declare a nonempty
+`inputLaws` array. Each law has
 `id`, `predicate`, zero-based `column`, comparison `op` (`<`, `<=`, `>`, `>=`, `=`),
 and a safe integer `value`. Names must be distinct within the claim. The predicate
 must be a reachable non-null integer input; derived relations and unrelated
@@ -773,7 +774,7 @@ Laws affect only their selected claim. They appear in its exact theorem type,
 manifest dependency closure, inspection output, and fresh report. Their names,
 formulas, and descriptors participate in content identities. Source constraints
 and error predicates remain independent goals and never supply these premises.
-This initial fragment supports invariant proofs only, not conditional refutations,
+This fragment supports invariant and coverage proofs, not conditional refutations,
 other claim kinds, arbitrary formulas, or module-interface proof reuse.
 
 By default `check` still requires all selected goals to be unconditional.
@@ -785,3 +786,11 @@ flag validates the assumptions against a dataset.
 
 The [input-law example](examples/selected-input-laws/README.md) pairs a conditional
 positivity proof with a refutation of the unrestricted source contract.
+
+The [coverage example](examples/selected-input-law-coverage/README.md) proves
+successor existence under an input-wide upper-bound law and refutes unrestricted
+coverage at `maxSafe`. Coverage `bounds` remain row-domain restrictions; input
+laws quantify over every row of the named input. Both can coexist and neither
+silently discharges the other. Changing `< maxSafe` to `<= maxSafe` breaks the
+maintained coverage proof. The generated conclusion still requires a bounded
+output witness and its derivation; head definedness is never an assumed law.

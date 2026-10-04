@@ -1110,6 +1110,59 @@ try {
   console.log(
     "Selected project: explicit input law checked conditionally; strict gates and weakened premise rejected.",
   );
+  const coverageLawFixture = new URL(
+    "../verification/lean/examples/selected-input-law-coverage/",
+    import.meta.url,
+  ).pathname;
+  const coverageLawInput = join(temp, "coverage-law-input");
+  const coverageLawOutput = join(temp, "coverage-law-project");
+  await cp(coverageLawFixture, coverageLawInput, { recursive: true });
+  const coverageLawConfig = join(coverageLawInput, "plan.json");
+  await exportProject(coverageLawConfig, coverageLawOutput);
+  await Bun.write(
+    join(coverageLawOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(coverageLawFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(coverageLawConfig, coverageLawOutput);
+  const coverageLawReport = await checkProject(
+    coverageLawConfig,
+    coverageLawOutput,
+    ["unrestricted_refuted"],
+    true,
+  );
+  if (
+    coverageLawReport.entries.find((e) => e.id === "total")?.status !== "conditional" ||
+    coverageLawReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved"
+  )
+    throw new Error("Coverage input-law premise was lost from the report");
+  let conditionalCoverageRejected = false;
+  try {
+    await checkProject(coverageLawConfig, coverageLawOutput, ["total"], true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("remains conditional")) throw error;
+    conditionalCoverageRejected = true;
+  }
+  if (
+    !conditionalCoverageRejected ||
+    (await Bun.file(join(coverageLawOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Conditional coverage bypassed the strict goal gate");
+  const inclusiveLaw = JSON.parse(await Bun.file(coverageLawConfig).text());
+  inclusiveLaw.claims[0].inputLaws[0].op = "<=";
+  await Bun.write(coverageLawConfig, JSON.stringify(inclusiveLaw));
+  await exportProject(coverageLawConfig, coverageLawOutput);
+  let inclusiveRejected = false;
+  try {
+    await checkProject(coverageLawConfig, coverageLawOutput, undefined, true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+      throw error;
+    inclusiveRejected = true;
+  }
+  if (!inclusiveRejected) throw new Error("Overflowing boundary was hidden by coverage input laws");
+  console.log(
+    "Selected project: conditional coverage and boundary refutation passed; inclusive law and strict gate rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

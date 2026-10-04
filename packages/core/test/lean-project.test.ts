@@ -1698,3 +1698,58 @@ test("explicit input laws become named premises and content identities", async (
     await expect(exportProject(config, output)).rejects.toThrow();
     await expect(readdir(output)).rejects.toThrow();
   }));
+
+test("coverage input laws remain distinct from row-domain bounds", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate item(n: integer). successor(X, X + 1) :- item(X).",
+    );
+    const law = {
+      id: "belowMaximum",
+      predicate: "item",
+      column: 0,
+      op: "<",
+      value: 9007199254740991,
+    };
+    const claim = {
+      kind: "program-coverage",
+      id: "total",
+      predicate: "successor",
+      inputPredicate: "item",
+      outputToInput: [0, null],
+      bounds: [],
+      inputLaws: [law],
+    };
+    const write = (claims: unknown[]) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims }));
+    await write([claim]);
+    const conditional = await planProject(config, output);
+    expect((await inspectProject(config, output)).goals[0]!.assumptions).toHaveLength(1);
+    await write([
+      { ...claim, inputLaws: undefined, bounds: [{ column: 0, op: "<", value: law.value }] },
+    ]);
+    const bounded = await planProject(config, output);
+    expect((await inspectProject(config, output)).goals[0]!.assumptions).toEqual([]);
+    expect(bounded.files["Datamog/Generated.lean"]).not.toBe(
+      conditional.files["Datamog/Generated.lean"],
+    );
+    expect(bounded.manifest.digest).not.toBe(conditional.manifest.digest);
+    for (const inputLaws of [
+      [],
+      [law, law],
+      [{ ...law, predicate: "successor" }],
+      [{ ...law, column: 1 }],
+      [{ ...law, op: "<>" }],
+      [{ ...law, value: 1.5 }],
+      [{ ...law, extra: true }],
+    ]) {
+      await write([{ ...claim, inputLaws }]);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await write([{ ...claim, polarity: "refute" }]);
+    await expect(exportProject(config, output)).rejects.toThrow("proofs only");
+    await write([{ ...claim, kind: "coverage", relationName: "Successor" }]);
+    await expect(exportProject(config, output)).rejects.toThrow();
+    await expect(readdir(output)).rejects.toThrow();
+  }));
