@@ -1579,3 +1579,79 @@ test("instance selectors require nonempty strings and check descriptors", () => 
       expect(() => parseSelection({ source: "source.dl", claims: [claim] })).toThrow();
   }
 });
+
+test("nested instance paths preserve sharing, local numbering, and overridden defaults", async () =>
+  fixture(async (config, output, dir) => {
+    const base = "verification/lean/examples/selected-nested-instance-checks/";
+    for (const name of ["filter.dl", "middle.dl", "wrapper.dl"])
+      await Bun.write(join(dir, name), await Bun.file(`${base}${name}`).text());
+    const source = await Bun.file(`${base}program.dl`).text();
+    await Bun.write(join(dir, "source.dl"), source);
+    const selection = JSON.parse(await Bun.file(`${base}plan.json`).text());
+    selection.source = "source.dl";
+    selection.claims.push(
+      {
+        kind: "error-predicate",
+        id: "safeError",
+        instance: "safe.pipeline.checked",
+        predicate: "bad",
+      },
+      {
+        kind: "constraint",
+        id: "parentCheck",
+        instance: "safe.pipeline",
+        constraint: 1,
+        polarity: "refute",
+      },
+    );
+    await Bun.write(config, JSON.stringify(selection));
+    const plan = await planProject(config, output);
+    const origin = (id: string) => plan.manifest.entries.find((e) => e.id === id)!.statement;
+    expect(origin("safeCheckConstraint")).toMatchObject({
+      file: "filter.dl",
+      text: "!- item(X), X <= 0.",
+      claim: { instance: "safe.pipeline.checked" },
+    });
+    expect(origin("parentCheckConstraint")).toMatchObject({
+      file: "middle.dl",
+      text: "!- item(X).",
+    });
+    const predicate = (id: string) =>
+      (origin(id) as { resolvedPredicate: string }).resolvedPredicate;
+    expect(predicate("safeErrorErrorPredicate")).toBe(predicate("sharedErrorErrorPredicate"));
+    expect(predicate("unsafeErrorErrorPredicate")).not.toBe(predicate("safeErrorErrorPredicate"));
+    expect((await planProject(config, output)).manifest).toEqual(plan.manifest);
+    expect(plan.manifest.entries.every((e) => !e.assumptions.length)).toBe(true);
+    await Bun.write(
+      join(dir, "source.dl"),
+      source.replace(
+        'safe(n: integer) := result from "wrapper.dl"(item = positive)',
+        'safe(n: integer) := result from "wrapper.dl"(item = positive, pipeline = positive)',
+      ),
+    );
+    await expect(exportProject(config, output)).rejects.toThrow(
+      "Unknown module binding path safe.pipeline.checked",
+    );
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [selection.claims[1]] }));
+    const shared = await planProject(config, output);
+    expect(shared.goals).toEqual(["sharedError"]);
+    for (const instance of [
+      "safe.pipeline",
+      "shared.checked",
+      "shared.pipeline.missing",
+      "shared..pipeline",
+      "shared.pipeline.checked.bad",
+      ".shared",
+      "shared.",
+    ]) {
+      await Bun.write(
+        config,
+        JSON.stringify({
+          source: "source.dl",
+          claims: [{ kind: "constraint", id: "check", constraint: 1, instance }],
+        }),
+      );
+      await expect(exportProject(config, output)).rejects.toThrow("Unknown module binding path");
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));

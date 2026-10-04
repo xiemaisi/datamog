@@ -17,5 +17,5 @@ bun run lean:project check verification/lean/examples/selected-instance-checks/p
 
 The report contains four checked goals, including two refutations. Changing
 `item = positive` to `item = seed` makes the safe proofs fail after regeneration.
-`instance` names a direct entry binding; nested instance paths are unsupported.
+This example uses direct entry bindings. The [nested example](../selected-nested-instance-checks/README.md) demonstrates dotted binding paths.
 These are theorems about the exported model, not backend correctness proofs.

@@ -852,9 +852,11 @@ Entry-file `constraint` and `error-predicate` goals can now follow module
 dependencies. Imported checks neither shift entry constraint indices nor become
 assumptions. The [module-check fixture](examples/selected-module-checks/plan.json)
 combines these goals with an invariant and an input-emptiness refutation.
-Selecting checks inside imported instances remains unsupported.
+Imported checks can be selected with the instance paths described below.
 
-Selected projects can also [select checks inside direct module instances](PROJECTS.md#checks-inside-direct-module-instances)
-by entry binding name. The [worked example](examples/selected-instance-checks/README.md)
+Selected projects can also [select checks inside module instances](PROJECTS.md#checks-inside-module-instances)
+by binding path. The [worked example](examples/selected-instance-checks/README.md)
 distinguishes shared aliases from different input wiring, with both proofs and
 refutations checked from source.
+The [nested example](examples/selected-nested-instance-checks/README.md) extends
+selection through child module bindings, including shared nested instances.

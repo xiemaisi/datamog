@@ -1,0 +1,4 @@
+input predicate item(n: integer).
+input predicate pipeline(n: integer) := result from "middle.dl"(item = item).
+output predicate result(X) :- pipeline(X).
+!- item(X).

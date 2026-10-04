@@ -1,0 +1,4 @@
+input predicate item(n: integer).
+input predicate checked(n: integer) := result from "filter.dl"(item = item).
+output predicate result(X) :- checked(X).
+!- item(X).

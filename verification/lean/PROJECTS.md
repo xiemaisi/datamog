@@ -35,7 +35,7 @@ only registered goals. Runtime checks remain enabled, and adding checks does not
 restrict a theorem's quantified inputs.
 
 Local `.dl` module imports are supported for composed `program-*` claims and
-entry-file and direct-instance check goals (see
+entry-file and instance check goals (see
 [modules](#local-module-programs)). Data-file bindings, general negation, aggregates, parity recursion,
 floats, arbitrary expression translation, and general structural relation laws
 remain outside this workflow. Proof caching/import, automatic proof search, and
@@ -617,7 +617,7 @@ A module source may also select `constraint` and `error-predicate` goals declare
 in its entry file. Constraint indices count only explicit entry-file `!-`
 statements, excluding imported constraints and synthesized checks. Named error
 selections require an entry-file error declaration and defining rules from that
-file. To select a check inside a direct import, supply `instance` as described below.
+file. To select a check inside an import, supply `instance` as described below.
 
 The goal follows every positive imported definition needed by its body. Source
 provenance adds an entry-relative `file` alongside the exact check text and
@@ -633,10 +633,11 @@ Those checks are never assumed: weakening the imported guard still invalidates
 the maintained proofs. A successful report concerns the selected entry goals,
 not satisfaction of all imported checks or successful execution on a dataset.
 
-## Checks inside direct module instances
+## Checks inside module instances
 
-Both check descriptors accept an optional `instance` naming a module binding in
-the entry file (for example, `safe` in `input predicate safe(...) := ...`).
+Both check descriptors accept an optional `instance` naming a module binding path.
+A single name selects an entry binding (for example, `safe`); dotted names follow
+source-local nested bindings (for example, `safe.pipeline.checked`).
 Without it, selection remains entry-local. With it, `constraint` is the one-based
 index among explicit `!-` statements in that instance's source, and `predicate`
 is the source-local name of a declared error predicate:
@@ -649,8 +650,11 @@ Selection uses explicit elaborator metadata, including the shared expansion and
 source-to-elaborated predicate mapping. Two aliases for the same module and
 wiring select the same checks; different wiring selects distinct instances.
 Nested imports still contribute definitions to the proof, but their checks are
-not included in the parent's numbering. Dotted instance paths, unknown bindings,
+not included in the parent's numbering. Unknown bindings, empty path segments,
 non-error predicates, and out-of-range indices are rejected before export.
+Only instantiated defaults appear in the path map: overriding a nested binding
+with an actual removes that child path, even if the actual denotes another
+module output. Selection does not follow relation aliases as module bindings.
 Named error goals include all defining sibling rules in the selected instance.
 
 The [instance-check example](examples/selected-instance-checks/README.md) proves
@@ -661,7 +665,10 @@ instance to arbitrary input. Source paths, selector descriptors, elaborated
 relations, and the complete module source graph participate in manifest identity.
 Checks never become input assumptions.
 
-Nested instance selectors, structural module claims, and reusable module-interface
+The [nested example](examples/selected-nested-instance-checks/README.md) checks
+three levels of bindings, shared paths, and different wiring. Each selected
+module keeps its own constraint numbering; parent and sibling checks remain
+unselected and unassumed. Structural module claims and reusable module-interface
 proofs remain future work.
 
 ## Worked example

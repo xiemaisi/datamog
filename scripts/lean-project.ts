@@ -326,7 +326,7 @@ export async function planProject(configInput: string, outputInput: string) {
   const selectedInstance = (name: string | undefined) => {
     if (name === undefined) return undefined;
     const instance = modules?.instances.get(name);
-    if (!instance) throw new Error(`Unknown direct module binding ${name}`);
+    if (!instance) throw new Error(`Unknown module binding path ${name}`);
     return instance;
   };
   const constraintBundles = selection.claims

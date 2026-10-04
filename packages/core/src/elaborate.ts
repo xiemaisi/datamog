@@ -78,7 +78,7 @@ export interface ElaborationResult {
   dataSources: DataSource[];
   /** Boundary type contracts, for `checkModuleBoundaries` after inference. */
   boundaries: BoundaryConstraint[];
-  /** Direct entry bindings, with shared expansion identity and source-local names. */
+  /** Entry and nested bindings, addressed by dot-separated source binding paths. */
   moduleBindings: {
     binding: string;
     file?: string;
@@ -121,6 +121,7 @@ interface Instance {
   file?: string;
   statements: Statement[];
   localNames: Set<string>;
+  children: { binding: string; instance: Instance }[];
   /** Outputs renamed out of the prefix scheme: export name -> merged predicate. */
   renamed: Map<string, string>;
   resolveName: (name: string) => string;
@@ -231,11 +232,20 @@ export function elaborate(
   entry.statements = ctx.out;
   setModuleDiagnosticNames(entry, ctx.diagnosticNames);
   checkElaboratedPolarities(entry, ctx.boundaries);
+  const allBindings: typeof bindings = [];
+  const collectBindings = (items: typeof bindings, parent = "") => {
+    for (const { binding, instance } of items) {
+      const path = parent ? `${parent}.${binding}` : binding;
+      allBindings.push({ binding: path, instance });
+      collectBindings(instance.children, path);
+    }
+  };
+  collectBindings(bindings);
   return {
     program: entry,
     dataSources: ctx.dataSources,
     boundaries: ctx.boundaries,
-    moduleBindings: bindings.map(({ binding, instance }) => ({
+    moduleBindings: allBindings.map(({ binding, instance }) => ({
       binding,
       file: instance.file,
       statements: instance.statements,
@@ -565,6 +575,7 @@ function instantiate(
           ? `${prefix}${name}`
           : name;
 
+  const children: Instance["children"] = [];
   const nestedOutputBoundaries: BoundaryConstraint[] = [];
   for (const s of module.statements) {
     if (!isExtDecl(s) || !s.binding?.isModule) continue;
@@ -600,6 +611,7 @@ function instantiate(
       ctx,
       binding.source,
     );
+    children.push({ binding: s.predicate, instance: childInstance });
     remapBoundaryShapes(actualBoundaries, childInstance.resolveName);
     const childOutput = outputName(childInstance, childExport.name);
     const boundary = outputBoundary(binding, s, file, childOutput);
@@ -654,6 +666,7 @@ function instantiate(
     file,
     statements: expanded,
     localNames,
+    children,
     renamed: new Map(),
     resolveName: (name) =>
       inputSubst[name] ??

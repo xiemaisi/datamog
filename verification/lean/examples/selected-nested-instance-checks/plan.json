@@ -1,0 +1,31 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "constraint",
+      "id": "safeCheck",
+      "instance": "safe.pipeline.checked",
+      "constraint": 1
+    },
+    {
+      "kind": "error-predicate",
+      "id": "sharedError",
+      "instance": "shared.pipeline.checked",
+      "predicate": "bad"
+    },
+    {
+      "kind": "constraint",
+      "id": "unsafeCheck",
+      "instance": "unsafe.pipeline.checked",
+      "constraint": 1,
+      "polarity": "refute"
+    },
+    {
+      "kind": "error-predicate",
+      "id": "unsafeError",
+      "instance": "unsafe.pipeline.checked",
+      "predicate": "bad",
+      "polarity": "refute"
+    }
+  ]
+}
