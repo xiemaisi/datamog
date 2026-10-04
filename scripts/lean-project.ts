@@ -161,7 +161,29 @@ export function parseSelection(value: unknown): Selection {
         claim.kind === "program-equivalence")
     ) {
       const mutual: Record<string, unknown> = claim;
-      keys(mutual, ["kind", "id", "predicates", "polarity"]);
+      keys(mutual, [
+        "kind",
+        "id",
+        "predicates",
+        "polarity",
+        ...(claim.kind === "program-invariant" ? ["inputLaws"] : []),
+      ]);
+      if (mutual.inputLaws !== undefined) {
+        if (!Array.isArray(mutual.inputLaws) || !mutual.inputLaws.length)
+          throw new Error("Input laws must be a nonempty array");
+        for (const law of mutual.inputLaws) {
+          keys(law, ["id", "predicate", "column", "op", "value"]);
+          if (
+            typeof law.id !== "string" ||
+            typeof law.predicate !== "string" ||
+            !Number.isSafeInteger(law.column) ||
+            Number(law.column) < 0 ||
+            !["<", "<=", ">", ">=", "="].includes(String(law.op)) ||
+            !Number.isSafeInteger(law.value)
+          )
+            throw new Error("Invalid integer input law");
+        }
+      }
       if (
         typeof mutual.id !== "string" ||
         !Array.isArray(mutual.predicates) ||
@@ -679,14 +701,15 @@ export async function checkProject(
   configPath: string,
   outputInput: string,
   requiredGoals?: string[],
+  allowConditional = false,
 ) {
   const output = resolve(outputInput);
   await owned(output);
   await rm(join(output, reportFile), { force: true });
   const plan = await planProject(configPath, output);
   await assertFiles(output, plan);
-  const required = requiredGoals ?? plan.goals;
-  if (!required.length || required.some((id) => !plan.goals.includes(id)))
+  const required = requiredGoals ?? (allowConditional ? undefined : plan.goals);
+  if (required && (!required.length || required.some((id) => !plan.goals.includes(id))))
     throw new Error("Unknown or empty required goal selection");
   const temp = await mkdtemp(join(tmpdir(), "datamog-selected-lean-"));
   try {
@@ -724,7 +747,13 @@ if (import.meta.main) {
   try {
     const [command, config, output, ...rest] = process.argv.slice(2);
     const required: string[] = [];
+    let allowConditional = false;
     for (let i = 0; i < rest.length; i += 2) {
+      if (rest[i] === "--allow-conditional" && !allowConditional) {
+        allowConditional = true;
+        i--;
+        continue;
+      }
       if (rest[i] !== "--require-goal" || !rest[i + 1] || rest[i + 1]!.startsWith("--"))
         throw new Error("Invalid required goal option");
       required.push(rest[i + 1]!);
@@ -736,7 +765,7 @@ if (import.meta.main) {
       (command !== "check" && rest.length)
     )
       throw new Error(
-        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--require-goal ID ...]",
+        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...]",
       );
     if (command === "inspect") {
       console.log(JSON.stringify(await inspectProject(config, output), null, 2));
@@ -746,7 +775,12 @@ if (import.meta.main) {
         `Exported ${plan.goals.length} goals to ${resolve(output)}. Maintain Datamog/Proofs.lean, then export again and check.`,
       );
     } else {
-      const report = await checkProject(config, output, required.length ? required : undefined);
+      const report = await checkProject(
+        config,
+        output,
+        required.length ? required : undefined,
+        allowConditional,
+      );
       console.log(
         `Checked ${report.entries.length} goals. Fresh report: ${join(resolve(output), reportFile)}`,
       );

@@ -12,8 +12,16 @@ export interface MutualClaim {
   predicates: string[];
   polarity?: "prove" | "refute";
 }
+export interface InputLaw {
+  id: string;
+  predicate: string;
+  column: number;
+  op: "<" | "<=" | ">" | ">=" | "=";
+  value: number;
+}
 export interface ProgramInvariantClaim {
   kind: "program-invariant";
+  inputLaws?: InputLaw[];
   id: string;
   predicates: string[];
   polarity?: "prove" | "refute";
@@ -316,7 +324,30 @@ function exportFamily(
       `(${columns.length ? `∀ ${binders}, ` : ""}${applied} 0 ${padded(columns)} → False)`,
     );
   }
-  const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${goals.join(" ∧ ")}\n`;
+  const laws = claim.kind === "program-invariant" ? (claim.inputLaws ?? []) : [];
+  if (laws.length && claim.polarity === "refute")
+    throw new Error("Input laws currently support invariant proofs only");
+  if (new Set(laws.map((law) => law.id)).size !== laws.length)
+    throw new Error("Input law names must be distinct");
+  const lawFormulas = laws.map((law) => {
+    const index = inputs.get(law.predicate);
+    const ops = { "<": "<", "<=": "≤", ">": ">", ">=": "≥", "=": "=" };
+    if (
+      !/^[A-Za-z][A-Za-z0-9_]*$/.test(law.id) ||
+      index === undefined ||
+      !Number.isSafeInteger(law.column) ||
+      law.column < 0 ||
+      law.column >= arityOf(law.predicate) ||
+      !Object.hasOwn(ops, law.op) ||
+      !Number.isSafeInteger(law.value)
+    )
+      throw new Error(
+        "Input law requires a reachable input predicate, valid column and safe integer bound",
+      );
+    const vars = Array.from({ length: arityOf(law.predicate) }, (_, i) => `lawx${i}`);
+    return `∀ ${vars.map((v) => `(${v} : Datamog.SafeInt)`).join(" ")}, input${index} ${vars.join(" ")} → lawx${law.column}.val ${ops[law.op]} (${law.value} : Int)`;
+  });
+  const statement = `def ${id} : Prop :=\n  ${params ? `∀ ${params},\n  ` : ""}${lawFormulas.map((formula) => `(${formula}) → `).join("")}${goals.join(" ∧ ")}\n`;
   const refute = claim.polarity === "refute";
   const proofName = refute ? `${id}_refuted` : id;
   const expected = `${refute ? "¬ " : ""}Generated.${id}`;
@@ -353,10 +384,19 @@ function exportFamily(
       kind: refute ? "definition" : "goal",
       ...(refute ? {} : { theorem: `Datamog.Checked.${id}` }),
       statement: { claim, source: statement },
-      assumptions: [],
-      dependencies: [family],
+      assumptions: laws.map((law, i) => `${law.id}: ${lawFormulas[i]}`),
+      dependencies: [family, ...laws.map((_, i) => `${id}InputLaw${i}`)],
     },
   ];
+  laws.forEach((law, i) =>
+    nodes.push({
+      id: `${id}InputLaw${i}`,
+      kind: "definition",
+      statement: { law, formula: lawFormulas[i] },
+      assumptions: [],
+      dependencies: [],
+    }),
+  );
   if (program)
     predicates.forEach((predicate, tag) =>
       nodes.push({

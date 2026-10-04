@@ -1,0 +1,2 @@
+input predicate item(n: integer).
+output(X, _: X > 0) :- item(X).

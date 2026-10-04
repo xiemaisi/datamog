@@ -860,3 +860,7 @@ distinguishes shared aliases from different input wiring, with both proofs and
 refutations checked from source.
 The [nested example](examples/selected-nested-instance-checks/README.md) extends
 selection through child module bindings, including shared nested instances.
+
+Selected invariant proofs now support [explicit integer input laws](PROJECTS.md#explicit-integer-input-laws).
+Their premises remain visible in exact theorem types and conditional reports;
+`--allow-conditional` permits reporting them without weakening `--require-goal`.

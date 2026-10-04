@@ -1680,15 +1680,16 @@ but its remaining input premises must stay visible at every importing boundary.
 | 1. Explicit current results | Typed SMT obligations, provenance, dependencies, bounded solver invocations, conditional discharge | Stronger process containment, memory limits, and CLI resource configuration |
 | 2. Semantics and Lean spike | Pinned Lean project, arithmetic and recursive proofs, structural libraries, fixed-fixture backend comparisons | Extend supported semantic profiles as needed |
 | 3. Statement/checking boundary | Exact theorem types, axiom audits, content manifests, fresh isolated builds, selected-project inspection and reports | General module-interface identities, reusable proof artifacts, cache/import protocol, finer invalidation; reports are not certificates |
-| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Structural module selections, explicit interface/input laws, broader structural relation claims, finite quantifiers and stratified negation |
+| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Structural module selections, broader interface/input laws, structural relation claims, finite quantifiers and stratified negation |
 | 5. Automation and wider semantics | SMT remains the automatic route; maintained Lean proofs check the supported fragments | CHC benchmarks, richer SMT, a certificate route, and a proved finite-group aggregate model |
 | 6. Reduce translation trust | Exporter/frontend/semantic model remain trusted; differential regressions check concrete cases | Deep embedding and a soundness theorem for translation/obligation generation; backend correspondence is separate |
 
 The initial arithmetic and reachability milestones are complete. The current
 consolidated workflow is demonstrated by the combined laws-and-checks example.
 Local module loading and source identities are now implemented for composed
-program laws and instance checks. Module-interface/input-law support and imported
-structural selections remain future work. Keep proposed body type guards
+program laws and instance checks. Named integer input bounds now support conditional
+invariant proofs; reusable module-interface laws and imported structural selections
+remain future work. Keep proposed body type guards
 separate: [that design](body-type-guards.md) concerns runtime filtering and type
 refinement rather than assumptions for arbitrary proofs.
 
@@ -1739,3 +1740,21 @@ cannot be selected through their former binding path. A three-level fixture
 proves and refutes nested checks under different wiring; parent constraints stay
 unselected. This remains the supported positive integer fragment; structural
 module selections and reusable module-interface proofs remain open.
+
+## Initial explicit input laws
+
+Selected `program-invariant` proofs now accept named comparisons between a column
+of a reachable non-null integer input and a safe integer literal. All input
+columns remain universally quantified. Each law becomes an explicit theorem
+premise and a manifest definition; its name and exact formula remain visible in
+inspection and fresh reports. These results are conditional. Source constraints
+are never promoted to assumptions.
+
+The default selected-project check retains unconditional gating. The explicit
+`--allow-conditional` option permits a fresh report containing conditional results,
+while any `--require-goal` still requires an unconditional result. A maintained
+example proves positivity under an input law and refutes the unrestricted claim.
+Fresh checks reject the proof after weakening the premise and reject conditional
+goals at strict gates. This first fragment does not support laws on other claim
+kinds, conditional refutations, arbitrary formulas, dataset validation, or reusable
+module-interface discharge.

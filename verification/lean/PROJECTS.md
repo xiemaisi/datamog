@@ -753,3 +753,35 @@ arbitrary external projects.
 `bun run test:lean-project` freshly builds the worked project, ignores a poisoned
 local cache, rejects `sorry`, a weaker theorem, and an extra axiom, and rejects a
 source change made during compilation. The dedicated Lean CI job runs this suite.
+
+## Explicit integer input laws
+
+A `program-invariant` proof can declare a nonempty `inputLaws` array. Each law has
+`id`, `predicate`, zero-based `column`, comparison `op` (`<`, `<=`, `>`, `>=`, `=`),
+and a safe integer `value`. Names must be distinct within the claim. The predicate
+must be a reachable non-null integer input; derived relations and unrelated
+inputs are rejected. Every input column is universally quantified, including
+columns not tested by the law. Multiple laws supply separate conjunctive premises.
+
+```json
+{"kind": "program-invariant", "id": "positive", "predicates": ["output"],
+ "inputLaws": [{"id": "positiveItems", "predicate": "item", "column": 0,
+                "op": ">", "value": 0}]}
+```
+
+Laws affect only their selected claim. They appear in its exact theorem type,
+manifest dependency closure, inspection output, and fresh report. Their names,
+formulas, and descriptors participate in content identities. Source constraints
+and error predicates remain independent goals and never supply these premises.
+This initial fragment supports invariant proofs only, not conditional refutations,
+other claim kinds, arbitrary formulas, or module-interface proof reuse.
+
+By default `check` still requires all selected goals to be unconditional.
+`check --allow-conditional` checks and audits every selected proof, then permits
+reports containing `conditional` results with their premises. An explicit
+`--require-goal ID` always requires that goal to be unconditional, even with this
+flag. Failure removes the previous report. Neither successful checking nor the
+flag validates the assumptions against a dataset.
+
+The [input-law example](examples/selected-input-laws/README.md) pairs a conditional
+positivity proof with a refutation of the unrestricted source contract.

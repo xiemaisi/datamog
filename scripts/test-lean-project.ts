@@ -1063,6 +1063,53 @@ try {
       throw new Error("A proof for one module wiring discharged a different instance");
     console.log(`Selected project: ${fixtureName} passed; changed wiring rejected.`);
   }
+  const inputLawsFixture = new URL(
+    "../verification/lean/examples/selected-input-laws/",
+    import.meta.url,
+  ).pathname;
+  const inputLawsInput = join(temp, "inputLaws-input");
+  const inputLawsOutput = join(temp, "inputLaws-project");
+  await cp(inputLawsFixture, inputLawsInput, { recursive: true });
+  const inputLawsConfig = join(inputLawsInput, "plan.json");
+  await exportProject(inputLawsConfig, inputLawsOutput);
+  await Bun.write(
+    join(inputLawsOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(inputLawsFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(inputLawsConfig, inputLawsOutput);
+  const inputLawsReport = await checkProject(inputLawsConfig, inputLawsOutput, undefined, true);
+  if (
+    inputLawsReport.entries.find((e) => e.id === "positive")?.status !== "conditional" ||
+    inputLawsReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved"
+  )
+    throw new Error("Input-law premise was lost from fresh assurance");
+  for (const required of [undefined, ["positive"]]) {
+    let rejected = false;
+    try {
+      await checkProject(inputLawsConfig, inputLawsOutput, required, required !== undefined);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("remains conditional")) throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(inputLawsOutput, "verification-result.json")).exists()))
+      throw new Error("Conditional input law bypassed unconditional goal gate");
+  }
+  const weaker = JSON.parse(await Bun.file(inputLawsConfig).text());
+  weaker.claims[0].inputLaws[0].value = -1;
+  await Bun.write(inputLawsConfig, JSON.stringify(weaker));
+  await exportProject(inputLawsConfig, inputLawsOutput);
+  let weakerRejected = false;
+  try {
+    await checkProject(inputLawsConfig, inputLawsOutput, undefined, true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+      throw error;
+    weakerRejected = true;
+  }
+  if (!weakerRejected) throw new Error("Weakened input law retained an invalid proof");
+  console.log(
+    "Selected project: explicit input law checked conditionally; strict gates and weakened premise rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

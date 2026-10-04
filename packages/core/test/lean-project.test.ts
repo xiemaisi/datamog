@@ -1655,3 +1655,46 @@ test("nested instance paths preserve sharing, local numbering, and overridden de
     }
     await expect(readdir(output)).rejects.toThrow();
   }));
+
+test("explicit input laws become named premises and content identities", async () =>
+  fixture(async (config, output, dir) => {
+    await Bun.write(
+      join(dir, "source.dl"),
+      "input predicate item(a: integer, b: integer). out(X, _: X > 0) :- item(X, Y).",
+    );
+    const law = { id: "positive", predicate: "item", column: 0, op: ">", value: 0 };
+    const claim = { kind: "program-invariant", id: "safe", predicates: ["out"], inputLaws: [law] };
+    const write = (claims: unknown[]) =>
+      Bun.write(config, JSON.stringify({ source: "source.dl", claims }));
+    await write([claim]);
+    const plan = await planProject(config, output);
+    const preview = await inspectProject(config, output);
+    expect(preview.goals[0]!.assumptions).toHaveLength(1);
+    expect(preview.goals[0]!.assumptions[0]).toContain("positive:");
+    expect(plan.files["Datamog/Generated.lean"]).toContain(
+      "∀ (lawx0 : Datamog.SafeInt) (lawx1 : Datamog.SafeInt), input0 lawx0 lawx1 → lawx0.val > (0 : Int)",
+    );
+    expect(plan.manifest.entries.find((e) => e.id === "safe")!.closure).toContain("safeInputLaw0");
+    await write([{ ...claim, inputLaws: [{ ...law, value: 1 }] }]);
+    expect((await planProject(config, output)).manifest.digest).not.toBe(plan.manifest.digest);
+    for (const inputLaws of [
+      [],
+      [law, law],
+      [{ ...law, predicate: "out" }],
+      [{ ...law, predicate: "absent" }],
+      [{ ...law, column: 2 }],
+      [{ ...law, column: -1 }],
+      [{ ...law, value: 1.5 }],
+      [{ ...law, value: 9007199254740992 }],
+      [{ ...law, op: "<>" }],
+      [{ ...law, typo: true }],
+    ]) {
+      await write([{ ...claim, inputLaws }]);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await write([{ ...claim, polarity: "refute" }]);
+    await expect(exportProject(config, output)).rejects.toThrow("proofs only");
+    await write([{ kind: "program-emptiness", id: "bad", predicate: "out", inputLaws: [law] }]);
+    await expect(exportProject(config, output)).rejects.toThrow();
+    await expect(readdir(output)).rejects.toThrow();
+  }));
