@@ -1523,3 +1523,59 @@ test("module check selection numbers only entry constraints and records their fi
     }
     await expect(readdir(output)).rejects.toThrow();
   }));
+
+test("imported checks select direct instances, preserve sharing and distinguish wiring", async () =>
+  fixture(async (config, output, dir) => {
+    const base = "verification/lean/examples/selected-instance-checks/";
+    await Bun.write(join(dir, "filter.dl"), await Bun.file(`${base}filter.dl`).text());
+    await Bun.write(join(dir, "source.dl"), await Bun.file(`${base}program.dl`).text());
+    const selection = JSON.parse(await Bun.file(`${base}plan.json`).text());
+    selection.source = "source.dl";
+    await Bun.write(config, JSON.stringify(selection));
+    const plan = await planProject(config, output);
+    const entry = (id: string) => plan.manifest.entries.find((e) => e.id === id)!;
+    expect(entry("safeCheckConstraint").statement).toMatchObject({
+      file: "filter.dl",
+      claim: { instance: "safe", constraint: 1 },
+      text: "!- item(X), X <= 0.",
+      span: { line: 3 },
+    });
+    expect(entry("sharedErrorErrorPredicate").statement).toMatchObject({
+      file: "filter.dl",
+      claim: { instance: "shared", predicate: "bad" },
+      resolvedPredicate: "safe$0$bad",
+    });
+    expect(entry("unsafeErrorErrorPredicate").statement).toMatchObject({
+      resolvedPredicate: "unsafe$1$bad",
+    });
+    expect(plan.manifest.entries.every((e) => e.assumptions.length === 0)).toBe(true);
+    expect((await planProject(config, output)).manifest).toEqual(plan.manifest);
+    const source = await Bun.file(join(dir, "source.dl")).text();
+    await Bun.write(join(dir, "source.dl"), source.replaceAll("item = positive", "item = seed"));
+    const changed = await planProject(config, output);
+    expect(changed.manifest.digest).not.toBe(plan.manifest.digest);
+    expect(changed.files["Datamog/Generated.lean"]).not.toBe(plan.files["Datamog/Generated.lean"]);
+    await Bun.write(join(dir, "source.dl"), source);
+    for (const claim of [
+      { kind: "constraint", id: "bad", instance: "missing", constraint: 1 },
+      { kind: "constraint", id: "bad", instance: "safe.nested", constraint: 1 },
+      { kind: "constraint", id: "bad", instance: "safe", constraint: 2 },
+      { kind: "error-predicate", id: "bad", instance: "safe", predicate: "result" },
+      { kind: "error-predicate", id: "bad", instance: "safe", predicate: "unsafe$1$bad" },
+    ]) {
+      await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [claim] }));
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("instance selectors require nonempty strings and check descriptors", () => {
+  for (const instance of [null, 1, "", true]) {
+    for (const claim of [
+      { kind: "constraint", id: "check", constraint: 1, instance },
+      { kind: "error-predicate", id: "check", predicate: "bad", instance },
+      { kind: "program-emptiness", id: "check", predicate: "bad", instance },
+    ])
+      expect(() => parseSelection({ source: "source.dl", claims: [claim] })).toThrow();
+  }
+});

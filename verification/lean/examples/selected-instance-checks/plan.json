@@ -1,0 +1,21 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "constraint", "id": "safeCheck", "instance": "safe", "constraint": 1 },
+    { "kind": "error-predicate", "id": "sharedError", "instance": "shared", "predicate": "bad" },
+    {
+      "kind": "constraint",
+      "id": "unsafeCheck",
+      "instance": "unsafe",
+      "constraint": 1,
+      "polarity": "refute"
+    },
+    {
+      "kind": "error-predicate",
+      "id": "unsafeError",
+      "instance": "unsafe",
+      "predicate": "bad",
+      "polarity": "refute"
+    }
+  ]
+}

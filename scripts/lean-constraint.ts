@@ -9,6 +9,7 @@ export interface ConstraintClaim {
   id: string;
   /** One-based index among explicit !- statements, excluding synthesized checks. */
   constraint: number;
+  instance?: string;
   polarity?: "prove" | "refute";
 }
 
@@ -72,6 +73,7 @@ export interface ErrorPredicateClaim {
   kind: "error-predicate";
   id: string;
   predicate: string;
+  instance?: string;
   polarity?: "prove" | "refute";
 }
 
@@ -80,11 +82,12 @@ export function exportErrorPredicate(
   typed: TypedProgram,
   claim: ErrorPredicateClaim,
   sourceFile?: string,
+  resolvedPredicate = claim.predicate,
 ) {
-  const rules = typed.rules.get(claim.predicate);
+  const rules = typed.rules.get(resolvedPredicate);
   if (
     !rules?.length ||
-    !typed.constraints.some((q) => q.outputName === claim.predicate && !q.synthetic)
+    !typed.constraints.some((q) => q.outputName === resolvedPredicate && !q.synthetic)
   )
     throw new Error("Selection requires a declared error predicate");
   const definitions = rules.map((rule) => {
@@ -107,7 +110,7 @@ export function exportErrorPredicate(
     {
       kind: "program-emptiness",
       id: claim.id,
-      predicate: claim.predicate,
+      predicate: resolvedPredicate,
       polarity: claim.polarity,
     },
   );
@@ -115,7 +118,12 @@ export function exportErrorPredicate(
   bundle.nodes.push({
     id: origin,
     kind: "definition",
-    statement: { claim, ...(sourceFile ? { file: sourceFile } : {}), definitions },
+    statement: {
+      claim,
+      resolvedPredicate,
+      ...(sourceFile ? { file: sourceFile } : {}),
+      definitions,
+    },
     assumptions: [],
     dependencies: [],
   });

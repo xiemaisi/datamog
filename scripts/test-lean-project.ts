@@ -1020,6 +1020,47 @@ try {
   console.log(
     "Selected project: entry checks over modules passed; imported checks remain unassumed.",
   );
+  const instanceFixture = new URL(
+    "../verification/lean/examples/selected-instance-checks/",
+    import.meta.url,
+  ).pathname;
+  const instanceInput = join(temp, "instance-input");
+  await cp(instanceFixture, instanceInput, { recursive: true });
+  const instanceConfig = join(instanceInput, "plan.json");
+  const instanceOutput = join(temp, "instance-project");
+  await exportProject(instanceConfig, instanceOutput);
+  await Bun.write(
+    join(instanceOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(instanceFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(instanceConfig, instanceOutput);
+  const instanceReport = await checkProject(instanceConfig, instanceOutput);
+  if (
+    instanceReport.entries.length !== 4 ||
+    instanceReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected proofs and refutations for separately selected instances");
+  const instanceSource = join(instanceInput, "program.dl");
+  await Bun.write(
+    instanceSource,
+    (await Bun.file(instanceSource).text()).replaceAll("item = positive", "item = seed"),
+  );
+  await exportProject(instanceConfig, instanceOutput);
+  await Bun.write(join(instanceOutput, "verification-result.json"), "old success");
+  let rewiredRejected = false;
+  try {
+    await checkProject(instanceConfig, instanceOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+      throw error;
+    rewiredRejected = true;
+  }
+  if (
+    !rewiredRejected ||
+    (await Bun.file(join(instanceOutput, "verification-result.json")).exists())
+  )
+    throw new Error("A proof for one module wiring discharged a different instance");
+  console.log("Selected project: imported instance checks passed; changed wiring rejected.");
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

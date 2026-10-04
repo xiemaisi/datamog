@@ -78,6 +78,13 @@ export interface ElaborationResult {
   dataSources: DataSource[];
   /** Boundary type contracts, for `checkModuleBoundaries` after inference. */
   boundaries: BoundaryConstraint[];
+  /** Direct entry bindings, with shared expansion identity and source-local names. */
+  moduleBindings: {
+    binding: string;
+    file?: string;
+    statements: Statement[];
+    predicates: Record<string, string>;
+  }[];
 }
 
 function nodePos(node: { $cstNode?: { offset: number; end: number } }): [number, number] | [] {
@@ -111,6 +118,9 @@ interface Context {
 interface Instance {
   /** Prefix its private and output predicate names were freshened with. */
   prefix: string;
+  file?: string;
+  statements: Statement[];
+  localNames: Set<string>;
   /** Outputs renamed out of the prefix scheme: export name -> merged predicate. */
   renamed: Map<string, string>;
   resolveName: (name: string) => string;
@@ -148,6 +158,7 @@ export function elaborate(
   resolve: ModuleResolver,
   entryFile?: string,
 ): ElaborationResult {
+  const bindings: { binding: string; instance: Instance }[] = [];
   const ctx: Context = {
     resolve,
     out: [],
@@ -198,6 +209,7 @@ export function elaborate(
       ctx,
       binding.source,
     );
+    bindings.push({ binding: stmt.predicate, instance });
     remapBoundaryShapes(actualBoundaries, instance.resolveName);
     const output = bindLocalName(ctx, instance, selected, stmt, columns);
     ctx.boundaries.push(outputBoundary(binding, stmt, entryFile, output));
@@ -219,7 +231,22 @@ export function elaborate(
   entry.statements = ctx.out;
   setModuleDiagnosticNames(entry, ctx.diagnosticNames);
   checkElaboratedPolarities(entry, ctx.boundaries);
-  return { program: entry, dataSources: ctx.dataSources, boundaries: ctx.boundaries };
+  return {
+    program: entry,
+    dataSources: ctx.dataSources,
+    boundaries: ctx.boundaries,
+    moduleBindings: bindings.map(({ binding, instance }) => ({
+      binding,
+      file: instance.file,
+      statements: instance.statements,
+      predicates: Object.fromEntries(
+        [...instance.localNames].map((name) => {
+          const resolved = instance.resolveName(name);
+          return [name, ctx.nameAliases.get(resolved) ?? resolved];
+        }),
+      ),
+    })),
+  };
 }
 
 /**
@@ -624,6 +651,9 @@ function instantiate(
   ctx.out.push(...expanded);
   const instance: Instance = {
     prefix,
+    file,
+    statements: expanded,
+    localNames,
     renamed: new Map(),
     resolveName: (name) =>
       inputSubst[name] ??

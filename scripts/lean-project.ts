@@ -115,8 +115,10 @@ export function parseSelection(value: unknown): Selection {
   for (const claim of claims) {
     if (claim && typeof claim === "object" && "kind" in claim && claim.kind === "constraint") {
       const selected: Record<string, unknown> = claim;
-      keys(selected, ["kind", "id", "constraint", "polarity"]);
+      keys(selected, ["kind", "id", "constraint", "polarity", "instance"]);
       if (
+        (selected.instance !== undefined &&
+          (typeof selected.instance !== "string" || !selected.instance.length)) ||
         typeof selected.id !== "string" ||
         !Number.isSafeInteger(selected.constraint) ||
         Number(selected.constraint) < 1 ||
@@ -185,6 +187,7 @@ export function parseSelection(value: unknown): Selection {
       "outputColumns",
       "rule",
       "refinement",
+      "instance",
     ]);
     if (
       claim.kind !== "error-predicate" &&
@@ -199,6 +202,7 @@ export function parseSelection(value: unknown): Selection {
     const fields = ["kind", "polarity", "id", "predicate"];
     keys(claim, [
       ...fields,
+      ...(claim.kind === "error-predicate" ? ["instance"] : []),
       ...(claim.kind === "error-predicate" || claim.kind === "program-emptiness"
         ? []
         : claim.kind === "local"
@@ -212,6 +216,9 @@ export function parseSelection(value: unknown): Selection {
                 : ["relationName", "keyColumns", "outputColumns"]),
     ]);
     if (
+      (claim.kind === "error-predicate" &&
+        claim.instance !== undefined &&
+        (typeof claim.instance !== "string" || !claim.instance.length)) ||
       [claim.id, claim.predicate].some((v) => typeof v !== "string") ||
       (claim.kind !== "error-predicate" &&
         claim.kind !== "program-emptiness" &&
@@ -316,18 +323,34 @@ export async function planProject(configInput: string, outputInput: string) {
     program.statements.filter(
       (statement) => statement.$type === "Query" && statement.isError && !statement.synthetic,
     );
+  const selectedInstance = (name: string | undefined) => {
+    if (name === undefined) return undefined;
+    const instance = modules?.instances.get(name);
+    if (!instance) throw new Error(`Unknown direct module binding ${name}`);
+    return instance;
+  };
   const constraintBundles = selection.claims
     .filter((claim) => claim.kind === "constraint")
     .map((claim) => {
-      const query = explicitConstraints[claim.constraint - 1];
+      const instance = selectedInstance(claim.instance);
+      const query = (instance?.constraints ?? explicitConstraints)[claim.constraint - 1];
       if (!query || query.$type !== "Query")
         throw new Error(`No explicit constraint ${claim.constraint}`);
-      return exportConstraint(typed, query, claim, modules?.entryPath);
+      return exportConstraint(typed, query, claim, instance?.file ?? modules?.entryPath);
     });
   constraintBundles.push(
     ...selection.claims
       .filter((claim) => claim.kind === "error-predicate")
       .map((claim) => {
+        const instance = selectedInstance(claim.instance);
+        if (instance) {
+          const predicate = instance.predicates[claim.predicate];
+          if (!predicate || !instance.errors.has(predicate))
+            throw new Error("Selection requires an error declared in the selected module instance");
+          if (typed.rules.get(predicate)?.some((rule) => !instance.ruleNodes.has(rule.$cstNode)))
+            throw new Error("Module error definitions must belong to the selected instance");
+          return exportErrorPredicate(typed, claim, instance.file, predicate);
+        }
         if (modules && !modules.entryErrorPredicates.includes(claim.predicate))
           throw new Error("Module error selections require an entry-file error declaration");
         if (

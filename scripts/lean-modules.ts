@@ -48,6 +48,26 @@ export function loadLeanModules(source: string, sourcePath: string) {
   return {
     program: elaborated.program,
     entryPath: label(entry),
+    instances: new Map(
+      elaborated.moduleBindings.map((instance) => [
+        instance.binding,
+        {
+          file: label(instance.file!),
+          predicates: instance.predicates,
+          constraints: instance.statements.filter(
+            (s) => s.$type === "Query" && s.isError && !s.synthetic,
+          ),
+          ruleNodes: new Set(
+            instance.statements.filter((s) => s.$type === "Rule").map((s) => s.$cstNode),
+          ),
+          errors: new Set(
+            instance.statements.flatMap((s) =>
+              s.$type === "Rule" && s.error ? [s.head.predicate] : [],
+            ),
+          ),
+        },
+      ]),
+    ),
     entryErrorPredicates,
     entryRuleNodes,
     entryConstraints: elaborated.program.statements.filter(

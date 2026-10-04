@@ -35,7 +35,7 @@ only registered goals. Runtime checks remain enabled, and adding checks does not
 restrict a theorem's quantified inputs.
 
 Local `.dl` module imports are supported for composed `program-*` claims and
-entry-file check goals (see
+entry-file and direct-instance check goals (see
 [modules](#local-module-programs)). Data-file bindings, general negation, aggregates, parity recursion,
 floats, arbitrary expression translation, and general structural relation laws
 remain outside this workflow. Proof caching/import, automatic proof search, and
@@ -603,7 +603,7 @@ transitive import invalidate the plan even when the entry file is unchanged.
 Check re-resolves the complete source graph when checking freshness. The source
 snapshot and selection snapshot retain their existing entry-point meaning.
 
-This scope supports composed integer program laws and entry-file checks as
+This scope supports composed integer program laws and selected source checks as
 described below. Structural projection and local selections in module sources
 are rejected. Runtime checks inside modules do not become assumptions.
 Data-file bindings, remote imports, separate interface-law assumptions, and proof
@@ -617,7 +617,7 @@ A module source may also select `constraint` and `error-predicate` goals declare
 in its entry file. Constraint indices count only explicit entry-file `!-`
 statements, excluding imported constraints and synthesized checks. Named error
 selections require an entry-file error declaration and defining rules from that
-file. Internal imported error names cannot be selected through this initial API.
+file. To select a check inside a direct import, supply `instance` as described below.
 
 The goal follows every positive imported definition needed by its body. Source
 provenance adds an entry-relative `file` alongside the exact check text and
@@ -633,8 +633,36 @@ Those checks are never assumed: weakening the imported guard still invalidates
 the maintained proofs. A successful report concerns the selected entry goals,
 not satisfaction of all imported checks or successful execution on a dataset.
 
-Selecting checks inside particular imported instances, structural module claims,
-and reusable module-interface proofs remain future work.
+## Checks inside direct module instances
+
+Both check descriptors accept an optional `instance` naming a module binding in
+the entry file (for example, `safe` in `input predicate safe(...) := ...`).
+Without it, selection remains entry-local. With it, `constraint` is the one-based
+index among explicit `!-` statements in that instance's source, and `predicate`
+is the source-local name of a declared error predicate:
+
+```json
+{"kind": "constraint", "id": "safeCheck", "instance": "safe", "constraint": 1}
+```
+
+Selection uses explicit elaborator metadata, including the shared expansion and
+source-to-elaborated predicate mapping. Two aliases for the same module and
+wiring select the same checks; different wiring selects distinct instances.
+Nested imports still contribute definitions to the proof, but their checks are
+not included in the parent's numbering. Dotted instance paths, unknown bindings,
+non-error predicates, and out-of-range indices are rejected before export.
+Named error goals include all defining sibling rules in the selected instance.
+
+The [instance-check example](examples/selected-instance-checks/README.md) proves
+checks for a module wired to a positive filter and refutes the same source checks
+for an instance wired to arbitrary input. Its shared alias exercises instance
+reuse. The fresh-check suite also rejects the safe proofs after rewiring their
+instance to arbitrary input. Source paths, selector descriptors, elaborated
+relations, and the complete module source graph participate in manifest identity.
+Checks never become input assumptions.
+
+Nested instance selectors, structural module claims, and reusable module-interface
+proofs remain future work.
 
 ## Worked example
 

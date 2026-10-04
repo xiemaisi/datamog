@@ -1,0 +1,5 @@
+input predicate seed(n: integer).
+positive(X) :- seed(X), X > 0.
+input predicate safe(n: integer) := result from "filter.dl"(item = positive).
+input predicate shared(n: integer) := result from "filter.dl"(item = positive).
+input predicate unsafe(n: integer) := result from "filter.dl"(item = seed).
