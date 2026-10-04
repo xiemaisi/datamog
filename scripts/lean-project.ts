@@ -295,30 +295,50 @@ export async function planProject(configInput: string, outputInput: string) {
   if (
     hasBindings &&
     (selection.projections.length ||
-      selection.claims.some((claim) => !claim.kind.startsWith("program-")))
+      selection.claims.some(
+        (claim) =>
+          !claim.kind.startsWith("program-") &&
+          claim.kind !== "constraint" &&
+          claim.kind !== "error-predicate",
+      ))
   )
-    throw new Error("Module verification currently supports composed program-* claims only");
+    throw new Error(
+      "Module verification supports composed program-* claims and entry-file checks only",
+    );
   const modules = hasBindings ? loadLeanModules(source, sourcePath) : undefined;
   const program = modules?.program ?? parse(source);
   const typed = modules?.typed ?? inferTypes(analyze(program));
   const exports = selection.projections.map((descriptor) =>
     exportLeanStructuralProjection(typed, descriptor),
   );
-  const explicitConstraints = program.statements.filter(
-    (statement) => statement.$type === "Query" && statement.isError && !statement.synthetic,
-  );
+  const explicitConstraints =
+    modules?.entryConstraints ??
+    program.statements.filter(
+      (statement) => statement.$type === "Query" && statement.isError && !statement.synthetic,
+    );
   const constraintBundles = selection.claims
     .filter((claim) => claim.kind === "constraint")
     .map((claim) => {
       const query = explicitConstraints[claim.constraint - 1];
       if (!query || query.$type !== "Query")
         throw new Error(`No explicit constraint ${claim.constraint}`);
-      return exportConstraint(typed, query, claim);
+      return exportConstraint(typed, query, claim, modules?.entryPath);
     });
   constraintBundles.push(
     ...selection.claims
       .filter((claim) => claim.kind === "error-predicate")
-      .map((claim) => exportErrorPredicate(typed, claim)),
+      .map((claim) => {
+        if (modules && !modules.entryErrorPredicates.includes(claim.predicate))
+          throw new Error("Module error selections require an entry-file error declaration");
+        if (
+          modules &&
+          typed.rules
+            .get(claim.predicate)
+            ?.some((rule) => !modules.entryRuleNodes.has(rule.$cstNode))
+        )
+          throw new Error("Module error selections require all defining rules in the entry file");
+        return exportErrorPredicate(typed, claim, modules?.entryPath);
+      }),
   );
   const mutuals = selection.claims
     .filter(

@@ -1,0 +1,9 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "program-invariant", "id": "safe", "predicates": ["output"] },
+    { "kind": "constraint", "id": "noViolation", "constraint": 1 },
+    { "kind": "constraint", "id": "inputEmpty", "constraint": 2, "polarity": "refute" },
+    { "kind": "error-predicate", "id": "noBad", "predicate": "bad" }
+  ]
+}

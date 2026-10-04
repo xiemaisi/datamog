@@ -982,6 +982,44 @@ try {
   console.log(
     "Selected project: nested modules and source snapshots checked; unsafe imported guard rejected.",
   );
+  const moduleChecksFixture = new URL(
+    "../verification/lean/examples/selected-module-checks/",
+    import.meta.url,
+  ).pathname;
+  await cp(moduleChecksFixture, join(temp, "module-checks-input"), { recursive: true });
+  const moduleChecksConfig = join(temp, "module-checks-input/plan.json");
+  const moduleChecksOutput = join(temp, "module-checks-project");
+  await exportProject(moduleChecksConfig, moduleChecksOutput);
+  await Bun.write(
+    join(moduleChecksOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(moduleChecksFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(moduleChecksConfig, moduleChecksOutput);
+  const moduleChecksReport = await checkProject(moduleChecksConfig, moduleChecksOutput);
+  if (
+    moduleChecksReport.entries.length !== 4 ||
+    moduleChecksReport.entries.some((e) => e.status !== "proved")
+  )
+    throw new Error("Expected entry checks and laws over imported definitions");
+  const checkedImport = join(temp, "module-checks-input/filter.dl");
+  await Bun.write(checkedImport, (await Bun.file(checkedImport).text()).replace("X > 0", "X >= 0"));
+  await exportProject(moduleChecksConfig, moduleChecksOutput);
+  await Bun.write(join(moduleChecksOutput, "verification-result.json"), "old success");
+  let moduleChecksRejected = false;
+  try {
+    await checkProject(moduleChecksConfig, moduleChecksOutput);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("omega")) throw error;
+    moduleChecksRejected = true;
+  }
+  if (
+    !moduleChecksRejected ||
+    (await Bun.file(join(moduleChecksOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Imported checks were assumed to exclude reachable entry violations");
+  console.log(
+    "Selected project: entry checks over modules passed; imported checks remain unassumed.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

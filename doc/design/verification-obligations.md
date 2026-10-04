@@ -1325,10 +1325,27 @@ files, cycles, and unsupported bindings. A maintained nested-module invariant
 fails after its transitive input guard is weakened.
 
 This does not introduce module interface assumptions or imported proof reuse.
-Only composed integer laws are supported for module sources; imported check and
-structural projection selections remain outside this initial scope. Remote
+Composed integer laws and entry-file check goals are supported for module sources;
+selection of checks inside imported instances and structural projections remain
+outside this scope. Remote
 modules and active data-file bindings are rejected. The frontend and elaborator
 remain trusted, and runtime checks do not become theorem hypotheses.
+
+## Entry-file checks through module definitions
+
+Module sources now support entry-file `constraint` and `error-predicate` goals.
+Explicit constraint indices exclude imported checks and synthesized refinements.
+Named errors require declarations and defining rules in the entry file; selecting
+an internal imported error relation remains unsupported. Provenance records the
+entry-relative source file along with text and locations, and each goal depends
+on the complete module source identity graph.
+
+The combined fixture proves entry laws and checks over an imported positive
+filter and refutes entry input emptiness. Its imported checks deliberately reject
+nonempty input, but are never supplied as hypotheses. Weakening the imported
+guard still breaks the proofs. Adding imported checks changes content identities
+without changing entry numbering or logical statements. These results do not
+assert that all checks in all imported instances have been proved.
 
 ## Which harder claims should be expressible?
 
@@ -1663,7 +1680,7 @@ but its remaining input premises must stay visible at every importing boundary.
 | 1. Explicit current results | Typed SMT obligations, provenance, dependencies, bounded solver invocations, conditional discharge | Stronger process containment, memory limits, and CLI resource configuration |
 | 2. Semantics and Lean spike | Pinned Lean project, arithmetic and recursive proofs, structural libraries, fixed-fixture backend comparisons | Extend supported semantic profiles as needed |
 | 3. Statement/checking boundary | Exact theorem types, axiom audits, content manifests, fresh isolated builds, selected-project inspection and reports | General module-interface identities, reusable proof artifacts, cache/import protocol, finer invalidation; reports are not certificates |
-| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Module check/projection selections, explicit interface/input laws, broader structural relation claims, finite quantifiers and stratified negation |
+| 4. Useful claim families | Composed invariants, uniqueness, coverage, equivalence, emptiness, explicit constraints and named errors; separate structural projections | Imported-instance check and structural module selections, explicit interface/input laws, broader structural relation claims, finite quantifiers and stratified negation |
 | 5. Automation and wider semantics | SMT remains the automatic route; maintained Lean proofs check the supported fragments | CHC benchmarks, richer SMT, a certificate route, and a proved finite-group aggregate model |
 | 6. Reduce translation trust | Exporter/frontend/semantic model remain trusted; differential regressions check concrete cases | Deep embedding and a soundness theorem for translation/obligation generation; backend correspondence is separate |
 

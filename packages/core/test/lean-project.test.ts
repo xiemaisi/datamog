@@ -84,7 +84,7 @@ test("duplicate identities and bound sources fail without output mutation", asyn
       join(dir, "source.dl"),
       'input predicate items(v: {n: integer}) := "input.jsonl". picked(V["n"]) :- items(V).',
     );
-    await expect(planProject(config, output)).rejects.toThrow("program-* claims only");
+    await expect(planProject(config, output)).rejects.toThrow("entry-file checks only");
   }));
 test("export refuses unrelated directories and symlinked managed files", async () =>
   fixture(async (config, output, dir) => {
@@ -1468,6 +1468,57 @@ test("module verification rejects invalid boundaries, cycles, missing files and 
       'input predicate seed(n: integer). input predicate out(n: integer) := positive from "https://example.com/filter.dl"(item = seed).',
     ]) {
       await Bun.write(join(dir, "source.dl"), source);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("module check selection numbers only entry constraints and records their file", async () =>
+  fixture(async (config, output, dir) => {
+    const imported = await Bun.file(
+      "verification/lean/examples/selected-module-checks/filter.dl",
+    ).text();
+    const source = await Bun.file(
+      "verification/lean/examples/selected-module-checks/program.dl",
+    ).text();
+    await Bun.write(join(dir, "filter.dl"), imported);
+    await Bun.write(join(dir, "source.dl"), source);
+    const claims = [
+      { kind: "constraint", id: "check", constraint: 1 },
+      { kind: "constraint", id: "nonempty", constraint: 2, polarity: "refute" },
+      { kind: "error-predicate", id: "error", predicate: "bad" },
+    ];
+    await Bun.write(config, JSON.stringify({ source: "source.dl", claims }));
+    const plan = await planProject(config, output);
+    expect(plan.manifest.entries.find((e) => e.id === "checkConstraint")!.statement).toMatchObject({
+      file: "source.dl",
+      text: "!- imported(X), X <= 0.",
+      span: { line: 5 },
+    });
+    expect(
+      plan.manifest.entries.find((e) => e.id === "nonemptyConstraint")!.statement,
+    ).toMatchObject({ file: "source.dl", text: "!- seed(X).", span: { line: 6 } });
+    expect(
+      plan.manifest.entries.find((e) => e.id === "errorErrorPredicate")!.statement,
+    ).toMatchObject({
+      file: "source.dl",
+      definitions: [{ error: true, text: "error predicate bad(X) :- imported(X), X <= 0." }],
+    });
+    expect(
+      plan.manifest.entries
+        .filter((e) => e.kind === "goal")
+        .every((e) => e.closure.includes("ModuleSources")),
+    ).toBe(true);
+    expect(plan.manifest.entries.every((e) => !e.assumptions.length)).toBe(true);
+    await Bun.write(join(dir, "filter.dl"), `${imported}\n!- item(X), X > 0.`);
+    const extra = await planProject(config, output);
+    expect(extra.files["Datamog/Generated.lean"]).toBe(plan.files["Datamog/Generated.lean"]);
+    expect(extra.manifest.digest).not.toBe(plan.manifest.digest);
+    for (const claim of [
+      { kind: "constraint", id: "check", constraint: 3 },
+      { kind: "error-predicate", id: "error", predicate: "internalBad" },
+    ]) {
+      await Bun.write(config, JSON.stringify({ source: "source.dl", claims: [claim] }));
       await expect(exportProject(config, output)).rejects.toThrow();
     }
     await expect(readdir(output)).rejects.toThrow();

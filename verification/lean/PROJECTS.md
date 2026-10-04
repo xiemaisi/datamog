@@ -34,7 +34,8 @@ register a refutation. Unsupported selections fail explicitly. Reports cover
 only registered goals. Runtime checks remain enabled, and adding checks does not
 restrict a theorem's quantified inputs.
 
-Local `.dl` module imports are supported for composed `program-*` claims (see
+Local `.dl` module imports are supported for composed `program-*` claims and
+entry-file check goals (see
 [modules](#local-module-programs)). Data-file bindings, general negation, aggregates, parity recursion,
 floats, arbitrary expression translation, and general structural relation laws
 remain outside this workflow. Proof caching/import, automatic proof search, and
@@ -602,13 +603,38 @@ transitive import invalidate the plan even when the entry file is unchanged.
 Check re-resolves the complete source graph when checking freshness. The source
 snapshot and selection snapshot retain their existing entry-point meaning.
 
-This first scope supports composed integer program laws only. Structural
-projection, local, explicit-constraint, and named-error selections in module
-sources are rejected. Runtime checks inside modules do not become assumptions.
+This scope supports composed integer program laws and entry-file checks as
+described below. Structural projection and local selections in module sources
+are rejected. Runtime checks inside modules do not become assumptions.
 Data-file bindings, remote imports, separate interface-law assumptions, and proof
 imports remain unsupported. Module cycles, missing files, and incompatible
 boundaries fail before export. This expands source loading; it does not prove the
 elaborator correct or establish a reusable assume-guarantee module theorem.
+
+## Entry-file checks over module dependencies
+
+A module source may also select `constraint` and `error-predicate` goals declared
+in its entry file. Constraint indices count only explicit entry-file `!-`
+statements, excluding imported constraints and synthesized checks. Named error
+selections require an entry-file error declaration and defining rules from that
+file. Internal imported error names cannot be selected through this initial API.
+
+The goal follows every positive imported definition needed by its body. Source
+provenance adds an entry-relative `file` alongside the exact check text and
+locations; the goal closure also contains `ModuleSources`. Adding an imported
+constraint changes source identities but does not renumber entry constraints or
+change their theorem statements.
+
+The [module-check example](examples/selected-module-checks/plan.json) proves an
+entry invariant, an explicit constraint, and a named error goal over an imported
+positive filter, and refutes a second entry constraint asserting empty input.
+Its module deliberately contains unselected checks that fail for nonempty input.
+Those checks are never assumed: weakening the imported guard still invalidates
+the maintained proofs. A successful report concerns the selected entry goals,
+not satisfaction of all imported checks or successful execution on a dataset.
+
+Selecting checks inside particular imported instances, structural module claims,
+and reusable module-interface proofs remain future work.
 
 ## Worked example
 

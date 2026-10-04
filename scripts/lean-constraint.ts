@@ -12,7 +12,12 @@ export interface ConstraintClaim {
   polarity?: "prove" | "refute";
 }
 
-export function exportConstraint(typed: TypedProgram, query: Query, claim: ConstraintClaim) {
+export function exportConstraint(
+  typed: TypedProgram,
+  query: Query,
+  claim: ConstraintClaim,
+  sourceFile?: string,
+) {
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(claim.id)) throw new Error("Invalid constraint claim name");
   if (!query.isError || query.synthetic || !query.$cstNode || query.outputName)
     throw new Error("Constraint selection requires an explicit source !- statement");
@@ -47,6 +52,7 @@ export function exportConstraint(typed: TypedProgram, query: Query, claim: Const
     dependencies: [],
     statement: {
       claim,
+      ...(sourceFile ? { file: sourceFile } : {}),
       text: cst.text,
       span: {
         offset: cst.offset,
@@ -70,7 +76,11 @@ export interface ErrorPredicateClaim {
 }
 
 /** Error status applies to the whole relation, including unmarked sibling rules. */
-export function exportErrorPredicate(typed: TypedProgram, claim: ErrorPredicateClaim) {
+export function exportErrorPredicate(
+  typed: TypedProgram,
+  claim: ErrorPredicateClaim,
+  sourceFile?: string,
+) {
   const rules = typed.rules.get(claim.predicate);
   if (
     !rules?.length ||
@@ -105,7 +115,7 @@ export function exportErrorPredicate(typed: TypedProgram, claim: ErrorPredicateC
   bundle.nodes.push({
     id: origin,
     kind: "definition",
-    statement: { claim, definitions },
+    statement: { claim, ...(sourceFile ? { file: sourceFile } : {}), definitions },
     assumptions: [],
     dependencies: [],
   });

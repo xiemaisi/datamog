@@ -847,3 +847,9 @@ Composed `program-*` selections now support local `.dl` modules through the exis
 elaborator and boundary checks. The [nested-module example](examples/selected-modules/README.md)
 records all source snapshots and import identities and rejects a changed upstream
 guard. Data bindings and separately proved module interfaces remain unsupported.
+
+Entry-file `constraint` and `error-predicate` goals can now follow module
+dependencies. Imported checks neither shift entry constraint indices nor become
+assumptions. The [module-check fixture](examples/selected-module-checks/plan.json)
+combines these goals with an invariant and an input-emptiness refutation.
+Selecting checks inside imported instances remains unsupported.

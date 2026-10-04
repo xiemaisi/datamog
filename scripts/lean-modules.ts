@@ -14,8 +14,18 @@ export function loadLeanModules(source: string, sourcePath: string) {
   const sources = new Map([[entry, source]]);
   const label = (file: string) => relative(dirname(entry), file).replaceAll("\\", "/");
   const imports: { importer: string; reference: string; file: string }[] = [];
+  const entryProgram = parseRaw(source, entry);
+  const entryConstraintNodes = new Set(
+    entryProgram.statements.filter((s) => s.$type === "Query" && s.isError).map((s) => s.$cstNode),
+  );
+  const entryRuleNodes = new Set(
+    entryProgram.statements.filter((s) => s.$type === "Rule").map((s) => s.$cstNode),
+  );
+  const entryErrorPredicates = entryProgram.statements.flatMap((s) =>
+    s.$type === "Rule" && s.error ? [s.head.predicate] : [],
+  );
   const elaborated = elaborate(
-    parseRaw(source, entry),
+    entryProgram,
     (ref, importer) => {
       if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(ref) || extname(ref) !== ".dl")
         throw new Error("Lean module imports require local .dl files");
@@ -37,6 +47,13 @@ export function loadLeanModules(source: string, sourcePath: string) {
   checkModuleBoundaries(typed, elaborated.boundaries);
   return {
     program: elaborated.program,
+    entryPath: label(entry),
+    entryErrorPredicates,
+    entryRuleNodes,
+    entryConstraints: elaborated.program.statements.filter(
+      (s) =>
+        s.$type === "Query" && s.isError && !s.synthetic && entryConstraintNodes.has(s.$cstNode),
+    ),
     typed,
     sources: [...sources]
       .sort(([a], [b]) => a.localeCompare(b))
