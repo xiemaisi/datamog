@@ -757,7 +757,7 @@ source change made during compilation. The dedicated Lean CI job runs this suite
 ## Explicit integer input laws
 
 Any composed `program-*` proof, or a `constraint` or `error-predicate` proof, can
-declare a nonempty `inputLaws` array. Each law has
+declare a nonempty `inputLaws` array. A column-bound law has
 `id`, `predicate`, zero-based `column`, comparison `op` (`<`, `<=`, `>`, `>=`, `=`),
 and a safe integer `value`. Names must be distinct within the claim. The predicate
 must be a reachable non-null integer input; derived relations and unrelated
@@ -807,6 +807,27 @@ retain their normal meaning; this does not introduce interface-law instantiation
 The [relational example](examples/selected-input-law-relations/README.md) proves
 uniqueness and equivalence under a named equality law on one input column. It
 also refutes both unrestricted claims. All columns remain quantified in the law,
-and uniqueness still varies non-key columns independently. This completes law
-support across composed claim kinds without expanding the law language: general
-functional dependencies and other multi-tuple input laws remain unsupported.
+and uniqueness still varies non-key columns independently. Functional-dependency laws are also supported as described below; other arbitrary
+multi-tuple input formulas remain unsupported.
+
+### Functional-dependency input laws
+
+Any supported `inputLaws` array may include a law with `kind` set to
+`functional-dependency`, a name `id`, a reachable input `predicate`, and zero-based
+`keyColumns` and `outputColumns` arrays. Two input tuples share exactly the key
+columns; every other column varies independently, including columns not selected
+as outputs. The conclusion conjoins the selected output equalities.
+
+Empty keys express global uniqueness of the selected outputs. Empty outputs,
+duplicate columns, key/output overlap, invalid indices, unknown fields, and
+non-input dependencies are rejected. These laws can coexist with column bounds;
+names remain unique within each selected claim. All laws are explicit premises,
+not asserted facts or checks of a loaded dataset. Conditional refutations remain
+unsupported.
+
+The [worked example](examples/selected-functional-dependency/README.md) proves a
+projection pipeline preserves an input dependency and refutes unrestricted
+uniqueness. Changing the key changes the exact theorem and manifest identity;
+rewiring an imported relation requires a law on the actual reachable input.
+Conditional reporting and strict goal gates apply unchanged. This is a supported
+integer input-law form, not automatic module-interface discharge or proof reuse.

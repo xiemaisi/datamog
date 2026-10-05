@@ -1784,3 +1784,21 @@ input column; non-key tuple positions remain independent in uniqueness goals.
 Fresh checks reject weakened laws and unconditional gates for conditional results.
 This does not add functional-dependency or arbitrary multi-tuple input laws, and
 conditional refutations remain unsupported.
+
+## Functional-dependency input laws
+
+Selected proofs now accept named functional dependencies on reachable non-null
+integer inputs. The premise quantifies two tuples sharing only selected key
+columns, independently varying every other column, and concludes equality of the
+selected output columns. Empty keys express global uniqueness; empty outputs,
+invalid/duplicate/overlapping columns, and derived-relation targets are rejected.
+The exact formula and descriptor enter the existing assumption and identity
+boundary. These laws can coexist with column bounds but remain explicit premises.
+
+A maintained projection pipeline proves that an input key dependency survives
+removing an unselected tag column. A companion theorem refutes unrestricted
+output uniqueness. Fresh checks reject adding the dropped tag to the assumed key
+and unconditional gating of the conditional proof. Unit regressions distinguish
+empty keys and multiple outputs and invalidate laws after module rewiring.
+This is not dataset validation, automatic premise discharge, or reusable module
+proof import. Arbitrary relational input formulas remain unsupported.

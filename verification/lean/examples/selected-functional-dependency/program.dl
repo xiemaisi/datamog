@@ -1,0 +1,3 @@
+input predicate item(k: integer, v: integer, tag: integer).
+projected(K, V) :- item(K, V, T).
+output(K, V) :- projected(K, V).

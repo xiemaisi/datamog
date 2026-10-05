@@ -95,6 +95,18 @@ function validateInputLaws(inputLaws: unknown) {
     if (!Array.isArray(inputLaws) || !inputLaws.length)
       throw new Error("Input laws must be a nonempty array");
     for (const law of inputLaws) {
+      if (law && typeof law === "object" && "kind" in law && law.kind === "functional-dependency") {
+        keys(law, ["kind", "id", "predicate", "keyColumns", "outputColumns"]);
+        if (
+          typeof law.id !== "string" ||
+          typeof law.predicate !== "string" ||
+          !Array.isArray(law.keyColumns) ||
+          !Array.isArray(law.outputColumns) ||
+          [...law.keyColumns, ...law.outputColumns].some((c) => !Number.isSafeInteger(c))
+        )
+          throw new Error("Invalid functional-dependency input law");
+        continue;
+      }
       keys(law, ["id", "predicate", "column", "op", "value"]);
       if (
         typeof law.id !== "string" ||

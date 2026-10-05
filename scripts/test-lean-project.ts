@@ -1269,6 +1269,52 @@ try {
   console.log(
     "Selected project: conditional uniqueness and equivalence passed; weakened premises and strict gates rejected.",
   );
+  const fdFixture = new URL(
+    "../verification/lean/examples/selected-functional-dependency/",
+    import.meta.url,
+  ).pathname;
+  const fdInput = join(temp, "fd-input");
+  const fdOutput = join(temp, "fd-project");
+  await cp(fdFixture, fdInput, { recursive: true });
+  const fdConfig = join(fdInput, "plan.json");
+  await exportProject(fdConfig, fdOutput);
+  await Bun.write(
+    join(fdOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(fdFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(fdConfig, fdOutput);
+  const fdReport = await checkProject(fdConfig, fdOutput, ["unrestricted_refuted"], true);
+  if (
+    fdReport.entries.find((e) => e.id === "unique")?.status !== "conditional" ||
+    fdReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved"
+  )
+    throw new Error("Functional dependency assurance was lost");
+  let fdGateRejected = false;
+  try {
+    await checkProject(fdConfig, fdOutput, ["unique"], true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("remains conditional")) throw error;
+    fdGateRejected = true;
+  }
+  if (!fdGateRejected || (await Bun.file(join(fdOutput, "verification-result.json")).exists()))
+    throw new Error("Functional dependency bypassed unconditional gating");
+  const fdSelection = JSON.parse(await Bun.file(fdConfig).text());
+  fdSelection.claims[0].inputLaws[0].keyColumns = [0, 2];
+  await Bun.write(fdConfig, JSON.stringify(fdSelection));
+  await exportProject(fdConfig, fdOutput);
+  let weakerFdRejected = false;
+  try {
+    await checkProject(fdConfig, fdOutput, undefined, true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+      throw error;
+    weakerFdRejected = true;
+  }
+  if (!weakerFdRejected)
+    throw new Error("Additional key silently strengthened the selected dependency");
+  console.log(
+    "Selected project: functional dependency preservation and refutation passed; extra key and strict gate rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

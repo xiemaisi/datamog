@@ -864,3 +864,8 @@ selection through child module bindings, including shared nested instances.
 All composed integer claim proofs, plus constraint and named-error proofs, support [explicit integer input laws](PROJECTS.md#explicit-integer-input-laws).
 Their premises remain visible in exact theorem types and conditional reports;
 `--allow-conditional` permits reporting them without weakening `--require-goal`.
+
+[Functional-dependency input laws](PROJECTS.md#functional-dependency-input-laws)
+now express input key/output uniqueness with independent non-key columns. A
+[projection example](examples/selected-functional-dependency/README.md) proves
+preservation conditionally and refutes the unrestricted claim.

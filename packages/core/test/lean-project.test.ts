@@ -1831,3 +1831,63 @@ test("uniqueness and equivalence input laws quantify every column and stay claim
     }
     await expect(readdir(output)).rejects.toThrow();
   }));
+
+test("functional dependencies keep non-key columns independent and reject invalid laws", async () =>
+  fixture(async (config, output, dir) => {
+    const base = "verification/lean/examples/selected-functional-dependency/";
+    await Bun.write(join(dir, "program.dl"), await Bun.file(`${base}program.dl`).text());
+    const selection = JSON.parse(await Bun.file(`${base}plan.json`).text());
+    const claim = selection.claims[0];
+    const law = claim.inputLaws[0];
+    const writeLaw = (inputLaw: unknown) =>
+      Bun.write(
+        config,
+        JSON.stringify({ ...selection, claims: [{ ...claim, inputLaws: [inputLaw] }] }),
+      );
+    await writeLaw(law);
+    const original = await inspectProject(config, output);
+    expect(original.goals[0]!.assumptions[0]).toContain(
+      "input0 lawx0 lawx1 lawx2 → input0 lawx0 lawy1 lawy2 → (lawx1 = lawy1)",
+    );
+    await writeLaw({ ...law, keyColumns: [], outputColumns: [1, 2] });
+    const global = await inspectProject(config, output);
+    expect(global.goals[0]!.assumptions[0]).toContain(
+      "input0 lawy0 lawy1 lawy2 → (lawx1 = lawy1 ∧ lawx2 = lawy2)",
+    );
+    expect(global.verificationPlan.digest).not.toBe(original.verificationPlan.digest);
+    await writeLaw({ ...law, keyColumns: [0, 2] });
+    const extraKey = await inspectProject(config, output);
+    expect(extraKey.goals[0]!.assumptions[0]).toContain("input0 lawx0 lawy1 lawx2");
+    expect(extraKey.verificationPlan.digest).not.toBe(original.verificationPlan.digest);
+    for (const invalid of [
+      { ...law, keyColumns: [0, 0] },
+      { ...law, outputColumns: [] },
+      { ...law, outputColumns: [0] },
+      { ...law, outputColumns: [1, 1] },
+      { ...law, keyColumns: [-1] },
+      { ...law, keyColumns: [0.5] },
+      { ...law, outputColumns: [3] },
+      { ...law, predicate: "output" },
+      { ...law, predicate: "missing" },
+      { ...law, column: 0 },
+      { ...law, kind: "unknown" },
+      { ...law, keyColumns: null },
+    ]) {
+      await writeLaw(invalid);
+      await expect(exportProject(config, output)).rejects.toThrow();
+    }
+    await Bun.write(
+      join(dir, "module.dl"),
+      "input predicate rows(k: integer, v: integer, tag: integer). output predicate result(K,V) :- rows(K,V,T).",
+    );
+    const source =
+      'input predicate first(k: integer, v: integer, tag: integer). input predicate second(k: integer, v: integer, tag: integer). input predicate output(k: integer, v: integer) := result from "module.dl"(rows = first).';
+    await Bun.write(join(dir, "program.dl"), source);
+    await writeLaw({ ...law, predicate: "first" });
+    const wired = await planProject(config, output);
+    await Bun.write(join(dir, "program.dl"), source.replace("rows = first", "rows = second"));
+    await expect(exportProject(config, output)).rejects.toThrow("reachable input");
+    await writeLaw({ ...law, predicate: "second" });
+    expect((await planProject(config, output)).manifest.digest).not.toBe(wired.manifest.digest);
+    await expect(readdir(output)).rejects.toThrow();
+  }));

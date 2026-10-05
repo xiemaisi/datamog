@@ -12,13 +12,22 @@ export interface MutualClaim {
   predicates: string[];
   polarity?: "prove" | "refute";
 }
-export interface InputLaw {
+export interface IntegerInputLaw {
+  kind?: never;
   id: string;
   predicate: string;
   column: number;
   op: "<" | "<=" | ">" | ">=" | "=";
   value: number;
 }
+export interface FunctionalDependencyInputLaw {
+  kind: "functional-dependency";
+  id: string;
+  predicate: string;
+  keyColumns: number[];
+  outputColumns: number[];
+}
+export type InputLaw = IntegerInputLaw | FunctionalDependencyInputLaw;
 export interface ProgramInvariantClaim {
   kind: "program-invariant";
   inputLaws?: InputLaw[];
@@ -335,6 +344,27 @@ function exportFamily(
     throw new Error("Input law names must be distinct");
   const lawFormulas = laws.map((law) => {
     const index = inputs.get(law.predicate);
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(law.id) || index === undefined)
+      throw new Error("Input law requires a name and reachable input predicate");
+    if (law.kind === "functional-dependency") {
+      const arity = arityOf(law.predicate);
+      const columns = [...law.keyColumns, ...law.outputColumns];
+      if (
+        !law.outputColumns.length ||
+        new Set(columns).size !== columns.length ||
+        columns.some((c) => !Number.isSafeInteger(c) || c < 0 || c >= arity)
+      )
+        throw new Error(
+          "Functional dependency requires distinct valid key/output columns and nonempty outputs",
+        );
+      const left = Array.from({ length: arity }, (_, i) => `lawx${i}`);
+      const right = left.map((x, i) => (law.keyColumns.includes(i) ? x : `lawy${i}`));
+      const binders = [...new Set([...left, ...right])]
+        .map((v) => `(${v} : Datamog.SafeInt)`)
+        .join(" ");
+      const equalities = law.outputColumns.map((i) => `${left[i]} = ${right[i]}`).join(" ∧ ");
+      return `∀ ${binders}, input${index} ${left.join(" ")} → input${index} ${right.join(" ")} → (${equalities})`;
+    }
     const ops = { "<": "<", "<=": "≤", ">": ">", ">=": "≥", "=": "=" };
     if (
       !/^[A-Za-z][A-Za-z0-9_]*$/.test(law.id) ||

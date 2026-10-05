@@ -1,0 +1,29 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-uniqueness",
+      "id": "unique",
+      "predicate": "output",
+      "keyColumns": [0],
+      "outputColumns": [1],
+      "inputLaws": [
+        {
+          "kind": "functional-dependency",
+          "id": "inputKey",
+          "predicate": "item",
+          "keyColumns": [0],
+          "outputColumns": [1]
+        }
+      ]
+    },
+    {
+      "kind": "program-uniqueness",
+      "id": "unrestricted",
+      "predicate": "output",
+      "keyColumns": [0],
+      "outputColumns": [1],
+      "polarity": "refute"
+    }
+  ]
+}
