@@ -64,3 +64,6 @@ certify native/SQL execution, prove termination, or provide an importable proof
 certificate. The selected workflow does not run backend comparisons for this
 source; the fixed Lean suite has separately reported concrete comparisons.
 See the [support matrix and trust boundary](../../PROJECTS.md) for the full scope.
+
+For a conditional proof whose input laws are checked before executing the same
+rows, see the [checked input execution example](../selected-input-run/README.md).

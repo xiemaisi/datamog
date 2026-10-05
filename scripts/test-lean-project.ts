@@ -1071,6 +1071,11 @@ try {
   const inputLawsOutput = join(temp, "inputLaws-project");
   await cp(inputLawsFixture, inputLawsInput, { recursive: true });
   const inputLawsConfig = join(inputLawsInput, "plan.json");
+  const inputLawsSource = join(inputLawsInput, "program.dl");
+  await Bun.write(
+    inputLawsSource,
+    (await Bun.file(inputLawsSource).text()).replace("output(X", "output predicate output(X"),
+  );
   await exportProject(inputLawsConfig, inputLawsOutput);
   await Bun.write(
     join(inputLawsOutput, "Datamog/Proofs.lean"),
@@ -1086,14 +1091,35 @@ try {
     undefined,
     true,
     inputLawsBinding,
+    true,
   );
   if (
     inputLawsReport.entries.find((e) => e.id === "positive")?.status !== "conditional" ||
     inputLawsReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved" ||
+    inputLawsReport.execution?.status !== "completed" ||
+    inputLawsReport.execution?.results[0]?.rows.length !== 2 ||
     inputLawsReport.dataset?.inputs[0]?.rows !== 2 ||
     inputLawsReport.dataset?.goals[0]?.status !== "premises-satisfied-for-supplied-inputs"
   )
     throw new Error("Input-law premise was lost from fresh assurance");
+  const checkedInputSource = await Bun.file(inputLawsSource).text();
+  await Bun.write(inputLawsSource, `${checkedInputSource}\n!- item(X), X = 1.\n`);
+  await exportProject(inputLawsConfig, inputLawsOutput);
+  await Bun.write(join(inputLawsOutput, "verification-result.json"), "old success");
+  let runtimeRejected = false;
+  try {
+    await checkProject(inputLawsConfig, inputLawsOutput, undefined, true, inputLawsBinding, true);
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== "ConstraintViolationError") throw error;
+    runtimeRejected = true;
+  }
+  if (
+    !runtimeRejected ||
+    (await Bun.file(join(inputLawsOutput, "verification-result.json")).exists())
+  )
+    throw new Error("Runtime constraint failure retained a successful report");
+  await Bun.write(inputLawsSource, checkedInputSource);
+  await exportProject(inputLawsConfig, inputLawsOutput);
   for (const required of [undefined, ["positive"]]) {
     let rejected = false;
     try {

@@ -1,0 +1,19 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-invariant",
+      "id": "positive",
+      "predicates": ["output"],
+      "inputLaws": [
+        { "id": "positiveItems", "predicate": "item", "column": 0, "op": ">", "value": 0 }
+      ]
+    },
+    {
+      "kind": "program-invariant",
+      "id": "unrestricted",
+      "predicates": ["output"],
+      "polarity": "refute"
+    }
+  ]
+}

@@ -2,8 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertInputDataUnchanged, validateInputData } from "../../../scripts/lean-input-data.ts";
+import {
+  assertInputDataUnchanged,
+  prepareInputData,
+  validateInputData,
+} from "../../../scripts/lean-input-data.ts";
+import { executeInputSnapshot } from "../../../scripts/lean-input-run.ts";
 import { planProject } from "../../../scripts/lean-project.ts";
+import { DatamogExecutor } from "../../engine/src/index.ts";
 
 async function withInputFile(run: (file: string, dir: string) => Promise<void>) {
   const dir = await mkdtemp(join(tmpdir(), "datamog-input-law-data-"));
@@ -85,5 +91,93 @@ test("dataset laws use the entry input after module wiring", async () => {
     await expect(
       validateInputData(plan.manifest, plan.inputDeclarations, [{ predicate: "item", file }]),
     ).rejects.toThrow("unneeded");
+  });
+});
+
+test("native execution uses checked rows even if the file later changes", async () => {
+  await withInputFile(async (file, dir) => {
+    const source =
+      "input predicate item(n: integer). output predicate output(X, _: X > 0) :- item(X).";
+    const config = join(dir, "plan.json");
+    await Bun.write(join(dir, "program.dl"), source);
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "program.dl",
+        claims: [
+          {
+            kind: "program-invariant",
+            id: "positive",
+            predicates: ["output"],
+            inputLaws: [{ id: "positiveItems", predicate: "item", column: 0, op: ">", value: 0 }],
+          },
+        ],
+      }),
+    );
+    const plan = await planProject(config, join(dir, "project"));
+    await Bun.write(file, "n\n1\n2\n");
+    const input = await prepareInputData(
+      plan.manifest,
+      plan.inputDeclarations,
+      [{ predicate: "item", file }],
+      true,
+    );
+    await Bun.write(file, "n\n0\n");
+    const execution = await executeInputSnapshot(plan.typed, input.rows);
+    expect(execution.status).toBe("completed");
+    expect(execution.results[0]!.rows.map((row) => Object.values(row))).toEqual([[1], [2]]);
+    await expect(assertInputDataUnchanged(input.evidence.inputs)).rejects.toThrow("changed");
+  });
+});
+
+test("native snapshot execution preserves runtime checks and rejects incomplete evaluation", async () => {
+  const rows = new Map([["item", [{ n: 0 }]]]);
+  const checked = DatamogExecutor.prepare(
+    "input predicate item(n: integer). output(X, _: X > 0) :- item(X).",
+  );
+  await expect(executeInputSnapshot(checked, rows)).rejects.toThrow();
+  const recursive = DatamogExecutor.prepare(
+    "input predicate item(n: integer). grow(X) :- item(X). grow(X + 1) :- grow(X).",
+  );
+  await expect(executeInputSnapshot(recursive, rows)).rejects.toThrow(
+    "did not reach a fixed point",
+  );
+  await expect(executeInputSnapshot(checked, new Map())).rejects.toThrow("Missing execution input");
+});
+
+test("execution requires files for inputs without laws as well", async () => {
+  await withInputFile(async (file, dir) => {
+    const config = join(dir, "plan.json");
+    await Bun.write(
+      join(dir, "program.dl"),
+      "input predicate item(n: integer). input predicate other(n: integer). output(X, _: X > 0) :- item(X).",
+    );
+    await Bun.write(
+      config,
+      JSON.stringify({
+        source: "program.dl",
+        claims: [
+          {
+            kind: "program-invariant",
+            id: "positive",
+            predicates: ["output"],
+            inputLaws: [{ id: "p", predicate: "item", column: 0, op: ">", value: 0 }],
+          },
+        ],
+      }),
+    );
+    const plan = await planProject(config, join(dir, "project"));
+    await Bun.write(file, "n\n1\n");
+    const bindings = [{ predicate: "item", file }];
+    await expect(
+      prepareInputData(plan.manifest, plan.inputDeclarations, bindings, true),
+    ).rejects.toThrow("other");
+    const input = await prepareInputData(
+      plan.manifest,
+      plan.inputDeclarations,
+      [...bindings, { predicate: "other", file }],
+      true,
+    );
+    expect(input.evidence.inputs).toHaveLength(2);
   });
 });

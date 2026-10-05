@@ -68,15 +68,16 @@ function checkLaw(law: InputLaw, rows: Record<string, unknown>[], columns: strin
 }
 
 /** Dataset evidence does not change the universal theorem's conditional status. */
-export async function validateInputData(
+export async function prepareInputData(
   manifest: Manifest,
   declarations: Map<string, ExtDecl>,
   supplied: InputFile[],
+  allInputs = false,
 ) {
   const goals = lawForGoal(manifest);
   const laws = goals.flatMap((goal) => goal.laws);
-  if (!laws.length) throw new Error("No selected goals have input laws to check");
-  const required = new Set(laws.map(({ law }) => law.predicate));
+  if (!laws.length && !allInputs) throw new Error("No selected goals have input laws to check");
+  const required = new Set(allInputs ? declarations.keys() : laws.map(({ law }) => law.predicate));
   const files = new Map<string, string>();
   for (const { predicate, file } of supplied) {
     if (!predicate || !file || files.has(predicate) || !required.has(predicate))
@@ -84,7 +85,7 @@ export async function validateInputData(
     files.set(predicate, resolve(file));
   }
   for (const predicate of required)
-    if (!files.has(predicate)) throw new Error(`Missing input file for law on ${predicate}`);
+    if (!files.has(predicate)) throw new Error(`Missing input file for ${predicate}`);
   const inputs = [];
   const rowsByPredicate = new Map<string, Record<string, unknown>[]>();
   for (const [predicate, file] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
@@ -112,13 +113,22 @@ export async function validateInputData(
         status: "premises-satisfied-for-supplied-inputs" as const,
       };
     });
-  return {
+  const evidence = {
     schema: "datamog-input-law-dataset-check-v1" as const,
     scope: "supplied-input-relations" as const,
     manifestDigest: manifest.digest,
     inputs,
     goals: results,
   };
+  return { evidence, rows: rowsByPredicate };
+}
+
+export async function validateInputData(
+  manifest: Manifest,
+  declarations: Map<string, ExtDecl>,
+  supplied: InputFile[],
+) {
+  return (await prepareInputData(manifest, declarations, supplied)).evidence;
 }
 
 export async function assertInputDataUnchanged(inputs: { file: string; digest: string }[]) {

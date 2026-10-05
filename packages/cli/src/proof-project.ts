@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const help =
-  "Usage: datamog proof <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...]";
+  "Usage: datamog proof <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...] [--run-native]";
 
 function checkoutRoot() {
   const configured = process.env.DATAMOG_VERIFICATION_ROOT;
@@ -53,8 +53,11 @@ export async function runProofProject(args: string[]) {
   const required: string[] = [];
   const inputFiles: string[] = [];
   let allowConditional = false;
+  let runNative = false;
   for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === "--allow-conditional" && !allowConditional) {
+    if (rest[i] === "--run-native" && !runNative) {
+      runNative = true;
+    } else if (rest[i] === "--allow-conditional" && !allowConditional) {
       allowConditional = true;
     } else if (rest[i] === "--input-file" && rest[i + 1]) {
       const binding = rest[++i]!;
@@ -67,7 +70,10 @@ export async function runProofProject(args: string[]) {
       throw new Error(help);
     }
   }
-  if (command !== "check" && (allowConditional || required.length || inputFiles.length))
+  if (
+    command !== "check" &&
+    (allowConditional || required.length || inputFiles.length || runNative)
+  )
     throw new Error(help);
   const stdout = await runner([command!, config, output, ...rest]);
   if (command !== "check") {
@@ -78,6 +84,7 @@ export async function runProofProject(args: string[]) {
   const report = (await Bun.file(path).json()) as {
     entries: { id: string; status: string; assumptions: string[] }[];
     verificationPlan: { entries: { id: string; statement: unknown }[] };
+    execution?: { backend: string; results: unknown[] };
     dataset?: {
       inputs: { predicate: string; rows: number }[];
       goals: { id: string; status: string }[];
@@ -100,6 +107,12 @@ export async function runProofProject(args: string[]) {
     console.log(
       "Dataset checks concern the supplied input files; universal theorem statuses remain unchanged.",
     );
+  }
+  if (report.execution) {
+    console.log(
+      `Execution completed on ${report.execution.backend} using the checked input snapshot.`,
+    );
+    console.log(JSON.stringify(report.execution.results, null, 2));
   }
   console.log(`Fresh report: ${path}`);
 }

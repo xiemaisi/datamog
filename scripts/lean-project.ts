@@ -41,7 +41,8 @@ import {
   exportProgramClaim,
 } from "./lean-mutual.ts";
 
-import { type InputFile, assertInputDataUnchanged, validateInputData } from "./lean-input-data.ts";
+import { type InputFile, assertInputDataUnchanged, prepareInputData } from "./lean-input-data.ts";
+import { executeInputSnapshot } from "./lean-input-run.ts";
 import { loadLeanModules } from "./lean-modules.ts";
 
 function checkoutRoot() {
@@ -599,13 +600,19 @@ export async function planProject(configInput: string, outputInput: string) {
     "scripts/lean-constraint.ts",
     "scripts/lean-modules.ts",
     "scripts/lean-input-data.ts",
+    "scripts/lean-input-run.ts",
     "packages/loader/csv/src/index.ts",
     "packages/loader/csv/src/csv-loader.ts",
     "packages/loader/csv/src/parse-content.ts",
     "packages/engine/src/loader.ts",
     "bun.lock",
   ]);
-  for (const directory of ["packages/core/src", "packages/parser/src"])
+  for (const directory of [
+    "packages/core/src",
+    "packages/parser/src",
+    "packages/engine/src",
+    "packages/backend/native/src",
+  ])
     for await (const path of new Bun.Glob("**/*").scan({
       cwd: join(root, directory),
       onlyFiles: true,
@@ -685,6 +692,7 @@ export async function planProject(configInput: string, outputInput: string) {
     manifest,
     goals: goals.map((goal) => goal.id),
     inputDeclarations: typed.extDecls,
+    typed,
     sourceSnapshot: { path: selection.source, text: source, digest: artifacts.source! },
     selectionSnapshot: { text: configText, digest: artifacts.selection! },
   };
@@ -763,6 +771,7 @@ export async function checkProject(
   requiredGoals?: string[],
   allowConditional = false,
   inputFiles: InputFile[] = [],
+  runNative = false,
 ) {
   const output = resolve(outputInput);
   await owned(output);
@@ -791,14 +800,21 @@ export async function checkProject(
       selectionSnapshot: plan.selectionSnapshot,
       verificationPlan: plan.manifest,
     };
-    const dataset = inputFiles.length
-      ? await validateInputData(plan.manifest, plan.inputDeclarations, inputFiles)
-      : undefined;
+    const input =
+      inputFiles.length || runNative
+        ? await prepareInputData(plan.manifest, plan.inputDeclarations, inputFiles, runNative)
+        : undefined;
+    const dataset = input?.evidence;
+    const execution = runNative ? await executeInputSnapshot(plan.typed, input!.rows) : undefined;
     const current = await planProject(configPath, output);
     assertCurrentVerificationManifest(plan.manifest, current.manifest);
     await assertFiles(output, current);
     if (dataset) await assertInputDataUnchanged(dataset.inputs);
-    const result = { ...report, ...(dataset ? { dataset } : {}) };
+    const result = {
+      ...report,
+      ...(dataset ? { dataset } : {}),
+      ...(execution ? { execution } : {}),
+    };
     const path = join(output, reportFile);
     await regular(path);
     await regular(`${path}.tmp`);
@@ -815,7 +831,13 @@ if (import.meta.main) {
     const required: string[] = [];
     const inputFiles: InputFile[] = [];
     let allowConditional = false;
+    let runNative = false;
     for (let i = 0; i < rest.length; i += 2) {
+      if (rest[i] === "--run-native" && !runNative) {
+        runNative = true;
+        i--;
+        continue;
+      }
       if (rest[i] === "--allow-conditional" && !allowConditional) {
         allowConditional = true;
         i--;
@@ -840,7 +862,7 @@ if (import.meta.main) {
       (command !== "check" && rest.length)
     )
       throw new Error(
-        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...]",
+        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...] [--run-native]",
       );
     if (command === "inspect") {
       console.log(JSON.stringify(await inspectProject(config, output), null, 2));
@@ -856,6 +878,7 @@ if (import.meta.main) {
         required.length ? required : undefined,
         allowConditional,
         inputFiles,
+        runNative,
       );
       console.log(
         `Checked ${report.entries.length} goals. Fresh report: ${join(resolve(output), reportFile)}`,

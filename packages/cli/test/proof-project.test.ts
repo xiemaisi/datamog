@@ -42,6 +42,7 @@ test("proof subcommand validates commands and keeps SMT verification separate", 
   for (const args of [
     ["proof"],
     ["proof", "inspect"],
+    ["proof", "inspect", fixture, "out", "--run-native"],
     ["proof", "inspect", fixture, "out", "--allow-conditional"],
     ["proof", "inspect", fixture, "out", "--input-file", "item=rows.csv"],
     ["proof", "export", fixture, "out", "--input-file", "item=rows.csv"],

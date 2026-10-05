@@ -217,3 +217,9 @@ CLI can use the workflow when a Datamog source checkout is available; set
 `DATAMOG_VERIFICATION_ROOT` to its root if it cannot be found automatically.
 See the [selected project guide](../../verification/lean/PROJECTS.md) for the
 supported integer and structural fragments and worked examples.
+
+Add `--run-native` to `proof check` to execute the same checked row snapshot and
+include runtime results in the fresh report. This requires explicit CSV files
+for every declared input, all with non-null integer columns. Runtime constraints
+remain enabled; any execution failure or the 1,000-iteration cap prevents a
+success report. See the [worked run](../../verification/lean/examples/selected-input-run/README.md).

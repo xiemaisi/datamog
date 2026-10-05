@@ -1824,4 +1824,16 @@ and records the exact file digests, row counts, and checked laws in a separate
 parser and integer coercion implementation. Failed laws and changed files prevent
 report publication. This is evidence about those supplied relations; the Lean
 goal remains conditional over arbitrary inputs, and unconditional goal gates
-still reject it. The CSV files are not automatically wired into a backend run.
+still reject it. Without `--run-native`, checking does not execute a backend.
+
+
+The optional `--run-native` mode now executes the same typed program and parsed
+CSV snapshot after fresh proof checking and input-law validation. It requires
+explicit files for every declared input and supports non-null integer input
+columns. A combined report retains conditional universal results, dataset law
+evidence, and separately labeled native runtime results. All runtime constraints
+remain enabled, and a 1,000-pass per-stratum cap rejects incomplete evaluation.
+Runtime failures and source/data changes prevent report publication. Native and
+engine sources participate in the manifest identity. This connects concrete
+premise checking to an execution without claiming backend correctness, termination,
+or proof of unselected properties.

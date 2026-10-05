@@ -869,5 +869,24 @@ missing file, or duplicate binding fails the check and leaves no fresh report.
 Successful reports include a separate `dataset` section with file digests, row
 counts, and the exact laws checked. This establishes those premises for the
 supplied CSV relations only. The universal Lean goal stays `conditional`, and
-`--require-goal` still rejects it. The check does not load those rows into a
-backend or establish a law for future datasets.
+`--require-goal` still rejects it. Without `--run-native`, the check does not execute a backend. Neither mode
+establishes a law for future datasets.
+
+
+### Executing checked input rows
+
+Add `--run-native` to `proof check` to execute the complete typed program after
+fresh proof and input-law checking. Supply `--input-file` for **every** declared
+input, including inputs without laws; this first execution mode accepts non-null
+integer CSV inputs only. An explicit header-only file represents an empty relation.
+The backend consumes the already-parsed snapshot, with no directory auto-loading
+or second CSV read for execution. The report records named/default query results
+under `execution`, with `assurance: "runtime-executed"`. Runtime constraints remain
+active. The universal theorem statuses and strict `--require-goal` gates retain
+their meaning.
+
+A failed law, runtime constraint, source/data freshness check, or native iteration
+cap prevents publication of the combined report. The cap is 1,000 passes per
+stratum; incomplete evaluation cannot produce a success report. This mode does
+not prove backend correctness or termination. See the
+[execution walkthrough](examples/selected-input-run/README.md).
