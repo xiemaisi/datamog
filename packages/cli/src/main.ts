@@ -40,12 +40,14 @@ import {
 import { ParquetLoader, parseParquetContent } from "datamog-parquet";
 import { ParseError, parseRaw, postProcess } from "datamog-parser";
 import { bigintSafeReplacer, formatCellAsString, prettifyProofRows } from "./output.ts";
+import { runProofProject } from "./proof-project.ts";
 import { runRepl } from "./repl-driver.ts";
 import { DEFAULT_SOLVER, reportVerdicts, verifyObligations } from "./verify.ts";
 
 function usage(exitCode = 1): never {
   console.error("Usage: datamog [global options] <program.dl> [output] [--<input> <source>]...");
   console.error("       datamog --repl [--json] [global options]");
+  console.error("       datamog proof <inspect|export|check> PLAN.json OUTPUT [proof options]");
   console.error();
   console.error("  <program.dl>   Path to a Datamog (.dl) source file");
   console.error("  [output]       Output predicate to evaluate: an `output predicate` name, or");
@@ -77,6 +79,8 @@ function usage(exitCode = 1): never {
   console.error("                             program's directory; working directory in --repl)");
   console.error("  --all                      Evaluate every output, not just one (table only)");
   console.error("  --dry-run                  Print generated SQL without executing");
+  console.error("  proof                      Work with an optional Lean verification project");
+  console.error("                             (run `datamog proof --help` for commands)");
   console.error("  --obligations              Print refinement proof obligations as SMT-LIB 2");
   console.error("  --verify                   Discharge those obligations with an SMT solver");
   console.error(
@@ -677,6 +681,10 @@ function csvEscape(value: string): string {
 
 async function main() {
   const args = process.argv.slice(2);
+  if (args[0] === "proof") {
+    await runProofProject(args.slice(1));
+    return;
+  }
 
   let programPath: string | undefined;
   let dataDir: string | undefined;

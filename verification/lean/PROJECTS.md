@@ -1,6 +1,7 @@
 # User-selected Lean projects
 
-`bun run lean:project` exports and checks selected claims from a Datamog source file. It supports structural projections, local head refinements,
+`bun run datamog proof` (or `bun run lean:project`) exports and checks selected
+claims from a Datamog source file. It supports structural projections, local head refinements,
 positive recursive program laws, explicit constraints, and named error predicates.
 Export and inspection need only Bun; checking uses pinned Lean **4.34.0** through
 `lake`. Ordinary execution and `--verify` do not require Lean.
@@ -831,3 +832,22 @@ uniqueness. Changing the key changes the exact theorem and manifest identity;
 rewiring an imported relation requires a law on the actual reachable input.
 Conditional reporting and strict goal gates apply unchanged. This is a supported
 integer input-law form, not automatic module-interface discharge or proof reuse.
+
+## Datamog CLI entry
+
+Run the same plan and fresh checker through the Datamog CLI:
+
+```bash
+bun run datamog proof inspect plan.json my-project
+bun run datamog proof export plan.json my-project
+bun run datamog proof check plan.json my-project --allow-conditional --require-goal unrestricted_refuted
+```
+
+`inspect` returns the read-only JSON plan. `export` preserves maintained Lean
+proofs. `check` prints proved and conditional results, with every remaining
+assumption, and writes the full fresh report. The existing `--verify` option
+continues to use SMT for local refinements. The Lean project command needs a
+Datamog source checkout containing the pinned semantics, source inventories,
+and project scripts. A compiled CLI finds that checkout beside the executable or
+above the working directory; `DATAMOG_VERIFICATION_ROOT` supplies an explicit
+checkout root when necessary. Lean itself is optional until `check`.

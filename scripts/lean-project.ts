@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 /** Local, source-built Lean projects. Reports are never imported as certificates. */
 import { lstat, mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,7 +43,30 @@ import {
 
 import { loadLeanModules } from "./lean-modules.ts";
 
-const root = new URL("../", import.meta.url).pathname;
+function checkoutRoot() {
+  const configured = process.env.DATAMOG_VERIFICATION_ROOT;
+  const candidates = configured
+    ? [resolve(configured)]
+    : [new URL("../", import.meta.url).pathname, process.cwd(), dirname(process.execPath)];
+  for (const candidate of candidates) {
+    let path = resolve(candidate);
+    while (true) {
+      if (
+        existsSync(join(path, "verification/lean/lean-toolchain")) &&
+        existsSync(join(path, "packages/core/src")) &&
+        existsSync(join(path, "bun.lock"))
+      )
+        return path;
+      const parent = dirname(path);
+      if (parent === path) break;
+      path = parent;
+    }
+  }
+  throw new Error(
+    "Selected Lean verification needs a Datamog source checkout; set DATAMOG_VERIFICATION_ROOT to its root",
+  );
+}
+const root = checkoutRoot();
 const library = join(root, "verification/lean");
 const marker = "datamog-lean-projection-project-v1\n";
 const proofFile = "Datamog/Proofs.lean";

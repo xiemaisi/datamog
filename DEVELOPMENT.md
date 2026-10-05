@@ -87,6 +87,7 @@ Run a Datamog program through the CLI:
 ```bash
 bun run datamog packages/cli/examples/family/family.dl
 bun run datamog --dry-run packages/cli/examples/family/family.dl
+bun run datamog proof inspect verification/lean/examples/selected-input-laws/plan.json /tmp/datamog-proof-inspection
 ```
 
 Select a backend explicitly:

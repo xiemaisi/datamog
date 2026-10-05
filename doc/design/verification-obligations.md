@@ -1802,3 +1802,15 @@ and unconditional gating of the conditional proof. Unit regressions distinguish
 empty keys and multiple outputs and invalidate laws after module rewiring.
 This is not dataset validation, automatic premise discharge, or reusable module
 proof import. Arbitrary relational input formulas remain unsupported.
+
+## Datamog CLI entry for selected Lean projects
+
+The CLI now exposes `datamog proof inspect|export|check` over the same project
+plan and fresh checker as the development script. Inspection is read-only;
+export preserves maintained proofs; checking prints claims, refutations, and
+remaining input laws and writes the exact result report only after a fresh
+isolated Lean build and axiom audit. The compiled CLI locates the Datamog source
+checkout at runtime, with an explicit root override available. Lean remains
+optional for ordinary execution and SMT verification. The project file remains
+external to Datamog syntax, and conditional results do not become unconditional
+because the CLI printed them.
