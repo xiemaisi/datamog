@@ -1077,16 +1077,33 @@ try {
     await Bun.file(join(inputLawsFixture, "Proofs.lean")).text(),
   );
   await exportProject(inputLawsConfig, inputLawsOutput);
-  const inputLawsReport = await checkProject(inputLawsConfig, inputLawsOutput, undefined, true);
+  const inputLawsCsv = join(inputLawsInput, "item.csv");
+  await Bun.write(inputLawsCsv, "n\n1\n9007199254740991\n");
+  const inputLawsBinding = [{ predicate: "item", file: inputLawsCsv }];
+  const inputLawsReport = await checkProject(
+    inputLawsConfig,
+    inputLawsOutput,
+    undefined,
+    true,
+    inputLawsBinding,
+  );
   if (
     inputLawsReport.entries.find((e) => e.id === "positive")?.status !== "conditional" ||
-    inputLawsReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved"
+    inputLawsReport.entries.find((e) => e.id === "unrestricted_refuted")?.status !== "proved" ||
+    inputLawsReport.dataset?.inputs[0]?.rows !== 2 ||
+    inputLawsReport.dataset?.goals[0]?.status !== "premises-satisfied-for-supplied-inputs"
   )
     throw new Error("Input-law premise was lost from fresh assurance");
   for (const required of [undefined, ["positive"]]) {
     let rejected = false;
     try {
-      await checkProject(inputLawsConfig, inputLawsOutput, required, required !== undefined);
+      await checkProject(
+        inputLawsConfig,
+        inputLawsOutput,
+        required,
+        required !== undefined,
+        inputLawsBinding,
+      );
     } catch (error) {
       if (!(error instanceof Error) || !error.message.includes("remains conditional")) throw error;
       rejected = true;

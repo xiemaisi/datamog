@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const help =
-  "Usage: datamog proof <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...]";
+  "Usage: datamog proof <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...]";
 
 function checkoutRoot() {
   const configured = process.env.DATAMOG_VERIFICATION_ROOT;
@@ -51,17 +51,24 @@ export async function runProofProject(args: string[]) {
   if (!config || !output || !["inspect", "export", "check"].includes(command ?? ""))
     throw new Error(help);
   const required: string[] = [];
+  const inputFiles: string[] = [];
   let allowConditional = false;
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--allow-conditional" && !allowConditional) {
       allowConditional = true;
+    } else if (rest[i] === "--input-file" && rest[i + 1]) {
+      const binding = rest[++i]!;
+      const equal = binding.indexOf("=");
+      if (equal < 1 || equal === binding.length - 1) throw new Error(help);
+      inputFiles.push(binding);
     } else if (rest[i] === "--require-goal" && rest[i + 1] && !rest[i + 1]!.startsWith("--")) {
       required.push(rest[++i]!);
     } else {
       throw new Error(help);
     }
   }
-  if (command !== "check" && (allowConditional || required.length)) throw new Error(help);
+  if (command !== "check" && (allowConditional || required.length || inputFiles.length))
+    throw new Error(help);
   const stdout = await runner([command!, config, output, ...rest]);
   if (command !== "check") {
     process.stdout.write(stdout);
@@ -71,6 +78,10 @@ export async function runProofProject(args: string[]) {
   const report = (await Bun.file(path).json()) as {
     entries: { id: string; status: string; assumptions: string[] }[];
     verificationPlan: { entries: { id: string; statement: unknown }[] };
+    dataset?: {
+      inputs: { predicate: string; rows: number }[];
+      goals: { id: string; status: string }[];
+    };
   };
   for (const entry of report.entries) {
     const node = report.verificationPlan.entries.find((node) => node.id === entry.id);
@@ -81,6 +92,14 @@ export async function runProofProject(args: string[]) {
         : "claim";
     console.log(`${entry.id}: ${entry.status} ${polarity}`);
     for (const assumption of entry.assumptions) console.log(`  assumes ${assumption}`);
+  }
+  if (report.dataset) {
+    for (const input of report.dataset.inputs)
+      console.log(`${input.predicate}: ${input.rows} CSV rows checked`);
+    for (const goal of report.dataset.goals) console.log(`${goal.id}: ${goal.status}`);
+    console.log(
+      "Dataset checks concern the supplied input files; universal theorem statuses remain unchanged.",
+    );
   }
   console.log(`Fresh report: ${path}`);
 }

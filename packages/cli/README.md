@@ -207,8 +207,12 @@ continue to use their existing paths.
 
 By default every selected goal must be unconditional. `--allow-conditional`
 permits a report that names remaining input-law premises. Every repeated
-`--require-goal ID` still requires a fresh unconditional result. Reports concern
-the modeled Datamog language; they do not prove backend correctness. A compiled
+`--require-goal ID` still requires a fresh unconditional result. With
+`--allow-conditional`, repeated `--input-file PREDICATE=PATH.csv` options can
+check every named integer input law against supplied header-based CSV relations.
+The report records file digests and dataset-scoped law results without changing
+the universal goal's conditional status. Reports concern the modeled Datamog
+language; they do not prove backend correctness. A compiled
 CLI can use the workflow when a Datamog source checkout is available; set
 `DATAMOG_VERIFICATION_ROOT` to its root if it cannot be found automatically.
 See the [selected project guide](../../verification/lean/PROJECTS.md) for the

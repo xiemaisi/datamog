@@ -37,9 +37,9 @@ restrict a theorem's quantified inputs.
 
 Local `.dl` module imports are supported for composed `program-*` claims and
 entry-file and instance check goals (see
-[modules](#local-module-programs)). Data-file bindings, general negation, aggregates, parity recursion,
+[modules](#local-module-programs)). Source data-file bindings, general negation, aggregates, parity recursion,
 floats, arbitrary expression translation, and general structural relation laws
-remain outside this workflow. Proof caching/import, automatic proof search, and
+remain outside this workflow. Explicit CSV input-law checks are described below. Proof caching/import, automatic proof search, and
 backend correctness are also outside its current scope.
 
 ## Structural projection selection
@@ -783,7 +783,7 @@ By default `check` still requires all selected goals to be unconditional.
 reports containing `conditional` results with their premises. An explicit
 `--require-goal ID` always requires that goal to be unconditional, even with this
 flag. Failure removes the previous report. Neither successful checking nor the
-flag validates the assumptions against a dataset.
+flag alone validates the assumptions against a dataset.
 
 The [input-law example](examples/selected-input-laws/README.md) pairs a conditional
 positivity proof with a refutation of the unrestricted source contract.
@@ -823,7 +823,8 @@ Empty keys express global uniqueness of the selected outputs. Empty outputs,
 duplicate columns, key/output overlap, invalid indices, unknown fields, and
 non-input dependencies are rejected. These laws can coexist with column bounds;
 names remain unique within each selected claim. All laws are explicit premises,
-not asserted facts or checks of a loaded dataset. Conditional refutations remain
+not asserted facts. The optional CSV dataset check below can test these laws
+on supplied rows. Conditional refutations remain
 unsupported.
 
 The [worked example](examples/selected-functional-dependency/README.md) proves a
@@ -851,3 +852,22 @@ Datamog source checkout containing the pinned semantics, source inventories,
 and project scripts. A compiled CLI finds that checkout beside the executable or
 above the working directory; `DATAMOG_VERIFICATION_ROOT` supplies an explicit
 checkout root when necessary. Lean itself is optional until `check`.
+
+For conditional integer input-law goals, `check` can also validate all explicit
+input laws against supplied CSV files:
+
+```bash
+bun run datamog proof check verification/lean/examples/selected-input-laws/plan.json my-project \
+  --allow-conditional --input-file item=/path/to/item.csv
+```
+
+Repeat `--input-file PREDICATE=PATH.csv` for every input relation named by a law
+in the selected goals. Predicate names refer to actual reachable input
+relations after module wiring. Files use the normal header-based Datamog CSV
+loader and the declared non-null integer columns. A failing law, invalid row,
+missing file, or duplicate binding fails the check and leaves no fresh report.
+Successful reports include a separate `dataset` section with file digests, row
+counts, and the exact laws checked. This establishes those premises for the
+supplied CSV relations only. The universal Lean goal stays `conditional`, and
+`--require-goal` still rejects it. The check does not load those rows into a
+backend or establish a law for future datasets.

@@ -1755,9 +1755,9 @@ The default selected-project check retains unconditional gating. The explicit
 while any `--require-goal` still requires an unconditional result. A maintained
 example proves positivity under an input law and refutes the unrestricted claim.
 Fresh checks reject the proof after weakening the premise and reject conditional
-goals at strict gates. This first fragment does not support laws on other claim
-kinds, conditional refutations, arbitrary formulas, dataset validation, or reusable
-module-interface discharge.
+goals at strict gates. This first fragment did not support laws on other claim
+kinds, conditional refutations, arbitrary formulas, or reusable module-interface
+discharge. The separate dataset check described below was added later.
 
 Coverage input laws reuse the same premise and reporting boundary. A worked
 successor theorem constructs an output for every input row under a named strict
@@ -1800,8 +1800,9 @@ removing an unselected tag column. A companion theorem refutes unrestricted
 output uniqueness. Fresh checks reject adding the dropped tag to the assumed key
 and unconditional gating of the conditional proof. Unit regressions distinguish
 empty keys and multiple outputs and invalidate laws after module rewiring.
-This is not dataset validation, automatic premise discharge, or reusable module
-proof import. Arbitrary relational input formulas remain unsupported.
+The law alone is not dataset validation, automatic premise discharge, or reusable
+module proof import. The separate CSV dataset check below can validate this law
+for supplied rows. Arbitrary relational input formulas remain unsupported.
 
 ## Datamog CLI entry for selected Lean projects
 
@@ -1814,3 +1815,13 @@ checkout at runtime, with an explicit root override available. Lean remains
 optional for ordinary execution and SMT verification. The project file remains
 external to Datamog syntax, and conditional results do not become unconditional
 because the CLI printed them.
+
+The first input-law dataset check now accepts repeated `--input-file
+PREDICATE=PATH.csv` on `proof check`. It parses supplied non-null integer inputs
+with Datamog's CSV loader, checks column-bound and functional-dependency laws,
+and records the exact file digests, row counts, and checked laws in a separate
+`dataset` section of the fresh report. The report identity includes the CSV
+parser and integer coercion implementation. Failed laws and changed files prevent
+report publication. This is evidence about those supplied relations; the Lean
+goal remains conditional over arbitrary inputs, and unconditional goal gates
+still reject it. The CSV files are not automatically wired into a backend run.

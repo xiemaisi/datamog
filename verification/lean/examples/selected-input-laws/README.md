@@ -20,5 +20,16 @@ or discharge their premises. Weakening the law's bound to `-1` invalidates the
 maintained proof after regeneration.
 
 These statements quantify over all input relations satisfying their named laws.
-They do not establish that a loaded dataset satisfies those laws. Runtime checks
-remain active, and source constraints never become implicit assumptions.
+They do not establish that a loaded dataset satisfies those laws. To check
+this law for a particular CSV relation, create a file such as `item.csv` with
+header `n` and positive integer rows, then run:
+
+```bash
+bun run datamog proof check verification/lean/examples/selected-input-laws/plan.json \
+  /tmp/datamog-input-laws --allow-conditional --input-file item=/path/to/item.csv
+```
+
+The report records separate dataset evidence and the CSV digest; `positive`
+remains conditional as a universal theorem. A zero row fails the dataset check
+and removes any previous report. Runtime checks remain active, and source
+constraints never become implicit assumptions.

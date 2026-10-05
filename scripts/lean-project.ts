@@ -41,6 +41,7 @@ import {
   exportProgramClaim,
 } from "./lean-mutual.ts";
 
+import { type InputFile, assertInputDataUnchanged, validateInputData } from "./lean-input-data.ts";
 import { loadLeanModules } from "./lean-modules.ts";
 
 function checkoutRoot() {
@@ -597,6 +598,11 @@ export async function planProject(configInput: string, outputInput: string) {
     "scripts/lean-mutual.ts",
     "scripts/lean-constraint.ts",
     "scripts/lean-modules.ts",
+    "scripts/lean-input-data.ts",
+    "packages/loader/csv/src/index.ts",
+    "packages/loader/csv/src/csv-loader.ts",
+    "packages/loader/csv/src/parse-content.ts",
+    "packages/engine/src/loader.ts",
     "bun.lock",
   ]);
   for (const directory of ["packages/core/src", "packages/parser/src"])
@@ -678,6 +684,7 @@ export async function planProject(configInput: string, outputInput: string) {
     moduleSources,
     manifest,
     goals: goals.map((goal) => goal.id),
+    inputDeclarations: typed.extDecls,
     sourceSnapshot: { path: selection.source, text: source, digest: artifacts.source! },
     selectionSnapshot: { text: configText, digest: artifacts.selection! },
   };
@@ -755,6 +762,7 @@ export async function checkProject(
   outputInput: string,
   requiredGoals?: string[],
   allowConditional = false,
+  inputFiles: InputFile[] = [],
 ) {
   const output = resolve(outputInput);
   await owned(output);
@@ -783,15 +791,20 @@ export async function checkProject(
       selectionSnapshot: plan.selectionSnapshot,
       verificationPlan: plan.manifest,
     };
+    const dataset = inputFiles.length
+      ? await validateInputData(plan.manifest, plan.inputDeclarations, inputFiles)
+      : undefined;
     const current = await planProject(configPath, output);
     assertCurrentVerificationManifest(plan.manifest, current.manifest);
     await assertFiles(output, current);
+    if (dataset) await assertInputDataUnchanged(dataset.inputs);
+    const result = { ...report, ...(dataset ? { dataset } : {}) };
     const path = join(output, reportFile);
     await regular(path);
     await regular(`${path}.tmp`);
-    await Bun.write(`${path}.tmp`, `${JSON.stringify(report, null, 2)}\n`);
+    await Bun.write(`${path}.tmp`, `${JSON.stringify(result, null, 2)}\n`);
     await rename(`${path}.tmp`, path);
-    return report;
+    return result;
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -800,11 +813,20 @@ if (import.meta.main) {
   try {
     const [command, config, output, ...rest] = process.argv.slice(2);
     const required: string[] = [];
+    const inputFiles: InputFile[] = [];
     let allowConditional = false;
     for (let i = 0; i < rest.length; i += 2) {
       if (rest[i] === "--allow-conditional" && !allowConditional) {
         allowConditional = true;
         i--;
+        continue;
+      }
+      if (rest[i] === "--input-file" && rest[i + 1]) {
+        const binding = rest[i + 1]!;
+        const equal = binding.indexOf("=");
+        if (equal < 1 || equal === binding.length - 1)
+          throw new Error("Expected --input-file predicate=path.csv");
+        inputFiles.push({ predicate: binding.slice(0, equal), file: binding.slice(equal + 1) });
         continue;
       }
       if (rest[i] !== "--require-goal" || !rest[i + 1] || rest[i + 1]!.startsWith("--"))
@@ -818,7 +840,7 @@ if (import.meta.main) {
       (command !== "check" && rest.length)
     )
       throw new Error(
-        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...]",
+        "Usage: bun run lean:project <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...]",
       );
     if (command === "inspect") {
       console.log(JSON.stringify(await inspectProject(config, output), null, 2));
@@ -833,6 +855,7 @@ if (import.meta.main) {
         output,
         required.length ? required : undefined,
         allowConditional,
+        inputFiles,
       );
       console.log(
         `Checked ${report.entries.length} goals. Fresh report: ${join(resolve(output), reportFile)}`,
