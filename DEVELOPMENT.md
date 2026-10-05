@@ -167,6 +167,8 @@ and Lake. From the repository root:
 ```bash
 bun run generate:lean        # regenerate statements/checkers, preserve maintained proofs
 bun run test:lean            # fresh build, axiom policy negatives, native/SQL comparisons
+bun run test:lean-project    # source-selected proofs and failure gates
+bun run test:lean-cli        # compiled CLI export/check/CSV execution acceptance
 ```
 
 Run these checks when changing the Lean exporters, semantic library, or proofs.

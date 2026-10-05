@@ -1,10 +1,14 @@
 # Optional Lean verification
 
+Status: **experimental spike complete for the documented fragments**.
+
 There are two workflows:
 
 - **User-selected programs:** [support matrix and workflow guide](PROJECTS.md),
   with an [end-to-end example](examples/selected-laws-and-checks/README.md).
-  Use `lean:project inspect`, `export`, and `check` for selected source claims.
+  Use `datamog proof inspect`, `export`, and `check` for selected source claims.
+  The [checked execution walkthrough](examples/selected-input-run/README.md) adds
+  CSV input-law validation and native execution from the same snapshot.
 - **Fixed semantics/proof regression project:** `generate:lean` and `test:lean`,
   described below. It checks maintained library laws, exported fixtures, and
   concrete backend comparisons.
@@ -13,6 +17,21 @@ Both check the modeled language. Neither certifies the native evaluator or SQL
 translator, disables runtime checks, or adds a general Lean mode to `--verify`.
 The scoped exporters described below have different limits; the selected-project
 support matrix is the current entry point for program verification.
+
+The experimental spike has a deliberately fixed scope: supported integer relation
+claims, the separate structural projection fragment, explicit input laws, and
+fresh local proof checking. Reports distinguish universal theorem assurance,
+CSV premise checks, and native runtime results. A source checkout is required;
+proof caching/import, reusable module-law discharge, wider value types, and
+backend correctness proofs are follow-up work.
+
+The acceptance commands are `bun run test:lean` (with Postgres required in CI),
+`bun run test:lean-project`, and `bun run test:lean-cli`. The last builds the
+compiled CLI and checks inspection, export, maintained proofs, CSV execution,
+and removal of old reports after rejected premises, runtime failures, or source
+changes. Ordinary Bun tests cover process deadlines, cancellation, output limits,
+and native snapshot execution. See [process limits](PROJECTS.md#process-limits-and-cancellation)
+for the operational boundary; these commands do not sandbox proof scripts.
 
 This project pins Lean **4.34.0** and has no third-party Lean dependencies.
 Ordinary Datamog builds and `bun test` do not require Lean. With Elan/Lean and

@@ -1,6 +1,6 @@
 # Richer verification obligations and Lean proofs
 
-Status: **implemented for scoped fragments; broader architecture remains in progress**.
+Status: **experimental spike complete for scoped fragments; broader architecture remains in progress**.
 The SMT obligation IR, provenance/dependency reporting, pinned Lean semantics
 project, and user-selected Lean workflow are implemented. Selected projects support
 positive recursive invariants, uniqueness, coverage, equivalence, emptiness,
@@ -1684,11 +1684,14 @@ but its remaining input premises must stay visible at every importing boundary.
 | 5. Automation and wider semantics | SMT remains the automatic route; maintained Lean proofs check the supported fragments | CHC benchmarks, richer SMT, a certificate route, and a proved finite-group aggregate model |
 | 6. Reduce translation trust | Exporter/frontend/semantic model remain trusted; differential regressions check concrete cases | Deep embedding and a soundness theorem for translation/obligation generation; backend correspondence is separate |
 
-The initial arithmetic and reachability milestones are complete. The current
-consolidated workflow is demonstrated by the combined laws-and-checks example.
+The initial arithmetic and reachability milestones are complete. The experimental
+spike now has a bounded user workflow through the CLI, explicit CSV input-law
+checking, and native snapshot execution. Its acceptance boundary is the fixed
+Lean/Postgres suite, selected-project suite, and compiled CLI acceptance test.
+The combined laws-and-checks and checked-input-run examples are its entry points.
 Local module loading and source identities are now implemented for composed
-program laws and instance checks. Named integer input bounds now support conditional
-invariant and coverage proofs; reusable module-interface laws and imported structural selections
+program laws and instance checks. Named integer bounds and functional dependencies support conditional
+composed laws and checks; reusable module-interface laws and imported structural selections
 remain future work. Keep proposed body type guards
 separate: [that design](body-type-guards.md) concerns runtime filtering and type
 refinement rather than assumptions for arbitrary proofs.
@@ -1837,3 +1840,12 @@ Runtime failures and source/data changes prevent report publication. Native and
 engine sources participate in the manifest identity. This connects concrete
 premise checking to an execution without claiming backend correctness, termination,
 or proof of unselected properties.
+
+The selected-project workflow now bounds subprocess output and deadlines, supports
+cancellation, and reaps direct children. On POSIX, it also kills remaining members
+of their process groups. Native execution runs in a separate process over source,
+module-wiring, and parsed-row snapshots, so synchronous evaluator work cannot block
+the supervisor's deadline. Lean commands default to 120 seconds, native execution
+to 30 seconds, and combined child output to 1 MiB. The CLI adds a 10-minute/8 MiB
+outer bound. These are orchestration limits, not a sandbox or a proof of termination;
+memory limits and containment of escaped process groups remain future work.

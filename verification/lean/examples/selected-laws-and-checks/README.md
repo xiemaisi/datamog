@@ -3,7 +3,8 @@
 This example verifies four claims about [program.dl](program.dl) using
 [plan.json](plan.json) and the maintained [Proofs.lean](Proofs.lean).
 It uses the repository's Bun setup and pinned Lean 4.34.0 through `lake`.
-Run the commands from the repository root.
+Run the commands from a Datamog source checkout with dependencies installed.
+The compiled CLI also needs that checkout; `DATAMOG_VERIFICATION_ROOT` can name it.
 
 The program accepts arbitrary integer `seed` rows, filters positive values,
 propagates them through mutually recursive `positive` and `carry` predicates,
@@ -28,11 +29,11 @@ Use an empty directory or one already owned by this workflow. Inspection require
 Bun only and does not write project files:
 
 ```bash
-bun run lean:project inspect verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough > /tmp/datamog-laws-preview.json
-bun run lean:project export verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough
+bun run datamog proof inspect verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough > /tmp/datamog-laws-preview.json
+bun run datamog proof export verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough
 cp verification/lean/examples/selected-laws-and-checks/Proofs.lean /tmp/datamog-laws-walkthrough/Datamog/Proofs.lean
-bun run lean:project export verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough
-bun run lean:project check verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough --require-goal safe --require-goal covered --require-goal noViolation --require-goal noBad
+bun run datamog proof export verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough
+bun run datamog proof check verification/lean/examples/selected-laws-and-checks/plan.json /tmp/datamog-laws-walkthrough --require-goal safe --require-goal covered --require-goal noViolation --require-goal noBad
 ```
 
 The copy installs this example's maintained proofs. For your own project, author
