@@ -890,3 +890,20 @@ cap prevents publication of the combined report. The cap is 1,000 passes per
 stratum; incomplete evaluation cannot produce a success report. This mode does
 not prove backend correctness or termination. See the
 [execution walkthrough](examples/selected-input-run/README.md).
+
+### Process limits and cancellation
+
+Selected-project checks bound each Lean command to 120 seconds and native
+execution to 30 seconds. Each child has a 1 MiB combined stdout/stderr limit;
+an oversized native result therefore fails the run. The CLI wrapper has a
+10-minute deadline and an 8 MiB output limit. SIGINT and SIGTERM cancel active
+work. Failure removes an earlier report and prevents publication of a new one.
+The internal checker also accepts an abort signal and per-process limit overrides.
+
+Native execution runs in a separate Bun process, reconstructing the program
+from the checked source/module snapshot and consuming the checked row snapshot.
+This permits a deadline to interrupt expensive work within one iteration.
+On POSIX systems, subprocess cleanup kills remaining members of the spawned
+process group and waits for the direct child to close. This is not a sandbox:
+escaped process groups and memory limits remain outside this spike. Windows
+cleanup targets the direct child only. Proof scripts remain trusted local code.

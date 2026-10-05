@@ -41,8 +41,9 @@ import {
   exportProgramClaim,
 } from "./lean-mutual.ts";
 
+import { type ProofProcessOptions, runProofProcess } from "../packages/cli/src/proof-process.ts";
 import { type InputFile, assertInputDataUnchanged, prepareInputData } from "./lean-input-data.ts";
-import { executeInputSnapshot } from "./lean-input-run.ts";
+import type { ExecutionSnapshot } from "./lean-input-worker.ts";
 import { loadLeanModules } from "./lean-modules.ts";
 
 function checkoutRoot() {
@@ -601,6 +602,8 @@ export async function planProject(configInput: string, outputInput: string) {
     "scripts/lean-modules.ts",
     "scripts/lean-input-data.ts",
     "scripts/lean-input-run.ts",
+    "scripts/lean-input-worker.ts",
+    "packages/cli/src/proof-process.ts",
     "packages/loader/csv/src/index.ts",
     "packages/loader/csv/src/csv-loader.ts",
     "packages/loader/csv/src/parse-content.ts",
@@ -693,6 +696,12 @@ export async function planProject(configInput: string, outputInput: string) {
     goals: goals.map((goal) => goal.id),
     inputDeclarations: typed.extDecls,
     typed,
+    executionSnapshot: {
+      source,
+      file: modules ? modules.sources.find((m) => m.path === modules.entryPath)!.file : sourcePath,
+      modules: moduleSources,
+      imports: modules?.imports,
+    } satisfies ExecutionSnapshot,
     sourceSnapshot: { path: selection.source, text: source, digest: artifacts.source! },
     selectionSnapshot: { text: configText, digest: artifacts.selection! },
   };
@@ -747,23 +756,9 @@ async function assertFiles(output: string, plan: Awaited<ReturnType<typeof planP
       throw new Error(`Stale or altered project file: ${path}; run export again`);
   }
 }
-async function run(command: string[], cwd: string) {
-  const env = { ...process.env };
-  env.LEAN_PATH = undefined;
-  env.LEAN_SRC_PATH = undefined;
-  const child = Bun.spawn(command, { cwd, env, stdout: "pipe", stderr: "pipe" });
-  const timer = setTimeout(() => child.kill("SIGKILL"), 120_000);
-  try {
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`${command.join(" ")} exited ${code}\n${stdout}${stderr}`);
-    return stdout + stderr;
-  } finally {
-    clearTimeout(timer);
-  }
+async function run(command: string[], cwd: string, options: ProofProcessOptions) {
+  const result = await runProofProcess(command, cwd, options);
+  return result.stdout + result.stderr;
 }
 export async function checkProject(
   configPath: string,
@@ -772,10 +767,12 @@ export async function checkProject(
   allowConditional = false,
   inputFiles: InputFile[] = [],
   runNative = false,
+  options: ProofProcessOptions = {},
 ) {
   const output = resolve(outputInput);
   await owned(output);
   await rm(join(output, reportFile), { force: true });
+  options.signal?.throwIfAborted();
   const plan = await planProject(configPath, output);
   await assertFiles(output, plan);
   const required = requiredGoals ?? (allowConditional ? undefined : plan.goals);
@@ -787,10 +784,10 @@ export async function checkProject(
     // Lake caches, alternate build scripts, or imported reports.
     for (const [path, content] of Object.entries(plan.files))
       await Bun.write(join(temp, path), content);
-    const version = await run(["lake", "env", "lean", "--version"], temp);
+    const version = await run(["lake", "env", "lean", "--version"], temp, options);
     if (!version.includes("version 4.34.0,"))
       throw new Error(`Unexpected Lean toolchain: ${version}`);
-    const build = await run(["lake", "build"], temp);
+    const build = await run(["lake", "build"], temp, options);
     const report = {
       ...createLeanVerificationResult(plan.manifest, build, required),
       workflow: "selected-lean-claims-v1" as const,
@@ -805,7 +802,33 @@ export async function checkProject(
         ? await prepareInputData(plan.manifest, plan.inputDeclarations, inputFiles, runNative)
         : undefined;
     const dataset = input?.evidence;
-    const execution = runNative ? await executeInputSnapshot(plan.typed, input!.rows) : undefined;
+    let execution:
+      | Awaited<ReturnType<typeof import("./lean-input-run.ts").executeInputSnapshot>>
+      | undefined;
+    if (runNative) {
+      const request = join(temp, "execution-input.json");
+      await Bun.write(
+        request,
+        JSON.stringify({ snapshot: plan.executionSnapshot, rows: [...input!.rows] }),
+      );
+      const response = await runProofProcess(
+        ["bun", join(root, "scripts/lean-input-worker.ts"), request],
+        temp,
+        {
+          ...options,
+          timeoutMs: options.timeoutMs ?? 30_000,
+        },
+      );
+      const decoded = JSON.parse(response.stdout);
+      if (decoded.error) {
+        const error = new Error(decoded.error.message);
+        error.name = decoded.error.name;
+        throw error;
+      }
+      if (decoded.result?.status !== "completed")
+        throw new Error("Invalid native execution response");
+      execution = decoded.result;
+    }
     const current = await planProject(configPath, output);
     assertCurrentVerificationManifest(plan.manifest, current.manifest);
     await assertFiles(output, current);
@@ -815,17 +838,25 @@ export async function checkProject(
       ...(dataset ? { dataset } : {}),
       ...(execution ? { execution } : {}),
     };
+    options.signal?.throwIfAborted();
     const path = join(output, reportFile);
     await regular(path);
     await regular(`${path}.tmp`);
     await Bun.write(`${path}.tmp`, `${JSON.stringify(result, null, 2)}\n`);
+    options.signal?.throwIfAborted();
     await rename(`${path}.tmp`, path);
     return result;
   } finally {
+    await rm(join(output, `${reportFile}.tmp`), { force: true });
+    if (options.signal?.aborted) await rm(join(output, reportFile), { force: true });
     await rm(temp, { recursive: true, force: true });
   }
 }
 if (import.meta.main) {
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.on("SIGINT", cancel);
+  process.on("SIGTERM", cancel);
   try {
     const [command, config, output, ...rest] = process.argv.slice(2);
     const required: string[] = [];
@@ -879,6 +910,7 @@ if (import.meta.main) {
         allowConditional,
         inputFiles,
         runNative,
+        { signal: controller.signal },
       );
       console.log(
         `Checked ${report.entries.length} goals. Fresh report: ${join(resolve(output), reportFile)}`,
@@ -887,5 +919,8 @@ if (import.meta.main) {
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
+  } finally {
+    process.off("SIGINT", cancel);
+    process.off("SIGTERM", cancel);
   }
 }

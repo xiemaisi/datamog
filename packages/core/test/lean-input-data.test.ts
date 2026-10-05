@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../../../scripts/lean-input-data.ts";
 import { executeInputSnapshot } from "../../../scripts/lean-input-run.ts";
 import { planProject } from "../../../scripts/lean-project.ts";
+import { runProofProcess } from "../../cli/src/proof-process.ts";
 import { DatamogExecutor } from "../../engine/src/index.ts";
 
 async function withInputFile(run: (file: string, dir: string) => Promise<void>) {
@@ -181,3 +182,50 @@ test("execution requires files for inputs without laws as well", async () => {
     expect(input.evidence.inputs).toHaveLength(2);
   });
 });
+
+test("isolated execution resolves modules entirely from the checked source snapshot", async () => {
+  await withInputFile(async (file, dir) => {
+    const sourceDir = join(dir, "source");
+    await cp("verification/lean/examples/selected-input-law-checks", sourceDir, {
+      recursive: true,
+    });
+    const plan = await planProject(join(sourceDir, "plan.json"), join(dir, "project"));
+    await Bun.write(file, "n\n1\n");
+    const input = await prepareInputData(
+      plan.manifest,
+      plan.inputDeclarations,
+      [{ predicate: "seed", file }],
+      true,
+    );
+    const request = join(dir, "request.json");
+    await Bun.write(
+      request,
+      JSON.stringify({ snapshot: plan.executionSnapshot, rows: [...input.rows] }),
+    );
+    await rm(sourceDir, { recursive: true });
+    const response = await runProofProcess(["bun", worker, request], dir);
+    expect(JSON.parse(response.stdout).result.status).toBe("completed");
+  });
+});
+
+test("isolated native execution has a deadline even within one expensive iteration", async () => {
+  await withInputFile(async (_file, dir) => {
+    const request = join(dir, "request.json");
+    await Bun.write(
+      request,
+      JSON.stringify({
+        snapshot: {
+          source:
+            "input predicate item(n: integer). output predicate pairs(X,Y) :- item(X), item(Y).",
+          file: join(dir, "source.dl"),
+        },
+        rows: [["item", Array.from({ length: 10000 }, (_, n) => ({ n }))]],
+      }),
+    );
+    await expect(
+      runProofProcess(["bun", worker, request], dir, { timeoutMs: 300 }),
+    ).rejects.toThrow("timeout");
+  });
+});
+
+const worker = new URL("../../../scripts/lean-input-worker.ts", import.meta.url).pathname;

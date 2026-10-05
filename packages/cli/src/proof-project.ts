@@ -1,6 +1,7 @@
 /** User-facing entry for source-selected Lean verification projects. */
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { runProofProcess } from "./proof-process.ts";
 
 const help =
   "Usage: datamog proof <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...] [--run-native]";
@@ -31,15 +32,23 @@ function checkoutRoot() {
 
 async function runner(args: string[]) {
   const script = join(checkoutRoot(), "scripts/lean-project.ts");
-  const child = Bun.spawn(["bun", script, ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (exitCode !== 0)
-    throw new Error(`${stdout}${stderr}`.trim() || `Proof project exited ${exitCode}`);
-  return stdout;
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.on("SIGINT", cancel);
+  process.on("SIGTERM", cancel);
+  try {
+    return (
+      await runProofProcess(["bun", script, ...args], process.cwd(), {
+        signal: controller.signal,
+        timeoutMs: 600_000,
+        maxOutputBytes: 8_388_608,
+        shutdownGraceMs: 1000,
+      })
+    ).stdout;
+  } finally {
+    process.off("SIGINT", cancel);
+    process.off("SIGTERM", cancel);
+  }
 }
 
 export async function runProofProject(args: string[]) {

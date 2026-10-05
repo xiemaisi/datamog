@@ -50,6 +50,24 @@ try {
   console.log(
     "Selected project: fresh coverage and optional-path soundness passed; local cache ignored.",
   );
+  for (const mode of ["timeout", "cancelled"]) {
+    const controller = new AbortController();
+    if (mode === "cancelled") controller.abort();
+    await Bun.write(reportPath, "old success");
+    let rejected = false;
+    try {
+      await checkProject(config, output, undefined, false, [], false, {
+        signal: controller.signal,
+        timeoutMs: mode === "timeout" ? 1 : 120_000,
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || (mode === "timeout" && !error.message.includes("timeout")))
+        throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(reportPath).exists()))
+      throw new Error(`${mode} retained a successful report`);
+  }
   for (const [name, bad, expected] of [
     [
       "sorry",
