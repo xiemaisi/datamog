@@ -157,7 +157,16 @@ export function parseSelection(value: unknown): Selection {
       claim.kind === "program-uniqueness"
     ) {
       const unique: Record<string, unknown> = claim;
-      keys(unique, ["kind", "id", "predicate", "keyColumns", "outputColumns", "polarity"]);
+      keys(unique, [
+        "kind",
+        "id",
+        "predicate",
+        "keyColumns",
+        "outputColumns",
+        "polarity",
+        "inputLaws",
+      ]);
+      validateInputLaws(unique.inputLaws);
       if (
         typeof unique.id !== "string" ||
         typeof unique.predicate !== "string" ||
@@ -185,7 +194,7 @@ export function parseSelection(value: unknown): Selection {
         "id",
         "predicates",
         "polarity",
-        ...(claim.kind === "program-invariant" ? ["inputLaws"] : []),
+        ...(claim.kind !== "mutual-invariant" ? ["inputLaws"] : []),
       ]);
       validateInputLaws(mutual.inputLaws);
       if (

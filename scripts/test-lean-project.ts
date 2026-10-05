@@ -1216,6 +1216,59 @@ try {
   console.log(
     "Selected project: conditional source checks and emptiness passed; weakened premises and strict gate rejected.",
   );
+  const relationLawFixture = new URL(
+    "../verification/lean/examples/selected-input-law-relations/",
+    import.meta.url,
+  ).pathname;
+  const relationLawInput = join(temp, "relation-law-input");
+  const relationLawOutput = join(temp, "relation-law-project");
+  await cp(relationLawFixture, relationLawInput, { recursive: true });
+  const relationLawConfig = join(relationLawInput, "plan.json");
+  await exportProject(relationLawConfig, relationLawOutput);
+  await Bun.write(
+    join(relationLawOutput, "Datamog/Proofs.lean"),
+    await Bun.file(join(relationLawFixture, "Proofs.lean")).text(),
+  );
+  await exportProject(relationLawConfig, relationLawOutput);
+  const relationLawReport = await checkProject(
+    relationLawConfig,
+    relationLawOutput,
+    ["uniqueUnrestricted_refuted", "equivalentUnrestricted_refuted"],
+    true,
+  );
+  if (
+    relationLawReport.entries.filter((e) => e.status === "conditional").length !== 2 ||
+    relationLawReport.entries.filter((e) => e.status === "proved").length !== 2
+  )
+    throw new Error("Relation-law assumptions leaked or disappeared");
+  for (const id of ["unique", "equivalent"]) {
+    let rejected = false;
+    try {
+      await checkProject(relationLawConfig, relationLawOutput, [id], true);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("remains conditional")) throw error;
+      rejected = true;
+    }
+    if (!rejected || (await Bun.file(join(relationLawOutput, "verification-result.json")).exists()))
+      throw new Error("Conditional relation law bypassed the strict gate");
+  }
+  const weakRelationLaw = JSON.parse(await Bun.file(relationLawConfig).text());
+  for (const claim of weakRelationLaw.claims) if (claim.inputLaws) claim.inputLaws[0].op = ">=";
+  await Bun.write(relationLawConfig, JSON.stringify(weakRelationLaw));
+  await exportProject(relationLawConfig, relationLawOutput);
+  let weakRelationRejected = false;
+  try {
+    await checkProject(relationLawConfig, relationLawOutput, undefined, true);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("error: Datamog/Proofs.lean"))
+      throw error;
+    weakRelationRejected = true;
+  }
+  if (!weakRelationRejected)
+    throw new Error("Weakened relational premises retained invalid proofs");
+  console.log(
+    "Selected project: conditional uniqueness and equivalence passed; weakened premises and strict gates rejected.",
+  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

@@ -756,8 +756,8 @@ source change made during compilation. The dedicated Lean CI job runs this suite
 
 ## Explicit integer input laws
 
-A `program-invariant`, `program-coverage`, `program-emptiness`, `constraint`, or
-`error-predicate` proof can declare a nonempty `inputLaws` array. Each law has
+Any composed `program-*` proof, or a `constraint` or `error-predicate` proof, can
+declare a nonempty `inputLaws` array. Each law has
 `id`, `predicate`, zero-based `column`, comparison `op` (`<`, `<=`, `>`, `>=`, `=`),
 and a safe integer `value`. Names must be distinct within the claim. The predicate
 must be a reachable non-null integer input; derived relations and unrelated
@@ -775,7 +775,7 @@ manifest dependency closure, inspection output, and fresh report. Their names,
 formulas, and descriptors participate in content identities. Source constraints
 and error predicates remain independent goals and never supply these premises.
 This fragment supports the proof kinds listed above, not conditional refutations,
-uniqueness/equivalence premises, arbitrary formulas, or module-interface proof reuse.
+arbitrary formulas, or module-interface proof reuse.
 
 By default `check` still requires all selected goals to be unconditional.
 `check --allow-conditional` checks and audits every selected proof, then permits
@@ -803,3 +803,10 @@ check descriptors and their input-law dependencies. Laws on instance-selected
 checks name the actual reachable input after wiring (such as entry input `seed`),
 not a module-local parameter or a derived alias. Existing nested selectors also
 retain their normal meaning; this does not introduce interface-law instantiation.
+
+The [relational example](examples/selected-input-law-relations/README.md) proves
+uniqueness and equivalence under a named equality law on one input column. It
+also refutes both unrestricted claims. All columns remain quantified in the law,
+and uniqueness still varies non-key columns independently. This completes law
+support across composed claim kinds without expanding the law language: general
+functional dependencies and other multi-tuple input laws remain unsupported.

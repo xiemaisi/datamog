@@ -861,6 +861,6 @@ refutations checked from source.
 The [nested example](examples/selected-nested-instance-checks/README.md) extends
 selection through child module bindings, including shared nested instances.
 
-Selected invariant, coverage, emptiness, constraint, and named-error proofs support [explicit integer input laws](PROJECTS.md#explicit-integer-input-laws).
+All composed integer claim proofs, plus constraint and named-error proofs, support [explicit integer input laws](PROJECTS.md#explicit-integer-input-laws).
 Their premises remain visible in exact theorem types and conditional reports;
 `--allow-conditional` permits reporting them without weakening `--require-goal`.

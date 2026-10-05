@@ -1,0 +1,3 @@
+input predicate item(key: integer, v: integer).
+raw(K, V) :- item(K, V).
+filtered(K, V) :- item(K, V), V = 0.

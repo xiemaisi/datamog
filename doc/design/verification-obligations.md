@@ -1775,3 +1775,12 @@ claim-local and never inferred from source checks. Fresh regressions reject
 weakened premises and unconditional gating of a conditional check. Module-local
 parameter names are not implicitly resolved as interface laws; laws must name a
 reachable input in the elaborated dependency graph.
+
+The same explicit integer input-law fragment now supports composed uniqueness and
+equivalence proofs, completing support across composed claim kinds. A two-column
+fixture assumes a constant value column, proves key uniqueness and equivalence
+with a filter, and refutes both unrestricted claims. Premises still quantify every
+input column; non-key tuple positions remain independent in uniqueness goals.
+Fresh checks reject weakened laws and unconditional gates for conditional results.
+This does not add functional-dependency or arbitrary multi-tuple input laws, and
+conditional refutations remain unsupported.

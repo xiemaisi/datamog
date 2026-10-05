@@ -29,6 +29,7 @@ export interface ProgramInvariantClaim {
 
 export interface ProgramUniquenessClaim {
   kind: "program-uniqueness";
+  inputLaws?: InputLaw[];
   id: string;
   predicate: string;
   keyColumns: number[];
@@ -42,6 +43,7 @@ export interface ProgramCoverageClaim extends Omit<CoverageClaim, "relationName"
 }
 export interface ProgramEquivalenceClaim {
   kind: "program-equivalence";
+  inputLaws?: InputLaw[];
   id: string;
   predicates: [string, string];
   polarity?: "prove" | "refute";

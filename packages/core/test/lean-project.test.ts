@@ -1695,7 +1695,7 @@ test("explicit input laws become named premises and content identities", async (
     await write([{ ...claim, polarity: "refute" }]);
     await expect(exportProject(config, output)).rejects.toThrow("proofs only");
     await write([
-      { kind: "program-equivalence", id: "bad", predicates: ["out", "out"], inputLaws: [law] },
+      { kind: "mutual-invariant", id: "bad", predicates: ["out", "out"], inputLaws: [law] },
     ]);
     await expect(exportProject(config, output)).rejects.toThrow();
     await expect(readdir(output)).rejects.toThrow();
@@ -1778,6 +1778,43 @@ test("input laws survive constraint and error origins without leaking to other c
         [{ ...descriptor.inputLaws[0], predicate: "item" }],
         [{ ...descriptor.inputLaws[0], predicate: "imported" }],
         [{ ...descriptor.inputLaws[0], column: 1 }],
+        [{ ...descriptor.inputLaws[0], typo: true }],
+      ]) {
+        await Bun.write(
+          config,
+          JSON.stringify({ ...selection, claims: [{ ...descriptor, inputLaws }] }),
+        );
+        await expect(exportProject(config, output)).rejects.toThrow();
+      }
+      await Bun.write(
+        config,
+        JSON.stringify({ ...selection, claims: [{ ...descriptor, polarity: "refute" }] }),
+      );
+      await expect(exportProject(config, output)).rejects.toThrow("proofs only");
+    }
+    await expect(readdir(output)).rejects.toThrow();
+  }));
+
+test("uniqueness and equivalence input laws quantify every column and stay claim-local", async () =>
+  fixture(async (config, output, dir) => {
+    const base = "verification/lean/examples/selected-input-law-relations/";
+    await Bun.write(join(dir, "program.dl"), await Bun.file(`${base}program.dl`).text());
+    const selection = JSON.parse(await Bun.file(`${base}plan.json`).text());
+    await Bun.write(config, JSON.stringify(selection));
+    const preview = await inspectProject(config, output);
+    for (const id of ["unique", "equivalent"]) {
+      const goal = preview.goals.find((g) => g.id === id)!;
+      expect(goal.assumptions).toHaveLength(1);
+      expect(goal.assumptions[0]).toContain("input0 lawx0 lawx1 → lawx1.val = (0 : Int)");
+      expect(goal.closure).toContain(`${id}InputLaw0`);
+    }
+    for (const id of ["uniqueUnrestricted_refuted", "equivalentUnrestricted_refuted"])
+      expect(preview.goals.find((g) => g.id === id)!.assumptions).toEqual([]);
+    for (const descriptor of selection.claims.slice(0, 2)) {
+      for (const inputLaws of [
+        [],
+        [{ ...descriptor.inputLaws[0], predicate: "raw" }],
+        [{ ...descriptor.inputLaws[0], column: 2 }],
         [{ ...descriptor.inputLaws[0], typo: true }],
       ]) {
         await Bun.write(

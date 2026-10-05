@@ -1,0 +1,49 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-uniqueness",
+      "id": "unique",
+      "predicate": "raw",
+      "keyColumns": [0],
+      "outputColumns": [1],
+      "inputLaws": [
+        {
+          "id": "zeroValues",
+          "predicate": "item",
+          "column": 1,
+          "op": "=",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "kind": "program-equivalence",
+      "id": "equivalent",
+      "predicates": ["raw", "filtered"],
+      "inputLaws": [
+        {
+          "id": "zeroValues",
+          "predicate": "item",
+          "column": 1,
+          "op": "=",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "kind": "program-uniqueness",
+      "id": "uniqueUnrestricted",
+      "predicate": "raw",
+      "keyColumns": [0],
+      "outputColumns": [1],
+      "polarity": "refute"
+    },
+    {
+      "kind": "program-equivalence",
+      "id": "equivalentUnrestricted",
+      "predicates": ["raw", "filtered"],
+      "polarity": "refute"
+    }
+  ]
+}
