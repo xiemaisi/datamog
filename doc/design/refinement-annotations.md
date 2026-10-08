@@ -771,6 +771,14 @@ peephole optimisation rather than a route to totality.
 
 ## 7 Tier 2: designed, not built
 
+The newer [verification-obligations proposal](verification-obligations.md) develops
+this direction and revises three assumptions in the historical discussion below:
+existential propositions can remain proof-irrelevant; predicate reasoning can use
+explicit interface laws instead of always unfolding definitions; and named
+relation-level coverage claims can be proved for all inputs under stated
+assumptions. The older restrictions describe this proposal's scope, not limits
+of Lean or of program verification in general.
+
 Tier 2 is annotations whose propositions mention predicates:
 
 ```prolog

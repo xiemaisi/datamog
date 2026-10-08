@@ -87,6 +87,7 @@ Run a Datamog program through the CLI:
 ```bash
 bun run datamog packages/cli/examples/family/family.dl
 bun run datamog --dry-run packages/cli/examples/family/family.dl
+bun run datamog proof inspect verification/lean/examples/selected-input-laws/plan.json /tmp/datamog-proof-inspection
 ```
 
 Select a backend explicitly:
@@ -156,6 +157,25 @@ structural relation and input validation measurements. Set
 median/min/max timings; it does not impose performance thresholds. See the
 [baseline and methodology](doc/design/semantic-types-benchmarks.md) for what is
 included in each measurement.
+
+## Optional Lean Verification
+
+The [Lean verification spike](verification/lean/README.md) pins Lean 4.34.0 and
+runs separately from ordinary TypeScript builds. The devcontainer includes Lean
+and Lake. From the repository root:
+
+```bash
+bun run generate:lean        # regenerate statements/checkers, preserve maintained proofs
+bun run test:lean            # fresh build, axiom policy negatives, native/SQL comparisons
+bun run test:lean-project    # source-selected proofs and failure gates
+bun run test:lean-cli        # compiled CLI export/check/CSV execution acceptance
+```
+
+Run these checks when changing the Lean exporters, semantic library, or proofs.
+The dedicated Lean Verification CI job installs the pinned toolchain and runs
+the same suite with Postgres required. The devcontainer also enables Postgres
+semantic comparisons automatically; elsewhere they skip explicitly without a test
+database URL. `bun test` covers source-generation regressions without Lean.
 
 ## Playground
 

@@ -1,0 +1,13 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "error-predicate", "id": "noBad", "predicate": "bad" },
+    {
+      "kind": "error-predicate",
+      "id": "nonemptyEmpty",
+      "predicate": "nonempty",
+      "polarity": "refute"
+    },
+    { "kind": "constraint", "id": "inputEmpty", "constraint": 1, "polarity": "refute" }
+  ]
+}

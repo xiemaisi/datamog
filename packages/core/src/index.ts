@@ -63,7 +63,14 @@ export {
   queryProjection,
 } from "./analyzer.ts";
 export { type ContractDiagnostic, findInertContracts } from "./contracts.ts";
-export { type Obligation, generateObligations, obligationScript } from "./obligations.ts";
+export {
+  type Obligation,
+  type LogicalObligation,
+  generateLogicalObligations,
+  type HypothesisProvenance,
+  generateObligations,
+  obligationScript,
+} from "./obligations.ts";
 export {
   type Builtin,
   BUILTINS,
@@ -183,3 +190,14 @@ export {
   declaredColumnType,
   validateStructuralColumn,
 } from "./structural-declarations.ts";
+
+export type {
+  BooleanExpression,
+  IntegerExpression,
+  LogicalExpression,
+  LogicalVariable,
+  ObligationStatement,
+} from "./obligation-ir.ts";
+export { exportSmtObligation } from "./obligation-smt.ts";
+
+export { exportLeanObligation, exportLeanRelation } from "./obligation-lean.ts";

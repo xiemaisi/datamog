@@ -1,0 +1,16 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "program-invariant", "id": "safe", "predicates": ["output"] },
+    {
+      "kind": "program-coverage",
+      "id": "covered",
+      "predicate": "output",
+      "inputPredicate": "seed",
+      "outputToInput": [0],
+      "bounds": [{ "column": 0, "op": ">", "value": 0 }]
+    },
+    { "kind": "constraint", "id": "noViolation", "constraint": 1 },
+    { "kind": "error-predicate", "id": "noBad", "predicate": "bad" }
+  ]
+}

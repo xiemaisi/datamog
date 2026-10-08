@@ -1,0 +1,2 @@
+input predicate sample(n: integer).
+guarded(X, X + 1) :- sample(X), X < 9007199254740990.

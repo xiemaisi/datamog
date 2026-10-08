@@ -1,4 +1,4 @@
-// Proof obligations for refinement contracts, as SMT-LIB 2.
+// Logical obligations for refinement contracts, with an SMT compatibility adapter.
 //
 // Phase 2 of doc/design/refinement-annotations.md. The script is the
 // deliverable: nothing here runs a solver, and no phase may assume a
@@ -40,7 +40,29 @@ import {
 import type { TypedProgram } from "./types.ts";
 import { inferTermType, rebuildVarTypes } from "./types.ts";
 
-const MAX_SAFE = "9007199254740991";
+import {
+  type BooleanExpression,
+  TRUE as DEFINED,
+  type IntegerExpression,
+  type LogicalExpression,
+  type LogicalVariable,
+  FALSE as NOT_NULL,
+  type ObligationStatement,
+  and,
+  arithmetic,
+  booleanVariable,
+  compare,
+  integer,
+  integerVariable,
+  isBoolean,
+  junction,
+  negate,
+  not,
+  or,
+} from "./obligation-ir.ts";
+import { exportSmtObligation } from "./obligation-smt.ts";
+
+const MAX_SAFE = integer(9007199254740991);
 
 /**
  * A term as a value, the condition under which it is NULL, and the condition
@@ -59,68 +81,41 @@ const MAX_SAFE = "9007199254740991";
  * the condition its operation actually carries rather than the convenient one.
  */
 interface Term {
-  v: string;
-  isNull: string;
-  def: string;
+  v: LogicalExpression;
+  isNull: BooleanExpression;
+  def: BooleanExpression;
 }
 
-const NOT_NULL = "false";
-const DEFINED = "true";
-
-function or(...conditions: string[]): string {
-  const live = conditions.filter((c) => c !== NOT_NULL);
-  if (live.length === 0) return NOT_NULL;
-  return live.length === 1 ? live[0]! : `(or ${live.join(" ")})`;
+function asBoolean(expr: LogicalExpression): BooleanExpression {
+  if (expr.sort !== "boolean") throw new UnsupportedTerm("a non-Boolean logical operand");
+  return expr;
 }
 
-function and(...conditions: string[]): string {
-  const live = conditions.filter((c) => c !== DEFINED);
-  if (live.length === 0) return DEFINED;
-  return live.length === 1 ? live[0]! : `(and ${live.join(" ")})`;
+function asInteger(expr: LogicalExpression): IntegerExpression {
+  if (expr.sort !== "integer") throw new UnsupportedTerm("a non-integer arithmetic operand");
+  return expr;
 }
 
-function nonNull(t: Term): string {
-  return t.isNull === NOT_NULL ? "true" : `(not ${t.isNull})`;
+function equality(left: LogicalExpression, right: LogicalExpression): BooleanExpression {
+  if (left.sort === "integer" && right.sort === "integer") return compare("=", left, right);
+  if (left.sort === "boolean" && right.sort === "boolean") {
+    return { sort: "boolean", kind: "boolean-equality", left, right };
+  }
+  throw new UnsupportedTerm("equality between different logical sorts");
 }
 
-/** Within the integer domain, so an arithmetic result has a value. */
-function inDomain(value: string): string {
-  return `(and (<= (- ${MAX_SAFE}) ${value}) (<= ${value} ${MAX_SAFE}))`;
+function nonNull(t: Term): BooleanExpression {
+  return isBoolean(t.isNull, false) ? DEFINED : not(t.isNull);
 }
 
-/** An SMT-LIB integer literal, which `div` and `*` need to stay linear. */
-function isNumeral(v: string): boolean {
-  return /^\d+$/.test(v) || /^\(- \d+\)$/.test(v);
-}
-
-/**
- * `abs`, folded on a literal. `(abs 2)` is not a numeral, so dividing by it
- * puts the term outside QF_LIA even though the divisor is a constant, and z3
- * rejects the script rather than answering.
- */
-function abs(v: string): string {
-  if (/^\d+$/.test(v)) return v;
-  const negated = v.match(/^\(- (\d+)\)$/);
-  return negated ? negated[1]! : `(abs ${v})`;
-}
-
-/** Truncating division, where SMT-LIB's `div` floors toward negative infinity. */
-function truncDiv(a: string, b: string): string {
-  const magnitude = `(div ${abs(a)} ${abs(b)})`;
-  // A literal divisor fixes the quotient's sign to the dividend's, or its
-  // opposite when the literal is negative, so the test needs no multiplication
-  // and the term stays linear.
-  const positive = isNumeral(b)
-    ? b.startsWith("(- ")
-      ? `(< ${a} 0)`
-      : `(>= ${a} 0)`
-    : `(>= (* ${a} ${b}) 0)`;
-  return `(ite ${positive} ${magnitude} (- ${magnitude}))`;
+/** Mathematical integers are restricted to Datamog's portable safe domain. */
+function inDomain(value: IntegerExpression): BooleanExpression {
+  return junction("and", [compare("<=", negate(MAX_SAFE), value), compare("<=", value, MAX_SAFE)]);
 }
 
 export interface ObligationContext {
   types: TypedProgram;
-  /** Variable name to its SMT declaration, accumulated per obligation. */
+  /** Integer variables used by the logical statement. */
   declared: Map<string, PrimitiveType>;
   /**
    * Variables the rule body proves non-null, so their `$null` companion is
@@ -129,20 +124,16 @@ export interface ObligationContext {
    * over an integer column fails for a reason the program excludes.
    */
   nonNull: ReadonlySet<string>;
-  /**
-   * Whether a term with two non-literal factors was emitted. QF_LIA rejects
-   * such a script outright rather than answering `unknown`, so the logic has
-   * to widen to match what the program actually needs.
-   */
-  nonlinear: boolean;
+  provenance: HypothesisProvenance[];
+  dependencies: Set<string>;
 }
 
 /**
- * Translate a Datamog expression. Returns undefined for anything outside
+ * Translate a Datamog expression. Throws UnsupportedTerm for anything outside
  * §4.1's fragment, which the caller reports rather than emitting a goal that
  * quietly means something else.
  */
-function toSmt(
+function toLogical(
   expr: HeadTerm,
   ctx: ObligationContext,
   vars: Map<string, PrimitiveType>,
@@ -158,13 +149,13 @@ function toSmt(
       if (isFloatLiteral(expr) || !Number.isInteger(expr.value)) {
         throw new UnsupportedTerm("a non-integer literal");
       }
-      return { v: String(expr.value), isNull: NOT_NULL, def: DEFINED };
+      return { v: integer(expr.value), isNull: NOT_NULL, def: DEFINED };
     case "BooleanLiteral":
-      return { v: expr.value ? "true" : "false", isNull: NOT_NULL, def: DEFINED };
+      return { v: expr.value ? DEFINED : NOT_NULL, isNull: NOT_NULL, def: DEFINED };
     case "NullLiteral":
       // Defined: `null` is a value, and writing it down is not a partial
       // operation. Only `isNull` moves.
-      return { v: "0", isNull: "true", def: DEFINED };
+      return { v: integer(0), isNull: DEFINED, def: DEFINED };
     case "Variable": {
       // Tier 1 is QF_LIA, so `integer` is the only sort that can be declared
       // faithfully. Anything else — a `float`, a `string`, a `value` — would
@@ -181,24 +172,24 @@ function toSmt(
       }
       ctx.declared.set(expr.name, type);
       return {
-        v: expr.name,
-        isNull: ctx.nonNull.has(expr.name) ? NOT_NULL : `${expr.name}$null`,
+        v: integerVariable(expr.name),
+        isNull: ctx.nonNull.has(expr.name) ? NOT_NULL : booleanVariable(`${expr.name}$null`),
         // A variable is bound to a value, null included, so it is always defined.
         def: DEFINED,
       };
     }
     case "UnaryExpr": {
-      const operand = toSmt(expr.operand, ctx, vars, subst);
+      const operand = toLogical(expr.operand, ctx, vars, subst);
       if (expr.op === "!") {
         // `!` is strict at a null as well as at an absence, so it has a value
         // exactly where its operand has a non-null one.
         return {
-          v: `(not ${operand.v})`,
+          v: not(asBoolean(operand.v)),
           isNull: NOT_NULL,
           def: and(operand.def, nonNull(operand)),
         };
       }
-      const value = `(- ${operand.v})`;
+      const value = negate(asInteger(operand.v));
       return {
         v: value,
         isNull: operand.isNull,
@@ -206,9 +197,9 @@ function toSmt(
       };
     }
     case "BinaryExpr": {
-      const l = toSmt(expr.left, ctx, vars, subst);
-      const r = toSmt(expr.right, ctx, vars, subst);
-      return binary(expr.op, l, r, ctx);
+      const l = toLogical(expr.left, ctx, vars, subst);
+      const r = toLogical(expr.right, ctx, vars, subst);
+      return binary(expr.op, l, r);
     }
     default:
       throw new UnsupportedTerm(expr.$type);
@@ -221,7 +212,7 @@ export class UnsupportedTerm extends Error {
   }
 }
 
-function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
+function binary(op: string, l: Term, r: Term): Term {
   // Connectives over comparisons stay two-valued (§4.1 excludes a bare boolean
   // term, so neither side can be NULL here). They are non-strict past their
   // dominating operand and strict everywhere else, and that is expressible: a
@@ -231,12 +222,12 @@ function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
   // always has a value, which in the goal drops the half of the contract saying
   // the proposition has one at all.
   if (op === "&&" || op === "||") {
-    const dominating = (t: Term) => and(t.def, op === "&&" ? `(not ${t.v})` : t.v);
+    const dominating = (t: Term) => and(t.def, op === "&&" ? not(asBoolean(t.v)) : asBoolean(t.v));
     return {
-      v: op === "&&" ? `(and ${l.v} ${r.v})` : `(or ${l.v} ${r.v})`,
+      v: junction(op === "&&" ? "and" : "or", [asBoolean(l.v), asBoolean(r.v)]),
       isNull: NOT_NULL,
       def:
-        l.def === DEFINED && r.def === DEFINED
+        isBoolean(l.def, true) && isBoolean(r.def, true)
           ? DEFINED
           : or(dominating(l), dominating(r), and(l.def, r.def)),
     };
@@ -252,7 +243,7 @@ function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
   // out of the condition instead of padding it with `true`. A connective's
   // definedness names each operand's condition twice, so the padding shows.
   const both = and(nonNull(l), nonNull(r));
-  const bothNull = `(and ${l.isNull} ${r.isNull})`;
+  const bothNull = junction("and", [l.isNull, r.isNull]);
   const bothDef = and(l.def, r.def);
   switch (op) {
     case "<":
@@ -260,20 +251,20 @@ function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
     case "<=":
     case ">=":
       return {
-        v: `(${op} ${l.v} ${r.v})`,
+        v: compare(op, asInteger(l.v), asInteger(r.v)),
         isNull: NOT_NULL,
         def: and(bothDef, both),
       };
     case "=":
       return {
-        v: `(or ${bothNull} (and ${both} (= ${l.v} ${r.v})))`,
+        v: junction("or", [bothNull, junction("and", [both, equality(l.v, r.v)])]),
         isNull: NOT_NULL,
         def: bothDef,
       };
     case "<>":
     case "!=":
       return {
-        v: `(not (or ${bothNull} (and ${both} (= ${l.v} ${r.v}))))`,
+        v: not(junction("or", [bothNull, junction("and", [both, equality(l.v, r.v)])])),
         isNull: NOT_NULL,
         def: bothDef,
       };
@@ -286,15 +277,15 @@ function binary(op: string, l: Term, r: Term, ctx: ObligationContext): Term {
   // (§10, §15.19).
   const propagated = or(l.isNull, r.isNull);
   if (op === "+" || op === "-" || op === "*") {
-    if (op === "*" && !isNumeral(l.v) && !isNumeral(r.v)) ctx.nonlinear = true;
-    const value = `(${op} ${l.v} ${r.v})`;
+    const value = arithmetic(op, asInteger(l.v), asInteger(r.v));
     return { v: value, isNull: propagated, def: and(bothDef, inDomain(value)) };
   }
   if (op === "/" || op === "%") {
-    if (!isNumeral(r.v)) ctx.nonlinear = true;
-    const nonZero = `(not (= ${r.v} 0))`;
-    const q = truncDiv(l.v, r.v);
-    const value = op === "/" ? q : `(- ${l.v} (* ${r.v} ${q}))`;
+    const left = asInteger(l.v);
+    const right = asInteger(r.v);
+    const nonZero = not(compare("=", right, integer(0)));
+    const q = arithmetic("trunc-div", left, right);
+    const value = op === "/" ? q : arithmetic("-", left, arithmetic("*", right, q));
     return { v: value, isNull: propagated, def: and(bothDef, nonZero) };
   }
   throw new UnsupportedTerm(`operator ${op}`);
@@ -327,7 +318,7 @@ function contractHypothesis(
   typed: TypedProgram,
   ctx: ObligationContext,
   vars: Map<string, PrimitiveType>,
-): string | undefined {
+): BooleanExpression | undefined {
   const rules = typed.rules.get(atom.predicate);
   if (!rules?.length) return undefined;
   if (!rules.every((r) => (r.head.refinements?.length ?? 0) > 0)) return undefined;
@@ -343,16 +334,21 @@ function contractHypothesis(
       // A contract mentioning a position the atom does not supply cannot be
       // stated here. Dropping the hypothesis only weakens the goal.
       if (actual === undefined) throw new UnsupportedTerm(`no actual for '${name}'`);
-      const term = toSmt(actual as HeadTerm, ctx, vars);
+      const term = toLogical(actual as HeadTerm, ctx, vars);
       resolved.set(name, term);
       return term;
     };
-    const conjuncts = rule.head.refinements!.map(
-      (r) => toSmt(r.formula as HeadTerm, ctx, vars, subst).v,
+    const conjuncts = rule.head.refinements!.map((r) =>
+      asBoolean(toLogical(r.formula as HeadTerm, ctx, vars, subst).v),
     );
-    return conjuncts.length === 1 ? conjuncts[0]! : `(and ${conjuncts.join(" ")})`;
+    return conjuncts.length === 1 ? conjuncts[0]! : junction("and", conjuncts);
   });
-  return disjuncts.length === 1 ? disjuncts[0]! : `(or ${disjuncts.join(" ")})`;
+  rules.forEach((rule, index) => {
+    rule.head.refinements!.forEach((_, refinement) => {
+      ctx.dependencies.add(obligationId(atom.predicate, index, refinement));
+    });
+  });
+  return disjuncts.length === 1 ? disjuncts[0]! : junction("or", disjuncts);
 }
 
 /** The hypotheses a rule body contributes (§3.3). */
@@ -360,27 +356,56 @@ function hypotheses(
   rule: Rule,
   ctx: ObligationContext,
   vars: Map<string, PrimitiveType>,
-): string[] {
+): BooleanExpression[] {
   // A set, because two head arguments over the same expression contribute the
   // same definedness hypothesis. Duplicates cost a solver nothing but make the
   // `--obligations` output harder to read.
-  const out = new Set<string>();
+  const out = new Map<string, BooleanExpression>();
   // Hypotheses are best effort: one outside the fragment is dropped rather
   // than failing the obligation, since omitting a hypothesis only weakens the
   // goal. A goal outside the fragment is a different matter and is reported.
-  const attempt = (build: () => string | undefined) => {
+  const record = (kind: HypothesisProvenance["kind"], node: SourceNode) => ({
+    kind,
+    ...sourceOf(node),
+  });
+  const omit = (kind: HypothesisProvenance["kind"], node: SourceNode, reason: string) => {
+    ctx.provenance.push({ ...record(kind, node), status: "omitted", reason });
+  };
+  const attempt = (
+    kind: HypothesisProvenance["kind"],
+    node: SourceNode,
+    build: () => BooleanExpression | undefined,
+  ) => {
+    const declared = new Map(ctx.declared);
     try {
       const built = build();
-      if (built !== undefined) out.add(built);
+      if (built !== undefined) {
+        out.set(JSON.stringify(built), built);
+        ctx.provenance.push({ ...record(kind, node), status: "included", formula: built });
+      } else if (kind === "relation-contract") {
+        omit(
+          kind,
+          node,
+          "no nonvacuous published refinement contract; relation membership is abstracted",
+        );
+      }
     } catch (e) {
       if (!(e instanceof UnsupportedTerm)) throw e;
+      ctx.declared = declared;
+      omit(kind, node, e.message);
     }
   };
   for (const element of rule.body) {
     if (element.$type === "Literal") {
       // A negated atom says the tuple is absent, which promises nothing about
       // the values, so only a positive one contributes.
-      if (!element.negated) attempt(() => contractHypothesis(element, ctx.types, ctx, vars));
+      if (!element.negated) {
+        attempt("relation-contract", element, () =>
+          contractHypothesis(element, ctx.types, ctx, vars),
+        );
+      } else {
+        omit("relation-contract", element, "negative relation membership is not encoded");
+      }
     } else if (element.$type === "Filter") {
       // A conjunct holds only where it has a value, so its definedness joins it.
       // A negated one is negation as failure over that whole reading: `not e`
@@ -388,22 +413,23 @@ function hypotheses(
       // it has no value. So the negation goes outside the definedness. Asserting
       // `(not value)` instead would assert something the program never promised,
       // and it is why the definedness of a connective has to be exact.
-      attempt(() => {
-        const t = toSmt(element.expr as HeadTerm, ctx, vars);
-        const holds = and(t.def, t.v);
-        return element.negated ? `(not ${holds})` : holds;
+      attempt("filter", element, () => {
+        const t = toLogical(element.expr as HeadTerm, ctx, vars);
+        const holds = and(t.def, asBoolean(t.v));
+        return element.negated ? not(holds) : holds;
       });
     } else if (element.$type === "Equality") {
       // The grammar calls the right-hand side `expr`.
-      attempt(() => {
+      attempt("equality", element, () => {
         const eq = binary(
           "=",
-          toSmt(element.left as HeadTerm, ctx, vars),
-          toSmt(element.expr as HeadTerm, ctx, vars),
-          ctx,
+          toLogical(element.left as HeadTerm, ctx, vars),
+          toLogical(element.expr as HeadTerm, ctx, vars),
         );
-        return and(eq.def, eq.v);
+        return and(eq.def, asBoolean(eq.v));
       });
+    } else {
+      omit("range", element, "range bounds are not encoded");
     }
     // A range atom bounds its variable and could contribute those bounds; it
     // does not yet. Omitting a hypothesis only weakens a goal.
@@ -416,9 +442,9 @@ function hypotheses(
   // side-condition on the goal, because the goal is about the tuple.
   for (const arg of rule.head.args) {
     if (containsAggregate(arg)) continue;
-    attempt(() => {
-      const def = toSmt(arg as HeadTerm, ctx, vars).def;
-      return def === DEFINED ? undefined : def;
+    attempt("head-definedness", arg, () => {
+      const def = toLogical(arg as HeadTerm, ctx, vars).def;
+      return isBoolean(def, true) ? undefined : def;
     });
   }
 
@@ -431,29 +457,70 @@ function hypotheses(
     if (arg.$type === "Variable" && arg.name === name) return; // `X = X`
     // Only an `integer` name can be declared faithfully in QF_LIA; for
     // anything else the goal mentioning it is already being dropped.
-    if (vars.get(name) !== "integer") return;
+    if (vars.get(name) !== "integer") {
+      omit("head-binding", arg, "non-integer head binding is not encoded");
+      return;
+    }
     ctx.declared.set(name, "integer");
     // Just the equality: the expression's definedness is asserted by the
     // head-argument pass above, which sees this same argument.
-    attempt(
-      () =>
+    attempt("head-binding", arg, () =>
+      asBoolean(
         binary(
           "=",
-          { v: name, isNull: ctx.nonNull.has(name) ? NOT_NULL : `${name}$null`, def: DEFINED },
-          toSmt(arg, ctx, vars),
-          ctx,
+          {
+            v: integerVariable(name),
+            isNull: ctx.nonNull.has(name) ? NOT_NULL : booleanVariable(`${name}$null`),
+            def: DEFINED,
+          },
+          toLogical(arg, ctx, vars),
         ).v,
+      ),
     );
   });
-  return [...out];
+  return [...out.values()];
+}
+
+interface SourceNode {
+  $cstNode?: { text: string; offset: number; end: number };
+}
+
+function sourceOf(node: SourceNode) {
+  const cst = node.$cstNode;
+  return { text: cst?.text ?? "(generated)", offset: cst?.offset, end: cst?.end };
+}
+
+export type HypothesisProvenance = {
+  kind: "relation-contract" | "filter" | "equality" | "range" | "head-definedness" | "head-binding";
+  text: string;
+  offset?: number;
+  end?: number;
+} & ({ status: "included"; formula: BooleanExpression } | { status: "omitted"; reason: string });
+
+/** An identity within this generated batch, never a persistent proof/cache key. */
+function obligationId(predicate: string, rule: number, refinement: number): string {
+  return JSON.stringify([predicate, rule + 1, refinement + 1]);
 }
 
 /** One obligation: a named goal with its hypotheses. */
-export interface Obligation {
+export interface LogicalObligation {
+  kind: "head-refinement";
+  source: { text: string; offset?: number; end?: number };
+  /** Batch-local identity; includes the elaborated predicate/module identity. */
+  id: string;
+  /** All defining refinements of each successfully assumed contract. */
+  dependencies: string[];
+  hypotheses: HypothesisProvenance[];
   predicate: string;
   /** 1-based, matching the order the rules are written in. */
   rule: number;
   claim: string;
+  statement: ObligationStatement | null;
+  unsupportedReason?: string;
+}
+
+/** SMT export retained for the CLI and existing callers. */
+export interface Obligation extends LogicalObligation {
   script: string;
   /** Constants the block declares, for asking a solver what falsified it. */
   declared: string[];
@@ -465,12 +532,17 @@ export interface Obligation {
 }
 
 /**
- * Generate one SMT-LIB block per refinement. A rule whose head contains an
+ * Generate one typed logical obligation per refinement. A rule whose head contains an
  * aggregate is skipped with a note: its contract needs §4.1's derived facts
  * and the empty-group goal of §3.1, which this pass does not yet emit.
  */
-export function generateObligations(typed: TypedProgram): Obligation[] {
-  const out: Obligation[] = [];
+export function generateLogicalObligations(typed: TypedProgram): LogicalObligation[] {
+  const out: LogicalObligation[] = [];
+  const parityPredicates = new Set(
+    typed.sortedStrata.flatMap((stratum) =>
+      stratum.some((p) => typed.maximalPredicates.has(p)) ? stratum : [],
+    ),
+  );
   for (const [predicate, rules] of typed.rules) {
     if (!rules.every((r) => (r.head.refinements?.length ?? 0) > 0)) continue;
     for (const [index, rule] of rules.entries()) {
@@ -484,72 +556,71 @@ export function generateObligations(typed: TypedProgram): Obligation[] {
         const type = inferTermType(arg, vars, typed.columnTypes);
         if (type) vars.set(name, type);
       });
-      for (const refinement of rule.head.refinements!) {
+      for (const [refinementIndex, refinement] of rule.head.refinements!.entries()) {
         const ctx: ObligationContext = {
           types: typed,
           declared: new Map(),
           nonNull,
-          nonlinear: false,
+          provenance: [],
+          dependencies: new Set(),
         };
-        let block: string;
-        let emitted = true;
+        let statement: ObligationStatement | null = null;
+        let unsupportedReason: string | undefined;
         try {
+          if (parityPredicates.has(predicate)) {
+            throw new UnsupportedTerm("parity-stratified recursion");
+          }
           if (rule.head.args.some(containsAggregate)) {
             throw new UnsupportedTerm("an aggregate in the head");
           }
-          const formula = toSmt(refinement.formula as HeadTerm, ctx, vars);
+          const formula = toLogical(refinement.formula as HeadTerm, ctx, vars);
           // A refinement *holds* of a tuple only where it has a value and that
           // value is true, which is the same rule a body conjunct follows. It
           // matters for an ordering, which is strict at null (§4.1): a contract
           // `_: Y > X` is violated by a tuple whose `Y` is null, the ordering
           // having no answer there, so the null case has to be inside the goal
           // rather than assumed away.
-          const goal = and(formula.def, formula.v);
+          const goal = and(formula.def, asBoolean(formula.v));
           const asserts = hypotheses(rule, ctx, vars);
           // Every variable ranges over an `integer` column, so it is inside
           // the domain: a solver given an unbounded `Int` otherwise falsifies
           // an overflow guard with a value no tuple can hold.
-          const declarations = [...ctx.declared]
-            .map(([name]) =>
-              [
-                `(declare-const ${name} Int)`,
-                ctx.nonNull.has(name) ? "" : `(declare-const ${name}$null Bool)`,
-                `(assert ${inDomain(name)})`,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-            )
-            .join("\n");
-          block = [
-            `; ${predicate} rule ${index + 1}: ${refinement.text}`,
-            "(push 1)",
-            declarations,
-            ...asserts.map((a) => `(assert ${a})`),
-            `(assert (not ${goal}))`,
-            "(check-sat) ; unsat discharges the obligation",
-            "(pop 1)",
-          ]
-            .filter((line) => line !== "")
-            .join("\n");
+          const variables: LogicalVariable[] = [...ctx.declared.keys()].flatMap((name) => [
+            { name, sort: "integer" as const },
+            ...(ctx.nonNull.has(name) ? [] : [{ name: `${name}$null`, sort: "boolean" as const }]),
+          ]);
+          statement = {
+            profile: "datamog-integer-v1",
+            variables,
+            domains: [...ctx.declared.keys()].map((name) => inDomain(integerVariable(name))),
+            hypotheses: asserts,
+            conclusion: goal,
+          };
         } catch (e) {
           if (!(e instanceof UnsupportedTerm)) throw e;
-          emitted = false;
-          block = `; ${predicate} rule ${index + 1}: ${refinement.text}\n; not emitted, ${e.message}`;
+          unsupportedReason = e.message;
         }
         out.push({
+          kind: "head-refinement",
+          source: sourceOf(refinement.formula),
+          id: obligationId(predicate, index, refinementIndex),
+          dependencies: [...ctx.dependencies],
+          hypotheses: ctx.provenance,
           predicate,
           rule: index + 1,
           claim: refinement.text,
-          script: block,
-          declared: [...ctx.declared.keys()].flatMap((n) =>
-            ctx.nonNull.has(n) ? [n] : [n, `${n}$null`],
-          ),
-          logic: emitted ? (ctx.nonlinear ? "QF_NIA" : "QF_LIA") : null,
+          statement,
+          unsupportedReason,
         });
       }
     }
   }
   return out;
+}
+
+/** Generate logical obligations and export each supported statement to SMT. */
+export function generateObligations(typed: TypedProgram): Obligation[] {
+  return generateLogicalObligations(typed).map(exportSmtObligation);
 }
 
 /** The obligations of `typed` as one SMT-LIB 2 script. */
@@ -562,10 +633,21 @@ export function obligationScript(typed: TypedProgram & AnalyzedProgram): string 
   const logic = obligations.some((o) => o.logic === "QF_NIA") ? "QF_NIA" : "QF_LIA";
   return [
     "; Datamog refinement obligations.",
-    "; Each block is unsat exactly when its contract holds for that rule.",
+    "; An unsat block discharges the abstract local goal, conditional on its contract dependencies.",
     `(set-logic ${logic})`,
     "",
-    ...obligations.map((o) => o.script),
+    ...obligations.map((o) =>
+      [
+        ...o.dependencies.map((id) => `; assumes obligation ${id}`),
+        ...o.hypotheses
+          .filter((h) => h.status === "omitted")
+          .map(
+            (h) =>
+              `; omitted ${h.kind}: ${h.text.replace(/\s+/g, " ")} — ${h.status === "omitted" ? h.reason : ""}; dropping a premise strengthens the obligation`,
+          ),
+        o.script,
+      ].join("\n"),
+    ),
     "",
   ].join("\n");
 }

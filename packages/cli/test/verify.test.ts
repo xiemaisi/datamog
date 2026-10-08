@@ -6,7 +6,7 @@ import { create as createNative } from "datamog-backend-native";
 import { analyze, generateObligations, inferTypes } from "datamog-core";
 import { ConstraintViolationError, DatamogExecutor } from "datamog-engine";
 import { parse } from "datamog-parser";
-import { DEFAULT_SOLVER, verifyObligations } from "../src/verify.ts";
+import { DEFAULT_SOLVER, resolveDependencies, verifyObligations } from "../src/verify.ts";
 
 const solver = DEFAULT_SOLVER.split(/\s+/)[0]!;
 const withSolver = Bun.which(solver) ? describe : describe.skip;
@@ -45,7 +45,7 @@ withSolver(`with ${solver}`, () => {
     // claim is about the data, not a theorem, so it is not discharged.
     expect(verdicts.map((v) => [v.obligation.predicate, v.status])).toEqual([
       ["slot", "counterexample"],
-      ["merged", "discharged"],
+      ["merged", "conditional"],
     ]);
   });
 
@@ -182,5 +182,148 @@ withSolver(`with ${solver}`, () => {
       );
       expect(discharged.filter(Boolean).length).toBeGreaterThanOrEqual(cases.length - 4);
     });
+  });
+});
+
+// Protocol regressions run even without an installed SMT solver.
+describe("solver process boundaries", () => {
+  const obligations = generateObligations(
+    inferTypes(analyze(parse("p(1). q(X, _: X > 0) :- p(X), X > 0."))),
+  );
+  const fake = (code: string) => [process.execPath, "-e", code];
+
+  test.each([
+    ["nonzero exit", 'console.log("unsat"); process.exit(2)'],
+    ["error before unsat", "console.log('(error \"bad assertion\")\\nunsat')"],
+    ["error after unsat", "console.log('unsat\\n(error \"bad command\")')"],
+    ["stderr verdict", 'console.error("unsat")'],
+    ["multiple answers", 'console.log("sat\\nunsat")'],
+    ["missing answer", 'console.log("")'],
+  ])("rejects %s", async (_, code) => {
+    expect((await verifyObligations(obligations, fake(code)))[0]!.status).toBe("error");
+  });
+
+  test("does not ask for a model after unsat", async () => {
+    const command = fake(`
+      const script = await Bun.stdin.text();
+      console.log(script.includes("get-value") ? '(error "no model")' : "unsat");
+    `);
+    expect((await verifyObligations(obligations, command))[0]!.status).toBe("discharged");
+  });
+
+  test("requests a model only after sat", async () => {
+    const command = fake(`
+      const script = await Bun.stdin.text();
+      console.log(script.includes("get-value") ? "sat\\n((X 1))" : "sat");
+    `);
+    const [verdict] = await verifyObligations(obligations, command);
+    expect(verdict!.status).toBe("counterexample");
+    expect(verdict!.detail).toBe("((X 1))");
+  });
+
+  test("model failure preserves sat without claiming an assignment", async () => {
+    const command = fake(`
+      const script = await Bun.stdin.text();
+      console.log(script.includes("get-value") ? "unsat" : "sat");
+    `);
+    const [verdict] = await verifyObligations(obligations, command);
+    expect(verdict!.status).toBe("counterexample");
+    expect(verdict!.detail).toContain("Countermodel unavailable");
+  });
+
+  test("kills a solver that hangs", async () => {
+    const [verdict] = await verifyObligations(obligations, fake("setInterval(() => {}, 1000)"), {
+      timeoutMs: 50,
+    });
+    expect(verdict!.status).toBe("timeout");
+  });
+
+  test.each(["stdout", "stderr"])("bounds %s output", async (stream) => {
+    const [verdict] = await verifyObligations(
+      obligations,
+      fake(`process.${stream}.write("x".repeat(100000)); setInterval(() => {}, 1000)`),
+      { maxOutputBytes: 1000 },
+    );
+    expect(verdict!.status).toBe("error");
+    expect(verdict!.detail).toBe("output limit exceeded");
+  });
+
+  test("cancels a running solver", async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 50);
+    try {
+      const [verdict] = await verifyObligations(obligations, fake("setInterval(() => {}, 1000)"), {
+        signal: controller.signal,
+      });
+      expect(verdict!.detail).toBe("cancelled");
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  test("an already cancelled run does not launch a solver", async () => {
+    const [verdict] = await verifyObligations(obligations, ["missing-solver"], {
+      signal: AbortSignal.abort(),
+    });
+    expect(verdict!.detail).toBe("cancelled");
+  });
+});
+
+describe("contract dependency closure", () => {
+  const recursive = generateObligations(
+    inferTypes(
+      analyze(
+        parse(`
+    p(0 as X, _: X >= 0).
+    p(X, _: X >= 0) :- q(X).
+    q(X, _: X >= 0) :- p(X).
+    r(X, _: X >= 0) :- q(X).
+  `),
+      ),
+    ),
+  );
+  const localResults = () =>
+    recursive.map((obligation) => ({
+      obligation,
+      status: "discharged" as const,
+    }));
+
+  test("complete mutual recursion discharges together", () => {
+    expect(resolveDependencies(localResults()).map((v) => v.status)).toEqual([
+      "discharged",
+      "discharged",
+      "discharged",
+      "discharged",
+    ]);
+  });
+
+  test("a partial cycle cannot discharge without its base rule", () => {
+    expect(resolveDependencies(localResults().slice(1)).map((v) => v.status)).toEqual([
+      "conditional",
+      "conditional",
+      "conditional",
+    ]);
+  });
+
+  test.each(["counterexample", "skipped", "unknown", "timeout", "error"] as const)(
+    "%s propagates through cycles and their consumers",
+    (status) => {
+      const results = localResults();
+      const resolved = resolveDependencies([{ ...results[0]!, status }, ...results.slice(1)]);
+      expect(resolved.map((v) => v.status)).toEqual([
+        status,
+        "conditional",
+        "conditional",
+        "conditional",
+      ]);
+      expect(resolveDependencies(resolved)).toEqual(resolved);
+    },
+  );
+
+  test("duplicate identities cannot fill a missing obligation", () => {
+    const results = localResults();
+    expect(
+      resolveDependencies([...results, results[0]!]).every((v) => v.status === "conditional"),
+    ).toBe(true);
   });
 });

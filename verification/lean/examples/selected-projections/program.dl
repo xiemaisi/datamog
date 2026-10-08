@@ -1,0 +1,3 @@
+input predicate items(values: {n: integer, extra?: integer?}).
+picked(V["n"]) :- items(V).
+maybe(V["extra"]) :- items(V).

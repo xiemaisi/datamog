@@ -1,0 +1,3 @@
+input predicate document(r: {required: {inner: {n: integer, nullable: integer?}}, optional?: {n: integer}, nullable: {n: integer}?, maybe?: {n: integer}?}).
+project(R["required"]["inner"]["n"], R["required"]["inner"]["nullable"]) :- document(R).
+?- project(X, Y).

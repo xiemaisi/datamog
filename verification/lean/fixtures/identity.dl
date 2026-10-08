@@ -1,0 +1,2 @@
+input predicate item(n: integer).
+identity(X, X) :- item(X).

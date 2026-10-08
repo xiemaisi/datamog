@@ -1,0 +1,12 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "program-equivalence", "id": "sameRows", "predicates": ["first", "second"] },
+    {
+      "kind": "program-equivalence",
+      "id": "filteredRows",
+      "predicates": ["first", "positive"],
+      "polarity": "refute"
+    }
+  ]
+}

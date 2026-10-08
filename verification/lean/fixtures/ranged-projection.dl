@@ -1,0 +1,2 @@
+input predicate items(values: {rows: [{n: integer, rating: integer?, score?: integer?}]}, outer: integer, inner: integer, unused: integer).
+ranged(U, R["rows"][I]["n"]) :- items(R, I, J, U), as_integer(R["rows"][I]["n"]) > 0, as_integer(R["rows"][I]["n"]) <= 10.

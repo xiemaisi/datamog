@@ -1,0 +1,3 @@
+input predicate sample(n: integer).
+grow(X, _: X > 0) :- sample(X), X > 0.
+grow(X + 1 as Y, _: Y > 0) :- grow(X).

@@ -1,0 +1,2 @@
+input predicate items(values: {rows: [{n: integer, rating: integer?, score?: integer?}]}, outer: integer, inner: integer, unused: integer).
+filtered(U, R["rows"][I]["n"]) :- U >= 0, items(R, I, J, U), I < J.

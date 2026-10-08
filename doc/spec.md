@@ -972,7 +972,9 @@ Index conventions:
 - Indices beyond the receiver length produce `""` / `[]` for string /
   array-`value` slices and `""` for string subscripts (the receiver's
   empty value). A `value` subscript that falls out of range has **no
-  value**, exactly as a missing key does (§5.4).
+  value**, exactly as a missing key does (§5.4). An integer subscript also
+  has no value when its `value` receiver is a scalar (including JSON null),
+  rather than an array. A null element inside an array remains a defined value.
 
 > **Cross-backend variance.** Strings containing an embedded NUL
 > character (`U+0000`, reachable via `parse_json("\"\\u0000\"")`) are
@@ -2637,8 +2639,9 @@ widening to `QF_NIA` if the program multiplies or divides by a variable. No
 solver ships with Datamog; the script is the deliverable, so that any compatible
 SMT-LIB solver can consume it. The encoder supports an integer-arithmetic
 fragment, not all well-typed expressions: unsupported goals involving float,
-string or value reasoning, and aggregate rules, cause obligations to be skipped.
-Body hypotheses outside the fragment are omitted; range bounds currently supply
+string or value reasoning, aggregate rules, and parity-recursive components cause
+obligations to be skipped. Body hypotheses outside the fragment are omitted with
+provenance and reasons in the output; range bounds currently supply
 no hypotheses. This can leave a valid claim unproved. The encoding writes out
 what SMT-LIB spells differently: division and modulo truncate toward zero (§5.3)
 rather than being Euclidean, `null` is
@@ -2655,17 +2658,27 @@ by a constraint: an unbounded SMT `Int` is otherwise falsified with a value no
 column can hold.
 
 A rule may assume the contract of any predicate it calls positively. Where the
-call is to the rule's own predicate that is an induction hypothesis, sound
-because the induction is on the derivation and every rule of a predicate is
-discharged together or not at all. A negated call assumes nothing: the absence
-of a tuple says nothing about values.
+call is to the rule's own predicate that is an induction hypothesis. For positive
+recursion, the induction is on the derivation and every defining refinement of
+each assumed contract must be discharged together. A local `unsat` result is
+reported as `conditional` when any member of its transitive dependency closure
+is missing, skipped, failed, or otherwise unresolved. Complete positive mutual
+recursion can discharge jointly; a partial cycle cannot. Parity-recursive
+components are unsupported by this induction argument. A negated call assumes
+nothing: the absence of a tuple says nothing about values.
 
 **Discharging them.** `--verify` runs each obligation through an SMT solver and
 reports `proved`, `FAILED` with the assignment that falsifies the claim, or
 `skipped` for a claim outside the fragment above. The solver is named by
 `--solver` and defaults to `z3 -in`; anything that reads an SMT-LIB 2 script on
 standard input will do. The exit status is non-zero unless every
-obligation is discharged.
+obligation is discharged. Each solver invocation is limited to 30 seconds and
+1 MiB of combined stdout/stderr. A timeout is reported separately; a nonzero
+exit, stderr diagnostics, malformed response, or output overflow is an error,
+even if the solver also prints `unsat`. Only one clean stdout verdict is
+accepted. A second invocation requests an assignment after `sat`; if retrieval
+fails, the original result is retained with an explicit unavailable-model note.
+These are trusted solver answers, not independently checked certificates.
 
 A contract that cannot be discharged is not thereby false. It may be a property
 of the data rather than a theorem, or it may need a bound the program has not

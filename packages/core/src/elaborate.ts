@@ -78,6 +78,13 @@ export interface ElaborationResult {
   dataSources: DataSource[];
   /** Boundary type contracts, for `checkModuleBoundaries` after inference. */
   boundaries: BoundaryConstraint[];
+  /** Entry and nested bindings, addressed by dot-separated source binding paths. */
+  moduleBindings: {
+    binding: string;
+    file?: string;
+    statements: Statement[];
+    predicates: Record<string, string>;
+  }[];
 }
 
 function nodePos(node: { $cstNode?: { offset: number; end: number } }): [number, number] | [] {
@@ -111,6 +118,10 @@ interface Context {
 interface Instance {
   /** Prefix its private and output predicate names were freshened with. */
   prefix: string;
+  file?: string;
+  statements: Statement[];
+  localNames: Set<string>;
+  children: { binding: string; instance: Instance }[];
   /** Outputs renamed out of the prefix scheme: export name -> merged predicate. */
   renamed: Map<string, string>;
   resolveName: (name: string) => string;
@@ -148,6 +159,7 @@ export function elaborate(
   resolve: ModuleResolver,
   entryFile?: string,
 ): ElaborationResult {
+  const bindings: { binding: string; instance: Instance }[] = [];
   const ctx: Context = {
     resolve,
     out: [],
@@ -198,6 +210,7 @@ export function elaborate(
       ctx,
       binding.source,
     );
+    bindings.push({ binding: stmt.predicate, instance });
     remapBoundaryShapes(actualBoundaries, instance.resolveName);
     const output = bindLocalName(ctx, instance, selected, stmt, columns);
     ctx.boundaries.push(outputBoundary(binding, stmt, entryFile, output));
@@ -219,7 +232,31 @@ export function elaborate(
   entry.statements = ctx.out;
   setModuleDiagnosticNames(entry, ctx.diagnosticNames);
   checkElaboratedPolarities(entry, ctx.boundaries);
-  return { program: entry, dataSources: ctx.dataSources, boundaries: ctx.boundaries };
+  const allBindings: typeof bindings = [];
+  const collectBindings = (items: typeof bindings, parent = "") => {
+    for (const { binding, instance } of items) {
+      const path = parent ? `${parent}.${binding}` : binding;
+      allBindings.push({ binding: path, instance });
+      collectBindings(instance.children, path);
+    }
+  };
+  collectBindings(bindings);
+  return {
+    program: entry,
+    dataSources: ctx.dataSources,
+    boundaries: ctx.boundaries,
+    moduleBindings: allBindings.map(({ binding, instance }) => ({
+      binding,
+      file: instance.file,
+      statements: instance.statements,
+      predicates: Object.fromEntries(
+        [...instance.localNames].map((name) => {
+          const resolved = instance.resolveName(name);
+          return [name, ctx.nameAliases.get(resolved) ?? resolved];
+        }),
+      ),
+    })),
+  };
 }
 
 /**
@@ -538,6 +575,7 @@ function instantiate(
           ? `${prefix}${name}`
           : name;
 
+  const children: Instance["children"] = [];
   const nestedOutputBoundaries: BoundaryConstraint[] = [];
   for (const s of module.statements) {
     if (!isExtDecl(s) || !s.binding?.isModule) continue;
@@ -573,6 +611,7 @@ function instantiate(
       ctx,
       binding.source,
     );
+    children.push({ binding: s.predicate, instance: childInstance });
     remapBoundaryShapes(actualBoundaries, childInstance.resolveName);
     const childOutput = outputName(childInstance, childExport.name);
     const boundary = outputBoundary(binding, s, file, childOutput);
@@ -624,6 +663,10 @@ function instantiate(
   ctx.out.push(...expanded);
   const instance: Instance = {
     prefix,
+    file,
+    statements: expanded,
+    localNames,
+    children,
     renamed: new Map(),
     resolveName: (name) =>
       inputSubst[name] ??

@@ -1,0 +1,6 @@
+input predicate seed(n: integer).
+identity(X, X) :- seed(X).
+left(X, Y) :- identity(X, Y).
+left(X, Y) :- right(X, Y).
+right(X, Y) :- left(X, Y).
+output(X, Y) :- right(X, Y).

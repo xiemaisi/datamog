@@ -1,0 +1,31 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-coverage",
+      "id": "total",
+      "predicate": "successor",
+      "inputPredicate": "item",
+      "outputToInput": [0, null],
+      "bounds": [],
+      "inputLaws": [
+        {
+          "id": "belowMaximum",
+          "predicate": "item",
+          "column": 0,
+          "op": "<",
+          "value": 9007199254740991
+        }
+      ]
+    },
+    {
+      "kind": "program-coverage",
+      "id": "unrestricted",
+      "predicate": "successor",
+      "inputPredicate": "item",
+      "outputToInput": [0, null],
+      "bounds": [],
+      "polarity": "refute"
+    }
+  ]
+}

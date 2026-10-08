@@ -1,0 +1,4 @@
+input predicate item(n: integer).
+output predicate result(X) :- item(X).
+!- item(X), X <= 0.
+error predicate bad(X) :- item(X), X <= 0.

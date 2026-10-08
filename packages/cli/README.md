@@ -52,6 +52,11 @@ bun run datamog --dry-run program.dl
 
 # Prove the refinement contracts rather than checking them against the data
 bun run datamog --verify program.dl
+
+# Inspect and check a selected Lean verification project
+bun run datamog proof inspect plan.json project-dir
+bun run datamog proof export plan.json project-dir
+bun run datamog proof check plan.json project-dir --allow-conditional
 ```
 
 ## Proving contracts
@@ -188,3 +193,33 @@ bun run datamog packages/cli/examples/<name>/<name>.dl
 ```
 
 Some use non-linear recursion (rejected by the SQL backends); those carry a `native-only` marker file and run on `--backend native` or `--backend seminaive`.
+
+## Selected Lean projects
+
+`datamog proof inspect|export|check PLAN.json OUTPUT` runs the selected Lean
+workflow from a Datamog source checkout. `inspect` is read-only. `export` writes
+generated goals and keeps maintained proofs in `OUTPUT/Datamog/Proofs.lean`.
+`check` rebuilds from the current source in a fresh directory using the pinned
+Lean toolchain and writes `OUTPUT/verification-result.json` only after all
+checks pass. It prints each checked claim, refutation, and visible input-law
+assumption. Lean is needed only for `check`; ordinary execution and `--verify`
+continue to use their existing paths.
+
+By default every selected goal must be unconditional. `--allow-conditional`
+permits a report that names remaining input-law premises. Every repeated
+`--require-goal ID` still requires a fresh unconditional result. With
+`--allow-conditional`, repeated `--input-file PREDICATE=PATH.csv` options can
+check every named integer input law against supplied header-based CSV relations.
+The report records file digests and dataset-scoped law results without changing
+the universal goal's conditional status. Reports concern the modeled Datamog
+language; they do not prove backend correctness. A compiled
+CLI can use the workflow when a Datamog source checkout is available; set
+`DATAMOG_VERIFICATION_ROOT` to its root if it cannot be found automatically.
+See the [selected project guide](../../verification/lean/PROJECTS.md) for the
+supported integer and structural fragments and worked examples.
+
+Add `--run-native` to `proof check` to execute the same checked row snapshot and
+include runtime results in the fresh report. This requires explicit CSV files
+for every declared input, all with non-null integer columns. Runtime constraints
+remain enabled; any execution failure or the 1,000-iteration cap prevents a
+success report. See the [worked run](../../verification/lean/examples/selected-input-run/README.md).

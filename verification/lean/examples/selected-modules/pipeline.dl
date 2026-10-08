@@ -1,0 +1,3 @@
+input predicate item(n: integer).
+input predicate filtered(n: integer) := positive from "filter.dl"(item = item).
+output predicate result(X) :- filtered(X).

@@ -1,0 +1,21 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-emptiness",
+      "id": "noViolation",
+      "predicate": "violation"
+    },
+    {
+      "kind": "program-emptiness",
+      "id": "positiveEmpty",
+      "predicate": "positive",
+      "polarity": "refute"
+    },
+    {
+      "kind": "program-emptiness",
+      "id": "emptyCycle",
+      "predicate": "flag"
+    }
+  ]
+}

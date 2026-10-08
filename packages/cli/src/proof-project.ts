@@ -1,0 +1,127 @@
+/** User-facing entry for source-selected Lean verification projects. */
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { runProofProcess } from "./proof-process.ts";
+
+const help =
+  "Usage: datamog proof <inspect|export|check> PLAN.json OUTPUT [--allow-conditional] [--require-goal ID ...] [--input-file PREDICATE=PATH.csv ...] [--run-native]";
+
+function checkoutRoot() {
+  const configured = process.env.DATAMOG_VERIFICATION_ROOT;
+  const candidates = configured
+    ? [resolve(configured)]
+    : [new URL("../../../", import.meta.url).pathname, process.cwd(), dirname(process.execPath)];
+  for (const candidate of candidates) {
+    let path = resolve(candidate);
+    while (true) {
+      if (
+        existsSync(join(path, "scripts/lean-project.ts")) &&
+        existsSync(join(path, "verification/lean/lean-toolchain")) &&
+        existsSync(join(path, "bun.lock"))
+      )
+        return path;
+      const parent = dirname(path);
+      if (parent === path) break;
+      path = parent;
+    }
+  }
+  throw new Error(
+    "Selected Lean verification needs a Datamog source checkout; set DATAMOG_VERIFICATION_ROOT to its root",
+  );
+}
+
+async function runner(args: string[]) {
+  const script = join(checkoutRoot(), "scripts/lean-project.ts");
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.on("SIGINT", cancel);
+  process.on("SIGTERM", cancel);
+  try {
+    return (
+      await runProofProcess(["bun", script, ...args], process.cwd(), {
+        signal: controller.signal,
+        timeoutMs: 600_000,
+        maxOutputBytes: 8_388_608,
+        shutdownGraceMs: 1000,
+      })
+    ).stdout;
+  } finally {
+    process.off("SIGINT", cancel);
+    process.off("SIGTERM", cancel);
+  }
+}
+
+export async function runProofProject(args: string[]) {
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
+    console.log(help);
+    return;
+  }
+  const [command, config, output, ...rest] = args;
+  if (!config || !output || !["inspect", "export", "check"].includes(command ?? ""))
+    throw new Error(help);
+  const required: string[] = [];
+  const inputFiles: string[] = [];
+  let allowConditional = false;
+  let runNative = false;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "--run-native" && !runNative) {
+      runNative = true;
+    } else if (rest[i] === "--allow-conditional" && !allowConditional) {
+      allowConditional = true;
+    } else if (rest[i] === "--input-file" && rest[i + 1]) {
+      const binding = rest[++i]!;
+      const equal = binding.indexOf("=");
+      if (equal < 1 || equal === binding.length - 1) throw new Error(help);
+      inputFiles.push(binding);
+    } else if (rest[i] === "--require-goal" && rest[i + 1] && !rest[i + 1]!.startsWith("--")) {
+      required.push(rest[++i]!);
+    } else {
+      throw new Error(help);
+    }
+  }
+  if (
+    command !== "check" &&
+    (allowConditional || required.length || inputFiles.length || runNative)
+  )
+    throw new Error(help);
+  const stdout = await runner([command!, config, output, ...rest]);
+  if (command !== "check") {
+    process.stdout.write(stdout);
+    return;
+  }
+  const path = join(resolve(output), "verification-result.json");
+  const report = (await Bun.file(path).json()) as {
+    entries: { id: string; status: string; assumptions: string[] }[];
+    verificationPlan: { entries: { id: string; statement: unknown }[] };
+    execution?: { backend: string; results: unknown[] };
+    dataset?: {
+      inputs: { predicate: string; rows: number }[];
+      goals: { id: string; status: string }[];
+    };
+  };
+  for (const entry of report.entries) {
+    const node = report.verificationPlan.entries.find((node) => node.id === entry.id);
+    const statement = node?.statement;
+    const polarity =
+      statement && typeof statement === "object" && "negationOf" in statement
+        ? "refutation"
+        : "claim";
+    console.log(`${entry.id}: ${entry.status} ${polarity}`);
+    for (const assumption of entry.assumptions) console.log(`  assumes ${assumption}`);
+  }
+  if (report.dataset) {
+    for (const input of report.dataset.inputs)
+      console.log(`${input.predicate}: ${input.rows} CSV rows checked`);
+    for (const goal of report.dataset.goals) console.log(`${goal.id}: ${goal.status}`);
+    console.log(
+      "Dataset checks concern the supplied input files; universal theorem statuses remain unchanged.",
+    );
+  }
+  if (report.execution) {
+    console.log(
+      `Execution completed on ${report.execution.backend} using the checked input snapshot.`,
+    );
+    console.log(JSON.stringify(report.execution.results, null, 2));
+  }
+  console.log(`Fresh report: ${path}`);
+}

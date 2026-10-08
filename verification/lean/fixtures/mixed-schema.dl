@@ -1,0 +1,1 @@
+input predicate items(values: {teams: [{members: [{age: integer, score?: integer?, rating: integer?}]}], optional?: {age: integer}, nullable: {age: integer}?}).

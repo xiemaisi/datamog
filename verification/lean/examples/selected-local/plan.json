@@ -1,0 +1,14 @@
+{
+  "source": "program.dl",
+  "claims": [
+    { "kind": "local", "id": "successor", "predicate": "successor", "rule": 1, "refinement": 1 },
+    {
+      "kind": "local",
+      "id": "falseGoal",
+      "predicate": "bad",
+      "rule": 1,
+      "refinement": 1,
+      "polarity": "refute"
+    }
+  ]
+}

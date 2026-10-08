@@ -1,0 +1,11 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "mutual-invariant",
+      "id": "bothSafe",
+      "predicates": ["left", "right"],
+      "polarity": "refute"
+    }
+  ]
+}

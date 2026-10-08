@@ -24,6 +24,10 @@
   "files": {
     "ignore": [
       "node_modules",
+      "verification/lean/.lake",
+      "verification/lean/lake-manifest.json",
+      "verification/lean/manifest.json",
+      "verification/lean/verification-result.json",
       "dist",
       "*.lockb",
       ".claude",

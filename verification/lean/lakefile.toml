@@ -1,0 +1,6 @@
+name = "datamogVerification"
+version = "0.1.0"
+defaultTargets = ["Datamog"]
+
+[[lean_lib]]
+name = "Datamog"

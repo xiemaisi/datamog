@@ -1,0 +1,25 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "program-coverage",
+      "id": "pipelineCoverage",
+      "predicate": "output",
+      "inputPredicate": "seed",
+      "outputToInput": [0, null],
+      "bounds": [
+        { "column": 0, "op": ">=", "value": 0 },
+        { "column": 0, "op": "<", "value": 9007199254740991 }
+      ]
+    },
+    {
+      "kind": "program-coverage",
+      "id": "pipelineTotal",
+      "predicate": "output",
+      "inputPredicate": "seed",
+      "outputToInput": [0, null],
+      "bounds": [],
+      "polarity": "refute"
+    }
+  ]
+}

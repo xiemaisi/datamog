@@ -1,0 +1,7 @@
+input predicate seed(n: integer).
+validated(X) :- seed(X), X > 0.
+forwarded(X) :- validated(X).
+left(X) :- forwarded(X).
+left(X) :- right(X).
+right(X + 1) :- left(X).
+output(X, _: X > 0) :- left(X).

@@ -1,0 +1,4 @@
+input predicate seed(n: integer).
+left(X, _: X > 0) :- seed(X), X > 0.
+left(X, _: X > 0) :- right(X).
+right(X + 1 as Y, _: Y > 1) :- left(X).

@@ -1,0 +1,6 @@
+input predicate seed(n: integer).
+left(X, _: X = 0 || (X > 0 && X <= 3)) :- seed(X), X = 0.
+left(X, _: X = 0 || (X > 0 && X <= 3)) :- right(X).
+right(X + 1 as Y, _: Y = 0 || (Y > 0 && Y <= 3)) :- left(X), X < 3.
+single(X, _: X = 0 || (X > 0 && X <= 3)) :- seed(X), X = 0.
+single(X + 1 as Y, _: Y = 0 || (Y > 0 && Y <= 3)) :- single(X), X < 3.

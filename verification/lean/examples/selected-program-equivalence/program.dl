@@ -1,0 +1,7 @@
+input predicate seed(n: integer).
+first(X) :- seed(X).
+first(X) :- first(X).
+helper(X) :- seed(X).
+second(X) :- helper(X).
+second(X) :- second(X).
+positive(X) :- helper(X), X > 0.

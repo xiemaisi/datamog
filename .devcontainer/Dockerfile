@@ -45,6 +45,20 @@ RUN corepack enable
 RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local/bun bash
 ENV PATH="/usr/local/bun/bin:${PATH}"
 
+# Lean and Lake via Elan. Keep toolchains in the runtime user's home so project
+# lean-toolchain files can select/install other versions without root access.
+# Run the proxies at build time: installing Elan alone can leave Lean undownloaded.
+ARG LEAN_TOOLCHAIN=leanprover/lean4:v4.34.0
+ENV ELAN_HOME=/home/node/.elan
+ENV PATH="${ELAN_HOME}/bin:${PATH}"
+USER node
+RUN curl -fsSL https://elan.lean-lang.org/elan-init.sh -o /tmp/elan-init.sh \
+ && sh /tmp/elan-init.sh -y --no-modify-path --default-toolchain "${LEAN_TOOLCHAIN}" \
+ && rm /tmp/elan-init.sh \
+ && lean --version \
+ && lake --version
+USER root
+
 # Install Claude Code + a wrapper that always passes --dangerously-skip-permissions.
 # The installer writes its launcher to $HOME/.local/bin/claude AND prepends
 # $HOME/.local/bin to PATH via shell rc files, so a wrapper at /usr/local/bin/claude

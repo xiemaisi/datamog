@@ -1,0 +1,56 @@
+{
+  "source": "program.dl",
+  "claims": [
+    {
+      "kind": "constraint",
+      "id": "check",
+      "instance": "imported",
+      "constraint": 1,
+      "inputLaws": [
+        {
+          "id": "positiveSeed",
+          "predicate": "seed",
+          "column": 0,
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "kind": "error-predicate",
+      "id": "noBad",
+      "instance": "imported",
+      "predicate": "bad",
+      "inputLaws": [
+        {
+          "id": "positiveSeed",
+          "predicate": "seed",
+          "column": 0,
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "kind": "program-emptiness",
+      "id": "empty",
+      "predicate": "violation",
+      "inputLaws": [
+        {
+          "id": "positiveSeed",
+          "predicate": "seed",
+          "column": 0,
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "kind": "constraint",
+      "id": "unrestricted",
+      "instance": "imported",
+      "constraint": 1,
+      "polarity": "refute"
+    }
+  ]
+}

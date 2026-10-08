@@ -1,0 +1,4 @@
+input predicate items(values: {rows: [{n: integer, rating: integer?, score?: integer?}]}, outer: integer, inner: integer, unused: integer).
+identified(U, R["rows"][I]["n"]) :- items(R, I, J, U).
+indexed(I, R["rows"][I]["rating"], U, I) :- items(R, I, J, U).
+optionalIdentified(U, R["rows"][I]["score"]) :- items(R, I, J, U).
