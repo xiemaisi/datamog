@@ -26,9 +26,12 @@ describes the exact limits. Unsupported selections fail explicitly.
 A verification project has three inputs: a Datamog program, a JSON plan selecting
 the claims to prove, and a Lean file containing your proofs. The workflow is:
 
-1. **Export the claims.** Each supported rule becomes a way to construct a
-   derivation in Lean. This gives recursive relations an induction principle:
-   a proof can follow a derivation back through the rules that produced it.
+1. **Export the claims.** Each supported positive rule becomes a way to construct
+   a finite derivation in Lean. This gives positively recursive relations an
+   induction principle: a proof can follow a derivation back through the rules
+   that produced it. The current relational exporter excludes negated relation
+   calls and parity-stratified recursion. Supporting them would require an
+   additional semantic model; this is a limit of the exporter, not of Lean.
    The semantic model preserves Datamog's integer bounds, null values, and
    undefined expressions where the selected fragment uses them.
 2. **Write the proofs.** Generated definitions and maintained proofs live in
